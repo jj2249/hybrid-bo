@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling >= 1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hybrid_bo"
+version = "0.0.0"
+authors = [
+    { name = "Eike Cramer", email = "eike.cramer@avt.rwth-aachen.de" },
+    { name = "Luis Kutschat", email = "luis.kutschat@avt.rwth-aachen.de" },
+    { name = "Joel Paulson", email = "paulson.82@osu.edu" },
+]
+description = "A package for performing hybrind Bayesian optimization"
+readme = "README.md"
+requires-python = ">=3.12"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = ["casadi", "numpy", "scipy>=1.15.0"]
+
+[project.optional-dependencies]
+examples = ["pyyaml", "matplotlib"]
