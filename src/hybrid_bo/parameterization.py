@@ -3,6 +3,7 @@ from typing import overload
 import casadi as cas
 import numpy as np
 
+from .array_operations import empty_like, exp, log
 from .type_aliases import CasadiType, MathArray, NumericType
 
 
