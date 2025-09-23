@@ -9,10 +9,9 @@ from .type_aliases import CasadiType
 
 
 class Mean(Parameterized, ABC):
-    def __init__(self, n_inputs: int = 1, n_outputs: int = 1) -> None:
+    def __init__(self, n_inputs: int = 1) -> None:
         super().__init__()
         self.n_inputs: int = n_inputs
-        self.n_outputs: int = n_outputs
 
     @overload
     def m(self, X: cas.SX) -> cas.SX: ...
@@ -32,7 +31,7 @@ class Mean(Parameterized, ABC):
 
 class ZeroMean(Mean):
     def __init__(self, n_inputs: int = 1) -> None:
-        super().__init__(n_inputs, 1)
+        super().__init__(n_inputs)
 
     @override
     def m(self, X: CasadiType | np.ndarray) -> CasadiType | np.ndarray:  # pyright: ignore[reportIncompatibleMethodOverride]
@@ -47,7 +46,7 @@ class ZeroMean(Mean):
 
 class ConstantMean(Mean):
     def __init__(self, n_inputs: int = 1, constant: Parameter | None = None) -> None:
-        super().__init__(n_inputs, 1)
+        super().__init__(n_inputs)
         self.constant: Parameter
 
         if constant is None:
