@@ -3,7 +3,7 @@ from typing import Any, overload
 import casadi as cas
 import numpy as np
 
-from .array_operations import cholesky, diag, log, solve
+from .array_operations import cholesky, diag, log, solve, sum
 from .kernels import Kernel
 from .means import Mean
 from .optimizers import CasadiOptimizer, LocalOptimizer, MultiStartOptimizer, Optimizer
