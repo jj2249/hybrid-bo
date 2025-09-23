@@ -1,0 +1,79 @@
+from abc import ABC, abstractmethod
+from typing import overload, override
+
+import casadi as cas
+import numpy as np
+
+from .parameterization import Parameter, Parameterized
+from .type_aliases import CasadiType
+
+
+class Mean(Parameterized, ABC):
+    def __init__(self, n_inputs: int = 1, n_outputs: int = 1) -> None:
+        super().__init__()
+        self.n_inputs: int = n_inputs
+        self.n_outputs: int = n_outputs
+
+    @overload
+    def m(self, X: cas.SX) -> cas.SX: ...
+    @overload
+    def m(self, X: cas.MX) -> cas.MX: ...
+    @overload
+    def m(self, X: cas.DM) -> cas.DM: ...
+    @overload
+    def m(self, X: np.ndarray) -> np.ndarray: ...
+
+    @abstractmethod
+    def m(self, X: CasadiType | np.ndarray) -> CasadiType | np.ndarray: ...
+
+    @abstractmethod
+    def m_variable(self, X: CasadiType | np.ndarray) -> CasadiType | np.ndarray: ...
+
+
+class ZeroMean(Mean):
+    def __init__(self, n_inputs: int = 1) -> None:
+        super().__init__(n_inputs, 1)
+
+    @override
+    def m(self, X: CasadiType | np.ndarray) -> CasadiType | np.ndarray:  # pyright: ignore[reportIncompatibleMethodOverride]
+        if isinstance(X, CasadiType):
+            return type(X).zeros(X.shape[0], 1)  # pyright: ignore[reportArgumentType]
+        return np.zeros((X.shape[0], 1))
+
+    @override
+    def m_variable(self, X: CasadiType | np.ndarray) -> CasadiType | np.ndarray:
+        return self.m(X)
+
+
+class ConstantMean(Mean):
+    def __init__(self, n_inputs: int = 1, constant: Parameter | None = None) -> None:
+        super().__init__(n_inputs, 1)
+        self.constant: Parameter
+
+        if constant is None:
+            self.constant = Parameter(
+                "constant",
+                value=0,
+                min=-1,
+                max=1,
+                transform_mode="identity",
+            )
+        else:
+            if constant.n_elements != 1:
+                msg: str = "constant.n_elements != 1"
+                raise Exception(msg)
+
+            self.constant = constant
+            self.constant.set_name("constant")
+
+        self.parameters.append(self.constant)
+
+    @override
+    def m(self, X: CasadiType | np.ndarray) -> CasadiType | np.ndarray:  # pyright: ignore[reportIncompatibleMethodOverride]
+        if isinstance(X, CasadiType):
+            return self.constant.value * type(X).ones(X.shape[0], 1)  # pyright: ignore[reportArgumentType]
+        return self.constant.value * np.ones((X.shape[0], 1))
+
+    @override
+    def m_variable(self, X: CasadiType | np.ndarray) -> CasadiType | np.ndarray:
+        return self.constant.variable() * np.ones((X.shape[0], 1))
