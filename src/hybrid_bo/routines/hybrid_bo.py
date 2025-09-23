@@ -278,7 +278,7 @@ def hybrid_bo(
     # %% Save results of BO
 
     if config.save_results:
-        path: Path = results_dir / "results_bo_with_mechanistic_models.pkl"
+        path: Path = results_dir / "results_hybrid_bo.pkl"
         if path.exists():
             print(f"WARNING: File {path} exists. Will not overwrite.")
         else:
