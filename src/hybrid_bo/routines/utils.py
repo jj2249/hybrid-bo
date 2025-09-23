@@ -299,7 +299,7 @@ def cdf_normal(x: MathArray) -> MathArray:
     if isinstance(x, cas.SX):
         cdf = 0.5 * (1 + cas.erf(x / np.sqrt(2)))
     else:
-        cdf = 0.5 * (1 + scipy.spatial.erf(x / np.sqrt(2)))
+        cdf = 0.5 * (1 + scipy.special.erf(x / np.sqrt(2)))
     return cdf
 
 
