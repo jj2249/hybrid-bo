@@ -22,7 +22,7 @@ def latin_hypercube_sampling(
     problem: Problem,
     config: Config,
     gp: GP,
-    u_train_initial_complete: np.ndarray,
+    u_train_initial_complete: list[np.ndarray],
     results_dir: Path,
     create_plots: Callable,
 ) -> None:

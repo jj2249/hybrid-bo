@@ -24,7 +24,7 @@ def hybrid_bo(
     problem: Problem,
     config: Config,
     gp: GP,
-    u_train_initial_complete: np.ndarray,
+    u_train_initial_complete: list[np.ndarray],
     optimizer: Optimizer,
     results_dir: Path,
     create_plots: Callable,
@@ -165,7 +165,12 @@ def hybrid_bo(
                 print("Setting up acquisition problem done.")
 
                 optimizer.set_problem(
-                    n_variables, f, None, h, lower_bounds, upper_bounds
+                    n_variables,
+                    f,
+                    None,
+                    h,
+                    lower_bounds,
+                    upper_bounds,
                 )
 
                 if isinstance(optimizer, MultiStartOptimizer):
@@ -462,7 +467,7 @@ def _setup_acq_problem_ei(
 
     (
         u,
-        _,
+        u_input_gp,
         x_input_gp_samples,
         input_gp_samples,
         x_no_gp_samples,

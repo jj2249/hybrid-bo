@@ -23,7 +23,7 @@ def standard_bo(
     problem: Problem,
     config: Config,
     gp: GP,
-    u_train_initial_complete: np.ndarray,
+    u_train_initial_complete: list[np.ndarray],
     optimizer: Optimizer,
     results_dir: Path,
     create_plots: Callable,
