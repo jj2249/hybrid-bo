@@ -5,6 +5,8 @@ import numpy as np
 from scipy.optimize import fsolve
 from scipy.stats import qmc
 
+from .optimizers import MultiStartOptimizer, Optimizer
+
 
 class Problem:
     """Class that defines a problem.
@@ -424,3 +426,52 @@ class Problem:
             check_bounds,
             seed,
         )
+
+    def solve(
+        self,
+        optimizer: Optimizer,
+        n_starting_points: int = 0,
+        seed: int | None = None,
+    ) -> dict[str, float | np.ndarray]:
+        # Parameters n_starting_points and seed are only important if type(optimizer) == MultistartOptimizer
+
+        u: cas.SX = cas.SX.sym("u", self.n_u, 1)  # pyright: ignore[reportArgumentType]
+        x: cas.SX = cas.SX.sym("x", self.n_x, 1)  # pyright: ignore[reportArgumentType]
+        w: cas.SX = cas.vertcat(u, x)  # pyright: ignore[reportAssignmentType]
+
+        n_variables: int = self.n_u + self.n_x
+
+        h_expression: cas.SX = cas.vertcat(self.h_known(u, x), self.h_unknown(u, x))  # pyright: ignore[reportAssignmentType]
+        h: cas.Function = cas.Function("h", [w], [h_expression])
+
+        lower_bounds: np.ndarray = np.vstack(
+            (self.u_lower_bounds, self.x_lower_bounds),
+        )
+        upper_bounds: np.ndarray = np.vstack(
+            (self.u_upper_bounds, self.x_upper_bounds),
+        )
+
+        f_expression: cas.SX = self.f(u, x)  # pyright: ignore[reportAssignmentType]
+        f: cas.Function = cas.Function("f", [w], [f_expression])
+
+        optimizer.set_problem(n_variables, f, None, h, lower_bounds, upper_bounds)
+
+        if isinstance(optimizer, MultiStartOptimizer):
+            starting_points: np.ndarray = optimizer.create_lhs_samples(
+                n_starting_points,
+                seed,
+            )
+            optimizer.set_X0(starting_points)
+
+        solution: dict[str, float | np.ndarray] | None = optimizer.solve()
+
+        if solution is None:
+            msg: str = "solution is None"
+            raise Exception(msg)
+
+        solution_formatted: dict[str, float | np.ndarray] = {}
+        solution_formatted["f"] = solution["f"]
+        solution_formatted["u"] = solution["x"][: self.n_u]  # pyright: ignore[reportIndexIssue]
+        solution_formatted["x"] = solution["x"][self.n_u :]  # pyright: ignore[reportIndexIssue]
+
+        return solution_formatted
