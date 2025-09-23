@@ -1,14 +1,24 @@
-from typing import overload
+import pickle
+from pathlib import Path
+from typing import TYPE_CHECKING, overload
 
 import casadi as cas
+import matplotlib.pyplot as plt
 import numpy as np
 import scipy
 
 from ..affine_transformers import AffineTransformer
 from ..config import Config
 from ..gp import GP
+from ..optimizers import Optimizer
 from ..problem import Problem
 from ..type_aliases import MathArray
+
+if TYPE_CHECKING:
+    from matplotlib.axes import Axes
+    from matplotlib.figure import Figure
+
+    from ..results_bo import ResultsBO
 
 
 def get_training_data(
@@ -358,3 +368,88 @@ def ei_gp(
     )
 
     return ei
+
+
+def compare_results(
+    results_dir: Path,
+    methods: list[str],
+    problem: Problem,
+    optimizer: Optimizer,
+    n_starting_points: int = 10,
+    seed: int | None = None,
+) -> None:
+    # %% Solve original problem
+
+    true_solution: dict[str, float | np.ndarray] = problem.solve(
+        optimizer,
+        n_starting_points,
+        seed,
+    )
+
+    # %% Create plotting data
+
+    f_optimal: float = true_solution["f"]  # pyright: ignore[reportAssignmentType]
+    results: dict[str, ResultsBO] = {}
+    f_cumulative_mins: dict[str, np.ndarray] = {}
+    regrets: dict[str, np.ndarray] = {}
+    regret_mins: dict[str, np.ndarray] = {}
+    regret_maxs: dict[str, np.ndarray] = {}
+    regret_means: dict[str, np.ndarray] = {}
+
+    for method in methods:
+        with (results_dir / f"results_{method}.pkl").open("rb") as file:
+            results[method] = pickle.load(file)
+
+            f_cumulative_mins[method] = np.minimum.accumulate(
+                results[method].f[:, :, 0],
+                1,
+            )
+
+            regrets[method] = f_cumulative_mins[method] - f_optimal
+
+            regret_mins[method] = regrets[method].min(0)
+            regret_maxs[method] = regrets[method].max(0)
+            regret_means[method] = regrets[method].mean(0)
+
+    # %% Create plot
+
+    fig: Figure
+    ax: Axes
+    fig, ax = plt.subplots()
+
+    colors: dict[str, str] = {
+        "hybrid_bo": "r",
+        "standard_bo": "k",
+        "latin_hypercube_sampling": "b",
+        "uniform_sampling": "g",
+    }
+
+    labels: dict[str, str] = {
+        "hybrid_bo": "Hybrid BO",
+        "standard_bo": "Standard BO",
+        "latin_hypercube_sampling": "Latin hypercube sampling",
+        "uniform_sampling": "Uniform sampling",
+    }
+
+    for method in methods:
+        iterations: np.ndarray = np.arange(regret_means[method].size, dtype=int) + 1
+        ax.plot(
+            iterations,
+            regret_means[method],
+            color=colors[method],
+            label=labels[method],
+        )
+        ax.plot(iterations, regret_maxs[method], color=colors[method], linestyle="--")
+        ax.plot(iterations, regret_mins[method], color=colors[method], linestyle="--")
+
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("Regret")
+
+    ax.set_xlim((1, regret_means[methods[-1]].size))
+    ax.set_xticks(np.arange(regret_means[methods[-1]].size, dtype=int) + 1)
+    ax.set_yscale("log")
+
+    ax.legend()
+    fig.tight_layout()
+
+    plt.show()
