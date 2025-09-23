@@ -42,7 +42,7 @@ def squared_distance(
     # See https://github.com/SheffieldML/GPy/blob/devel/GPy/kern/src/stationary.py,
     # method Stationary._unscaled_dist()
 
-    if (len(X1.shape) != 2) or (len(X2.shape) != 2):  # noqa: PLR2004
+    if (len(X1.shape) != 2) or (len(X2.shape) != 2):
         msg: str = "(len(X1.shape) != 2) or (len(X2.shape) != 2)"
         raise Exception(msg)
 
