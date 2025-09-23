@@ -139,19 +139,19 @@ class GP(Parameterized):
             x: cas.SX = cas.SX.sym("x", trainables.n_elements, 1)  # pyright: ignore[reportArgumentType]
 
             # Original domain
-            x_original: cas.SX = inv_transform(x, trainables.transform_mode)  # pyright: ignore[reportAssignmentType]
+            x_original: cas.SX = inv_transform(x, trainables.transform_mode)
 
             # Transformed domain
             lower_bounds: np.ndarray = transform(
                 trainables.min,
                 trainables.transform_mode,
-            )  # pyright: ignore[reportAssignmentType]
+            )
 
             # Transformed domain
             upper_bounds: np.ndarray = transform(
                 trainables.max,
                 trainables.transform_mode,
-            )  # pyright: ignore[reportAssignmentType]
+            )
 
             # Original domain
             negative_log_mll_function: cas.Function = cas.Function(
@@ -251,11 +251,11 @@ class GP(Parameterized):
             self.noise_std.variable() ** 2 + self.epsilon
         ) * np.eye(self.n_training_points)  # pyright: ignore[reportAssignmentType]
 
-        L_tt: CasadiType = cholesky(K_tt)  # pyright: ignore[reportAssignmentType]
-        alpha: CasadiType = solve(L_tt.T, solve(L_tt, (self.Y_train - m_t)))  # pyright: ignore[reportAssignmentType]
+        L_tt: CasadiType = cholesky(K_tt)
+        alpha: CasadiType = solve(L_tt.T, solve(L_tt, (self.Y_train - m_t)))
 
         return -0.5 * (
             (self.Y_train - m_t).T @ alpha
-            + sum(log(diag(L_tt)))  # pyright: ignore[reportArgumentType]
+            + sum(log(diag(L_tt)))
             + self.n_training_points * np.log(2 * np.pi)
         )
