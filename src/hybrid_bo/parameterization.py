@@ -82,8 +82,12 @@ class Parameter:
 
 
 class Parameterized:
-    def __init__(self) -> None:
-        self.parameters: list[Parameter] = []
+    def __init__(self, parameters: list[Parameter] | None = None) -> None:
+        self.parameters: list[Parameter]
+        if parameters is None:
+            self.parameters = []
+        else:
+            self.parameters = parameters
 
     def trainable_parameters(self) -> list[Parameter]:
         return [parameter for parameter in self.parameters if parameter.trainable]
