@@ -437,7 +437,7 @@ class Problem:
     def solve(
         self,
         optimizer: Optimizer,
-        n_starting_points: int = 0,
+        n_starting_points: int = 10,
         seed: int | None = None,
     ) -> dict[str, float | np.ndarray]:
         # Parameters n_starting_points and seed are only important if type(optimizer) == MultistartOptimizer
