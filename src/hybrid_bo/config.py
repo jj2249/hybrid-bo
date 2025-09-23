@@ -68,6 +68,9 @@ class Config:
     # LCB = mean - factor_lcb_std * std
     factor_lcb_std: float = 1.0
 
+    # EI Standard (no deterministic equivalent)
+    epsilon_ei_standard: float = 1.0e-10
+
     # %% Plotting
 
     # Number of evaluation points used for every component of u
