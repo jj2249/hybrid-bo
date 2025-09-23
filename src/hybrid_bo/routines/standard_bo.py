@@ -263,7 +263,7 @@ def standard_bo(
                 pickle.dump(results_bo, file, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def set_gp_XY(  # noqa: N802
+def set_gp_XY(
     gp: GP,
     u_train: np.ndarray,
     f_train: np.ndarray,
