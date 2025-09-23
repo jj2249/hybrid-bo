@@ -1,0 +1,77 @@
+# %% General
+
+# int | null
+seed: null
+
+# %% BO
+
+## General
+
+# Configure if plots are supposed to be created, bool
+create_plots: True
+
+# Configure if results are supposed to be saved, bool
+save_results: True
+
+# Number of Bayesion optimization runs, int
+n_runs_bo: 1
+
+# Number of Bayesian optimization iterations, int
+n_iterations_bo: 5
+
+# Configure which acquisition problem formulation to use, str, alternatives: "lcb", "ei"
+formulation_acq: "ei"
+
+# Number of starting points the optimization of the acquisition problem is executed with, int
+n_starts_acq_optimization: 100
+
+# Number of GP samples used in the acquisition problem, int
+n_samples_gp: 50
+
+## Acquisition problem formulation specific
+
+# LCB
+# float
+factor_lcb_std: 1.0
+
+# EI Standard (no deterministic equivalent)
+# float
+epsilon_ei_standard: 1.0e-10
+
+# %% Problem
+
+# Indices of the elements of u that are inputs of the GP, list[int]
+# We use lists because indexing with tuples sometimes is different from indexing with lists in NumPy as well as CasADi
+indices_u_input_gp: [0]
+
+# Indices of the elements of x that are inputs of the GP, list[int]
+indices_x_input_gp: []
+
+# Indices of the elements of x that are outputs of the GP, list[int]
+indices_x_output_gp: [1]
+
+# Number of starting points the training of the GP is executed with, int
+n_starts_training_gp: 100
+
+# Indices of the elements of x that are measured, list[int]
+indices_x_measured: [1]
+
+# Standard deviation of the measurement noise, float
+std_measurement_noise: 0.0
+
+# Configure if scipy.optimize.fsolve() uses a Jacobian as a parameter when evaluating the problem, bool
+use_jacobian_evaluate_problem: True
+
+# Configure if evaluating the problem checks if the solution is within the variable bounds, bool
+check_bounds_evaluate_problem: True
+
+# Maximum number of executing scipy.optimize.fsolve() when evaluating the problem, int
+n_starts_max_evaluate_problem: 100
+
+# %% Plotting
+
+# Number of evaluation points used for every component of u, list[int]
+n_eval_points: [101]
+
+# Level of confidence in percent for plotting the confidence intervals, int
+confidence_level: 95
