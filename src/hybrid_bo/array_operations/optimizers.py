@@ -47,6 +47,7 @@ class Optimizer(ABC):
     @abstractmethod
     def solve(self) -> dict[str, float | np.ndarray] | None:
         """Returns optimal x (np.ndarray), f (float), g (np.ndarray) and h (np.ndarray)."""
+        ...
 
 
 class LocalOptimizer(Optimizer):
