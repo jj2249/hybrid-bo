@@ -19,7 +19,4 @@ classifiers = [
 ]
 license = "MIT"
 license-files = ["LICENSE"]
-dependencies = ["casadi", "numpy", "scipy>=1.15.0"]
-
-[project.optional-dependencies]
-examples = ["pyyaml", "matplotlib"]
+dependencies = ["casadi", "numpy", "scipy>=1.15.0", "pyyaml", "matplotlib"]
