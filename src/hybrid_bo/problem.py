@@ -2,8 +2,8 @@ from typing import final
 
 import casadi as cas
 import numpy as np
-from scipy.optimize import fsolve
-from scipy.stats import qmc
+import scipy
+import scipy.optimize
 
 from .optimizers import MultiStartOptimizer, Optimizer
 
@@ -163,7 +163,7 @@ class Problem:
 
         # %% Get initial guesses for x
 
-        sampler: qmc.LatinHypercube = qmc.LatinHypercube(
+        sampler: scipy.stats.qmc.LatinHypercube = scipy.stats.qmc.LatinHypercube(
             self.n_x,
             rng=np.random.default_rng(seed),
         )
@@ -199,12 +199,16 @@ class Problem:
         ready_to_return: bool = False
         while i_start < n_starts_max:
             if use_jacobian:
-                roots: np.ndarray = fsolve(h_np, X_0[i_start, :], fprime=h_np_jacobian)[
+                roots: np.ndarray = scipy.optimize.fsolve(
+                    h_np, X_0[i_start, :], fprime=h_np_jacobian
+                )[
                     :,
                     np.newaxis,
                 ]  # pyright: ignore[reportArgumentType, reportCallIssue]
             else:
-                roots: np.ndarray = fsolve(h_np, X_0[i_start, :])[:, np.newaxis]  # pyright: ignore[reportArgumentType, reportCallIssue]
+                roots: np.ndarray = scipy.optimize.fsolve(h_np, X_0[i_start, :])[
+                    :, np.newaxis
+                ]  # pyright: ignore[reportArgumentType, reportCallIssue]
 
             if (np.linalg.norm(h_np(roots.ravel())) < self.threshold_equality) and (
                 (not check_bounds)
@@ -279,7 +283,7 @@ class Problem:
 
         # %% Get starting points for x_free
 
-        sampler: qmc.LatinHypercube = qmc.LatinHypercube(
+        sampler: scipy.stats.qmc.LatinHypercube = scipy.stats.qmc.LatinHypercube(
             x_fixed.size, rng=np.random.default_rng(seed)
         )
         samples: np.ndarray = sampler.random(n_starts_max)
@@ -313,13 +317,16 @@ class Problem:
         ready_to_return: bool = False
         while i_start < n_starts_max:
             if use_jacobian:
-                roots: np.ndarray = fsolve(
+                roots: np.ndarray = scipy.optimize.fsolve(
                     h_np,
                     X_free_0[i_start, :],
                     fprime=h_np_jacobian,
                 )[:, np.newaxis]  # pyright: ignore[reportArgumentType, reportCallIssue]
             else:
-                roots: np.ndarray = fsolve(h_np, X_free_0[i_start, :])[:, np.newaxis]  # pyright: ignore[reportArgumentType, reportCallIssue]
+                roots: np.ndarray = scipy.optimize.fsolve(h_np, X_free_0[i_start, :])[
+                    :,
+                    np.newaxis,
+                ]  # pyright: ignore[reportArgumentType, reportCallIssue]
 
             if (np.linalg.norm(h_np(roots.ravel())) < self.threshold_equality) and (
                 (not check_bounds)

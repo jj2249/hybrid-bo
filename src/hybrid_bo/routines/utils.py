@@ -2,8 +2,7 @@ from typing import overload
 
 import casadi as cas
 import numpy as np
-from scipy.special import erf as scipy_erf
-from scipy.stats import norm as scipy_norm
+import scipy
 
 from ..affine_transformers import AffineTransformer
 from ..config import Config
@@ -61,7 +60,7 @@ def get_sampling_based_data(
     n_training_points_total: int = np.sum(n_training_points_complete)
 
     measurement_noise_train_temp: np.ndarray = np.atleast_2d(
-        scipy_norm.rvs(
+        scipy.stats.norm.rvs(
             0,
             config.std_measurement_noise,
             n_training_points_total,
@@ -82,7 +81,7 @@ def get_sampling_based_data(
         )
         i_measurement_noise_train = i_measurement_noise_train_new
 
-    gaussian_standard_samples_temp: np.ndarray = scipy_norm.rvs(
+    gaussian_standard_samples_temp: np.ndarray = scipy.stats.norm.rvs(
         size=config.n_samples_gp * config.n_runs_bo,
         random_state=config.rng,
     )  # pyright: ignore[reportAssignmentType]
@@ -290,7 +289,7 @@ def cdf_normal(x: MathArray) -> MathArray:
     if isinstance(x, cas.SX):
         cdf = 0.5 * (1 + cas.erf(x / np.sqrt(2)))
     else:
-        cdf = 0.5 * (1 + scipy_erf(x / np.sqrt(2)))
+        cdf = 0.5 * (1 + scipy.spatial.erf(x / np.sqrt(2)))
     return cdf
 
 
