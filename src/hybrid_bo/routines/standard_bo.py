@@ -11,7 +11,6 @@ from ..affine_transformers import (
     MinMaxTransformer,
     StandardTransformer,
 )
-from ..array_operations import sample_mean, sample_variance
 from ..config import Config
 from ..gp import GP
 from ..optimizers import MultiStartOptimizer, Optimizer
@@ -44,9 +43,9 @@ def standard_bo(
     )
 
     measurement_noise_train_complete: list[np.ndarray]
-    gaussian_standard_samples_complete: np.ndarray
-    measurement_noise_train_complete, gaussian_standard_samples_complete = (
-        get_sampling_based_data(config, n_training_points_complete)
+    measurement_noise_train_complete, _ = get_sampling_based_data(
+        config,
+        n_training_points_complete,
     )
 
     # %% Results of BO
@@ -56,12 +55,6 @@ def standard_bo(
     # %% Iterate over multiple BO runs
 
     for i_run_bo in range(config.n_runs_bo):
-        # %% Samples of the Gaussian standard distribution for the reparameterization trick
-
-        gaussian_standard_samples: np.ndarray = gaussian_standard_samples_complete[
-            [i_run_bo]
-        ].T
-
         # %% Training data
 
         u_train: np.ndarray = u_train_initial_complete[i_run_bo].copy()
