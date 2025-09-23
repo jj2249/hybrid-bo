@@ -23,10 +23,14 @@ class Mean(Parameterized, ABC):
     def m(self, X: np.ndarray) -> np.ndarray: ...
 
     @abstractmethod
-    def m(self, X: CasadiType | np.ndarray) -> CasadiType | np.ndarray: ...
+    def m(self, X: CasadiType | np.ndarray) -> CasadiType | np.ndarray:
+        # Uses attribute value for all trainable parameters
+        ...
 
     @abstractmethod
-    def m_variable(self, X: CasadiType | np.ndarray) -> CasadiType | np.ndarray: ...
+    def m_variable(self, X: CasadiType | np.ndarray) -> CasadiType | np.ndarray:
+        # Uses attribute variable for all trainable parameters
+        ...
 
 
 class ZeroMean(Mean):
