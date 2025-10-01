@@ -204,11 +204,11 @@ class GP(Parameterized):
     def predict(
         self, X: CasadiType | np.ndarray
     ) -> tuple[CasadiType | np.ndarray, CasadiType | np.ndarray]:
-        m_t: CasadiType | np.ndarray = self.mean.m(self.X_train)
-        K_tt: CasadiType | np.ndarray = self.kernel.k(self.X_train, self.X_train) + (
+        m_t: np.ndarray = self.mean.m(self.X_train)
+        K_tt: np.ndarray = self.kernel.k(self.X_train, self.X_train) + (
             self.noise_std.value**2 + self.epsilon
         ) * np.eye(self.n_training_points)
-        L_tt: CasadiType | np.ndarray = np.linalg.cholesky(K_tt)
+        L_tt: np.ndarray = np.linalg.cholesky(K_tt)
 
         m_x: CasadiType | np.ndarray = self.mean.m(X)
         K_xx: CasadiType | np.ndarray = self.kernel.k(X, X)  # pyright: ignore[reportArgumentType, reportCallIssue]
