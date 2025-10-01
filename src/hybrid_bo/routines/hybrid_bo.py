@@ -17,6 +17,7 @@ from ..gp import GP
 from ..optimizers import MultiStartOptimizer, Optimizer
 from ..problem import Problem
 from ..results_bo import ResultsBO
+from ..type_aliases import SymbolicType
 from .utils import get_sampling_based_data, get_training_data
 
 
@@ -407,7 +408,7 @@ def _setup_acq_problem_lcb(
 
     # %% Samples of GP
 
-    output_gp_samples: cas.SX = _get_output_gp_samples(
+    output_gp_samples: SymbolicType = _get_output_gp_samples(
         gp,
         input_transformer_gp,
         output_transformer_gp,
@@ -417,23 +418,23 @@ def _setup_acq_problem_lcb(
 
     # %% Get number of optimization variables, f, h, lower and upper bounds
 
-    f_expression_parts: cas.SX = cas.SX(config.n_samples_gp, 1)
-    h_expression: list[cas.SX] = []
+    f_expression_parts: SymbolicType = SymbolicType(config.n_samples_gp, 1)
+    h_expression: list[SymbolicType] = []
 
     for i_sample in range(config.n_samples_gp):
-        x_sample: cas.SX = cas.SX(problem.n_x, 1)
+        x_sample: SymbolicType = SymbolicType(problem.n_x, 1)
         if config.indices_x_input_gp:
             x_sample[config.indices_x_input_gp] = x_input_gp_samples[[i_sample]].T
         x_sample[config.indices_x_output_gp] = output_gp_samples[[i_sample]].T
         if config.indices_x_no_gp:
             x_sample[config.indices_x_no_gp] = x_no_gp_samples[[i_sample]].T
 
-        h_general_expression: cas.SX = problem.h_known(u, x_sample)  # pyright: ignore[reportAssignmentType]
+        h_general_expression: SymbolicType = problem.h_known(u, x_sample)  # pyright: ignore[reportAssignmentType]
         h_expression.extend([h_general_expression])
 
         f_expression_parts[i_sample] = problem.f(u, x_sample)
 
-    f_expression: cas.SX = sample_mean(
+    f_expression: SymbolicType = sample_mean(
         f_expression_parts,
     ) - config.factor_lcb_std * cas.sqrt(sample_variance(f_expression_parts))
 
@@ -479,7 +480,7 @@ def _setup_acq_problem_ei(
 
     # %% Samples of GP
 
-    output_gp_samples: cas.SX = _get_output_gp_samples(
+    output_gp_samples: SymbolicType = _get_output_gp_samples(
         gp,
         input_transformer_gp,
         output_transformer_gp,
@@ -489,23 +490,23 @@ def _setup_acq_problem_ei(
 
     # %% Get number of optimization variables, f, h, lower and upper bounds
 
-    f_expression_parts: cas.SX = cas.SX(config.n_samples_gp, 1)
-    h_expression: list[cas.SX] = []
+    f_expression_parts: SymbolicType = SymbolicType(config.n_samples_gp, 1)
+    h_expression: list[SymbolicType] = []
 
     for i_sample in range(config.n_samples_gp):
-        x_sample: cas.SX = cas.SX(problem.n_x, 1)
+        x_sample: SymbolicType = SymbolicType(problem.n_x, 1)
         if config.indices_x_input_gp:
             x_sample[config.indices_x_input_gp] = x_input_gp_samples[[i_sample]].T
         x_sample[config.indices_x_output_gp] = output_gp_samples[[i_sample]].T
         if config.indices_x_no_gp:
             x_sample[config.indices_x_no_gp] = x_no_gp_samples[[i_sample]].T
 
-        h_general_expression: cas.SX = problem.h_known(u, x_sample)  # pyright: ignore[reportAssignmentType]
+        h_general_expression: SymbolicType = problem.h_known(u, x_sample)  # pyright: ignore[reportAssignmentType]
         h_expression.extend([h_general_expression])
 
         f_expression_parts[i_sample] = cas.fmin(problem.f(u, x_sample) - incumbent, 0)  # pyright: ignore[reportOperatorIssue]
 
-    f_expression: cas.SX = sample_mean(f_expression_parts)  # pyright: ignore[reportAssignmentType]
+    f_expression: SymbolicType = sample_mean(f_expression_parts)  # pyright: ignore[reportAssignmentType]
 
     w, n_variables, lower_bounds, upper_bounds = _get_common_optimization_parts(
         problem,
@@ -528,11 +529,11 @@ def _get_common_variables_and_bounds(
     config: Config,
     problem: Problem,
 ) -> tuple[
-    cas.SX,
-    cas.SX,
-    cas.SX,
-    cas.SX,
-    cas.SX,
+    SymbolicType,
+    SymbolicType,
+    SymbolicType,
+    SymbolicType,
+    SymbolicType,
     np.ndarray,
     np.ndarray,
     np.ndarray,
@@ -545,18 +546,18 @@ def _get_common_variables_and_bounds(
         )
         raise Exception(msg)
 
-    u: cas.SX = cas.SX.sym("u", problem.n_u, 1)  # pyright: ignore[reportArgumentType]
+    u: SymbolicType = SymbolicType.sym("u", problem.n_u, 1)  # pyright: ignore[reportArgumentType]
 
-    u_input_gp: cas.SX = u[config.indices_u_input_gp]
-    u_input_gp_samples: cas.SX = cas.repmat(u_input_gp.T, config.n_samples_gp, 1)
-    x_input_gp_samples: cas.SX = cas.SX.sym(
+    u_input_gp: SymbolicType = u[config.indices_u_input_gp]
+    u_input_gp_samples: SymbolicType = cas.repmat(u_input_gp.T, config.n_samples_gp, 1)
+    x_input_gp_samples: SymbolicType = SymbolicType.sym(
         "x_input_gp",  # pyright: ignore[reportArgumentType]
         config.n_samples_gp,  # pyright: ignore[reportArgumentType]
         len(config.indices_x_input_gp),  # pyright: ignore[reportArgumentType]
     )
-    input_gp_samples: cas.SX = cas.horzcat(u_input_gp_samples, x_input_gp_samples)  # pyright: ignore[reportAssignmentType]
+    input_gp_samples: SymbolicType = cas.horzcat(u_input_gp_samples, x_input_gp_samples)  # pyright: ignore[reportAssignmentType]
 
-    x_no_gp_samples: cas.SX = cas.SX.sym(
+    x_no_gp_samples: SymbolicType = SymbolicType.sym(
         "x_no_gp_samples",  # pyright: ignore[reportArgumentType]
         config.n_samples_gp,  # pyright: ignore[reportArgumentType]
         len(config.indices_x_no_gp),  # pyright: ignore[reportArgumentType]
@@ -598,20 +599,20 @@ def _get_output_gp_samples(
     input_transformer_gp: AffineTransformer,
     output_transformer_gp: AffineTransformer,
     gaussian_standard_samples: np.ndarray,
-    input_gp_samples: cas.SX,
-) -> cas.SX:
-    output_gp_mean_transformed: cas.SX
-    output_gp_variance_transformed: cas.SX
+    input_gp_samples: SymbolicType,
+) -> SymbolicType:
+    output_gp_mean_transformed: SymbolicType
+    output_gp_variance_transformed: SymbolicType
     output_gp_mean_transformed, output_gp_variance_transformed = gp.predict(
         input_transformer_gp.transform(input_gp_samples),
     )  # pyright: ignore[reportAssignmentType]
 
-    output_gp_samples_transformed: cas.SX = (
+    output_gp_samples_transformed: SymbolicType = (
         output_gp_mean_transformed
         + cas.sqrt(cas.diag(output_gp_variance_transformed)) * gaussian_standard_samples
     )
 
-    output_gp_samples: cas.SX = output_transformer_gp.inverse_transform(
+    output_gp_samples: SymbolicType = output_transformer_gp.inverse_transform(
         output_gp_samples_transformed,
     )  # pyright: ignore[reportAssignmentType]
 
@@ -620,15 +621,17 @@ def _get_output_gp_samples(
 
 def _get_common_optimization_parts(
     problem: Problem,
-    u: cas.SX,
-    x_input_gp_samples: cas.SX,
-    x_no_gp_samples: cas.SX,
+    u: SymbolicType,
+    x_input_gp_samples: SymbolicType,
+    x_no_gp_samples: SymbolicType,
     x_input_gp_samples_lower_bounds: np.ndarray,
     x_input_gp_samples_upper_bounds: np.ndarray,
     x_no_gp_samples_lower_bounds: np.ndarray,
     x_no_gp_samples_upper_bounds: np.ndarray,
-) -> tuple[cas.SX, int, np.ndarray, np.ndarray]:
-    w: cas.SX = cas.vertcat(u, cas.vec(x_input_gp_samples), cas.vec(x_no_gp_samples))  # pyright: ignore[reportAssignmentType]
+) -> tuple[SymbolicType, int, np.ndarray, np.ndarray]:
+    w: SymbolicType = cas.vertcat(
+        u, cas.vec(x_input_gp_samples), cas.vec(x_no_gp_samples)
+    )  # pyright: ignore[reportAssignmentType]
     n_variables: int = w.shape[0]
 
     lower_bounds: np.ndarray = np.concatenate(

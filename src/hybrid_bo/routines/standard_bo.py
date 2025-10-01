@@ -16,6 +16,7 @@ from ..gp import GP
 from ..optimizers import MultiStartOptimizer, Optimizer
 from ..problem import Problem
 from ..results_bo import ResultsBO
+from ..type_aliases import SymbolicType
 from .utils import ei_gp, get_sampling_based_data, get_training_data
 
 
@@ -290,13 +291,15 @@ def setup_acq_problem(
     incumbent: float,
 ) -> tuple[int, cas.Function, cas.Function, np.ndarray, np.ndarray]:
     # n_variables, f, h, lower_bounds, upper_bounds
-    u: cas.SX = cas.SX.sym("u", problem.n_u, 1)  # pyright: ignore[reportArgumentType]
-    u_transformed: cas.SX = input_transformer_gp.transform(u.T).T  # pyright: ignore[reportAssignmentType]
-    x: cas.SX = cas.SX.sym("x", problem.n_x, 1)  # pyright: ignore[reportArgumentType]
-    w: cas.SX = cas.vertcat(u, x)  # pyright: ignore[reportAssignmentType]
+    u: SymbolicType = SymbolicType.sym("u", problem.n_u, 1)  # pyright: ignore[reportArgumentType]
+    u_transformed: SymbolicType = input_transformer_gp.transform(u.T).T  # pyright: ignore[reportAssignmentType]
+    x: SymbolicType = SymbolicType.sym("x", problem.n_x, 1)  # pyright: ignore[reportArgumentType]
+    w: SymbolicType = cas.vertcat(u, x)  # pyright: ignore[reportAssignmentType]
     n_variables: int = problem.n_u + problem.n_x
 
-    h_expression: cas.SX = cas.vertcat(problem.h_known(u, x), problem.h_unknown(u, x))  # pyright: ignore[reportAssignmentType]
+    h_expression: SymbolicType = cas.vertcat(
+        problem.h_known(u, x), problem.h_unknown(u, x)
+    )  # pyright: ignore[reportAssignmentType]
     h: cas.Function = cas.Function("h", [w], [h_expression])
 
     lower_bounds: np.ndarray = np.vstack(
@@ -307,14 +310,14 @@ def setup_acq_problem(
         (problem.u_upper_bounds, problem.x_upper_bounds),
     )
 
-    mean_transformed: cas.SX
-    var_transformed: cas.SX
+    mean_transformed: SymbolicType
+    var_transformed: SymbolicType
     mean_transformed, var_transformed = gp.predict(u_transformed.T)  # pyright: ignore[reportAssignmentType]
 
-    mean: cas.SX = output_transformer_gp.inverse_transform(mean_transformed)  # pyright: ignore[reportAssignmentType]
-    std: cas.SX = cas.sqrt(var_transformed) / output_transformer_gp.slope
+    mean: SymbolicType = output_transformer_gp.inverse_transform(mean_transformed)  # pyright: ignore[reportAssignmentType]
+    std: SymbolicType = cas.sqrt(var_transformed) / output_transformer_gp.slope
 
-    f_expression: cas.SX
+    f_expression: SymbolicType
 
     # Lower confidence bound
     if config.formulation_acq.startswith("lcb"):

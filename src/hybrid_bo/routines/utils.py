@@ -12,7 +12,7 @@ from ..config import Config
 from ..gp import GP
 from ..optimizers import Optimizer
 from ..problem import Problem
-from ..type_aliases import MathArray
+from ..type_aliases import CasadiType
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -276,12 +276,16 @@ def get_f_eval_samples(
 @overload
 def pdf_normal(x: cas.SX) -> cas.SX: ...
 @overload
+def pdf_normal(x: cas.MX) -> cas.MX: ...
+@overload
+def pdf_normal(x: cas.DM) -> cas.DM: ...
+@overload
 def pdf_normal(x: np.ndarray) -> np.ndarray: ...
 
 
-def pdf_normal(x: cas.SX | np.ndarray) -> cas.SX | np.ndarray:
-    pdf: cas.SX | np.ndarray
-    if isinstance(x, cas.SX):
+def pdf_normal(x: CasadiType | np.ndarray) -> CasadiType | np.ndarray:
+    pdf: CasadiType | np.ndarray
+    if isinstance(x, CasadiType):
         pdf = cas.exp(-0.5 * x**2) / np.sqrt(2 * np.pi)
     else:
         pdf = np.exp(-0.5 * x**2) / np.sqrt(2 * np.pi)
@@ -291,12 +295,16 @@ def pdf_normal(x: cas.SX | np.ndarray) -> cas.SX | np.ndarray:
 @overload
 def cdf_normal(x: cas.SX) -> cas.SX: ...
 @overload
+def cdf_normal(x: cas.MX) -> cas.MX: ...
+@overload
+def cdf_normal(x: cas.DM) -> cas.DM: ...
+@overload
 def cdf_normal(x: np.ndarray) -> np.ndarray: ...
 
 
-def cdf_normal(x: MathArray) -> MathArray:
-    cdf: MathArray
-    if isinstance(x, cas.SX):
+def cdf_normal(x: CasadiType | np.ndarray) -> CasadiType | np.ndarray:
+    cdf: CasadiType | np.ndarray
+    if isinstance(x, CasadiType):
         cdf = 0.5 * (1 + cas.erf(x / np.sqrt(2)))
     else:
         cdf = 0.5 * (1 + scipy.special.erf(x / np.sqrt(2)))
@@ -313,6 +321,22 @@ def ei_gp(
 ) -> cas.SX: ...
 @overload
 def ei_gp(
+    mean: cas.MX,
+    std: cas.MX,
+    incumbent: float,
+    maximize: bool,
+    epsilon: float,
+) -> cas.SX: ...
+@overload
+def ei_gp(
+    mean: cas.DM,
+    std: cas.DM,
+    incumbent: float,
+    maximize: bool,
+    epsilon: float,
+) -> cas.DM: ...
+@overload
+def ei_gp(
     mean: np.ndarray,
     std: np.ndarray,
     incumbent: float,
@@ -322,12 +346,12 @@ def ei_gp(
 
 
 def ei_gp(
-    mean: MathArray,
-    std: MathArray,
+    mean: CasadiType | np.ndarray,
+    std: CasadiType | np.ndarray,
     incumbent: float,
     maximize: bool = True,
     epsilon: float = 1.0e-10,
-) -> MathArray:
+) -> CasadiType | np.ndarray:
     """Returns expected improvement for BO with Gaussian processes as surrogate model.
 
     See https://botorch.org/docs/acquisition#analytic-acquisition-functions for maximization problem.
@@ -335,9 +359,9 @@ def ei_gp(
 
     Parameters
     ----------
-    mean : MathArray
+    mean : CasadiType | np.ndarray
         Mean of the Gaussian process
-    std : MathArray, m x n
+    std : CasadiType | np.ndarray, m x n
         Standard deviation of the Gaussian process
     incumbent : float
         Best observation of the function to minimize so far
@@ -350,7 +374,7 @@ def ei_gp(
 
     Returns
     -------
-    MathArray
+    CasadiType | np.ndarray
         Expected improvement
     """
 
@@ -362,10 +386,10 @@ def ei_gp(
     if not maximize:
         sign = -1.0
 
-    gamma: MathArray = sign * (mean - incumbent) / (std + epsilon)
-    ei: MathArray = sign * (mean - incumbent) * cdf_normal(gamma) + std * pdf_normal(
+    gamma: CasadiType | np.ndarray = sign * (mean - incumbent) / (std + epsilon)
+    ei: CasadiType | np.ndarray = sign * (mean - incumbent) * cdf_normal(
         gamma,
-    )
+    ) + std * pdf_normal(gamma)
 
     return ei
 

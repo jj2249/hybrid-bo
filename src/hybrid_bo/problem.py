@@ -6,6 +6,7 @@ import scipy
 import scipy.optimize
 
 from .optimizers import MultiStartOptimizer, Optimizer
+from .type_aliases import SymbolicType
 
 
 class Problem:
@@ -159,7 +160,7 @@ class Problem:
 
         # %% Setup variables to be solved for
 
-        x: cas.SX = cas.SX.sym("x", self.n_x, 1)  # pyright: ignore[reportArgumentType]
+        x: SymbolicType = SymbolicType.sym("x", self.n_x, 1)  # pyright: ignore[reportArgumentType]
 
         # %% Get initial guesses for x
 
@@ -273,11 +274,11 @@ class Problem:
 
         # %% Setup variables to be solved for
 
-        x_free = cas.SX.sym("x_free", len(indices_x_free), 1)  # pyright: ignore[reportArgumentType]
+        x_free = SymbolicType.sym("x_free", len(indices_x_free), 1)  # pyright: ignore[reportArgumentType]
 
         # %% Setup helper variables
 
-        x: cas.SX = cas.SX(self.n_x, 1)
+        x: SymbolicType = SymbolicType(self.n_x, 1)
         x[indices_x_fixed] = x_fixed
         x[indices_x_free] = x_free
 
@@ -442,13 +443,15 @@ class Problem:
     ) -> dict[str, float | np.ndarray]:
         # Parameters n_starting_points and seed are only important if type(optimizer) == MultistartOptimizer
 
-        u: cas.SX = cas.SX.sym("u", self.n_u, 1)  # pyright: ignore[reportArgumentType]
-        x: cas.SX = cas.SX.sym("x", self.n_x, 1)  # pyright: ignore[reportArgumentType]
-        w: cas.SX = cas.vertcat(u, x)  # pyright: ignore[reportAssignmentType]
+        u: SymbolicType = SymbolicType.sym("u", self.n_u, 1)  # pyright: ignore[reportArgumentType]
+        x: SymbolicType = SymbolicType.sym("x", self.n_x, 1)  # pyright: ignore[reportArgumentType]
+        w: SymbolicType = cas.vertcat(u, x)  # pyright: ignore[reportAssignmentType]
 
         n_variables: int = self.n_u + self.n_x
 
-        h_expression: cas.SX = cas.vertcat(self.h_known(u, x), self.h_unknown(u, x))  # pyright: ignore[reportAssignmentType]
+        h_expression: SymbolicType = cas.vertcat(
+            self.h_known(u, x), self.h_unknown(u, x)
+        )  # pyright: ignore[reportAssignmentType]
         h: cas.Function = cas.Function("h", [w], [h_expression])
 
         lower_bounds: np.ndarray = np.vstack(
@@ -458,7 +461,7 @@ class Problem:
             (self.u_upper_bounds, self.x_upper_bounds),
         )
 
-        f_expression: cas.SX = self.f(u, x)  # pyright: ignore[reportAssignmentType]
+        f_expression: SymbolicType = self.f(u, x)  # pyright: ignore[reportAssignmentType]
         f: cas.Function = cas.Function("f", [w], [f_expression])
 
         optimizer.set_problem(n_variables, f, None, h, lower_bounds, upper_bounds)

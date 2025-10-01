@@ -4,7 +4,7 @@ import casadi as cas
 import numpy as np
 
 from .array_operations import empty_like, exp, log
-from .type_aliases import CasadiType, MathArray, NumericType
+from .type_aliases import CasadiType, NumericType, SymbolicType
 
 
 class Parameter:
@@ -29,7 +29,9 @@ class Parameter:
         self.max: np.ndarray
         self.trainable: bool = trainable
         self.transform_mode: str = transform_mode  # Options: "identity" and "log"
-        self.symbol: cas.SX = cas.SX.sym(self.name, self.n_rows, self.n_columns)  # pyright: ignore[reportArgumentType]
+        self.symbol: SymbolicType = SymbolicType.sym(
+            self.name, self.n_rows, self.n_columns
+        )  # pyright: ignore[reportArgumentType]
 
         if value is None:
             self.value = np.ones((self.n_rows, self.n_columns))
@@ -73,9 +75,9 @@ class Parameter:
 
     def set_name(self, name: str) -> None:
         self.name = name
-        self.symbol = cas.SX.sym(self.name, self.n_rows, self.n_columns)  # pyright: ignore[reportArgumentType]
+        self.symbol = SymbolicType.sym(self.name, self.n_rows, self.n_columns)  # pyright: ignore[reportArgumentType]
 
-    def variable(self) -> MathArray:
+    def variable(self) -> SymbolicType | np.ndarray:
         if self.trainable:
             return self.symbol
         return self.value
@@ -103,12 +105,12 @@ class JoinedParameters:
         self.min: np.ndarray
         self.max: np.ndarray
         self.transform_mode: list[str] = []
-        self.symbol: cas.SX
+        self.symbol: SymbolicType
 
         value_list: list[np.ndarray] = []
         min_list: list[np.ndarray] = []
         max_list: list[np.ndarray] = []
-        symbol_list: list[cas.SX] = []
+        symbol_list: list[SymbolicType] = []
 
         for parameter in parameters:
             self.n_elements += parameter.n_elements
@@ -219,7 +221,10 @@ def transform_multiple(
 
 
 @overload
-def inv_transform(X_transformed: cas.SX, transform_mode: str | list[str]) -> cas.SX: ...
+def inv_transform(
+    X_transformed: cas.SX,
+    transform_mode: str | list[str],
+) -> cas.SX: ...
 @overload
 def inv_transform(X_transformed: cas.MX, transform_mode: str | list[str]) -> cas.MX: ...
 @overload
@@ -240,7 +245,9 @@ def inv_transform(
 
 
 @overload
-def inv_transform_single(X_transformed: cas.SX, transform_mode: str) -> cas.SX: ...
+def inv_transform_single(
+    X_transformed: SymbolicType, transform_mode: str
+) -> SymbolicType: ...
 @overload
 def inv_transform_single(X_transformed: cas.MX, transform_mode: str) -> cas.MX: ...
 @overload
@@ -266,9 +273,9 @@ def inv_transform_single(
 
 @overload
 def inv_transform_multiple(
-    X_transformed: cas.SX,
+    X_transformed: SymbolicType,
     transform_mode: list[str],
-) -> cas.SX: ...
+) -> SymbolicType: ...
 @overload
 def inv_transform_multiple(
     X_transformed: cas.MX,

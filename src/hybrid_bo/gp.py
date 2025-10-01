@@ -15,7 +15,7 @@ from .parameterization import (
     set_values,
     transform,
 )
-from .type_aliases import CasadiType
+from .type_aliases import CasadiType, SymbolicType
 
 
 class GP(Parameterized):
@@ -136,10 +136,10 @@ class GP(Parameterized):
 
         else:
             # Transformed domain, used for optimization problem
-            x: cas.SX = cas.SX.sym("x", trainables.n_elements, 1)  # pyright: ignore[reportArgumentType]
+            x: SymbolicType = SymbolicType.sym("x", trainables.n_elements, 1)  # pyright: ignore[reportArgumentType]
 
             # Original domain
-            x_original: cas.SX = inv_transform(x, trainables.transform_mode)
+            x_original: SymbolicType = inv_transform(x, trainables.transform_mode)
 
             # Transformed domain
             lower_bounds: np.ndarray = transform(

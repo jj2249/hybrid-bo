@@ -1,23 +1,23 @@
 import casadi as cas
 import numpy as np
 
-from hybrid_bo import Problem
+from hybrid_bo import Problem, SymbolicType
 
 
 def custom_problem() -> Problem:
     n_u: int = 1
     n_x: int = 2
 
-    u: cas.SX = cas.SX.sym("u", n_u, 1)  # pyright: ignore[reportArgumentType]
-    x: cas.SX = cas.SX.sym("x", n_x, 1)  # pyright: ignore[reportArgumentType]
+    u: SymbolicType = SymbolicType.sym("u", n_u, 1)  # pyright: ignore[reportArgumentType]
+    x: SymbolicType = SymbolicType.sym("x", n_x, 1)  # pyright: ignore[reportArgumentType]
 
-    f_expression: cas.SX = x[0]
+    f_expression: SymbolicType = x[0]
     f: cas.Function = cas.Function("f", [u, x], [f_expression])
 
-    h_known_expression: cas.SX = 5 - x[0] ** 2 - x[1] ** 2
+    h_known_expression: SymbolicType = 5 - x[0] ** 2 - x[1] ** 2
     h_known: cas.Function = cas.Function("h_known", [u, x], [h_known_expression])
 
-    h_unkonwn_expression: cas.SX = (
+    h_unkonwn_expression: SymbolicType = (
         x[1] - cas.exp(-((u - 2) ** 2)) - cas.exp(-(u**2) / 3)
     )
     h_unknown: cas.Function = cas.Function("h_unknown", [u, x], [h_unkonwn_expression])

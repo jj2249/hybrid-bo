@@ -327,7 +327,7 @@ class SciPyLocalOptimizer(LocalOptimizer):
     ) -> None:
         super().set_problem(n_variables, f, g, h, lower_bounds, upper_bounds)
 
-        x: cas.SX = cas.SX.sym("x", n_variables, 1)  # pyright: ignore[reportArgumentType]
+        x: SymbolicType = SymbolicType.sym("x", n_variables, 1)  # pyright: ignore[reportArgumentType]
 
         # %% Set self.f_np
 
@@ -336,7 +336,7 @@ class SciPyLocalOptimizer(LocalOptimizer):
         # %% Set self.f_gradient_np
 
         if self.method in self.gradient_methods:
-            f_gradient_expression: cas.SX = cas.gradient(self.f(x), x)
+            f_gradient_expression: SymbolicType = cas.gradient(self.f(x), x)
             f_gradient: cas.Function = cas.Function(
                 "gradient",
                 [x],
@@ -349,7 +349,7 @@ class SciPyLocalOptimizer(LocalOptimizer):
         # %% Set self.f_hessian_np
 
         if self.method in self.hessian_methods:
-            f_hessian_expression: cas.SX
+            f_hessian_expression: SymbolicType
             f_hessian_expression, _ = cas.hessian(self.f(x), x)
             f_hessian: cas.Function = cas.Function(
                 "hessian",
@@ -388,7 +388,7 @@ class SciPyLocalOptimizer(LocalOptimizer):
                 def h_np(x: np.ndarray) -> np.ndarray:
                     return self.h(x[:, np.newaxis]).full().flatten()  # pyright: ignore[reportOptionalCall, reportAttributeAccessIssue, reportOptionalMemberAccess]
 
-                h_jacobian_expression: cas.SX = cas.jacobian(self.h(x), x)
+                h_jacobian_expression: SymbolicType = cas.jacobian(self.h(x), x)
                 h_jacobian: cas.Function = cas.Function(
                     "h_jacobian",
                     [x],
@@ -400,8 +400,8 @@ class SciPyLocalOptimizer(LocalOptimizer):
 
                 h_constraints: scipy.optimize.NonlinearConstraint | dict[str, Any]
                 if self.method in ("trust-constr", "COBYQA"):
-                    v: cas.SX = cas.SX.sym("v", self.h.numel_out(0), 1)  # pyright: ignore[reportArgumentType]
-                    h_v_hessian_expression: cas.SX
+                    v: SymbolicType = SymbolicType.sym("v", self.h.numel_out(0), 1)  # pyright: ignore[reportArgumentType]
+                    h_v_hessian_expression: SymbolicType
                     h_v_hessian_expression, _ = cas.hessian(v.T @ self.h(x), x)
                     h_v_hessian: cas.Function = cas.Function(
                         "h_v_hessian",
@@ -434,7 +434,7 @@ class SciPyLocalOptimizer(LocalOptimizer):
                 def g_np(x: np.ndarray) -> np.ndarray:
                     return self.g(x[:, np.newaxis]).full().flatten()  # pyright: ignore[reportOptionalCall, reportAttributeAccessIssue, reportOptionalMemberAccess]
 
-                g_jacobian_expression: cas.SX = cas.jacobian(self.g(x), x)
+                g_jacobian_expression: SymbolicType = cas.jacobian(self.g(x), x)
                 g_jacobian: cas.Function = cas.Function(
                     "g_jacobian", [x], [g_jacobian_expression]
                 )
@@ -444,8 +444,8 @@ class SciPyLocalOptimizer(LocalOptimizer):
 
                 g_constraints: scipy.optimize.NonlinearConstraint | dict[str, Any]
                 if self.method in ("trust-constr", "COBYQA"):
-                    v: cas.SX = cas.SX.sym("v", self.g.numel_out(0), 1)  # pyright: ignore[reportArgumentType]
-                    g_v_hessian_expression: cas.SX
+                    v: SymbolicType = SymbolicType.sym("v", self.g.numel_out(0), 1)  # pyright: ignore[reportArgumentType]
+                    g_v_hessian_expression: SymbolicType
                     g_v_hessian_expression, _ = cas.hessian(v.T @ self.g(x), x)
 
                     g_v_hessian: cas.Function = cas.Function(
