@@ -236,7 +236,7 @@ class GP(Parameterized):
 
         return -0.5 * (
             (self.Y_train - m_t).T @ alpha
-            + np.sum(np.log(np.diag(L_tt)))
+            + 2 * np.sum(np.log(np.diag(L_tt)))
             + self.n_training_points * np.log(2 * np.pi)
         )
 
@@ -256,6 +256,6 @@ class GP(Parameterized):
 
         return -0.5 * (
             (self.Y_train - m_t).T @ alpha
-            + sum(log(diag(L_tt)))
+            + 2 * sum(log(diag(L_tt)))
             + self.n_training_points * np.log(2 * np.pi)
         )
