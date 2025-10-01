@@ -245,14 +245,20 @@ class GP(Parameterized):
         if trainables.n_elements == 0:
             return self.log_mll()
 
-        m_t: CasadiType = self.mean.m_variable(self.X_train)  # pyright: ignore[reportAssignmentType]
+        m_t: CasadiType | np.ndarray = self.mean.m_variable(self.X_train)
 
-        K_tt: CasadiType = self.kernel.k_variable(self.X_train, self.X_train) + (
-            self.noise_std.variable() ** 2 + self.epsilon
-        ) * np.eye(self.n_training_points)  # pyright: ignore[reportAssignmentType]
+        K_tt: CasadiType | np.ndarray = self.kernel.k_variable(
+            self.X_train,
+            self.X_train,
+        ) + (self.noise_std.variable() ** 2 + self.epsilon) * np.eye(
+            self.n_training_points,
+        )
 
-        L_tt: CasadiType = cholesky(K_tt)
-        alpha: CasadiType = solve(L_tt.T, solve(L_tt, (self.Y_train - m_t)))
+        L_tt: CasadiType | np.ndarray = cholesky(K_tt)
+        alpha: CasadiType | np.ndarray = solve(
+            L_tt.T,
+            solve(L_tt, (self.Y_train - m_t)),
+        )
 
         return -0.5 * (
             (self.Y_train - m_t).T @ alpha
