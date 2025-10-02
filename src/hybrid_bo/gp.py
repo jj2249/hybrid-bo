@@ -53,7 +53,7 @@ class GP(Parameterized):
                 "noise_std",
                 value=1e-2,
                 min=1e-6,
-                max=10,
+                max=1.0,
                 transform_mode="log",
             )
 

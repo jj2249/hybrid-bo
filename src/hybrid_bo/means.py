@@ -56,9 +56,9 @@ class ConstantMean(Mean):
         if constant is None:
             self.constant = Parameter(
                 "constant",
-                value=0,
-                min=-1,
-                max=1,
+                value=0.0,
+                min=-1.0,
+                max=1.0,
                 transform_mode="identity",
             )
         else:

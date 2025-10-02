@@ -307,16 +307,18 @@ class StationaryKernel(Kernel, ABC):
                 self.lengthscale = Parameter(
                     "lengthscale",
                     self.n_inputs,
-                    min=1.0e-5,
-                    max=1.0e5,
+                    value=1.0,
+                    min=1.0e-3,
+                    max=1.0e2,
                     transform_mode="log",
                 )
             else:
                 self.lengthscale = Parameter(
                     "lengthscale",
                     1,
-                    min=1.0e-5,
-                    max=1.0e5,
+                    value=1.0,
+                    min=1.0e-3,
+                    max=1.0e2,
                     transform_mode="log",
                 )
             self.ARD = ARD
