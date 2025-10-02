@@ -30,8 +30,10 @@ class Parameter:
         self.trainable: bool = trainable
         self.transform_mode: str = transform_mode  # Options: "identity" and "log"
         self.symbol: SymbolicType = SymbolicType.sym(
-            self.name, self.n_rows, self.n_columns
-        )  # pyright: ignore[reportArgumentType]
+            self.name,  # pyright: ignore[reportArgumentType]
+            self.n_rows,  # pyright: ignore[reportArgumentType]
+            self.n_columns,  # pyright: ignore[reportArgumentType]
+        )
 
         if value is None:
             self.value = np.ones((self.n_rows, self.n_columns))
@@ -237,7 +239,8 @@ def inv_transform(
 
 
 def inv_transform(
-    X_transformed: CasadiType | np.ndarray, transform_mode: str | list[str]
+    X_transformed: CasadiType | np.ndarray,
+    transform_mode: str | list[str],
 ) -> CasadiType | np.ndarray:
     if isinstance(transform_mode, str):
         return inv_transform_single(X_transformed, transform_mode)
@@ -245,9 +248,7 @@ def inv_transform(
 
 
 @overload
-def inv_transform_single(
-    X_transformed: SymbolicType, transform_mode: str
-) -> SymbolicType: ...
+def inv_transform_single(X_transformed: cas.SX, transform_mode: str) -> cas.SX: ...
 @overload
 def inv_transform_single(X_transformed: cas.MX, transform_mode: str) -> cas.MX: ...
 @overload
@@ -273,9 +274,9 @@ def inv_transform_single(
 
 @overload
 def inv_transform_multiple(
-    X_transformed: SymbolicType,
+    X_transformed: cas.SX,
     transform_mode: list[str],
-) -> SymbolicType: ...
+) -> cas.SX: ...
 @overload
 def inv_transform_multiple(
     X_transformed: cas.MX,

@@ -129,9 +129,9 @@ class ZeroKernel(Kernel):
             raise Exception(msg)
 
         if isinstance(X1, CasadiType):
-            return type(X1).zeros(X1.shape[0], X2.shape[0])
+            return type(X1).zeros(X1.shape[0], X2.shape[0])  # pyright: ignore[reportArgumentType]
         if isinstance(X2, CasadiType):
-            return type(X2).zeros(X1.shape[0], X2.shape[0])
+            return type(X2).zeros(X1.shape[0], X2.shape[0])  # pyright: ignore[reportArgumentType]
         return np.zeros((X1.shape[0], X2.shape[0]))
 
     @override
@@ -177,9 +177,9 @@ class ConstantKernel(Kernel):
             raise Exception(msg)
 
         if isinstance(X1, CasadiType):
-            return self.constant.value * type(X1).ones(X1.shape[0], X2.shape[0])
+            return self.constant.value * type(X1).ones(X1.shape[0], X2.shape[0])  # pyright: ignore[reportArgumentType]
         if isinstance(X2, CasadiType):
-            return self.constant.value * type(X2).ones(X1.shape[0], X2.shape[0])
+            return self.constant.value * type(X2).ones(X1.shape[0], X2.shape[0])  # pyright: ignore[reportArgumentType]
         return self.constant.value * np.ones((X1.shape[0], X2.shape[0]))
 
     def k_variable(
