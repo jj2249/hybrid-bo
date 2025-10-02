@@ -64,8 +64,9 @@ class OutputScaleKernel(Kernel):
         if outputscale is None:
             self.outputscale = Parameter(
                 "outputscale",
-                min=1e-5,
-                max=1e5,
+                value=1.0,
+                min=0.1,
+                max=10.0,
                 transform_mode="log",
             )
         else:
