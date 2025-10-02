@@ -7,6 +7,8 @@ import casadi as cas
 import numpy as np
 import scipy
 
+from .type_aliases import SymbolicType
+
 
 class Optimizer(ABC):
     def __init__(self) -> None:
