@@ -16,10 +16,28 @@ def cholesky(X: cas.DM) -> cas.DM: ...
 def cholesky(X: np.ndarray) -> np.ndarray: ...
 
 
-def cholesky(X: CasadiType | np.ndarray) -> CasadiType | np.ndarray:
-    if isinstance(X, CasadiType):
+def cholesky(
+    X: CasadiType | np.ndarray,
+    epsilon: float = 1.0e-10,
+) -> CasadiType | np.ndarray:
+    if isinstance(X, cas.MX):
+        n_rows: int = X.size1()
+        L: cas.MX = cas.MX.zeros(n_rows, n_rows)  # pyright: ignore[reportArgumentType]
+        for i in range(n_rows):
+            for j in range(i + 1):
+                s: cas.MX | float = cas.dot(L[i, :j], L[j, :j]) if j > 0 else 0.0
+                if j < i:
+                    # Off-diagonal
+                    L[i, j] = (X[i, j] - s) / L[j, j]
+                else:
+                    # Diagonal
+                    L[i, i] = cas.sqrt(X[i, i] - s + epsilon)
+        return L
+
+    if isinstance(X, cas.SX | cas.DM):
         # Casadi returns upper triangular matrix!
         return cas.chol(X).T
+
     return np.linalg.cholesky(X)
 
 
