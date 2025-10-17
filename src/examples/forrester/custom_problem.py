@@ -1,10 +1,10 @@
 import casadi as cas
 import numpy as np
 
-from hybrid_bo import Problem, SymbolicType
+from hybrid_bo import Config, Problem, SymbolicType
 
 
-def custom_problem() -> Problem:
+def custom_problem(config: Config) -> Problem:
     n_u: int = 1
     n_x: int = 2
 
