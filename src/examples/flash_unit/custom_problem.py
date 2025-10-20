@@ -55,8 +55,8 @@ class CustomProblem(Problem):
 
         T_lower_bound: float = 363.15 / 1000
         T_upper_bound: float = 403.15 / 1000
-        p_lower_bound: float = 0.9
-        p_upper_bound: float = 3.6
+        p_lower_bound: float = 0.8
+        p_upper_bound: float = 2.6
 
         u_lower_bounds: np.ndarray = np.array([T_lower_bound, p_lower_bound])[
             :,
@@ -280,7 +280,7 @@ def plot_physical_boundary(
 ) -> None:
     # %% Variables to create grid with
 
-    n_eval_points: list[int] = [101, 101]
+    n_eval_points: list[int] = [201, 201]
 
     T: np.ndarray = np.linspace(
         problem.u_lower_bounds[0],
@@ -330,4 +330,4 @@ def plot_physical_boundary(
 
     # %% Plotting
 
-    ax.plot(T_plot, p_plot, c="k")
+    ax.plot(T_plot, p_plot, c="k", linewidth=3.0)
