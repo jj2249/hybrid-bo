@@ -14,6 +14,7 @@ from hybrid_bo.routines import (
     standard_bo,
     uniform_sampling,
 )
+from hybrid_bo.routines.utils import compare_results
 
 # Options:
 # "forrester"
@@ -27,7 +28,15 @@ example: str = "abstract_example"
 # "latin_hypercube_sampling"
 # "uniform_sampling"
 # "results_comparison"
-routine: str = "hybrid_bo"
+routine: str = "results_comparison"
+
+# Options:
+# "all"
+# "hybrid_bo"
+# "standard_bo"
+# "latin_hypercube_sampling"
+# "uniform_sampling"
+methods_for_comparison: list[str] = ["all"]
 
 this_dir: Path = Path(__file__).parent.resolve()
 results_dir: Path = this_dir / example
@@ -97,3 +106,14 @@ if __name__ == "__main__":
                 results_dir,
                 create_plots_uniform_sampling,
             )
+        case "results_comparison":
+            compare_results(
+                results_dir,
+                methods_for_comparison,
+                problem,
+                optimizer_hybrid_bo,
+                100,
+                config.seed,
+            )
+        case _:
+            print("WARNING: Your given routine is not known!")
