@@ -420,6 +420,14 @@ def compare_results(
     regret_maxs: dict[str, np.ndarray] = {}
     regret_means: dict[str, np.ndarray] = {}
 
+    if methods == ["all"]:
+        methods = [
+            "hybrid_bo",
+            "standard_bo",
+            "latin_hypercube_sampling",
+            "uniform_sampling",
+        ]
+
     for method in methods:
         with (results_dir / f"results_{method}.pkl").open("rb") as file:
             results[method] = pickle.load(file)
