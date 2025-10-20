@@ -218,13 +218,13 @@ def latin_hypercube_sampling(
 
                     print("Plotting done.")
 
-                    # %% Fill results of BO
+                # %% Fill results of BO
 
-                    results_bo.f[i_run_bo, i_bo] = f_next
-                    results_bo.f_no_noise[i_run_bo, i_bo] = f_next_no_noise
-                    results_bo.u[i_run_bo, i_bo] = u_next.flatten()
-                    results_bo.x[i_run_bo, i_bo] = x_next.flatten()
-                    results_bo.x_no_noise[i_run_bo, i_bo] = x_next_no_noise.flatten()
+                results_bo.f[i_run_bo, i_bo] = f_next
+                results_bo.f_no_noise[i_run_bo, i_bo] = f_next_no_noise
+                results_bo.u[i_run_bo, i_bo] = u_next.flatten()
+                results_bo.x[i_run_bo, i_bo] = x_next.flatten()
+                results_bo.x_no_noise[i_run_bo, i_bo] = x_next_no_noise.flatten()
 
                 print(f"BO iteration {i_bo + 1} done.\n---\n")
 
