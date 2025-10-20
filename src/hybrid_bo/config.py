@@ -2,14 +2,16 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from .problem import Problem
-
 
 @dataclass
 class Config:
     # %% Problem
 
-    problem: Problem
+    # Number of elements in u
+    n_u: int
+
+    # Number of elements in x
+    n_x: int
 
     # Indices of the elements of x that are measured
     indices_x_measured: list[int]
@@ -95,7 +97,7 @@ class Config:
 
     def __post_init__(self) -> None:
         self.indices_x_no_gp: list[int] = list(
-            set(range(self.problem.n_x))
+            set(range(self.n_x))
             - set(self.indices_x_input_gp)
             - set(self.indices_x_output_gp),
         )

@@ -5,11 +5,8 @@ from hybrid_bo import Config, Problem, SymbolicType
 
 
 def custom_problem(config: Config) -> Problem:
-    n_u: int = 1
-    n_x: int = 2
-
-    u: SymbolicType = SymbolicType.sym("u", n_u, 1)  # pyright: ignore[reportArgumentType]
-    x: SymbolicType = SymbolicType.sym("x", n_x, 1)  # pyright: ignore[reportArgumentType]
+    u: SymbolicType = SymbolicType.sym("u", config.n_u, 1)  # pyright: ignore[reportArgumentType]
+    x: SymbolicType = SymbolicType.sym("x", config.n_x, 1)  # pyright: ignore[reportArgumentType]
 
     f_expression: SymbolicType = x[0] * x[1]
     f: cas.Function = cas.Function("f", [u, x], [f_expression])

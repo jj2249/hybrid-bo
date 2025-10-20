@@ -8,16 +8,16 @@ seed: 0
 ## General
 
 # Configure if plots are supposed to be created, bool
-create_plots: False
+create_plots: True
 
 # Configure if results are supposed to be saved, bool
 save_results: True
 
 # Number of Bayesion optimization runs, int
-n_runs_bo: 10
+n_runs_bo: 3
 
 # Number of Bayesian optimization iterations, int
-n_iterations_bo: 10
+n_iterations_bo: 5
 
 # Configure which acquisition problem formulation to use, str, alternatives: "lcb", "ei"
 formulation_acq: "ei"
@@ -39,6 +39,12 @@ factor_lcb_std: 1.0
 epsilon_ei_standard: 1.0e-10
 
 # %% Problem
+
+# Number of elements in u, int
+n_u: 2
+
+# Number of elements in x, int
+n_x: 2
 
 # Indices of the elements of u that are inputs of the GP, list[int]
 # We use lists because indexing with tuples sometimes is different from indexing with lists in NumPy as well as CasADi

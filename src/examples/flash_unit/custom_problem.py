@@ -143,6 +143,13 @@ class CustomProblem(Problem):
             x_upper_bounds,
         )
 
+        if self.n_u != self.config.n_u:
+            msg: str = "self.n_u != self.config.n_u"
+            raise Exception(msg)
+        if self.n_x != self.config.n_x:
+            msg: str = "self.n_x != self.config.n_x"
+            raise Exception(msg)
+
     @override
     def evaluate_with_simulation(
         self,

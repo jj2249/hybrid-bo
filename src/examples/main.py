@@ -26,7 +26,7 @@ example: str = "abstract_example"
 # "standard_bo"
 # "latin_hypercube_sampling"
 # "uniform_sampling"
-# "compare_results"
+# "results_comparison"
 routine: str = "hybrid_bo"
 
 this_dir: Path = Path(__file__).parent.resolve()
@@ -34,14 +34,13 @@ results_dir: Path = this_dir / example
 
 
 if __name__ == "__main__":
-    example_pkg: ModuleType = import_module(example)
-    problem: Problem = example_pkg.custom_problem()
-
     config_path: Path = this_dir / example / "config.yaml"
     with config_path.open("r") as stream:
         config_dict: dict = yaml.safe_load(stream)
-    config_dict["problem"] = problem
     config: Config = Config(**config_dict)
+
+    example_pkg: ModuleType = import_module(example)
+    problem: Problem = example_pkg.custom_problem(config)
 
     gp_hybrid_bo: GP = example_pkg.gp_hybrid_bo(problem.n_u)
     gp_standard_bo: GP = example_pkg.gp_standard_bo(problem.n_u)

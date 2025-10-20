@@ -48,6 +48,12 @@ confidence_level: 95
 
 # %% Problem
 
+# Number of elements in u, int
+n_u: 1
+
+# Number of elements in x, int
+n_x: 2
+
 # Indices of the elements of u that are inputs of the GP, list[int]
 # We use lists because indexing with tuples sometimes is different from indexing with lists in NumPy as well as CasADi
 indices_u_input_gp: [0]
