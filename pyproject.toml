@@ -1,22 +1,36 @@
-[build-system]
-requires = ["hatchling >= 1.26"]
-build-backend = "hatchling.build"
-
 [project]
-name = "hybrid_bo"
-version = "0.0.0"
 authors = [
-    { name = "Eike Cramer", email = "eike.cramer@avt.rwth-aachen.de" },
     { name = "Luis Kutschat", email = "luis.kutschat@avt.rwth-aachen.de" },
-    { name = "Joel Paulson", email = "paulson.82@osu.edu" },
+    { name = "Eike Cramer", email = "e.cramer@ucl.ac.uk" },
+    { name = "Joel Paulson", email = "joel.paulson@wisc.edu" },
 ]
+dependencies = [
+    "casadi>=3.7.2,<4",
+    "numpy>=2.3.4,<3",
+    "scipy>=1.15",
+    "matplotlib>=3.10.7,<4",
+    "pyyaml>=6.0.3,<7",
+]
+name = "hybrid-bo"
+requires-python = ">= 3.12"
+version = "0.1.0"
 description = "A package for performing hybrind Bayesian optimization"
 readme = "README.md"
-requires-python = ">=3.12"
-classifiers = [
-    "Programming Language :: Python :: 3",
-    "Operating System :: OS Independent",
-]
 license = "MIT"
 license-files = ["LICENSE"]
-dependencies = ["casadi", "numpy", "scipy>=1.15.0", "pyyaml", "matplotlib"]
+
+[build-system]
+build-backend = "hatchling.build"
+requires = ["hatchling"]
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["win-64"]
+
+[tool.pixi.pypi-dependencies]
+hybrid_bo = { path = ".", editable = true }
+
+[tool.pixi.tasks]
+
+[tool.pixi.dependencies]
+python = "3.12.*"
