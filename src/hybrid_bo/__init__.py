@@ -5,11 +5,10 @@ from hybrid_bo import (
     means,
     optimizers,
     parameterization,
+    routines,
     type_aliases,
 )
 from hybrid_bo.config import Config
 from hybrid_bo.gp import GP
 from hybrid_bo.problem import Problem
 from hybrid_bo.results_bo import ResultsBO
-
-from hybrid_bo import routines  # isort: skip
