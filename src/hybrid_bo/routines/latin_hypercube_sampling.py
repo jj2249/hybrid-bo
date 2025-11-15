@@ -5,13 +5,16 @@ from pathlib import Path
 import numpy as np
 import scipy
 
-from hybrid_bo import GP, Config, Problem, ResultsBO
 from hybrid_bo.affine_transformers import (
     AffineTransformer,
     MinMaxTransformer,
     StandardTransformer,
 )
+from hybrid_bo.config import Config
+from hybrid_bo.gp import GP
 from hybrid_bo.optimizers import MultiStartOptimizer
+from hybrid_bo.problem import Problem
+from hybrid_bo.results_bo import ResultsBO
 from hybrid_bo.routines.utils import get_sampling_based_data, get_training_data
 
 

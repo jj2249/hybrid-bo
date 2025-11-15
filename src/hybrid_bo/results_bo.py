@@ -1,6 +1,7 @@
 import numpy as np
 
-from hybrid_bo import Config, Problem
+from hybrid_bo.config import Config
+from hybrid_bo.problem import Problem
 
 
 class ResultsBO:

@@ -3,7 +3,10 @@ from typing import Any, overload
 import casadi as cas
 import numpy as np
 
-from hybrid_bo.array_operations import cholesky, diag, log, solve, sum
+from hybrid_bo.array_operations.arithmetic_functions import sum
+from hybrid_bo.array_operations.linear_algebra import cholesky, solve
+from hybrid_bo.array_operations.nonlinear_functions import log
+from hybrid_bo.array_operations.shape_functions import diag
 from hybrid_bo.kernels import Kernel
 from hybrid_bo.means import Mean
 from hybrid_bo.optimizers import (

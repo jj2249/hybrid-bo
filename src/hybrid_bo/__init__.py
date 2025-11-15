@@ -1,4 +1,4 @@
-from . import (
+from hybrid_bo import (
     affine_transformers,
     array_operations,
     kernels,
@@ -7,9 +7,9 @@ from . import (
     parameterization,
     type_aliases,
 )
-from .config import Config
-from .gp import GP
-from .problem import Problem
-from .results_bo import ResultsBO
+from hybrid_bo.config import Config
+from hybrid_bo.gp import GP
+from hybrid_bo.problem import Problem
+from hybrid_bo.results_bo import ResultsBO
 
-from . import routines  # isort: skip
+from hybrid_bo import routines  # isort: skip

@@ -4,15 +4,17 @@ from pathlib import Path
 
 import numpy as np
 
-from hybrid_bo import GP, Config, Problem, ResultsBO
-from hybrid_bo.optimizers import MultiStartOptimizer
-from hybrid_bo.routines.utils import get_sampling_based_data, get_training_data
-
-from ..affine_transformers import (
+from hybrid_bo.affine_transformers import (
     AffineTransformer,
     MinMaxTransformer,
     StandardTransformer,
 )
+from hybrid_bo.config import Config
+from hybrid_bo.gp import GP
+from hybrid_bo.optimizers import MultiStartOptimizer
+from hybrid_bo.problem import Problem
+from hybrid_bo.results_bo import ResultsBO
+from hybrid_bo.routines.utils import get_sampling_based_data, get_training_data
 
 
 def do_uniform_sampling(
