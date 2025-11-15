@@ -1,6 +1,18 @@
-.venv/
+# pixi environments
+.pixi/
+!.pixi/config.toml
+
+# VS Code
 .vscode/
 
-*__pycache__/
+# Python
+**/__pycache__/
 
+# docs
+docs/_build/
+docs/_static/
+docs/_templates/
+
+# Data files
 *.pkl
+
