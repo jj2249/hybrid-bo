@@ -5,8 +5,8 @@ import numpy as np
 import scipy
 import scipy.optimize
 
-from .optimizers import MultiStartOptimizer, Optimizer
-from .type_aliases import SymbolicType
+from hybrid_bo.optimizers import MultiStartOptimizer, Optimizer
+from hybrid_bo.type_aliases import SymbolicType
 
 
 class Problem:

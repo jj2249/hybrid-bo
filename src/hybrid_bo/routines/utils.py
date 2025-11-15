@@ -7,12 +7,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy
 
-from ..affine_transformers import AffineTransformer
-from ..config import Config
-from ..gp import GP
-from ..optimizers import Optimizer
-from ..problem import Problem
-from ..type_aliases import CasadiType
+from hybrid_bo import GP, Config, Problem
+from hybrid_bo.affine_transformers import AffineTransformer
+from hybrid_bo.optimizers import Optimizer
+from hybrid_bo.type_aliases import CasadiType
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes

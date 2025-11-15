@@ -4,9 +4,9 @@ from typing import TypeAlias, overload, override
 import casadi as cas
 import numpy as np
 
-from .array_operations import exp, sqrt, squared_distance, tile
-from .parameterization import Parameter, Parameterized
-from .type_aliases import CasadiType
+from hybrid_bo.array_operations import exp, sqrt, squared_distance, tile
+from hybrid_bo.parameterization import Parameter, Parameterized
+from hybrid_bo.type_aliases import CasadiType
 
 
 class Kernel(Parameterized, ABC):

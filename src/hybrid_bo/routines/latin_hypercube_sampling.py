@@ -5,17 +5,14 @@ from pathlib import Path
 import numpy as np
 import scipy
 
-from ..affine_transformers import (
+from hybrid_bo import GP, Config, Problem, ResultsBO
+from hybrid_bo.affine_transformers import (
     AffineTransformer,
     MinMaxTransformer,
     StandardTransformer,
 )
-from ..config import Config
-from ..gp import GP
-from ..optimizers import MultiStartOptimizer
-from ..problem import Problem
-from ..results_bo import ResultsBO
-from .utils import get_sampling_based_data, get_training_data
+from hybrid_bo.optimizers import MultiStartOptimizer
+from hybrid_bo.routines.utils import get_sampling_based_data, get_training_data
 
 
 def latin_hypercube_sampling(

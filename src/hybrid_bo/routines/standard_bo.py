@@ -6,18 +6,16 @@ from pathlib import Path
 import casadi as cas
 import numpy as np
 
+from hybrid_bo import GP, Config, Problem, ResultsBO
+from hybrid_bo.optimizers import MultiStartOptimizer, Optimizer
+from hybrid_bo.routines.utils import ei_gp, get_sampling_based_data, get_training_data
+from hybrid_bo.type_aliases import SymbolicType
+
 from ..affine_transformers import (
     AffineTransformer,
     MinMaxTransformer,
     StandardTransformer,
 )
-from ..config import Config
-from ..gp import GP
-from ..optimizers import MultiStartOptimizer, Optimizer
-from ..problem import Problem
-from ..results_bo import ResultsBO
-from ..type_aliases import SymbolicType
-from .utils import ei_gp, get_sampling_based_data, get_training_data
 
 
 def standard_bo(

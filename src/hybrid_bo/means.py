@@ -4,8 +4,8 @@ from typing import overload, override
 import casadi as cas
 import numpy as np
 
-from .parameterization import Parameter, Parameterized
-from .type_aliases import CasadiType
+from hybrid_bo.parameterization import Parameter, Parameterized
+from hybrid_bo.type_aliases import CasadiType
 
 
 class Mean(Parameterized, ABC):

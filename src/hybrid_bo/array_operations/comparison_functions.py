@@ -3,7 +3,7 @@ from typing import overload
 import casadi as cas
 import numpy as np
 
-from ..type_aliases import CasadiType, NumericType
+from hybrid_bo.type_aliases import CasadiType, NumericType
 
 
 # Maybe always use CasADi function?

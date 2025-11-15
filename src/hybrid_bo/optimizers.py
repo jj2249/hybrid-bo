@@ -7,7 +7,7 @@ import casadi as cas
 import numpy as np
 import scipy
 
-from .type_aliases import SymbolicType
+from hybrid_bo.type_aliases import SymbolicType
 
 
 class Optimizer(ABC):

@@ -3,8 +3,8 @@ from typing import overload
 import casadi as cas
 import numpy as np
 
-from .array_operations import empty_like, exp, log
-from .type_aliases import CasadiType, NumericType, SymbolicType
+from hybrid_bo.array_operations import empty_like, exp, log
+from hybrid_bo.type_aliases import CasadiType, NumericType, SymbolicType
 
 
 class Parameter:

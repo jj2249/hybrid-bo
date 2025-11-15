@@ -3,7 +3,7 @@ from typing import overload, override
 import casadi as cas
 import numpy as np
 
-from .type_aliases import CasadiType
+from hybrid_bo.type_aliases import CasadiType
 
 
 class AffineTransformer:

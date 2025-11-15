@@ -3,11 +3,16 @@ from typing import Any, overload
 import casadi as cas
 import numpy as np
 
-from .array_operations import cholesky, diag, log, solve, sum
-from .kernels import Kernel
-from .means import Mean
-from .optimizers import CasadiOptimizer, LocalOptimizer, MultiStartOptimizer, Optimizer
-from .parameterization import (
+from hybrid_bo.array_operations import cholesky, diag, log, solve, sum
+from hybrid_bo.kernels import Kernel
+from hybrid_bo.means import Mean
+from hybrid_bo.optimizers import (
+    CasadiOptimizer,
+    LocalOptimizer,
+    MultiStartOptimizer,
+    Optimizer,
+)
+from hybrid_bo.parameterization import (
     JoinedParameters,
     Parameter,
     Parameterized,
@@ -15,7 +20,7 @@ from .parameterization import (
     set_values,
     transform,
 )
-from .type_aliases import CasadiType, SymbolicType
+from hybrid_bo.type_aliases import CasadiType, SymbolicType
 
 
 class GP(Parameterized):

@@ -3,11 +3,8 @@ from typing import overload
 import casadi as cas
 import numpy as np
 
-from ..type_aliases import CasadiType
-from .arithmetic_functions import sum
-from .comparison_functions import fmax
-from .nonlinear_functions import sqrt
-from .shape_functions import tile
+from hybrid_bo.array_operations import fmax, sqrt, sum, tile
+from hybrid_bo.type_aliases import CasadiType
 
 
 @overload
