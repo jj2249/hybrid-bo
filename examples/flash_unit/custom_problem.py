@@ -5,6 +5,7 @@ import numpy as np
 from matplotlib.axes import Axes
 
 from hybrid_bo import Config, Problem
+from hybrid_bo.type_aliases import SymbolicType
 
 
 def custom_problem(config: Config) -> Problem:
@@ -48,10 +49,10 @@ class CustomProblem(Problem):
 
         # %% u, x and their bounds
 
-        T: cas.SX = cas.SX.sym("T", 1, 1)  # pyright: ignore[reportArgumentType] # Temperature in the flash unit (1000 * K)
-        p: cas.SX = cas.SX.sym("p", 1, 1)  # pyright: ignore[reportArgumentType] # Pressure in the flash unit (bar)
+        T: SymbolicType = SymbolicType("T", 1, 1)  # pyright: ignore[reportArgumentType] # Temperature in the flash unit (1000 * K)
+        p: SymbolicType = SymbolicType("p", 1, 1)  # pyright: ignore[reportArgumentType] # Pressure in the flash unit (bar)
 
-        u: cas.SX = cas.vertcat(T, p)  # pyright: ignore[reportAssignmentType]
+        u: SymbolicType = cas.vertcat(T, p)  # pyright: ignore[reportAssignmentType]
 
         T_lower_bound: float = 363.15 / 1000
         T_upper_bound: float = 403.15 / 1000
@@ -67,10 +68,10 @@ class CustomProblem(Problem):
             np.newaxis,
         ]
 
-        x_1: cas.SX = cas.SX.sym("x_1", 1, 1)  # pyright: ignore[reportArgumentType] # Mole Fraction of H2O in bottom Stream (-)
-        gamma_1_ln: cas.SX = cas.SX.sym("gamma_1_ln", 1, 1)  # pyright: ignore[reportArgumentType] # Activation coefficient (-)
+        x_1: SymbolicType = SymbolicType("x_1", 1, 1)  # pyright: ignore[reportArgumentType] # Mole Fraction of H2O in bottom Stream (-)
+        gamma_1_ln: SymbolicType = SymbolicType("gamma_1_ln", 1, 1)  # pyright: ignore[reportArgumentType] # Activation coefficient (-)
 
-        x: cas.SX = cas.vertcat(x_1, gamma_1_ln)  # pyright: ignore[reportAssignmentType]
+        x: SymbolicType = cas.vertcat(x_1, gamma_1_ln)  # pyright: ignore[reportAssignmentType]
 
         x_1_lower_bound: float = 0.0
         x_1_upper_bound: float = 1.0
@@ -89,28 +90,28 @@ class CustomProblem(Problem):
         # %% Helper variables
 
         B: float = self.F - self.D
-        y_1: cas.SX = (self.F * self.z_1 - B * x_1) / self.D
-        x_2: cas.SX = 1 - x_1  # (-)
-        p_1_sat: cas.SX = (
+        y_1: SymbolicType = (self.F * self.z_1 - B * x_1) / self.D
+        x_2: SymbolicType = 1 - x_1  # (-)
+        p_1_sat: SymbolicType = (
             cas.power(10, self.A_1 - self.B_1 / (self.C_1 + T * 1000)) / 1e5  # (bar)
         )
-        tau_12: cas.SX = self.a_12 + self.b_12 / (T * 1000)  # (-)
-        tau_21: cas.SX = self.a_21 + self.b_21 / (T * 1000)  # (-)
-        alpha_12: cas.SX = self.c_12 + self.d_12 * (T * 1000 - 273.15)  # (-)
-        alpha_21: cas.SX = self.c_21 + self.d_21 * (T * 1000 - 273.15)  # (-)
-        G_12: cas.SX = cas.exp(-alpha_12 * tau_12)  # (-)
-        G_21: cas.SX = cas.exp(-alpha_21 * tau_21)  # (-)
+        tau_12: SymbolicType = self.a_12 + self.b_12 / (T * 1000)  # (-)
+        tau_21: SymbolicType = self.a_21 + self.b_21 / (T * 1000)  # (-)
+        alpha_12: SymbolicType = self.c_12 + self.d_12 * (T * 1000 - 273.15)  # (-)
+        alpha_21: SymbolicType = self.c_21 + self.d_21 * (T * 1000 - 273.15)  # (-)
+        G_12: SymbolicType = cas.exp(-alpha_12 * tau_12)  # (-)
+        G_21: SymbolicType = cas.exp(-alpha_21 * tau_21)  # (-)
 
         # %% f, h and g
 
-        f_expression: cas.SX = (
+        f_expression: SymbolicType = (
             self.zeta * ((y_1 - self.y_1_set) ** 2)
             + self.beta * ((1000 * T) ** 2)
             + self.eta * ((p - self.p_amb) ** 2)
         )
         f: cas.Function = cas.Function("f", [u, x], [f_expression])
 
-        h_known_expression: list[cas.SX] = [
+        h_known_expression: list[SymbolicType] = [
             p * y_1 - p_1_sat * x_1 * cas.exp(gamma_1_ln),
         ]
 
@@ -120,7 +121,7 @@ class CustomProblem(Problem):
             [cas.vertcat(*h_known_expression)],
         )
 
-        h_unknown_expression: cas.SX = gamma_1_ln - x_2**2 * (
+        h_unknown_expression: SymbolicType = gamma_1_ln - x_2**2 * (
             tau_21 * (G_21 / (x_1 + x_2 * G_21)) ** 2
             + ((tau_12 * G_12) / (x_2 + x_1 * G_12) ** 2)
         )

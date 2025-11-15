@@ -1,7 +1,8 @@
 import casadi as cas
 import numpy as np
 
-from hybrid_bo import Config, Problem, SymbolicType
+from hybrid_bo import Config, Problem
+from hybrid_bo.type_aliases import SymbolicType
 
 
 def custom_problem(config: Config) -> Problem:
