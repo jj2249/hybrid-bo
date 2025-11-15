@@ -14,10 +14,10 @@ create_plots: True
 save_results: True
 
 # Number of Bayesion optimization runs, int
-n_runs_bo: 10
+n_runs_bo: 1
 
 # Number of Bayesian optimization iterations, int
-n_iterations_bo: 0
+n_iterations_bo: 5
 
 # Configure which acquisition problem formulation to use, str, alternatives: "lcb", "ei"
 formulation_acq: "ei"
