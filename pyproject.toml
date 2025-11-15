@@ -34,3 +34,10 @@ hybrid_bo = { path = ".", editable = true }
 
 [tool.pixi.dependencies]
 python = "3.12.*"
+
+[tool.pixi.environments]
+default = { solve-group = "default" }
+docs = { features = ["docs"], solve-group = "default" }
+
+[dependency-groups]
+docs = ["sphinx", "sphinx-autoapi", "furo"]
