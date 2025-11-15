@@ -15,7 +15,7 @@ from hybrid_bo.optimizers import MultiStartOptimizer
 from hybrid_bo.routines.utils import get_sampling_based_data, get_training_data
 
 
-def latin_hypercube_sampling(
+def do_latin_hypercube_sampling(
     problem: Problem,
     config: Config,
     gp: GP,

@@ -18,7 +18,7 @@ from ..affine_transformers import (
 )
 
 
-def standard_bo(
+def do_standard_bo(
     problem: Problem,
     config: Config,
     gp: GP,

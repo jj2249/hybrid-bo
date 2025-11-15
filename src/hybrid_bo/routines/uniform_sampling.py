@@ -15,7 +15,7 @@ from ..affine_transformers import (
 )
 
 
-def uniform_sampling(
+def do_uniform_sampling(
     problem: Problem,
     config: Config,
     gp: GP,

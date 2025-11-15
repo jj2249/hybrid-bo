@@ -18,7 +18,7 @@ from hybrid_bo.routines.utils import get_sampling_based_data, get_training_data
 from hybrid_bo.type_aliases import SymbolicType
 
 
-def hybrid_bo(
+def do_hybrid_bo(
     problem: Problem,
     config: Config,
     gp: GP,

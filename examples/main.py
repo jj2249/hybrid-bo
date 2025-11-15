@@ -9,10 +9,10 @@ import yaml
 from hybrid_bo import GP, Config, Problem
 from hybrid_bo.optimizers import Optimizer
 from hybrid_bo.routines import (
-    hybrid_bo,
-    latin_hypercube_sampling,
-    standard_bo,
-    uniform_sampling,
+    do_hybrid_bo,
+    do_latin_hypercube_sampling,
+    do_standard_bo,
+    do_uniform_sampling,
 )
 from hybrid_bo.routines.utils import compare_results
 
@@ -28,7 +28,7 @@ example: str = "abstract_example"
 # "latin_hypercube_sampling"
 # "uniform_sampling"
 # "results_comparison"
-routine: str = "results_comparison"
+routine: str = "hybrid_bo"
 
 # Options:
 # "all"
@@ -69,7 +69,7 @@ if __name__ == "__main__":
 
     match routine:
         case "hybrid_bo":
-            hybrid_bo(
+            do_hybrid_bo(
                 problem,
                 config,
                 gp_hybrid_bo,
@@ -79,7 +79,7 @@ if __name__ == "__main__":
                 create_plots_hybrid_bo,
             )
         case "standard_bo":
-            standard_bo(
+            do_standard_bo(
                 problem,
                 config,
                 gp_standard_bo,
@@ -89,7 +89,7 @@ if __name__ == "__main__":
                 create_plots_standard_bo,
             )
         case "latin_hypercube_sampling":
-            latin_hypercube_sampling(
+            do_latin_hypercube_sampling(
                 problem,
                 config,
                 gp_standard_bo,
@@ -98,7 +98,7 @@ if __name__ == "__main__":
                 create_plots_latin_hypercube_sampling,
             )
         case "uniform_sampling":
-            uniform_sampling(
+            do_uniform_sampling(
                 problem,
                 config,
                 gp_standard_bo,
