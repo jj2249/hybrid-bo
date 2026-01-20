@@ -36,6 +36,10 @@ class Problem:
         u_upper_bounds: np.ndarray | None = None,
         x_lower_bounds: np.ndarray | None = None,
         x_upper_bounds: np.ndarray | None = None,
+        u_lower_bounds_starting_points: np.ndarray | None = None,
+        u_upper_bounds_starting_points: np.ndarray | None = None,
+        x_lower_bounds_starting_points: np.ndarray | None = None,
+        x_upper_bounds_starting_points: np.ndarray | None = None,
         threshold_equality: float = 1.0e-10,
     ) -> None:
         # %% Attributes
@@ -50,11 +54,20 @@ class Problem:
         self.n_h_known: int = self.h_known.numel_out(0)  # Number of equations in h_hown
         self.n_h_unknown: int = self.h_unknown.numel_out(0)  # Number of equations in g
 
-        self.u_lower_bounds: np.ndarray  # Lower bounds for u used as constraints
-        self.u_upper_bounds: np.ndarray  # Upper bounds for u used as constraints
+        # The following bounds are used as box constraints in the acquisition problem
+        self.u_lower_bounds: np.ndarray
+        self.u_upper_bounds: np.ndarray
 
-        self.x_lower_bounds: np.ndarray  # Lower bounds for x used as constraints
-        self.x_upper_bounds: np.ndarray  # Upper bounds for x used as constraints
+        self.x_lower_bounds: np.ndarray
+        self.x_upper_bounds: np.ndarray
+
+        # The following bounds are only important when using a multistart solver
+        # They can be used to generate starting points
+        self.u_lower_bounds_starting_points: np.ndarray
+        self.u_upper_bounds_starting_points: np.ndarray
+
+        self.x_lower_bounds_starting_points: np.ndarray
+        self.x_upper_bounds_starting_points: np.ndarray
 
         self.threshold_equality: float = threshold_equality  # Threshold that defines if two floats are considered equal
 
@@ -79,6 +92,26 @@ class Problem:
             self.x_upper_bounds = np.inf * np.ones((self.n_x, 1))
         else:
             self.x_upper_bounds = x_upper_bounds
+
+        if u_lower_bounds_starting_points is None:
+            self.u_lower_bounds_starting_points = self.u_lower_bounds
+        else:
+            self.u_lower_bounds_starting_points = u_lower_bounds_starting_points
+
+        if u_upper_bounds_starting_points is None:
+            self.u_upper_bounds_starting_points = self.u_upper_bounds
+        else:
+            self.u_upper_bounds_starting_points = u_upper_bounds_starting_points
+
+        if x_lower_bounds_starting_points is None:
+            self.x_lower_bounds_starting_points = self.x_lower_bounds
+        else:
+            self.x_lower_bounds_starting_points = x_lower_bounds_starting_points
+
+        if x_upper_bounds_starting_points is None:
+            self.x_upper_bounds_starting_points = self.x_upper_bounds
+        else:
+            self.x_upper_bounds_starting_points = x_upper_bounds_starting_points
 
         # %% Exceptions
 
@@ -137,7 +170,7 @@ class Problem:
             msg: str = "self.u_lower_bounds.shape != (self.n_u, 1)"
             raise Exception(msg)
         if self.u_upper_bounds.shape != (self.n_u, 1):
-            msg: str = "self.u_max.shape != (self.n_u, 1)"
+            msg: str = "self.u_upper_bounds.shape != (self.n_u, 1)"
             raise Exception(msg)
 
         if self.x_lower_bounds.shape != (self.n_x, 1):
@@ -145,6 +178,20 @@ class Problem:
             raise Exception(msg)
         if self.x_upper_bounds.shape != (self.n_x, 1):
             msg: str = "self.x_upper_bounds.shape != (self.n_x, 1)"
+            raise Exception(msg)
+
+        if self.u_lower_bounds_starting_points.shape != (self.n_u, 1):
+            msg: str = "self.u_lower_bounds_starting_points.shape != (self.n_u, 1)"
+            raise Exception(msg)
+        if self.u_upper_bounds_starting_points.shape != (self.n_u, 1):
+            msg: str = "self.u_upper_bounds_starting_points.shape != (self.n_u, 1)"
+            raise Exception(msg)
+
+        if self.x_lower_bounds.shape != (self.n_x, 1):
+            msg: str = "self.x_lower_bounds_starting_points.shape != (self.x_u, 1)"
+            raise Exception(msg)
+        if self.x_upper_bounds.shape != (self.n_x, 1):
+            msg: str = "self.x_upper_bounds_starting_points.shape != (self.n_x, 1)"
             raise Exception(msg)
 
     @final
