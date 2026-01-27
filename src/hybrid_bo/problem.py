@@ -76,42 +76,42 @@ class Problem:
         if u_lower_bounds is None:
             self.u_lower_bounds = -np.inf * np.ones((self.n_u, 1))
         else:
-            self.u_lower_bounds = u_lower_bounds
+            self.u_lower_bounds = u_lower_bounds.copy()
 
         if u_upper_bounds is None:
             self.u_upper_bounds = np.inf * np.ones((self.n_u, 1))
         else:
-            self.u_upper_bounds = u_upper_bounds
+            self.u_upper_bounds = u_upper_bounds.copy()
 
         if x_lower_bounds is None:
             self.x_lower_bounds = -np.inf * np.ones((self.n_x, 1))
         else:
-            self.x_lower_bounds = x_lower_bounds
+            self.x_lower_bounds = x_lower_bounds.copy()
 
         if x_upper_bounds is None:
             self.x_upper_bounds = np.inf * np.ones((self.n_x, 1))
         else:
-            self.x_upper_bounds = x_upper_bounds
+            self.x_upper_bounds = x_upper_bounds.copy()
 
         if u_lower_bounds_starting_points is None:
-            self.u_lower_bounds_starting_points = self.u_lower_bounds
+            self.u_lower_bounds_starting_points = self.u_lower_bounds.copy()
         else:
-            self.u_lower_bounds_starting_points = u_lower_bounds_starting_points
+            self.u_lower_bounds_starting_points = u_lower_bounds_starting_points.copy()
 
         if u_upper_bounds_starting_points is None:
-            self.u_upper_bounds_starting_points = self.u_upper_bounds
+            self.u_upper_bounds_starting_points = self.u_upper_bounds.copy()
         else:
-            self.u_upper_bounds_starting_points = u_upper_bounds_starting_points
+            self.u_upper_bounds_starting_points = u_upper_bounds_starting_points.copy()
 
         if x_lower_bounds_starting_points is None:
-            self.x_lower_bounds_starting_points = self.x_lower_bounds
+            self.x_lower_bounds_starting_points = self.x_lower_bounds.copy()
         else:
-            self.x_lower_bounds_starting_points = x_lower_bounds_starting_points
+            self.x_lower_bounds_starting_points = x_lower_bounds_starting_points.copy()
 
         if x_upper_bounds_starting_points is None:
-            self.x_upper_bounds_starting_points = self.x_upper_bounds
+            self.x_upper_bounds_starting_points = self.x_upper_bounds.copy()
         else:
-            self.x_upper_bounds_starting_points = x_upper_bounds_starting_points
+            self.x_upper_bounds_starting_points = x_upper_bounds_starting_points.copy()
 
         # %% Exceptions
 
@@ -255,7 +255,8 @@ class Problem:
                 ]  # pyright: ignore[reportArgumentType, reportCallIssue]
             else:
                 roots: np.ndarray = scipy.optimize.fsolve(h_np, X_0[i_start, :])[
-                    :, np.newaxis
+                    :,
+                    np.newaxis,
                 ]  # pyright: ignore[reportArgumentType, reportCallIssue]
 
             if (np.linalg.norm(h_np(roots.ravel())) < self.threshold_equality) and (
