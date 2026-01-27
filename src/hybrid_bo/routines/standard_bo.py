@@ -135,10 +135,9 @@ def do_standard_bo(
 
                 n_variables: int
                 f: cas.Function
-                h: cas.Function
                 lower_bounds: np.ndarray
                 upper_bounds: np.ndarray
-                n_variables, f, h, lower_bounds, upper_bounds = setup_acq_problem(
+                n_variables, f, lower_bounds, upper_bounds = setup_acq_problem(
                     config,
                     problem,
                     gp,
@@ -150,7 +149,7 @@ def do_standard_bo(
                 print("Setting up acquisition problem done.")
 
                 optimizer.set_problem(
-                    n_variables, f, None, h, lower_bounds, upper_bounds
+                    n_variables, f, None, None, lower_bounds, upper_bounds
                 )
 
                 if isinstance(optimizer, MultiStartOptimizer):
@@ -289,26 +288,16 @@ def setup_acq_problem(
     input_transformer_gp: AffineTransformer,
     output_transformer_gp: AffineTransformer,
     incumbent: float,
-) -> tuple[int, cas.Function, cas.Function, np.ndarray, np.ndarray]:
-    # n_variables, f, h, lower_bounds, upper_bounds
+) -> tuple[int, cas.Function, np.ndarray, np.ndarray]:
+    # n_variables, f, lower_bounds, upper_bounds
+
     u: SymbolicType = SymbolicType.sym("u", problem.n_u, 1)  # pyright: ignore[reportArgumentType]
     u_transformed: SymbolicType = input_transformer_gp.transform(u.T).T  # pyright: ignore[reportAssignmentType]
-    x: SymbolicType = SymbolicType.sym("x", problem.n_x, 1)  # pyright: ignore[reportArgumentType]
-    w: SymbolicType = cas.vertcat(u, x)  # pyright: ignore[reportAssignmentType]
-    n_variables: int = problem.n_u + problem.n_x
+    n_variables: int = problem.n_u
+    w: SymbolicType = u
 
-    h_expression: SymbolicType = cas.vertcat(
-        problem.h_known(u, x), problem.h_unknown(u, x)
-    )  # pyright: ignore[reportAssignmentType]
-    h: cas.Function = cas.Function("h", [w], [h_expression])
-
-    lower_bounds: np.ndarray = np.vstack(
-        (problem.u_lower_bounds, problem.x_lower_bounds),
-    )
-
-    upper_bounds: np.ndarray = np.vstack(
-        (problem.u_upper_bounds, problem.x_upper_bounds),
-    )
+    lower_bounds: np.ndarray = problem.u_lower_bounds
+    upper_bounds: np.ndarray = problem.u_upper_bounds
 
     mean_transformed: SymbolicType
     var_transformed: SymbolicType
@@ -326,8 +315,8 @@ def setup_acq_problem(
     # Expected improvement
     # Negative sign because max(a, b) = - min(-a, -b)
     else:
-        f_expression = -ei_gp(mean, std, incumbent, maximize=False)  # pyright: ignore[reportCallIssue]
+        f_expression = -ei_gp(mean, std, incumbent, False)
 
     f: cas.Function = cas.Function("f", [w], [f_expression])
 
-    return n_variables, f, h, lower_bounds, upper_bounds
+    return n_variables, f, lower_bounds, upper_bounds
