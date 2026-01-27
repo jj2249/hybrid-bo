@@ -65,10 +65,50 @@ class LocalOptimizer(Optimizer):
 
 
 class MultiStartOptimizer(Optimizer):
-    def __init__(self, local_optimizer: LocalOptimizer) -> None:
+    def __init__(
+        self,
+        local_optimizer: LocalOptimizer,
+        lower_bounds_starting_points: np.ndarray | None = None,
+        upper_bounds_starting_points: np.ndarray | None = None,
+    ) -> None:
         super().__init__()
+
+        # %% Attributes
+
         self.local_optimizer: LocalOptimizer = local_optimizer
+        self.lower_bounds_starting_points: np.ndarray
+        self.upper_bounds_starting_points: np.ndarray
         self.X0: np.ndarray = np.empty([0])
+
+        # %% Non-trivial assignments
+
+        if lower_bounds_starting_points is None:
+            if self.local_optimizer.lower_bounds is not None:
+                self.lower_bounds_starting_points = (
+                    self.local_optimizer.lower_bounds.copy()
+                )
+            else:
+                msg: str = (
+                    "Could not derive 'lower_bounds_starting_points' from "
+                    "'local_optimizer.lower_bounds' since this is 'None'."
+                )
+                raise Exception(msg)
+        else:
+            self.lower_bounds_starting_points = lower_bounds_starting_points
+
+        if upper_bounds_starting_points is None:
+            if self.local_optimizer.upper_bounds is not None:
+                self.upper_bounds_starting_points = (
+                    self.local_optimizer.upper_bounds.copy()
+                )
+            else:
+                msg: str = (
+                    "Could not derive 'upper_bounds_starting_points' from "
+                    "'local_optimizer.upper_bounds' since this is 'None'."
+                )
+                raise Exception(msg)
+        else:
+            self.upper_bounds_starting_points = upper_bounds_starting_points
 
     @override
     def set_problem(
