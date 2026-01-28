@@ -88,6 +88,9 @@ def do_latin_hypercube_sampling(
         gp.create_training_problem()
 
         if isinstance(gp.optimizer, MultiStartOptimizer):
+            gp.optimizer.lower_bounds_starting_points = gp.optimizer.lower_bounds.copy()  # pyright: ignore[reportOptionalMemberAccess]
+            gp.optimizer.upper_bounds_starting_points = gp.optimizer.upper_bounds.copy()  # pyright: ignore[reportOptionalMemberAccess]
+
             starting_points: np.ndarray = gp.optimizer.create_lhs_samples(
                 n_starts=config.n_starts_training_gp,
                 seed=config.seed,
@@ -133,8 +136,12 @@ def do_latin_hypercube_sampling(
 
         u_additional: np.ndarray = sampler.random(config.n_iterations_bo)
         u_additional: np.ndarray = (
-            problem.u_lower_bounds.T
-            + (problem.u_upper_bounds.T - problem.u_lower_bounds.T) * u_additional
+            problem.u_lower_bounds_starting_points.T
+            + (
+                problem.u_upper_bounds_starting_points.T
+                - problem.u_lower_bounds_starting_points.T
+            )
+            * u_additional
         )
 
         # %% Actual loop
@@ -185,6 +192,13 @@ def do_latin_hypercube_sampling(
                 gp.create_training_problem()
 
                 if isinstance(gp.optimizer, MultiStartOptimizer):
+                    gp.optimizer.lower_bounds_starting_points = (
+                        gp.optimizer.lower_bounds.copy()  # pyright: ignore[reportOptionalMemberAccess]
+                    )
+                    gp.optimizer.upper_bounds_starting_points = (
+                        gp.optimizer.upper_bounds.copy()  # pyright: ignore[reportOptionalMemberAccess]
+                    )
+
                     starting_points: np.ndarray = gp.optimizer.create_lhs_samples(
                         n_starts=config.n_starts_training_gp,
                         seed=config.seed,
