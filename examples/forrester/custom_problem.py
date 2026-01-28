@@ -21,8 +21,14 @@ def custom_problem(config: Config) -> Problem:
     u_lower_bounds: np.ndarray = np.array([0])[:, np.newaxis]
     u_upper_bounds: np.ndarray = np.array([1])[:, np.newaxis]
 
-    x_lower_bounds: np.ndarray = np.array([-1, 0])[:, np.newaxis]
-    x_upper_bounds: np.ndarray = np.array([1, 16])[:, np.newaxis]
+    x_lower_bounds: np.ndarray = np.array([-np.inf, -np.inf])[:, np.newaxis]
+    x_upper_bounds: np.ndarray = np.array([np.inf, np.inf])[:, np.newaxis]
+
+    u_lower_bounds_starting_points: np.ndarray = u_lower_bounds.copy()
+    u_upper_bounds_starting_points: np.ndarray = u_upper_bounds.copy()
+
+    x_lower_bounds_starting_points: np.ndarray = np.array([-1, 0])[:, np.newaxis]
+    x_upper_bounds_starting_points: np.ndarray = np.array([1, 16])[:, np.newaxis]
 
     return Problem(
         f,
@@ -32,4 +38,8 @@ def custom_problem(config: Config) -> Problem:
         u_upper_bounds,
         x_lower_bounds,
         x_upper_bounds,
+        u_lower_bounds_starting_points,
+        u_upper_bounds_starting_points,
+        x_lower_bounds_starting_points,
+        x_upper_bounds_starting_points,
     )
