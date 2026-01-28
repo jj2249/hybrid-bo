@@ -1,7 +1,7 @@
 # %% General
 
 # int | null
-seed: null
+seed: 0
 
 # %% BO
 
@@ -17,13 +17,13 @@ save_results: True
 n_runs_bo: 1
 
 # Number of Bayesian optimization iterations, int
-n_iterations_bo: 3
+n_iterations_bo: 5
 
 # Configure which acquisition problem formulation to use, str, alternatives: "lcb", "ei"
 formulation_acq: "ei"
 
 # Number of starting points the optimization of the acquisition problem is executed with, int
-n_starts_acq_optimization: 10
+n_starts_acq_optimization: 100
 
 # Number of GP samples used in the acquisition problem, int
 n_samples_gp: 50
@@ -37,14 +37,6 @@ factor_lcb_std: 1.0
 # EI Standard (no deterministic equivalent)
 # float
 epsilon_ei_standard: 1.0e-10
-
-# %% Plotting
-
-# Number of evaluation points used for every component of u, list[int]
-n_eval_points: [101]
-
-# Level of confidence in percent for plotting the confidence intervals, int
-confidence_level: 95
 
 # %% Problem
 
@@ -71,7 +63,7 @@ n_starts_training_gp: 100
 indices_x_measured: [1]
 
 # Configure if you want to use the outputs of the GP as optimization variables in the acquisition problem, bool
-use_output_gp_as_opt_var: True
+use_output_gp_as_opt_var: False
 
 # Standard deviation of the measurement noise, float
 std_measurement_noise: 0.0
@@ -84,3 +76,11 @@ check_bounds_evaluate_problem: True
 
 # Maximum number of executing scipy.optimize.fsolve() when evaluating the problem, int
 n_starts_max_evaluate_problem: 100
+
+# %% Plotting
+
+# Number of evaluation points used for every component of u, list[int]
+n_eval_points: [101]
+
+# Level of confidence in percent for plotting the confidence intervals, int
+confidence_level: 95
