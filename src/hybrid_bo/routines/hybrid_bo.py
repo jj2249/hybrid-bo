@@ -153,7 +153,17 @@ def do_hybrid_bo(
                 h: cas.Function
                 lower_bounds: np.ndarray
                 upper_bounds: np.ndarray
-                n_variables, f, h, lower_bounds, upper_bounds = _setup_acq_problem(
+                lower_bounds_starting_points: np.ndarray
+                upper_bounds_starting_points: np.ndarray
+                (
+                    n_variables,
+                    f,
+                    h,
+                    lower_bounds,
+                    upper_bounds,
+                    lower_bounds_starting_points,
+                    upper_bounds_starting_points,
+                ) = _setup_acq_problem(
                     config,
                     problem,
                     gp,
@@ -175,6 +185,13 @@ def do_hybrid_bo(
                 )
 
                 if isinstance(optimizer, MultiStartOptimizer):
+                    optimizer.lower_bounds_starting_points = (
+                        lower_bounds_starting_points
+                    )
+                    optimizer.upper_bounds_starting_points = (
+                        upper_bounds_starting_points
+                    )
+
                     starting_points: np.ndarray = optimizer.create_lhs_samples(
                         n_starts=config.n_starts_acq_optimization,
                         seed=config.seed,
@@ -328,7 +345,9 @@ def _setup_acq_problem(
     output_transformer_gp: AffineTransformer,
     gaussian_standard_samples: np.ndarray,
     incumbent: float,
-) -> tuple[int, cas.Function, cas.Function, np.ndarray, np.ndarray]:
+) -> tuple[
+    int, cas.Function, cas.Function, np.ndarray, np.ndarray, np.ndarray, np.ndarray
+]:
     """Sets up the deterministic equivalent of the acquisition function problem according to a selected formulation.
 
     Parameters
@@ -348,6 +367,10 @@ def _setup_acq_problem(
         Lower bounds of the optimization variables
     np.ndarray with shape (m, 1)
         Upper bounds of the optimization variables
+    np.ndarray with shape (m, 1)
+        Lower bounds of the optimization variables used for generating starting points for multi start optimizers
+    np.ndarray with shape (m, 1)
+        Upper bounds of the optimization variables used for generating starting points for multi start optimizers
     """
 
     if config.formulation_acq not in ["ei", "lcb"]:
@@ -398,6 +421,16 @@ def _setup_acq_problem(
         (config.n_samples_gp, 1),
     )
 
+    x_lower_bounds_starting_points_samples: np.ndarray = np.tile(
+        problem.x_lower_bounds_starting_points.T,
+        (config.n_samples_gp, 1),
+    )
+
+    x_upper_bounds_starting_points_samples: np.ndarray = np.tile(
+        problem.x_upper_bounds_starting_points.T,
+        (config.n_samples_gp, 1),
+    )
+
     # %% Samples of GP
 
     output_gp_mean_transformed: SymbolicType
@@ -415,7 +448,8 @@ def _setup_acq_problem(
         output_gp_samples_transformed,
     )  # pyright: ignore[reportAssignmentType]
 
-    # %% Get optimization variables w, f_expression, h_expression, lower_bounds, and upper_bounds
+    # %% Get optimization variables w, f_expression, h_expression,
+    # lower_bounds, upper_bounds, lower_bounds_starting_points, and upper_bounds_starting_points
 
     w: SymbolicType
     n_variables: int
@@ -423,6 +457,8 @@ def _setup_acq_problem(
     h_expression: list[SymbolicType] = []
     lower_bounds: np.ndarray
     upper_bounds: np.ndarray
+    lower_bounds_starting_points: np.ndarray
+    upper_bounds_starting_points: np.ndarray
 
     f_expression_parts: SymbolicType = SymbolicType(config.n_samples_gp, 1)
 
@@ -511,6 +547,60 @@ def _setup_acq_problem(
             ),
         )
 
+        lower_bounds_starting_points = np.concatenate(
+            (
+                problem.u_lower_bounds_starting_points,
+                x_lower_bounds_starting_points_samples[
+                    :,
+                    config.indices_x_input_gp,
+                ].flatten("F")[
+                    :,
+                    np.newaxis,
+                ],
+                x_lower_bounds_starting_points_samples[
+                    :,
+                    config.indices_x_output_gp,
+                ].flatten("F")[
+                    :,
+                    np.newaxis,
+                ],
+                x_lower_bounds_starting_points_samples[
+                    :,
+                    config.indices_x_no_gp,
+                ].flatten("F")[
+                    :,
+                    np.newaxis,
+                ],
+            ),
+        )
+
+        upper_bounds_starting_points = np.concatenate(
+            (
+                problem.u_upper_bounds_starting_points,
+                x_upper_bounds_starting_points_samples[
+                    :,
+                    config.indices_x_input_gp,
+                ].flatten("F")[
+                    :,
+                    np.newaxis,
+                ],
+                x_upper_bounds_starting_points_samples[
+                    :,
+                    config.indices_x_output_gp,
+                ].flatten("F")[
+                    :,
+                    np.newaxis,
+                ],
+                x_upper_bounds_starting_points_samples[
+                    :,
+                    config.indices_x_no_gp,
+                ].flatten("F")[
+                    :,
+                    np.newaxis,
+                ],
+            ),
+        )
+
     else:
         w = cas.vertcat(
             u,
@@ -552,4 +642,12 @@ def _setup_acq_problem(
     h: cas.Function = cas.Function("h", [w], [cas.vertcat(*h_expression)])
     f: cas.Function = cas.Function("f", [w], [f_expression])
 
-    return n_variables, f, h, lower_bounds, upper_bounds
+    return (
+        n_variables,
+        f,
+        h,
+        lower_bounds,
+        upper_bounds,
+        lower_bounds_starting_points,
+        upper_bounds_starting_points,
+    )

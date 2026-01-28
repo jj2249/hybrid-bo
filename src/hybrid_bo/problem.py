@@ -515,6 +515,19 @@ class Problem:
         optimizer.set_problem(n_variables, f, None, h, lower_bounds, upper_bounds)
 
         if isinstance(optimizer, MultiStartOptimizer):
+            optimizer.lower_bounds_starting_points = np.vstack(
+                (
+                    self.u_lower_bounds_starting_points,
+                    self.x_lower_bounds_starting_points,
+                ),
+            )
+            optimizer.upper_bounds_starting_points = np.vstack(
+                (
+                    self.u_upper_bounds_starting_points,
+                    self.x_upper_bounds_starting_points,
+                ),
+            )
+
             starting_points: np.ndarray = optimizer.create_lhs_samples(
                 n_starting_points,
                 seed,

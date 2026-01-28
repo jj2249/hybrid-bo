@@ -153,6 +153,13 @@ def do_standard_bo(
                 )
 
                 if isinstance(optimizer, MultiStartOptimizer):
+                    optimizer.lower_bounds_starting_points = (
+                        problem.u_lower_bounds_starting_points
+                    )
+                    optimizer.upper_bounds_starting_points = (
+                        problem.u_upper_bounds_starting_points
+                    )
+
                     starting_points: np.ndarray = optimizer.create_lhs_samples(
                         n_starts=config.n_starts_acq_optimization,
                         seed=config.seed,
