@@ -39,8 +39,11 @@ def u_train_initial(problem: Problem, config: Config) -> list[np.ndarray]:
     )
 
     u_train_initial_array: np.ndarray = (
-        problem.u_lower_bounds.T
-        + (problem.u_upper_bounds.T - problem.u_lower_bounds.T)
+        problem.u_lower_bounds_starting_points.T
+        + (
+            problem.u_upper_bounds_starting_points.T
+            - problem.u_lower_bounds_starting_points.T
+        )
         * u_train_initial_array_unscaled
     )
 
