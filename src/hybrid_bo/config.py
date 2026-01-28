@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 
-@dataclass
+@dataclass(frozen=True)
 class Config:
     # %% Problem
 
@@ -25,6 +25,9 @@ class Config:
 
     # Indices of the elements of x that are outputs of the GP
     indices_x_output_gp: list[int]
+
+    # Configure if you want to use the outputs of the GP as optimization variables in the acquisition problem
+    use_output_gp_as_opt_var: bool
 
     # Number of starting points the training of the GP is executed with
     n_starts_training_gp: int = 8
@@ -92,14 +95,37 @@ class Config:
     # Indices of the elements of x that are neither inputs nor outputs of the GP
     indices_x_no_gp: list[int] = field(init=False)
 
+    # Indices of the elements of x that are used as optimization variables
+    indices_x_opt: list[int] = field(init=False)
+
     # Random number generator
     rng: np.random.Generator = field(init=False)
 
     def __post_init__(self) -> None:
-        self.indices_x_no_gp: list[int] = list(
-            set(range(self.n_x))
-            - set(self.indices_x_input_gp)
-            - set(self.indices_x_output_gp),
+        object.__setattr__(
+            self,
+            "indices_x_no_gp",
+            list(
+                set(range(self.n_x))
+                - set(self.indices_x_input_gp)
+                - set(self.indices_x_output_gp),
+            ),
         )
 
-        self.rng: np.random.Generator = np.random.default_rng(self.seed)
+        if self.use_output_gp_as_opt_var:
+            object.__setattr__(
+                self,
+                "indices_x_opt",
+                list(range(self.n_x)),
+            )
+        else:
+            object.__setattr__(
+                self,
+                "indices_x_opt",
+                list(set(range(self.n_x)) - set(self.indices_x_output_gp)),
+            )
+
+        if not self.n_eval_points:
+            object.__setattr__(self, "n_eval_points", [101] * self.n_u)
+
+        object.__setattr__(self, "rng", np.random.default_rng(self.seed))

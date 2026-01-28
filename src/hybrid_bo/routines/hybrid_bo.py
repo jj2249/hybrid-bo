@@ -331,12 +331,6 @@ def _setup_acq_problem(
 ) -> tuple[int, cas.Function, cas.Function, np.ndarray, np.ndarray]:
     """Sets up the deterministic equivalent of the acquisition function problem according to a selected formulation.
 
-    The optimization variables w are a np.ndarray with shape(m, 1).
-    If we denote the problem inputs as u, the states used as a GP input as x_input_gp
-    and the samples of states being neither outputs nor inputs of the GP as x_no_gp_samples,
-    then the optimization variables have the structure
-    w = [u, x_input_gp, x_no_gp_samples, other], where other depends on the formulation.
-
     Parameters
     ----------
     gaussian_standard_samples : np.ndarray with shape (n, 1)
@@ -356,189 +350,13 @@ def _setup_acq_problem(
         Upper bounds of the optimization variables
     """
 
-    if config.formulation_acq == "lcb":
-        return _setup_acq_problem_lcb(
-            config,
-            problem,
-            gp,
-            input_transformer_gp,
-            output_transformer_gp,
-            gaussian_standard_samples,
+    if config.formulation_acq not in ["ei", "lcb"]:
+        msg: str = (
+            f"The given formulation_acq '{config.formulation_acq}'"
+            "is not among the allowed options."
         )
+        raise Exception(msg)
 
-    if config.formulation_acq == "ei":
-        return _setup_acq_problem_ei(
-            config,
-            problem,
-            gp,
-            input_transformer_gp,
-            output_transformer_gp,
-            gaussian_standard_samples,
-            incumbent,
-        )
-
-    msg: str = (
-        f"The given formulation_acq '{config.formulation_acq}'"
-        "is not among the allowed options."
-    )
-    raise Exception(msg)
-
-
-def _setup_acq_problem_lcb(
-    config: Config,
-    problem: Problem,
-    gp: GP,
-    input_transformer_gp: AffineTransformer,
-    output_transformer_gp: AffineTransformer,
-    gaussian_standard_samples: np.ndarray,
-) -> tuple[int, cas.Function, cas.Function, np.ndarray, np.ndarray]:
-    # %% Acquisition function problem parts independent from iteration
-
-    (
-        u,
-        u_input_gp,
-        x_input_gp_samples,
-        input_gp_samples,
-        x_no_gp_samples,
-        x_input_gp_samples_lower_bounds,
-        x_input_gp_samples_upper_bounds,
-        x_no_gp_samples_lower_bounds,
-        x_no_gp_samples_upper_bounds,
-    ) = _get_common_variables_and_bounds(config, problem)
-
-    # %% Samples of GP
-
-    output_gp_samples: SymbolicType = _get_output_gp_samples(
-        gp,
-        input_transformer_gp,
-        output_transformer_gp,
-        gaussian_standard_samples,
-        input_gp_samples,
-    )
-
-    # %% Get number of optimization variables, f, h, lower and upper bounds
-
-    f_expression_parts: SymbolicType = SymbolicType(config.n_samples_gp, 1)
-    h_expression: list[SymbolicType] = []
-
-    for i_sample in range(config.n_samples_gp):
-        x_sample: SymbolicType = SymbolicType(problem.n_x, 1)
-        if config.indices_x_input_gp:
-            x_sample[config.indices_x_input_gp] = x_input_gp_samples[[i_sample]].T
-        x_sample[config.indices_x_output_gp] = output_gp_samples[[i_sample]].T
-        if config.indices_x_no_gp:
-            x_sample[config.indices_x_no_gp] = x_no_gp_samples[[i_sample]].T
-
-        h_general_expression: SymbolicType = problem.h_known(u, x_sample)  # pyright: ignore[reportAssignmentType]
-        h_expression.extend([h_general_expression])
-
-        f_expression_parts[i_sample] = problem.f(u, x_sample)
-
-    f_expression: SymbolicType = sample_mean(
-        f_expression_parts,
-    ) - config.factor_lcb_std * cas.sqrt(sample_variance(f_expression_parts))
-
-    w, n_variables, lower_bounds, upper_bounds = _get_common_optimization_parts(
-        problem,
-        u,
-        x_input_gp_samples,
-        x_no_gp_samples,
-        x_input_gp_samples_lower_bounds,
-        x_input_gp_samples_upper_bounds,
-        x_no_gp_samples_lower_bounds,
-        x_no_gp_samples_upper_bounds,
-    )
-
-    h: cas.Function = cas.Function("h", [w], [cas.vertcat(*h_expression)])
-    f: cas.Function = cas.Function("f", [w], [f_expression])
-
-    return n_variables, f, h, lower_bounds, upper_bounds
-
-
-def _setup_acq_problem_ei(
-    config: Config,
-    problem: Problem,
-    gp: GP,
-    input_transformer_gp: AffineTransformer,
-    output_transformer_gp: AffineTransformer,
-    gaussian_standard_samples: np.ndarray,
-    incumbent: float,
-) -> tuple[int, cas.Function, cas.Function, np.ndarray, np.ndarray]:
-    # %% Acquisition function problem parts independent from iteration
-
-    (
-        u,
-        u_input_gp,
-        x_input_gp_samples,
-        input_gp_samples,
-        x_no_gp_samples,
-        x_input_gp_samples_lower_bounds,
-        x_input_gp_samples_upper_bounds,
-        x_no_gp_samples_lower_bounds,
-        x_no_gp_samples_upper_bounds,
-    ) = _get_common_variables_and_bounds(config, problem)
-
-    # %% Samples of GP
-
-    output_gp_samples: SymbolicType = _get_output_gp_samples(
-        gp,
-        input_transformer_gp,
-        output_transformer_gp,
-        gaussian_standard_samples,
-        input_gp_samples,
-    )
-
-    # %% Get number of optimization variables, f, h, lower and upper bounds
-
-    f_expression_parts: SymbolicType = SymbolicType(config.n_samples_gp, 1)
-    h_expression: list[SymbolicType] = []
-
-    for i_sample in range(config.n_samples_gp):
-        x_sample: SymbolicType = SymbolicType(problem.n_x, 1)
-        if config.indices_x_input_gp:
-            x_sample[config.indices_x_input_gp] = x_input_gp_samples[[i_sample]].T
-        x_sample[config.indices_x_output_gp] = output_gp_samples[[i_sample]].T
-        if config.indices_x_no_gp:
-            x_sample[config.indices_x_no_gp] = x_no_gp_samples[[i_sample]].T
-
-        h_general_expression: SymbolicType = problem.h_known(u, x_sample)  # pyright: ignore[reportAssignmentType]
-        h_expression.extend([h_general_expression])
-
-        f_expression_parts[i_sample] = cas.fmin(problem.f(u, x_sample) - incumbent, 0)  # pyright: ignore[reportOperatorIssue]
-
-    f_expression: SymbolicType = sample_mean(f_expression_parts)  # pyright: ignore[reportAssignmentType]
-
-    w, n_variables, lower_bounds, upper_bounds = _get_common_optimization_parts(
-        problem,
-        u,
-        x_input_gp_samples,
-        x_no_gp_samples,
-        x_input_gp_samples_lower_bounds,
-        x_input_gp_samples_upper_bounds,
-        x_no_gp_samples_lower_bounds,
-        x_no_gp_samples_upper_bounds,
-    )
-
-    h: cas.Function = cas.Function("h", [w], [cas.vertcat(*h_expression)])
-    f: cas.Function = cas.Function("f", [w], [f_expression])
-
-    return n_variables, f, h, lower_bounds, upper_bounds
-
-
-def _get_common_variables_and_bounds(
-    config: Config,
-    problem: Problem,
-) -> tuple[
-    SymbolicType,
-    SymbolicType,
-    SymbolicType,
-    SymbolicType,
-    SymbolicType,
-    np.ndarray,
-    np.ndarray,
-    np.ndarray,
-    np.ndarray,
-]:
     if len(config.indices_u_input_gp) + len(config.indices_x_input_gp) != problem.n_u:
         msg: str = (
             "len(config.indices_u_input_gp) + len(config.indices_x_input_gp)"
@@ -546,61 +364,42 @@ def _get_common_variables_and_bounds(
         )
         raise Exception(msg)
 
-    u: SymbolicType = SymbolicType.sym("u", problem.n_u, 1)  # pyright: ignore[reportArgumentType]
+    # %% Get some important variables and bounds
 
+    u: SymbolicType = SymbolicType.sym("u", problem.n_u, 1)  # pyright: ignore[reportArgumentType]
     u_input_gp: SymbolicType = u[config.indices_u_input_gp]
     u_input_gp_samples: SymbolicType = cas.repmat(u_input_gp.T, config.n_samples_gp, 1)
+
     x_input_gp_samples: SymbolicType = SymbolicType.sym(
         "x_input_gp",  # pyright: ignore[reportArgumentType]
         config.n_samples_gp,  # pyright: ignore[reportArgumentType]
         len(config.indices_x_input_gp),  # pyright: ignore[reportArgumentType]
     )
-    input_gp_samples: SymbolicType = cas.horzcat(u_input_gp_samples, x_input_gp_samples)  # pyright: ignore[reportAssignmentType]
-
     x_no_gp_samples: SymbolicType = SymbolicType.sym(
         "x_no_gp_samples",  # pyright: ignore[reportArgumentType]
         config.n_samples_gp,  # pyright: ignore[reportArgumentType]
         len(config.indices_x_no_gp),  # pyright: ignore[reportArgumentType]
     )
-
-    x_input_gp_samples_lower_bounds: np.ndarray = np.tile(
-        problem.x_lower_bounds[config.indices_x_input_gp].T,
-        (config.n_samples_gp, 1),
-    )
-    x_input_gp_samples_upper_bounds: np.ndarray = np.tile(
-        problem.x_upper_bounds[config.indices_x_input_gp].T,
-        (config.n_samples_gp, 1),
+    x_output_gp_samples: SymbolicType = SymbolicType.sym(
+        "x_output_gp_samples",  # pyright: ignore[reportArgumentType]
+        config.n_samples_gp,  # pyright: ignore[reportArgumentType]
+        len(config.indices_x_output_gp),  # pyright: ignore[reportArgumentType]
     )
 
-    x_no_gp_samples_lower_bounds: np.ndarray = np.tile(
-        problem.x_lower_bounds[config.indices_x_no_gp].T,
-        (config.n_samples_gp, 1),
-    )
-    x_no_gp_samples_upper_bounds: np.ndarray = np.tile(
-        problem.x_upper_bounds[config.indices_x_no_gp].T,
+    input_gp_samples: SymbolicType = cas.horzcat(u_input_gp_samples, x_input_gp_samples)  # pyright: ignore[reportAssignmentType]
+
+    x_lower_bounds_samples: np.ndarray = np.tile(
+        problem.x_lower_bounds.T,
         (config.n_samples_gp, 1),
     )
 
-    return (
-        u,
-        u_input_gp,
-        x_input_gp_samples,
-        input_gp_samples,
-        x_no_gp_samples,
-        x_input_gp_samples_lower_bounds,
-        x_input_gp_samples_upper_bounds,
-        x_no_gp_samples_lower_bounds,
-        x_no_gp_samples_upper_bounds,
+    x_upper_bounds_samples: np.ndarray = np.tile(
+        problem.x_upper_bounds.T,
+        (config.n_samples_gp, 1),
     )
 
+    # %% Samples of GP
 
-def _get_output_gp_samples(
-    gp: GP,
-    input_transformer_gp: AffineTransformer,
-    output_transformer_gp: AffineTransformer,
-    gaussian_standard_samples: np.ndarray,
-    input_gp_samples: SymbolicType,
-) -> SymbolicType:
     output_gp_mean_transformed: SymbolicType
     output_gp_variance_transformed: SymbolicType
     output_gp_mean_transformed, output_gp_variance_transformed = gp.predict(
@@ -616,38 +415,141 @@ def _get_output_gp_samples(
         output_gp_samples_transformed,
     )  # pyright: ignore[reportAssignmentType]
 
-    return output_gp_samples
+    # %% Get optimization variables w, f_expression, h_expression, lower_bounds, and upper_bounds
 
+    w: SymbolicType
+    n_variables: int
+    f_expression: SymbolicType
+    h_expression: list[SymbolicType] = []
+    lower_bounds: np.ndarray
+    upper_bounds: np.ndarray
 
-def _get_common_optimization_parts(
-    problem: Problem,
-    u: SymbolicType,
-    x_input_gp_samples: SymbolicType,
-    x_no_gp_samples: SymbolicType,
-    x_input_gp_samples_lower_bounds: np.ndarray,
-    x_input_gp_samples_upper_bounds: np.ndarray,
-    x_no_gp_samples_lower_bounds: np.ndarray,
-    x_no_gp_samples_upper_bounds: np.ndarray,
-) -> tuple[SymbolicType, int, np.ndarray, np.ndarray]:
-    w: SymbolicType = cas.vertcat(
-        u, cas.vec(x_input_gp_samples), cas.vec(x_no_gp_samples)
-    )  # pyright: ignore[reportAssignmentType]
-    n_variables: int = w.shape[0]
+    f_expression_parts: SymbolicType = SymbolicType(config.n_samples_gp, 1)
 
-    lower_bounds: np.ndarray = np.concatenate(
-        (
-            problem.u_lower_bounds,
-            x_input_gp_samples_lower_bounds.flatten("F")[:, np.newaxis],
-            x_no_gp_samples_lower_bounds.flatten("F")[:, np.newaxis],
-        ),
-    )
+    for i_sample in range(config.n_samples_gp):
+        x_sample: SymbolicType = SymbolicType(problem.n_x, 1)
 
-    upper_bounds: np.ndarray = np.concatenate(
-        (
-            problem.u_upper_bounds,
-            x_input_gp_samples_upper_bounds.flatten("F")[:, np.newaxis],
-            x_no_gp_samples_upper_bounds.flatten("F")[:, np.newaxis],
-        ),
-    )
+        if config.indices_x_input_gp:
+            x_sample[config.indices_x_input_gp] = x_input_gp_samples[[i_sample]].T
 
-    return w, n_variables, lower_bounds, upper_bounds
+        if config.use_output_gp_as_opt_var:
+            x_sample[config.indices_x_output_gp] = x_output_gp_samples[[i_sample]].T
+        else:
+            x_sample[config.indices_x_output_gp] = output_gp_samples[[i_sample]].T
+
+        if config.indices_x_no_gp:
+            x_sample[config.indices_x_no_gp] = x_no_gp_samples[[i_sample]].T
+
+        if config.use_output_gp_as_opt_var:
+            h_expression.extend(
+                [
+                    problem.h_known(u, x_sample),  # pyright: ignore[reportArgumentType]
+                    x_sample[config.indices_x_output_gp]
+                    - output_gp_samples[[i_sample]].T,
+                ],
+            )
+        else:
+            h_expression.append(problem.h_known(u, x_sample))  # pyright: ignore[reportArgumentType]
+
+        if config.formulation_acq == "ei":
+            f_expression_parts[i_sample] = cas.fmin(
+                problem.f(u, x_sample) - incumbent,  # pyright: ignore[reportOperatorIssue]
+                0,
+            )  # pyright: ignore[reportOperatorIssue]
+
+        else:  # lcb
+            f_expression_parts[i_sample] = problem.f(u, x_sample)
+
+    if config.formulation_acq == "ei":
+        f_expression = sample_mean(f_expression_parts)  # pyright: ignore[reportAssignmentType]
+    else:  # lcb
+        f_expression = sample_mean(
+            f_expression_parts,
+        ) - config.factor_lcb_std * cas.sqrt(sample_variance(f_expression_parts))
+
+    if config.use_output_gp_as_opt_var:
+        w = cas.vertcat(
+            u,
+            cas.vec(x_input_gp_samples),
+            cas.vec(x_output_gp_samples),
+            cas.vec(x_no_gp_samples),
+        )  # pyright: ignore[reportAssignmentType]
+
+        lower_bounds = np.concatenate(
+            (
+                problem.u_lower_bounds,
+                x_lower_bounds_samples[:, config.indices_x_input_gp].flatten("F")[
+                    :,
+                    np.newaxis,
+                ],
+                x_lower_bounds_samples[:, config.indices_x_output_gp].flatten("F")[
+                    :,
+                    np.newaxis,
+                ],
+                x_lower_bounds_samples[:, config.indices_x_no_gp].flatten("F")[
+                    :,
+                    np.newaxis,
+                ],
+            ),
+        )
+
+        upper_bounds = np.concatenate(
+            (
+                problem.u_upper_bounds,
+                x_upper_bounds_samples[:, config.indices_x_input_gp].flatten("F")[
+                    :,
+                    np.newaxis,
+                ],
+                x_upper_bounds_samples[:, config.indices_x_output_gp].flatten("F")[
+                    :,
+                    np.newaxis,
+                ],
+                x_upper_bounds_samples[:, config.indices_x_no_gp].flatten("F")[
+                    :,
+                    np.newaxis,
+                ],
+            ),
+        )
+
+    else:
+        w = cas.vertcat(
+            u,
+            cas.vec(x_input_gp_samples),
+            cas.vec(x_no_gp_samples),
+        )  # pyright: ignore[reportAssignmentType]
+
+        lower_bounds = np.concatenate(
+            (
+                problem.u_lower_bounds,
+                x_lower_bounds_samples[:, config.indices_x_input_gp].flatten("F")[
+                    :,
+                    np.newaxis,
+                ],
+                x_lower_bounds_samples[:, config.indices_x_no_gp].flatten("F")[
+                    :,
+                    np.newaxis,
+                ],
+            ),
+        )
+
+        upper_bounds = np.concatenate(
+            (
+                problem.u_upper_bounds,
+                x_upper_bounds_samples[:, config.indices_x_input_gp].flatten("F")[
+                    :,
+                    np.newaxis,
+                ],
+                x_upper_bounds_samples[:, config.indices_x_no_gp].flatten("F")[
+                    :,
+                    np.newaxis,
+                ],
+            ),
+        )
+
+    # %% Get number of optimization variables, f, and h
+
+    n_variables = w.shape[0]
+    h: cas.Function = cas.Function("h", [w], [cas.vertcat(*h_expression)])
+    f: cas.Function = cas.Function("f", [w], [f_expression])
+
+    return n_variables, f, h, lower_bounds, upper_bounds
