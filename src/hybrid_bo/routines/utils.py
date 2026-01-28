@@ -316,32 +316,32 @@ def ei_gp(
     mean: cas.SX,
     std: cas.SX,
     incumbent: float,
-    maximize: bool,
-    epsilon: float,
+    maximize: bool = True,
+    epsilon: float = 1.0e-10,
 ) -> cas.SX: ...
 @overload
 def ei_gp(
     mean: cas.MX,
     std: cas.MX,
     incumbent: float,
-    maximize: bool,
-    epsilon: float,
-) -> cas.SX: ...
+    maximize: bool = True,
+    epsilon: float = 1.0e-10,
+) -> cas.MX: ...
 @overload
 def ei_gp(
     mean: cas.DM,
     std: cas.DM,
     incumbent: float,
-    maximize: bool,
-    epsilon: float,
+    maximize: bool = True,
+    epsilon: float = 1.0e-10,
 ) -> cas.DM: ...
 @overload
 def ei_gp(
     mean: np.ndarray,
     std: np.ndarray,
     incumbent: float,
-    maximize: bool,
-    epsilon: float,
+    maximize: bool = True,
+    epsilon: float = 1.0e-10,
 ) -> np.ndarray: ...
 
 

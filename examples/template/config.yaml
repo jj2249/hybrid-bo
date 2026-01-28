@@ -56,6 +56,9 @@ n_starts_training_gp: 100
 # Indices of the elements of x that are measured, list[int]
 indices_x_measured: []
 
+# Configure if you want to use the outputs of the GP as optimization variables in the acquisition problem, bool
+use_output_gp_as_opt_var: True
+
 # Standard deviation of the measurement noise, float
 std_measurement_noise: 0.0
 
