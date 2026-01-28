@@ -430,22 +430,22 @@ def _setup_acq_problem(
         x_sample: SymbolicType = SymbolicType(problem.n_x, 1)
 
         if config.indices_x_input_gp:
-            x_sample[config.indices_x_input_gp] = x_input_gp_samples[[i_sample]].T
+            x_sample[config.indices_x_input_gp] = x_input_gp_samples[i_sample, :].T
 
         if config.use_output_gp_as_opt_var:
-            x_sample[config.indices_x_output_gp] = x_output_gp_samples[[i_sample]].T
+            x_sample[config.indices_x_output_gp] = x_output_gp_samples[i_sample, :].T
         else:
-            x_sample[config.indices_x_output_gp] = output_gp_samples[[i_sample]].T
+            x_sample[config.indices_x_output_gp] = output_gp_samples[i_sample, :].T
 
         if config.indices_x_no_gp:
-            x_sample[config.indices_x_no_gp] = x_no_gp_samples[[i_sample]].T
+            x_sample[config.indices_x_no_gp] = x_no_gp_samples[i_sample, :].T
 
         if config.use_output_gp_as_opt_var:
             h_expression.extend(
                 [
                     problem.h_known(u, x_sample),  # pyright: ignore[reportArgumentType]
                     x_sample[config.indices_x_output_gp]
-                    - output_gp_samples[[i_sample]].T,
+                    - output_gp_samples[i_sample, :].T,
                 ],
             )
         else:
