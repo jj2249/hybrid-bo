@@ -61,7 +61,7 @@ class Problem:
         self.x_lower_bounds: np.ndarray
         self.x_upper_bounds: np.ndarray
 
-        # The following bounds are only important when using a multistart solver
+        # The following bounds are important when using a method that relies on multiple starting points
         # They can be used to generate starting points
         self.u_lower_bounds_starting_points: np.ndarray
         self.u_upper_bounds_starting_points: np.ndarray
@@ -187,11 +187,25 @@ class Problem:
             msg: str = "self.u_upper_bounds_starting_points.shape != (self.n_u, 1)"
             raise Exception(msg)
 
-        if self.x_lower_bounds.shape != (self.n_x, 1):
+        if self.x_lower_bounds_starting_points.shape != (self.n_x, 1):
             msg: str = "self.x_lower_bounds_starting_points.shape != (self.x_u, 1)"
             raise Exception(msg)
-        if self.x_upper_bounds.shape != (self.n_x, 1):
+        if self.x_upper_bounds_starting_points.shape != (self.n_x, 1):
             msg: str = "self.x_upper_bounds_starting_points.shape != (self.n_x, 1)"
+            raise Exception(msg)
+
+        if not np.isfinite(self.u_lower_bounds_starting_points).all():
+            msg: str = "not np.isfinite(self.u_lower_bounds_starting_points).all()"
+            raise Exception(msg)
+        if not np.isfinite(self.u_upper_bounds_starting_points).all():
+            msg: str = "not np.isfinite(self.u_upper_bounds_starting_points).all()"
+            raise Exception(msg)
+
+        if not np.isfinite(self.x_lower_bounds_starting_points).all():
+            msg: str = "not np.isfinite(self.x_lower_bounds_starting_points).all()"
+            raise Exception(msg)
+        if not np.isfinite(self.x_upper_bounds_starting_points).all():
+            msg: str = "not np.isfinite(self.x_upper_bounds_starting_points).all()"
             raise Exception(msg)
 
     @final
@@ -215,10 +229,15 @@ class Problem:
             self.n_x,
             rng=np.random.default_rng(seed),
         )
+
         samples: np.ndarray = sampler.random(n_starts_max)
         X_0: np.ndarray = (
-            self.x_lower_bounds.T
-            + (self.x_upper_bounds - self.x_lower_bounds).T * samples
+            self.x_lower_bounds_starting_points.T
+            + (
+                self.x_upper_bounds_starting_points
+                - self.x_lower_bounds_starting_points
+            ).T
+            * samples
         )
 
         # %% Setup equations to be solved
@@ -335,12 +354,13 @@ class Problem:
         sampler: scipy.stats.qmc.LatinHypercube = scipy.stats.qmc.LatinHypercube(
             x_fixed.size, rng=np.random.default_rng(seed)
         )
+
         samples: np.ndarray = sampler.random(n_starts_max)
         X_free_0: np.ndarray = (
-            self.x_lower_bounds[indices_x_free].T
+            self.x_lower_bounds_starting_points[indices_x_free].T
             + (
-                self.x_upper_bounds[indices_x_free]
-                - self.x_lower_bounds[indices_x_free]
+                self.x_upper_bounds_starting_points[indices_x_free]
+                - self.x_lower_bounds_starting_points[indices_x_free]
             ).T
             * samples
         )
