@@ -95,7 +95,7 @@ def do_latin_hypercube_sampling(
                 n_starts=config.n_starts_training_gp,
                 seed=config.seed,
             )
-            gp.optimizer.set_X0(starting_points)
+            gp.optimizer.X0 = starting_points
 
         gp.solve_training_problem()
 
@@ -203,7 +203,7 @@ def do_latin_hypercube_sampling(
                         n_starts=config.n_starts_training_gp,
                         seed=config.seed,
                     )
-                    gp.optimizer.set_X0(starting_points)
+                    gp.optimizer.X0 = starting_points
 
                 gp.solve_training_problem()
 

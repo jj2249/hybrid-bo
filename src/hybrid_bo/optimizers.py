@@ -73,19 +73,45 @@ class MultiStartOptimizer(Optimizer):
         upper_bounds_starting_points: np.ndarray | None = None,
     ) -> None:
         super().__init__()
+
+        # %% Attributes
+
         self.local_optimizer: LocalOptimizer = local_optimizer
-        self.X0: np.ndarray
-        if X0 is None:
-            self.X0 = np.empty([0])
-        else:
-            self.set_X0(X0)
-        self.n_starts: int = self.X0.shape[0]
+        self._X0: np.ndarray
         self.lower_bounds_starting_points: np.ndarray | None = (
             lower_bounds_starting_points
         )
         self.upper_bounds_starting_points: np.ndarray | None = (
             upper_bounds_starting_points
         )
+
+        # %% Non-trivial assignments
+        if X0 is None:
+            self._X0 = np.empty([0])
+            self.n_starts = 0
+        else:
+            self.X0 = X0
+
+    @property
+    def X0(self) -> np.ndarray:
+        return self._X0
+
+    @X0.setter
+    def X0(self, X0: np.ndarray) -> None:
+        if len(X0.shape) != 2:
+            msg: str = "len(X0.shape) != 2"
+            raise Exception(msg)
+
+        if X0.shape[1] != self.n_variables:
+            msg: str = "X0.shape[1] != self.n_variables"
+            raise Exception(msg)
+
+        if not np.isfinite(X0).all():
+            msg: str = "not np.isfinite(X0).all()"
+            raise Exception(msg)
+
+        self._X0 = X0
+        self.n_starts = self._X0.shape[0]
 
     @override
     def set_problem(
@@ -106,22 +132,6 @@ class MultiStartOptimizer(Optimizer):
             self.lower_bounds,
             self.upper_bounds,
         )
-
-    def set_X0(self, X0: np.ndarray) -> None:
-        if len(X0.shape) != 2:
-            msg: str = "len(X0.shape) != 2"
-            raise Exception(msg)
-
-        if X0.shape[1] != self.n_variables:
-            msg: str = "X0.shape[1] != self.n_variables"
-            raise Exception(msg)
-
-        if not np.isfinite(X0).all():
-            msg: str = "not np.isfinite(X0).all()"
-            raise Exception(msg)
-
-        self.X0 = X0
-        self.n_starts = self.X0.shape[0]
 
     def create_lhs_samples(
         self,
@@ -158,8 +168,8 @@ class MultiStartOptimizer(Optimizer):
         solution: dict[str, float | np.ndarray] | None = None
         f_min = np.inf
 
-        for i_guess in range(self.n_starts()):
-            self.local_optimizer.set_x0(self.X0[i_guess, :][:, np.newaxis])
+        for i_guess in range(self.n_starts):
+            self.local_optimizer.set_x0(self._X0[i_guess, :][:, np.newaxis])
 
             current_solution: dict[str, float | np.ndarray] | None = (
                 self.local_optimizer.solve()

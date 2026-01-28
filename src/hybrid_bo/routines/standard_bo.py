@@ -98,7 +98,7 @@ def do_standard_bo(
                 n_starts=config.n_starts_training_gp,
                 seed=config.seed,
             )
-            gp.optimizer.set_X0(starting_points)
+            gp.optimizer.X0 = starting_points
 
         gp.solve_training_problem()
 
@@ -167,7 +167,7 @@ def do_standard_bo(
                         n_starts=config.n_starts_acq_optimization,
                         seed=config.seed,
                     )
-                    optimizer.set_X0(starting_points)
+                    optimizer.X0 = starting_points
 
                 solution: dict[str, float | np.ndarray] | None = optimizer.solve()
 
@@ -226,7 +226,7 @@ def do_standard_bo(
                         n_starts=config.n_starts_training_gp,
                         seed=config.seed,
                     )
-                    gp.optimizer.set_X0(starting_points)
+                    gp.optimizer.X0 = starting_points
 
                 gp.solve_training_problem()
 

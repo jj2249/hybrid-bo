@@ -552,7 +552,7 @@ class Problem:
                 n_starting_points,
                 seed,
             )
-            optimizer.set_X0(starting_points)
+            optimizer.X0 = starting_points
 
         solution: dict[str, float | np.ndarray] | None = optimizer.solve()
 

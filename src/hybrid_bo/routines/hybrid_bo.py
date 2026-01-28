@@ -112,7 +112,7 @@ def do_hybrid_bo(
                 n_starts=config.n_starts_training_gp,
                 seed=config.seed,
             )
-            gp.optimizer.set_X0(starting_points)
+            gp.optimizer.X0 = starting_points
 
         gp.solve_training_problem()
 
@@ -199,7 +199,7 @@ def do_hybrid_bo(
                         n_starts=config.n_starts_acq_optimization,
                         seed=config.seed,
                     )
-                    optimizer.set_X0(starting_points)
+                    optimizer.X0 = starting_points
 
                 solution: dict[str, float | np.ndarray] | None = optimizer.solve()
 
@@ -263,7 +263,7 @@ def do_hybrid_bo(
                         n_starts=config.n_starts_training_gp,
                         seed=config.seed,
                     )
-                    gp.optimizer.set_X0(starting_points)
+                    gp.optimizer.X0 = starting_points
 
                 gp.solve_training_problem()
 
@@ -640,6 +640,44 @@ def _setup_acq_problem(
                     np.newaxis,
                 ],
                 x_upper_bounds_samples[:, config.indices_x_no_gp].flatten("F")[
+                    :,
+                    np.newaxis,
+                ],
+            ),
+        )
+
+        lower_bounds_starting_points = np.concatenate(
+            (
+                problem.u_lower_bounds_starting_points,
+                x_lower_bounds_starting_points_samples[
+                    :, config.indices_x_input_gp
+                ].flatten("F")[
+                    :,
+                    np.newaxis,
+                ],
+                x_lower_bounds_starting_points_samples[
+                    :, config.indices_x_no_gp
+                ].flatten("F")[
+                    :,
+                    np.newaxis,
+                ],
+            ),
+        )
+
+        upper_bounds_starting_points = np.concatenate(
+            (
+                problem.u_upper_bounds,
+                x_upper_bounds_starting_points_samples[
+                    :,
+                    config.indices_x_input_gp,
+                ].flatten("F")[
+                    :,
+                    np.newaxis,
+                ],
+                x_upper_bounds_starting_points_samples[
+                    :,
+                    config.indices_x_no_gp,
+                ].flatten("F")[
                     :,
                     np.newaxis,
                 ],
