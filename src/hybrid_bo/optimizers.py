@@ -68,47 +68,24 @@ class MultiStartOptimizer(Optimizer):
     def __init__(
         self,
         local_optimizer: LocalOptimizer,
+        X0: np.ndarray | None = None,
         lower_bounds_starting_points: np.ndarray | None = None,
         upper_bounds_starting_points: np.ndarray | None = None,
     ) -> None:
         super().__init__()
-
-        # %% Attributes
-
         self.local_optimizer: LocalOptimizer = local_optimizer
-        self.lower_bounds_starting_points: np.ndarray
-        self.upper_bounds_starting_points: np.ndarray
-        self.X0: np.ndarray = np.empty([0])
-
-        # %% Non-trivial assignments
-
-        if lower_bounds_starting_points is None:
-            if self.local_optimizer.lower_bounds is not None:
-                self.lower_bounds_starting_points = (
-                    self.local_optimizer.lower_bounds.copy()
-                )
-            else:
-                msg: str = (
-                    "Could not derive 'lower_bounds_starting_points' from "
-                    "'local_optimizer.lower_bounds' since this is 'None'."
-                )
-                raise Exception(msg)
+        self.X0: np.ndarray
+        if X0 is None:
+            self.X0 = np.empty([0])
         else:
-            self.lower_bounds_starting_points = lower_bounds_starting_points
-
-        if upper_bounds_starting_points is None:
-            if self.local_optimizer.upper_bounds is not None:
-                self.upper_bounds_starting_points = (
-                    self.local_optimizer.upper_bounds.copy()
-                )
-            else:
-                msg: str = (
-                    "Could not derive 'upper_bounds_starting_points' from "
-                    "'local_optimizer.upper_bounds' since this is 'None'."
-                )
-                raise Exception(msg)
-        else:
-            self.upper_bounds_starting_points = upper_bounds_starting_points
+            self.set_X0(X0)
+        self.n_starts: int = self.X0.shape[0]
+        self.lower_bounds_starting_points: np.ndarray | None = (
+            lower_bounds_starting_points
+        )
+        self.upper_bounds_starting_points: np.ndarray | None = (
+            upper_bounds_starting_points
+        )
 
     @override
     def set_problem(
@@ -139,12 +116,12 @@ class MultiStartOptimizer(Optimizer):
             msg: str = "X0.shape[1] != self.n_variables"
             raise Exception(msg)
 
-        self.X0 = X0
+        if not np.isfinite(X0).all():
+            msg: str = "not np.isfinite(X0).all()"
+            raise Exception(msg)
 
-    def n_starts(self) -> int:
-        if self.X0 is None:
-            return 0
-        return self.X0.shape[0]
+        self.X0 = X0
+        self.n_starts = self.X0.shape[0]
 
     def create_lhs_samples(
         self,
@@ -153,22 +130,11 @@ class MultiStartOptimizer(Optimizer):
     ) -> np.ndarray:
         # lhs: latin hypercube sampling
 
-        if self.lower_bounds is None:
-            msg: str = "self.lower_bounds is None"
+        if self.lower_bounds_starting_points is None:
+            msg: str = "self.lower_bounds_starting_points is None"
             raise Exception(msg)
-        if self.upper_bounds is None:
-            msg: str = "self.upper_bounds is None"
-            raise Exception(msg)
-
-        if not (
-            np.isfinite(self.lower_bounds).all()
-            and np.isfinite(self.upper_bounds).all()
-        ):
-            msg: str = (
-                "np.isfinite(self.lower_bounds).all() "
-                "and np.isfinite(self.upper_bounds).all()"
-            )
-            raise Exception(msg)
+        if self.upper_bounds_starting_points is None:
+            msg: str = "self.upper_bounds_starting_points is None"
 
         sampler: scipy.stats.qmc.LatinHypercube = scipy.stats.qmc.LatinHypercube(
             self.n_variables,
@@ -177,10 +143,18 @@ class MultiStartOptimizer(Optimizer):
 
         samples: np.ndarray = sampler.random(n_starts)
 
-        return self.lower_bounds.T + (self.upper_bounds - self.lower_bounds).T * samples
+        return (
+            self.lower_bounds_starting_points.T
+            + (self.upper_bounds_starting_points - self.lower_bounds_starting_points).T
+            * samples
+        )
 
     @override
     def solve(self) -> dict[str, float | np.ndarray] | None:
+        if self.n_starts < 1:
+            msg: str = "self.n_starts() < 1"
+            raise Exception(msg)
+
         solution: dict[str, float | np.ndarray] | None = None
         f_min = np.inf
 
