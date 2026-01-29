@@ -23,7 +23,7 @@ def do_uniform_sampling(
     gp: GP,
     u_train_initial_complete: list[np.ndarray],
     results_dir: Path,
-    create_plots: Callable,
+    create_plots: Callable | None,
 ) -> None:
     # %% Data to create for all BO runs
 
@@ -112,7 +112,7 @@ def do_uniform_sampling(
 
         # %% Create initial plots
 
-        if config.create_plots:
+        if config.create_plots and create_plots:
             create_plots(
                 problem,
                 config,
@@ -214,7 +214,7 @@ def do_uniform_sampling(
 
                 # %% Create plots
 
-                if config.create_plots:
+                if config.create_plots and create_plots:
                     create_plots(
                         problem,
                         config,

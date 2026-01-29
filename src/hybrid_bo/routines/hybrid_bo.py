@@ -28,7 +28,7 @@ def do_hybrid_bo(
     u_train_initial_complete: list[np.ndarray],
     optimizer: Optimizer,
     results_dir: Path,
-    create_plots: Callable,
+    create_plots: Callable | None = None,
 ) -> None:
     # %% Data to create for all BO runs
 
@@ -124,7 +124,7 @@ def do_hybrid_bo(
 
         # %% Create initial plots
 
-        if config.create_plots:
+        if config.create_plots and create_plots:
             create_plots(
                 problem,
                 config,
@@ -275,7 +275,7 @@ def do_hybrid_bo(
 
                 # %% Create plots
 
-                if config.create_plots:
+                if config.create_plots and create_plots:
                     create_plots(
                         problem,
                         config,
