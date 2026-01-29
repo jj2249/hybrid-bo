@@ -164,7 +164,6 @@ def do_latin_hypercube_sampling(
                         config.indices_x_measured,
                         config.n_starts_max_evaluate_problem,
                         config.use_jacobian_evaluate_problem,
-                        config.check_bounds_evaluate_problem,
                         config.seed,
                     )
                 )

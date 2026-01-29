@@ -65,9 +65,6 @@ std_measurement_noise: 0.0
 # Configure if scipy.optimize.fsolve() uses a Jacobian as a parameter when evaluating the problem, bool
 use_jacobian_evaluate_problem: True
 
-# Configure if evaluating the problem checks if the solution is within the variable bounds, bool
-check_bounds_evaluate_problem: True
-
 # Maximum number of executing scipy.optimize.fsolve() when evaluating the problem, int
 n_starts_max_evaluate_problem: 100
 

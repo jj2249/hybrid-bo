@@ -14,7 +14,7 @@ create_plots: True
 save_results: True
 
 # Number of Bayesion optimization runs, int
-n_runs_bo: 3
+n_runs_bo: 1
 
 # Number of Bayesian optimization iterations, int
 n_iterations_bo: 5
@@ -71,16 +71,13 @@ std_measurement_noise: 0.0
 # Configure if scipy.optimize.fsolve() uses a Jacobian as a parameter when evaluating the problem, bool
 use_jacobian_evaluate_problem: True
 
-# Configure if evaluating the problem checks if the solution is within the variable bounds, bool
-check_bounds_evaluate_problem: True
-
 # Maximum number of executing scipy.optimize.fsolve() when evaluating the problem, int
 n_starts_max_evaluate_problem: 100
 
 # %% Plotting
 
 # Number of evaluation points used for every component of u, list[int]
-n_eval_points: [101, 101]
+n_eval_points: [31, 31]
 
 # Level of confidence in percent for plotting the confidence intervals, int
 confidence_level: 95

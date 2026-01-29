@@ -38,9 +38,6 @@ class Config:
     # Configure if scipy.optimize.fsolve() uses a Jacobian as a parameter when evaluating the problem
     use_jacobian_evaluate_problem: bool = True
 
-    # Configure if evaluating the problem checks if the solution is within the variable bounds
-    check_bounds_evaluate_problem: bool = True
-
     # Maximum number of executing scipy.optimize.fsolve() when evaluating the problem
     n_starts_max_evaluate_problem: int = 100
 

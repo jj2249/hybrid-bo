@@ -168,7 +168,6 @@ class CustomProblem(Problem):
         u: np.ndarray,
         n_starts_max: int = 100,
         use_jacobian: bool = True,
-        check_bounds: bool = True,
         seed: int | None = None,
     ) -> tuple[float, np.ndarray]:
         f_temp: float
@@ -177,7 +176,6 @@ class CustomProblem(Problem):
             u,
             n_starts_max,
             use_jacobian,
-            check_bounds,
             seed,
         )
 
@@ -206,7 +204,6 @@ class CustomProblem(Problem):
         indices_x_fixed: list[int],
         n_starts_max: int = 100,
         use_jacobian: bool = True,
-        check_bounds: bool = True,
         seed: int | None = None,
     ) -> tuple[float, np.ndarray]:
         f_temp: float
@@ -218,7 +215,6 @@ class CustomProblem(Problem):
             indices_x_fixed,
             n_starts_max,
             use_jacobian,
-            check_bounds,
             seed,
         )
 
@@ -248,7 +244,6 @@ class CustomProblem(Problem):
         indices_x_measured: list[int],
         n_starts_max: int = 100,
         use_jacobian: bool = True,
-        check_bounds: bool = True,
         seed: int | None = None,
     ) -> tuple[float, np.ndarray, float, np.ndarray]:
         f_temp: float
@@ -263,7 +258,6 @@ class CustomProblem(Problem):
                 indices_x_measured,
                 n_starts_max,
                 use_jacobian,
-                check_bounds,
             )
         )
 

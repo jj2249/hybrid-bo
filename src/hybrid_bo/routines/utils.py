@@ -51,7 +51,6 @@ def get_training_data(
             config.indices_x_measured,
             config.n_starts_max_evaluate_problem,
             config.use_jacobian_evaluate_problem,
-            config.check_bounds_evaluate_problem,
             config.seed,
         )
 
@@ -109,7 +108,6 @@ def get_evaluation_data(
     problem: Problem,
     n_starts_max_evaluate_problem: int,
     use_jacobian_evaluate_problem: bool,
-    check_bounds_evaluate_problem: bool,
     n_eval_points: list[int],
     original: bool = False,
     seed: int | None = None,
@@ -156,7 +154,6 @@ def get_evaluation_data(
                 u_eval[[i_eval]].T,
                 n_starts_max_evaluate_problem,
                 use_jacobian_evaluate_problem,
-                check_bounds_evaluate_problem,
                 seed,
             )
         else:
@@ -164,7 +161,6 @@ def get_evaluation_data(
                 u_eval[[i_eval]].T,
                 n_starts_max_evaluate_problem,
                 use_jacobian_evaluate_problem,
-                check_bounds_evaluate_problem,
                 seed,
             )
 
@@ -254,7 +250,6 @@ def get_f_eval_samples(
                         config.indices_x_output_gp,
                         config.n_starts_max_evaluate_problem,
                         config.use_jacobian_evaluate_problem,
-                        config.check_bounds_evaluate_problem,
                         config.seed,
                     )
                 )
@@ -266,7 +261,6 @@ def get_f_eval_samples(
                     config.indices_x_output_gp,
                     config.n_starts_max_evaluate_problem,
                     config.use_jacobian_evaluate_problem,
-                    config.check_bounds_evaluate_problem,
                     config.seed,
                 )
 

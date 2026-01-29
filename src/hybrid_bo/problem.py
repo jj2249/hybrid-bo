@@ -193,7 +193,6 @@ class Problem:
         u: np.ndarray,
         n_starts_max: int = 100,
         use_jacobian: bool = True,
-        check_bounds: bool = True,
         seed: int | None = None,
     ) -> tuple[float, np.ndarray]:
         """Returns f and x from u using h_known and h_unknown. No measurement noise is considered."""
@@ -246,7 +245,9 @@ class Problem:
         while i_start < n_starts_max:
             if use_jacobian:
                 roots: np.ndarray = scipy.optimize.fsolve(
-                    h_np, X_0[i_start, :], fprime=h_np_jacobian
+                    h_np,
+                    X_0[i_start, :],
+                    fprime=h_np_jacobian,
                 )[
                     :,
                     np.newaxis,
@@ -257,12 +258,10 @@ class Problem:
                     np.newaxis,
                 ]  # pyright: ignore[reportArgumentType, reportCallIssue]
 
-            if (np.linalg.norm(h_np(roots.ravel())) < self.threshold_equality) and (
-                (not check_bounds)
-                or (
-                    (roots >= self.x_lower_bounds_evaluation).all()
-                    and (roots <= self.x_upper_bounds_evaluation).all()
-                )
+            if (
+                (np.linalg.norm(h_np(roots.ravel())) < self.threshold_equality)
+                and ((roots >= self.x_lower_bounds_evaluation).all())
+                and ((roots <= self.x_upper_bounds_evaluation).all())
             ):
                 ready_to_return: bool = True
 
@@ -280,14 +279,12 @@ class Problem:
         u: np.ndarray,
         n_starts_max: int = 100,
         use_jacobian: bool = True,
-        check_bounds: bool = True,
         seed: int | None = None,
     ) -> tuple[float, np.ndarray]:
         return self.evaluate_with_simulation_original(
             u,
             n_starts_max,
             use_jacobian,
-            check_bounds,
             seed,
         )
 
@@ -299,7 +296,6 @@ class Problem:
         indices_x_fixed: list[int],
         n_starts_max: int = 100,
         use_jacobian: bool = True,
-        check_bounds: bool = True,
         seed: int | None = None,
     ) -> tuple[float, np.ndarray]:
         """Returns f and x from u and fixed parts of x using h_known. The fixed part of x is either measured or an output from a GP."""
@@ -376,12 +372,10 @@ class Problem:
                     np.newaxis,
                 ]  # pyright: ignore[reportArgumentType, reportCallIssue]
 
-            if (np.linalg.norm(h_np(roots.ravel())) < self.threshold_equality) and (
-                (not check_bounds)
-                or (
-                    (roots >= self.x_lower_bounds_evaluation[indices_x_free]).all()
-                    and (roots <= self.x_upper_bounds_evaluation[indices_x_free]).all()
-                )
+            if (
+                (np.linalg.norm(h_np(roots.ravel())) < self.threshold_equality)
+                and ((roots >= self.x_lower_bounds_evaluation[indices_x_free]).all())
+                and ((roots <= self.x_upper_bounds_evaluation[indices_x_free]).all())
             ):
                 ready_to_return: bool = True
 
@@ -405,7 +399,6 @@ class Problem:
         indices_x_fixed: list[int],
         n_starts_max: int = 100,
         use_jacobian: bool = True,
-        check_bounds: bool = True,
         seed: int | None = None,
     ) -> tuple[float, np.ndarray]:
         return self.evaluate_with_fixed_x_original(
@@ -414,7 +407,6 @@ class Problem:
             indices_x_fixed,
             n_starts_max,
             use_jacobian,
-            check_bounds,
             seed,
         )
 
@@ -426,7 +418,6 @@ class Problem:
         indices_x_measured: list[int],
         n_starts_max: int = 100,
         use_jacobian: bool = True,
-        check_bounds: bool = True,
         seed: int | None = None,
     ) -> tuple[float, np.ndarray, float, np.ndarray]:
         """Returns f and x (with and without consideration of measurement noise) from u using h_known and h_unknown."""
@@ -437,7 +428,6 @@ class Problem:
             u,
             n_starts_max,
             use_jacobian,
-            check_bounds,
             seed,
         )
 
@@ -452,7 +442,6 @@ class Problem:
                 indices_x_measured,
                 n_starts_max,
                 use_jacobian,
-                check_bounds,
                 seed,
             )
 
@@ -469,7 +458,6 @@ class Problem:
         indices_x_measured: list[int],
         n_starts_max: int = 100,
         use_jacobian: bool = True,
-        check_bounds: bool = True,
         seed: int | None = None,
     ) -> tuple[float, np.ndarray, float, np.ndarray]:
         return self.evaluate_with_noisy_simulation_original(
@@ -478,7 +466,6 @@ class Problem:
             indices_x_measured,
             n_starts_max,
             use_jacobian,
-            check_bounds,
             seed,
         )
 
@@ -497,7 +484,8 @@ class Problem:
         n_variables: int = self.n_u + self.n_x
 
         h_expression: SymbolicType = cas.vertcat(
-            self.h_known(u, x), self.h_unknown(u, x)
+            self.h_known(u, x),
+            self.h_unknown(u, x),
         )  # pyright: ignore[reportAssignmentType]
         h: cas.Function = cas.Function("h", [w], [h_expression])
 
