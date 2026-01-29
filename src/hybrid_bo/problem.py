@@ -32,14 +32,16 @@ class Problem:
         f: cas.Function,
         h_known: cas.Function,
         h_unknown: cas.Function,
-        u_lower_bounds: np.ndarray | None = None,
-        u_upper_bounds: np.ndarray | None = None,
-        x_lower_bounds: np.ndarray | None = None,
-        x_upper_bounds: np.ndarray | None = None,
-        u_lower_bounds_starting_points: np.ndarray | None = None,
-        u_upper_bounds_starting_points: np.ndarray | None = None,
-        x_lower_bounds_starting_points: np.ndarray | None = None,
-        x_upper_bounds_starting_points: np.ndarray | None = None,
+        u_lower_bounds_acquisition: np.ndarray,
+        u_upper_bounds_acquisition: np.ndarray,
+        x_lower_bounds_acquisition: np.ndarray,
+        x_upper_bounds_acquisition: np.ndarray,
+        u_lower_bounds_starting_points: np.ndarray,
+        u_upper_bounds_starting_points: np.ndarray,
+        x_lower_bounds_starting_points: np.ndarray,
+        x_upper_bounds_starting_points: np.ndarray,
+        x_lower_bounds_evaluation: np.ndarray,
+        x_upper_bounds_evaluation: np.ndarray,
         threshold_equality: float = 1.0e-10,
     ) -> None:
         # %% Attributes
@@ -55,63 +57,33 @@ class Problem:
         self.n_h_unknown: int = self.h_unknown.numel_out(0)  # Number of equations in g
 
         # The following bounds are used as box constraints in the acquisition problem
-        self.u_lower_bounds: np.ndarray
-        self.u_upper_bounds: np.ndarray
+        self.u_lower_bounds_acquisition: np.ndarray = u_lower_bounds_acquisition.copy()
+        self.u_upper_bounds_acquisition: np.ndarray = u_upper_bounds_acquisition.copy()
 
-        self.x_lower_bounds: np.ndarray
-        self.x_upper_bounds: np.ndarray
+        self.x_lower_bounds_acquisition: np.ndarray = x_lower_bounds_acquisition.copy()
+        self.x_upper_bounds_acquisition: np.ndarray = x_upper_bounds_acquisition.copy()
 
         # The following bounds are important when using a method that relies on multiple starting points
         # They can be used to generate starting points
-        self.u_lower_bounds_starting_points: np.ndarray
-        self.u_upper_bounds_starting_points: np.ndarray
+        self.u_lower_bounds_starting_points: np.ndarray = (
+            u_lower_bounds_starting_points.copy()
+        )
+        self.u_upper_bounds_starting_points: np.ndarray = (
+            u_upper_bounds_starting_points.copy()
+        )
 
-        self.x_lower_bounds_starting_points: np.ndarray
-        self.x_upper_bounds_starting_points: np.ndarray
+        self.x_lower_bounds_starting_points: np.ndarray = (
+            x_lower_bounds_starting_points.copy()
+        )
+        self.x_upper_bounds_starting_points: np.ndarray = (
+            x_upper_bounds_starting_points.copy()
+        )
+
+        # The following bounds are used to check if a solution is valid when the problem is evaluated at a point u
+        self.x_lower_bounds_evaluation: np.ndarray = x_lower_bounds_evaluation.copy()
+        self.x_upper_bounds_evaluation: np.ndarray = x_upper_bounds_evaluation.copy()
 
         self.threshold_equality: float = threshold_equality  # Threshold that defines if two floats are considered equal
-
-        # %% Non-trivial assignments
-
-        if u_lower_bounds is None:
-            self.u_lower_bounds = -np.inf * np.ones((self.n_u, 1))
-        else:
-            self.u_lower_bounds = u_lower_bounds.copy()
-
-        if u_upper_bounds is None:
-            self.u_upper_bounds = np.inf * np.ones((self.n_u, 1))
-        else:
-            self.u_upper_bounds = u_upper_bounds.copy()
-
-        if x_lower_bounds is None:
-            self.x_lower_bounds = -np.inf * np.ones((self.n_x, 1))
-        else:
-            self.x_lower_bounds = x_lower_bounds.copy()
-
-        if x_upper_bounds is None:
-            self.x_upper_bounds = np.inf * np.ones((self.n_x, 1))
-        else:
-            self.x_upper_bounds = x_upper_bounds.copy()
-
-        if u_lower_bounds_starting_points is None:
-            self.u_lower_bounds_starting_points = self.u_lower_bounds.copy()
-        else:
-            self.u_lower_bounds_starting_points = u_lower_bounds_starting_points.copy()
-
-        if u_upper_bounds_starting_points is None:
-            self.u_upper_bounds_starting_points = self.u_upper_bounds.copy()
-        else:
-            self.u_upper_bounds_starting_points = u_upper_bounds_starting_points.copy()
-
-        if x_lower_bounds_starting_points is None:
-            self.x_lower_bounds_starting_points = self.x_lower_bounds.copy()
-        else:
-            self.x_lower_bounds_starting_points = x_lower_bounds_starting_points.copy()
-
-        if x_upper_bounds_starting_points is None:
-            self.x_upper_bounds_starting_points = self.x_upper_bounds.copy()
-        else:
-            self.x_upper_bounds_starting_points = x_upper_bounds_starting_points.copy()
 
         # %% Exceptions
 
@@ -166,17 +138,17 @@ class Problem:
             msg: str = "self.h_unknown.size_out(0) != (self.n_g, 1)"
             raise Exception(msg)
 
-        if self.u_lower_bounds.shape != (self.n_u, 1):
+        if self.u_lower_bounds_acquisition.shape != (self.n_u, 1):
             msg: str = "self.u_lower_bounds.shape != (self.n_u, 1)"
             raise Exception(msg)
-        if self.u_upper_bounds.shape != (self.n_u, 1):
+        if self.u_upper_bounds_acquisition.shape != (self.n_u, 1):
             msg: str = "self.u_upper_bounds.shape != (self.n_u, 1)"
             raise Exception(msg)
 
-        if self.x_lower_bounds.shape != (self.n_x, 1):
+        if self.x_lower_bounds_acquisition.shape != (self.n_x, 1):
             msg: str = "self.x_lower_bounds.shape != (self.x_u, 1)"
             raise Exception(msg)
-        if self.x_upper_bounds.shape != (self.n_x, 1):
+        if self.x_upper_bounds_acquisition.shape != (self.n_x, 1):
             msg: str = "self.x_upper_bounds.shape != (self.n_x, 1)"
             raise Exception(msg)
 
@@ -192,6 +164,13 @@ class Problem:
             raise Exception(msg)
         if self.x_upper_bounds_starting_points.shape != (self.n_x, 1):
             msg: str = "self.x_upper_bounds_starting_points.shape != (self.n_x, 1)"
+            raise Exception(msg)
+
+        if self.x_lower_bounds_evaluation.shape != (self.n_x, 1):
+            msg: str = "self.x_lower_bounds_evaluation.shape != (self.n_x, 1)"
+            raise Exception(msg)
+        if self.x_upper_bounds_evaluation.shape != (self.n_x, 1):
+            msg: str = "self.x_upper_bounds_evaluation.shape != (self.n_x, 1)"
             raise Exception(msg)
 
         if not np.isfinite(self.u_lower_bounds_starting_points).all():
@@ -281,8 +260,8 @@ class Problem:
             if (np.linalg.norm(h_np(roots.ravel())) < self.threshold_equality) and (
                 (not check_bounds)
                 or (
-                    (roots >= self.x_lower_bounds).all()
-                    and (roots <= self.x_upper_bounds).all()
+                    (roots >= self.x_lower_bounds_evaluation).all()
+                    and (roots <= self.x_upper_bounds_evaluation).all()
                 )
             ):
                 ready_to_return: bool = True
@@ -400,8 +379,8 @@ class Problem:
             if (np.linalg.norm(h_np(roots.ravel())) < self.threshold_equality) and (
                 (not check_bounds)
                 or (
-                    (roots >= self.x_lower_bounds[indices_x_free]).all()
-                    and (roots <= self.x_upper_bounds[indices_x_free]).all()
+                    (roots >= self.x_lower_bounds_evaluation[indices_x_free]).all()
+                    and (roots <= self.x_upper_bounds_evaluation[indices_x_free]).all()
                 )
             ):
                 ready_to_return: bool = True
@@ -523,10 +502,10 @@ class Problem:
         h: cas.Function = cas.Function("h", [w], [h_expression])
 
         lower_bounds: np.ndarray = np.vstack(
-            (self.u_lower_bounds, self.x_lower_bounds),
+            (self.u_lower_bounds_acquisition, self.x_lower_bounds_acquisition),
         )
         upper_bounds: np.ndarray = np.vstack(
-            (self.u_upper_bounds, self.x_upper_bounds),
+            (self.u_upper_bounds_acquisition, self.x_upper_bounds_acquisition),
         )
 
         f_expression: SymbolicType = self.f(u, x)  # pyright: ignore[reportAssignmentType]

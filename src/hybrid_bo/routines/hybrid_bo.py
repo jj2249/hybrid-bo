@@ -422,12 +422,12 @@ def _setup_acq_problem(
     input_gp_samples: SymbolicType = cas.horzcat(u_input_gp_samples, x_input_gp_samples)  # pyright: ignore[reportAssignmentType]
 
     x_lower_bounds_samples: np.ndarray = np.tile(
-        problem.x_lower_bounds.T,
+        problem.x_lower_bounds_acquisition.T,
         (config.n_samples_gp, 1),
     )
 
     x_upper_bounds_samples: np.ndarray = np.tile(
-        problem.x_upper_bounds.T,
+        problem.x_upper_bounds_acquisition.T,
         (config.n_samples_gp, 1),
     )
 
@@ -523,7 +523,7 @@ def _setup_acq_problem(
 
         lower_bounds = np.concatenate(
             (
-                problem.u_lower_bounds,
+                problem.u_lower_bounds_acquisition,
                 x_lower_bounds_samples[:, config.indices_x_input_gp].flatten("F")[
                     :,
                     np.newaxis,
@@ -541,7 +541,7 @@ def _setup_acq_problem(
 
         upper_bounds = np.concatenate(
             (
-                problem.u_upper_bounds,
+                problem.u_upper_bounds_acquisition,
                 x_upper_bounds_samples[:, config.indices_x_input_gp].flatten("F")[
                     :,
                     np.newaxis,
@@ -620,7 +620,7 @@ def _setup_acq_problem(
 
         lower_bounds = np.concatenate(
             (
-                problem.u_lower_bounds,
+                problem.u_lower_bounds_acquisition,
                 x_lower_bounds_samples[:, config.indices_x_input_gp].flatten("F")[
                     :,
                     np.newaxis,
@@ -634,7 +634,7 @@ def _setup_acq_problem(
 
         upper_bounds = np.concatenate(
             (
-                problem.u_upper_bounds,
+                problem.u_upper_bounds_acquisition,
                 x_upper_bounds_samples[:, config.indices_x_input_gp].flatten("F")[
                     :,
                     np.newaxis,
@@ -666,7 +666,7 @@ def _setup_acq_problem(
 
         upper_bounds_starting_points = np.concatenate(
             (
-                problem.u_upper_bounds,
+                problem.u_upper_bounds_acquisition,
                 x_upper_bounds_starting_points_samples[
                     :,
                     config.indices_x_input_gp,

@@ -314,8 +314,8 @@ def setup_acq_problem(
     n_variables: int = problem.n_u
     w: SymbolicType = u
 
-    lower_bounds: np.ndarray = problem.u_lower_bounds
-    upper_bounds: np.ndarray = problem.u_upper_bounds
+    lower_bounds: np.ndarray = problem.u_lower_bounds_acquisition
+    upper_bounds: np.ndarray = problem.u_upper_bounds_acquisition
 
     mean_transformed: SymbolicType
     var_transformed: SymbolicType

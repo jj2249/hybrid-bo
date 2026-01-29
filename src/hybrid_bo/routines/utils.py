@@ -132,8 +132,8 @@ def get_evaluation_data(
     u_eval_components: list[np.ndarray] = []
     for i_component in range(problem.n_u):
         u_eval_component: np.ndarray = np.linspace(
-            problem.u_lower_bounds[i_component],
-            problem.u_upper_bounds[i_component],
+            problem.u_lower_bounds_acquisition[i_component],
+            problem.u_upper_bounds_acquisition[i_component],
             n_eval_points[i_component],
         )
         u_eval_components.append(u_eval_component)
