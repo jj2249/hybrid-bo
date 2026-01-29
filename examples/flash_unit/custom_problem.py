@@ -79,18 +79,27 @@ class CustomProblem(Problem):
 
         x_1_lower_bound_starting_points: float = 0.0
         x_1_upper_bound_starting_points: float = 1.0
-        gamma_1_lower_bound_starting_points: float = np.log(0.5)
-        gamma_1_upper_bound_starting_points: float = np.log(2.0)
+        gamma_1_ln_lower_bound_starting_points: float = np.log(0.5)
+        gamma_1_ln_upper_bound_starting_points: float = np.log(2.0)
 
         x_lower_bounds_starting_points: np.ndarray = np.array(
-            [[x_1_lower_bound_starting_points, gamma_1_lower_bound_starting_points]],
+            [[x_1_lower_bound_starting_points, gamma_1_ln_lower_bound_starting_points]],
         ).T
         x_upper_bounds_starting_points: np.ndarray = np.array(
-            [[x_1_upper_bound_starting_points, gamma_1_upper_bound_starting_points]],
+            [[x_1_upper_bound_starting_points, gamma_1_ln_upper_bound_starting_points]],
         ).T
 
-        x_lower_bounds_evaluation: np.ndarray = x_lower_bounds_starting_points.copy()
-        x_upper_bounds_evaluation: np.ndarray = x_upper_bounds_starting_points.copy()
+        x_1_lower_bound_evaluation: float = 0.0
+        x_1_upper_bound_evaluation: float = 1.0
+        gamma_1_ln_lower_bound_evaluation: float = -np.inf
+        gamma_1_ln_upper_bound_evaluation: float = np.inf
+
+        x_lower_bounds_evaluation: np.ndarray = np.array(
+            [[x_1_lower_bound_evaluation, gamma_1_ln_lower_bound_evaluation]],
+        ).T
+        x_upper_bounds_evaluation: np.ndarray = np.array(
+            [[x_1_upper_bound_evaluation, gamma_1_ln_upper_bound_evaluation]],
+        ).T
 
         # %% Helper variables
 
