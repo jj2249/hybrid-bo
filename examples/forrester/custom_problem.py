@@ -5,7 +5,7 @@ from hybrid_bo import Config, Problem
 from hybrid_bo.type_aliases import SymbolicType
 
 
-def custom_problem(config: Config) -> Problem:
+def get_custom_problem(config: Config) -> Problem:
     u: SymbolicType = SymbolicType.sym("u", config.n_u, 1)  # pyright: ignore[reportArgumentType]
     x: SymbolicType = SymbolicType.sym("x", config.n_x, 1)  # pyright: ignore[reportArgumentType]
 

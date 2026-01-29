@@ -8,7 +8,7 @@ from hybrid_bo import Config, Problem
 from hybrid_bo.type_aliases import SymbolicType
 
 
-def custom_problem(config: Config) -> Problem:
+def get_custom_problem(config: Config) -> Problem:
     return CustomProblem(config)
 
 

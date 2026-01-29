@@ -49,7 +49,7 @@ if __name__ == "__main__":
     config: Config = Config(**config_dict)
 
     example_pkg: ModuleType = import_module(example)
-    problem: Problem = example_pkg.custom_problem(config)
+    problem: Problem = example_pkg.get_custom_problem(config)
 
     gp_hybrid_bo: GP = example_pkg.gp_hybrid_bo(problem.n_u)
     gp_standard_bo: GP = example_pkg.gp_standard_bo(problem.n_u)
