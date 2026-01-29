@@ -49,8 +49,8 @@ class CustomProblem(Problem):
 
         # %% u, x and their bounds
 
-        T: SymbolicType = SymbolicType("T", 1, 1)  # pyright: ignore[reportArgumentType] # Temperature in the flash unit (1000 * K)
-        p: SymbolicType = SymbolicType("p", 1, 1)  # pyright: ignore[reportArgumentType] # Pressure in the flash unit (bar)
+        T: SymbolicType = SymbolicType.sym("T", 1, 1)  # pyright: ignore[reportArgumentType] # Temperature in the flash unit (1000 * K)
+        p: SymbolicType = SymbolicType.sym("p", 1, 1)  # pyright: ignore[reportArgumentType] # Pressure in the flash unit (bar)
 
         u: SymbolicType = cas.vertcat(T, p)  # pyright: ignore[reportAssignmentType]
 
@@ -59,33 +59,38 @@ class CustomProblem(Problem):
         p_lower_bound: float = 0.8
         p_upper_bound: float = 2.6
 
-        u_lower_bounds: np.ndarray = np.array([T_lower_bound, p_lower_bound])[
-            :,
-            np.newaxis,
-        ]
-        u_upper_bounds: np.ndarray = np.array([T_upper_bound, p_upper_bound])[
-            :,
-            np.newaxis,
-        ]
+        u_lower_bounds_acquisition: np.ndarray = np.array(
+            [[T_lower_bound, p_lower_bound]],
+        ).T
+        u_upper_bounds_acquisition: np.ndarray = np.array(
+            [[T_upper_bound, p_upper_bound]],
+        ).T
 
-        x_1: SymbolicType = SymbolicType("x_1", 1, 1)  # pyright: ignore[reportArgumentType] # Mole Fraction of H2O in bottom Stream (-)
-        gamma_1_ln: SymbolicType = SymbolicType("gamma_1_ln", 1, 1)  # pyright: ignore[reportArgumentType] # Activation coefficient (-)
+        u_lower_bounds_starting_points: np.ndarray = u_lower_bounds_acquisition.copy()
+        u_upper_bounds_starting_points: np.ndarray = u_upper_bounds_acquisition.copy()
+
+        x_1: SymbolicType = SymbolicType.sym("x_1", 1, 1)  # pyright: ignore[reportArgumentType] # Mole Fraction of H2O in bottom Stream (-)
+        gamma_1_ln: SymbolicType = SymbolicType.sym("gamma_1_ln", 1, 1)  # pyright: ignore[reportArgumentType] # Activation coefficient (-)
 
         x: SymbolicType = cas.vertcat(x_1, gamma_1_ln)  # pyright: ignore[reportAssignmentType]
 
-        x_1_lower_bound: float = 0.0
-        x_1_upper_bound: float = 1.0
-        gamma_1_lower_bound: float = np.log(0.5)
-        gamma_1_upper_bound: float = np.log(2.0)
+        x_lower_bounds_acquisition: np.ndarray = np.array([[-np.inf, -np.inf]]).T
+        x_upper_bounds_acquisition: np.ndarray = np.array([[np.inf, np.inf]]).T
 
-        x_lower_bounds: np.ndarray = np.array([x_1_lower_bound, gamma_1_lower_bound])[
-            :,
-            np.newaxis,
-        ]
-        x_upper_bounds: np.ndarray = np.array([x_1_upper_bound, gamma_1_upper_bound])[
-            :,
-            np.newaxis,
-        ]
+        x_1_lower_bound_starting_points: float = 0.0
+        x_1_upper_bound_starting_points: float = 1.0
+        gamma_1_lower_bound_starting_points: float = np.log(0.5)
+        gamma_1_upper_bound_starting_points: float = np.log(2.0)
+
+        x_lower_bounds_starting_points: np.ndarray = np.array(
+            [[x_1_lower_bound_starting_points, gamma_1_lower_bound_starting_points]],
+        ).T
+        x_upper_bounds_starting_points: np.ndarray = np.array(
+            [[x_1_upper_bound_starting_points, gamma_1_upper_bound_starting_points]],
+        ).T
+
+        x_lower_bounds_evaluation: np.ndarray = x_lower_bounds_starting_points.copy()
+        x_upper_bounds_evaluation: np.ndarray = x_upper_bounds_starting_points.copy()
 
         # %% Helper variables
 
@@ -138,10 +143,16 @@ class CustomProblem(Problem):
             f,
             h_known,
             h_unknown,
-            u_lower_bounds,
-            u_upper_bounds,
-            x_lower_bounds,
-            x_upper_bounds,
+            u_lower_bounds_acquisition,
+            u_upper_bounds_acquisition,
+            x_lower_bounds_acquisition,
+            x_upper_bounds_acquisition,
+            u_lower_bounds_starting_points,
+            u_upper_bounds_starting_points,
+            x_lower_bounds_starting_points,
+            x_upper_bounds_starting_points,
+            x_lower_bounds_evaluation,
+            x_upper_bounds_evaluation,
         )
 
         if self.n_u != self.config.n_u:
@@ -291,14 +302,14 @@ def plot_physical_boundary(
     n_eval_points: list[int] = [201, 201]
 
     T: np.ndarray = np.linspace(
-        problem.u_lower_bounds[0],
-        problem.u_upper_bounds[0],
+        problem.u_lower_bounds_acquisition[0],
+        problem.u_upper_bounds_acquisition[0],
         n_eval_points[0],
     )
 
     p: np.ndarray = np.linspace(
-        problem.u_lower_bounds[1],
-        problem.u_upper_bounds[1],
+        problem.u_lower_bounds_acquisition[1],
+        problem.u_upper_bounds_acquisition[1],
         n_eval_points[1],
     )
 
