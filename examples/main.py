@@ -51,11 +51,11 @@ if __name__ == "__main__":
     example_pkg: ModuleType = import_module(example)
     problem: Problem = example_pkg.get_custom_problem(config)
 
-    gp_hybrid_bo: GP = example_pkg.gp_hybrid_bo(problem.n_u)
-    gp_standard_bo: GP = example_pkg.gp_standard_bo(problem.n_u)
-    optimizer_hybrid_bo: Optimizer = example_pkg.optimizer_hybrid_bo()
-    optimizer_standard_bo: Optimizer = example_pkg.optimizer_standard_bo()
-    u_train_initial_complete: list[np.ndarray] = example_pkg.u_train_initial(
+    gp_hybrid_bo: GP = example_pkg.get_gp_hybrid_bo(problem.n_u)
+    gp_standard_bo: GP = example_pkg.get_gp_standard_bo(problem.n_u)
+    optimizer_hybrid_bo: Optimizer = example_pkg.get_optimizer_hybrid_bo()
+    optimizer_standard_bo: Optimizer = example_pkg.get_optimizer_standard_bo()
+    u_train_initial_complete: list[np.ndarray] = example_pkg.get_u_train_initial(
         problem,
         config,
     )

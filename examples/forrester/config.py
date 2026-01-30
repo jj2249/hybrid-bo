@@ -24,7 +24,7 @@ from hybrid_bo.optimizers import (
 from hybrid_bo.parameterization import Parameter
 
 
-def u_train_initial(problem: Problem, config: Config) -> list[np.ndarray]:
+def get_u_train_initial(problem: Problem, config: Config) -> list[np.ndarray]:
     # u_train: np.ndarray = np.array([[-3], [-1], [0]])
     # return [u_train]
 
@@ -57,7 +57,7 @@ def u_train_initial(problem: Problem, config: Config) -> list[np.ndarray]:
     return u_train_initial
 
 
-def gp_hybrid_bo(n_inputs: int) -> GP:
+def get_gp_hybrid_bo(n_inputs: int) -> GP:
     # %% Define kernel
 
     # Options:
@@ -92,11 +92,11 @@ def gp_hybrid_bo(n_inputs: int) -> GP:
     return gp
 
 
-def gp_standard_bo(n_inputs: int) -> GP:
-    return gp_hybrid_bo(n_inputs)
+def get_gp_standard_bo(n_inputs: int) -> GP:
+    return get_gp_hybrid_bo(n_inputs)
 
 
-def optimizer_hybrid_bo() -> Optimizer:
+def get_optimizer_hybrid_bo() -> Optimizer:
     plugin_options: dict[str, Any] = {"print_time": 0}
     solver_options: dict[str, Any] = {"print_level": 0}
     local_optimizer: LocalOptimizer = CasadiOptimizer(
@@ -109,5 +109,5 @@ def optimizer_hybrid_bo() -> Optimizer:
     return optimizer
 
 
-def optimizer_standard_bo() -> Optimizer:
-    return optimizer_hybrid_bo()
+def get_optimizer_standard_bo() -> Optimizer:
+    return get_optimizer_hybrid_bo()
