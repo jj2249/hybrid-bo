@@ -23,7 +23,7 @@ def do_uniform_sampling(
     gp: GP,
     u_train_initial_complete: list[np.ndarray],
     results_dir: Path,
-    create_plots: Callable | None,
+    create_plots: Callable | None = None,
 ) -> None:
     # %% Data to create for all BO runs
 
