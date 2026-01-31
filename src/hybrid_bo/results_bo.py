@@ -16,6 +16,11 @@ class ResultsBO:
             np.nan,
         )
 
+        self.incumbent: np.ndarray = np.full(
+            (config.n_runs_bo, config.n_iterations_bo, 1),
+            np.nan,
+        )
+
         self.u: np.ndarray = np.full(
             (config.n_runs_bo, config.n_iterations_bo, problem.n_u),
             np.nan,

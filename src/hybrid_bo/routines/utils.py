@@ -408,7 +408,6 @@ def compare_results(
 
     f_optimal: float = true_solution["f"]  # pyright: ignore[reportAssignmentType]
     results: dict[str, ResultsBO] = {}
-    f_cumulative_mins: dict[str, np.ndarray] = {}
     regrets: dict[str, np.ndarray] = {}
     regret_mins: dict[str, np.ndarray] = {}
     regret_maxs: dict[str, np.ndarray] = {}
@@ -426,13 +425,7 @@ def compare_results(
         with (results_dir / f"results_{method}.pkl").open("rb") as file:
             results[method] = pickle.load(file)
 
-            f_cumulative_mins[method] = np.minimum.accumulate(
-                results[method].f[:, :, 0],
-                1,
-            )
-
-            regrets[method] = f_cumulative_mins[method] - f_optimal
-
+            regrets[method] = results[method].incumbent - f_optimal
             regret_mins[method] = regrets[method].min(0)
             regret_maxs[method] = regrets[method].max(0)
             regret_means[method] = regrets[method].mean(0)
