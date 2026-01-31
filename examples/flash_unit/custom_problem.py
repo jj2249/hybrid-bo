@@ -94,13 +94,6 @@ class CustomProblem(Problem):
         gamma_1_ln_lower_bound_evaluation: float = -np.inf
         gamma_1_ln_upper_bound_evaluation: float = np.inf
 
-        x_lower_bounds_evaluation: np.ndarray = np.array(
-            [[x_1_lower_bound_evaluation, gamma_1_ln_lower_bound_evaluation]],
-        ).T
-        x_upper_bounds_evaluation: np.ndarray = np.array(
-            [[x_1_upper_bound_evaluation, gamma_1_ln_upper_bound_evaluation]],
-        ).T
-
         # %% Helper variables
 
         B: float = self.F - self.D
@@ -160,8 +153,6 @@ class CustomProblem(Problem):
             u_upper_bounds_starting_points,
             x_lower_bounds_starting_points,
             x_upper_bounds_starting_points,
-            x_lower_bounds_evaluation,
-            x_upper_bounds_evaluation,
         )
 
         if self.n_u != self.config.n_u:

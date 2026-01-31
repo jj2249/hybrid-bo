@@ -32,9 +32,6 @@ def get_custom_problem(config: Config) -> Problem:
     x_lower_bounds_starting_points: np.ndarray = np.array([[0, 0]]).T
     x_upper_bounds_starting_points: np.ndarray = np.array([[np.sqrt(5), np.sqrt(5)]]).T
 
-    x_lower_bounds_evaluation: np.ndarray = x_lower_bounds_starting_points.copy()
-    x_upper_bounds_evaluation: np.ndarray = x_upper_bounds_starting_points.copy()
-
     return Problem(
         f,
         h_known,
@@ -47,6 +44,4 @@ def get_custom_problem(config: Config) -> Problem:
         u_upper_bounds_starting_points,
         x_lower_bounds_starting_points,
         x_upper_bounds_starting_points,
-        x_lower_bounds_evaluation,
-        x_upper_bounds_evaluation,
     )

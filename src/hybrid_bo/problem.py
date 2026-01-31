@@ -40,8 +40,6 @@ class Problem:
         u_upper_bounds_starting_points: np.ndarray,
         x_lower_bounds_starting_points: np.ndarray,
         x_upper_bounds_starting_points: np.ndarray,
-        x_lower_bounds_evaluation: np.ndarray,
-        x_upper_bounds_evaluation: np.ndarray,
         threshold_equality: float = 1.0e-10,
     ) -> None:
         # %% Attributes
@@ -56,10 +54,16 @@ class Problem:
         self.n_h_known: int = self.h_known.numel_out(0)  # Number of equations in h_hown
         self.n_h_unknown: int = self.h_unknown.numel_out(0)  # Number of equations in g
 
-        # The following bounds are used as box constraints in the acquisition problem
+        # The following bounds are used
+        # - as box constraints in the original problem formulation
+        # - as box constraints in the acquisition problem formulation
         self.u_lower_bounds_acquisition: np.ndarray = u_lower_bounds_acquisition.copy()
         self.u_upper_bounds_acquisition: np.ndarray = u_upper_bounds_acquisition.copy()
 
+        # The following bounds are used
+        # - as box constraints in the original problem formulation
+        # - as box constraints in the acquisition problem formulation
+        # - for checking if a solution is valid when evaluating the system at a specific u
         self.x_lower_bounds_acquisition: np.ndarray = x_lower_bounds_acquisition.copy()
         self.x_upper_bounds_acquisition: np.ndarray = x_upper_bounds_acquisition.copy()
 
@@ -72,16 +76,14 @@ class Problem:
             u_upper_bounds_starting_points.copy()
         )
 
+        # The following bounds are important when using a method that relies on multiple starting points
+        # They can be used to generate starting points
         self.x_lower_bounds_starting_points: np.ndarray = (
             x_lower_bounds_starting_points.copy()
         )
         self.x_upper_bounds_starting_points: np.ndarray = (
             x_upper_bounds_starting_points.copy()
         )
-
-        # The following bounds are used to check if a solution is valid when the problem is evaluated at a point u
-        self.x_lower_bounds_evaluation: np.ndarray = x_lower_bounds_evaluation.copy()
-        self.x_upper_bounds_evaluation: np.ndarray = x_upper_bounds_evaluation.copy()
 
         self.threshold_equality: float = threshold_equality  # Threshold that defines if two floats are considered equal
 
@@ -164,13 +166,6 @@ class Problem:
             raise Exception(msg)
         if self.x_upper_bounds_starting_points.shape != (self.n_x, 1):
             msg: str = "self.x_upper_bounds_starting_points.shape != (self.n_x, 1)"
-            raise Exception(msg)
-
-        if self.x_lower_bounds_evaluation.shape != (self.n_x, 1):
-            msg: str = "self.x_lower_bounds_evaluation.shape != (self.n_x, 1)"
-            raise Exception(msg)
-        if self.x_upper_bounds_evaluation.shape != (self.n_x, 1):
-            msg: str = "self.x_upper_bounds_evaluation.shape != (self.n_x, 1)"
             raise Exception(msg)
 
         if not np.isfinite(self.u_lower_bounds_starting_points).all():
@@ -260,8 +255,8 @@ class Problem:
 
             if (
                 (np.linalg.norm(h_np(roots.ravel())) < self.threshold_equality)
-                and ((roots >= self.x_lower_bounds_evaluation).all())
-                and ((roots <= self.x_upper_bounds_evaluation).all())
+                and ((roots >= self.x_lower_bounds_acquisition).all())
+                and ((roots <= self.x_upper_bounds_acquisition).all())
             ):
                 ready_to_return: bool = True
 
@@ -374,8 +369,8 @@ class Problem:
 
             if (
                 (np.linalg.norm(h_np(roots.ravel())) < self.threshold_equality)
-                and ((roots >= self.x_lower_bounds_evaluation[indices_x_free]).all())
-                and ((roots <= self.x_upper_bounds_evaluation[indices_x_free]).all())
+                and ((roots >= self.x_lower_bounds_acquisition[indices_x_free]).all())
+                and ((roots <= self.x_upper_bounds_acquisition[indices_x_free]).all())
             ):
                 ready_to_return: bool = True
 
