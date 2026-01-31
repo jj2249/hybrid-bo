@@ -23,8 +23,8 @@ def get_custom_problem(config: Config) -> Problem:
     u_lower_bounds_acquisition: np.ndarray = np.array([[-3]]).T
     u_upper_bounds_acquisition: np.ndarray = np.array([[3]]).T
 
-    x_lower_bounds: np.ndarray = np.array([[-np.inf, -np.inf]]).T
-    x_upper_bounds: np.ndarray = np.array([[np.inf, np.inf]]).T
+    x_lower_bounds_acquisition: np.ndarray = np.array([[-np.inf, -np.inf]]).T
+    x_upper_bounds_acquisition: np.ndarray = np.array([[np.inf, np.inf]]).T
 
     u_lower_bounds_starting_points: np.ndarray = u_lower_bounds_acquisition.copy()
     u_upper_bounds_starting_points: np.ndarray = u_upper_bounds_acquisition.copy()
@@ -41,8 +41,8 @@ def get_custom_problem(config: Config) -> Problem:
         h_unknown,
         u_lower_bounds_acquisition,
         u_upper_bounds_acquisition,
-        x_lower_bounds,
-        x_upper_bounds,
+        x_lower_bounds_acquisition,
+        x_upper_bounds_acquisition,
         u_lower_bounds_starting_points,
         u_upper_bounds_starting_points,
         x_lower_bounds_starting_points,
