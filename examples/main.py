@@ -113,7 +113,7 @@ if __name__ == "__main__":
                 problem,
                 optimizer_hybrid_bo,
                 100,
-                config.seed,
+                config.rng,
             )
         case _:
             print("WARNING: Your given routine is not known!")

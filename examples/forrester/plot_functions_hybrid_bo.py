@@ -56,7 +56,7 @@ def create_plots(
         config.use_jacobian_evaluate_problem,
         config.n_eval_points,
         True,
-        config.seed,
+        config.rng,
     )
 
     # %% Get samples of f at evaluation points

@@ -40,7 +40,7 @@ def create_plots(
         config.use_jacobian_evaluate_problem,
         config.n_eval_points,
         False,
-        config.seed,
+        config.rng,
     )
 
     f_eval_grid_original: np.ndarray
@@ -57,7 +57,7 @@ def create_plots(
         config.use_jacobian_evaluate_problem,
         config.n_eval_points,
         True,
-        config.seed,
+        config.rng,
     )
 
     u_eval_transformed: np.ndarray = input_transformer_gp.transform(u_eval)  # pyright: ignore[reportAssignmentType]

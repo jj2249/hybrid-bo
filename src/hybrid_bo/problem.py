@@ -188,7 +188,7 @@ class Problem:
         u: np.ndarray,
         n_starts_max: int = 100,
         use_jacobian: bool = True,
-        seed: int | None = None,
+        rng: np.random.Generator | None = None,
     ) -> tuple[float, np.ndarray]:
         """Returns f and x from u using h_known and h_unknown. No measurement noise is considered."""
 
@@ -198,9 +198,12 @@ class Problem:
 
         # %% Get initial guesses for x
 
+        if rng is None:
+            rng = np.random.default_rng()
+
         sampler: scipy.stats.qmc.LatinHypercube = scipy.stats.qmc.LatinHypercube(
             self.n_x,
-            rng=np.random.default_rng(seed),
+            rng=rng,
         )
 
         samples: np.ndarray = sampler.random(n_starts_max)
@@ -274,13 +277,13 @@ class Problem:
         u: np.ndarray,
         n_starts_max: int = 100,
         use_jacobian: bool = True,
-        seed: int | None = None,
+        rng: np.random.Generator | None = None,
     ) -> tuple[float, np.ndarray]:
         return self.evaluate_with_simulation_original(
             u,
             n_starts_max,
             use_jacobian,
-            seed,
+            rng,
         )
 
     @final
@@ -291,7 +294,7 @@ class Problem:
         indices_x_fixed: list[int],
         n_starts_max: int = 100,
         use_jacobian: bool = True,
-        seed: int | None = None,
+        rng: np.random.Generator | None = None,
     ) -> tuple[float, np.ndarray]:
         """Returns f and x from u and fixed parts of x using h_known. The fixed part of x is either measured or an output from a GP."""
 
@@ -321,8 +324,12 @@ class Problem:
 
         # %% Get starting points for x_free
 
+        if rng is None:
+            rng = np.random.default_rng()
+
         sampler: scipy.stats.qmc.LatinHypercube = scipy.stats.qmc.LatinHypercube(
-            x_fixed.size, rng=np.random.default_rng(seed)
+            x_fixed.size,
+            rng=rng,
         )
 
         samples: np.ndarray = sampler.random(n_starts_max)
@@ -394,7 +401,7 @@ class Problem:
         indices_x_fixed: list[int],
         n_starts_max: int = 100,
         use_jacobian: bool = True,
-        seed: int | None = None,
+        rng: np.random.Generator | None = None,
     ) -> tuple[float, np.ndarray]:
         return self.evaluate_with_fixed_x_original(
             u,
@@ -402,7 +409,7 @@ class Problem:
             indices_x_fixed,
             n_starts_max,
             use_jacobian,
-            seed,
+            rng,
         )
 
     @final
@@ -413,7 +420,7 @@ class Problem:
         indices_x_measured: list[int],
         n_starts_max: int = 100,
         use_jacobian: bool = True,
-        seed: int | None = None,
+        rng: np.random.Generator | None = None,
     ) -> tuple[float, np.ndarray, float, np.ndarray]:
         """Returns f and x (with and without consideration of measurement noise) from u using h_known and h_unknown."""
 
@@ -423,7 +430,7 @@ class Problem:
             u,
             n_starts_max,
             use_jacobian,
-            seed,
+            rng,
         )
 
         f: float
@@ -437,7 +444,7 @@ class Problem:
                 indices_x_measured,
                 n_starts_max,
                 use_jacobian,
-                seed,
+                rng,
             )
 
         else:
@@ -453,7 +460,7 @@ class Problem:
         indices_x_measured: list[int],
         n_starts_max: int = 100,
         use_jacobian: bool = True,
-        seed: int | None = None,
+        rng: np.random.Generator | None = None,
     ) -> tuple[float, np.ndarray, float, np.ndarray]:
         return self.evaluate_with_noisy_simulation_original(
             u,
@@ -461,16 +468,16 @@ class Problem:
             indices_x_measured,
             n_starts_max,
             use_jacobian,
-            seed,
+            rng,
         )
 
     def solve(
         self,
         optimizer: Optimizer,
         n_starting_points: int = 10,
-        seed: int | None = None,
+        rng: np.random.Generator | None = None,
     ) -> dict[str, float | np.ndarray]:
-        # Parameters n_starting_points and seed are only important if type(optimizer) == MultistartOptimizer
+        # Parameters n_starting_points and rng are only important if type(optimizer) == MultistartOptimizer
 
         u: SymbolicType = SymbolicType.sym("u", self.n_u, 1)  # pyright: ignore[reportArgumentType]
         x: SymbolicType = SymbolicType.sym("x", self.n_x, 1)  # pyright: ignore[reportArgumentType]
@@ -512,7 +519,7 @@ class Problem:
 
             starting_points: np.ndarray = optimizer.create_lhs_samples(
                 n_starting_points,
-                seed,
+                rng,
             )
             optimizer.X0 = starting_points
 

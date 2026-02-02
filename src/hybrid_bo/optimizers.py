@@ -136,7 +136,7 @@ class MultiStartOptimizer(Optimizer):
     def create_lhs_samples(
         self,
         n_starts: int = 10,
-        seed: int | None = None,
+        rng: np.random.Generator | None = None,
     ) -> np.ndarray:
         # lhs: latin hypercube sampling
 
@@ -146,9 +146,12 @@ class MultiStartOptimizer(Optimizer):
         if self.upper_bounds_starting_points is None:
             msg: str = "self.upper_bounds_starting_points is None"
 
+        if rng is None:
+            rng = np.random.default_rng()
+
         sampler: scipy.stats.qmc.LatinHypercube = scipy.stats.qmc.LatinHypercube(
             self.n_variables,
-            rng=np.random.default_rng(seed),
+            rng=rng,
         )
 
         samples: np.ndarray = sampler.random(n_starts)

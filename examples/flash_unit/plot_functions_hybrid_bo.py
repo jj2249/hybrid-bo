@@ -46,7 +46,7 @@ def create_plots(
         config.use_jacobian_evaluate_problem,
         config.n_eval_points,
         False,
-        config.seed,
+        config.rng,
     )
 
     x_eval_original: np.ndarray
@@ -66,7 +66,7 @@ def create_plots(
         config.use_jacobian_evaluate_problem,
         config.n_eval_points,
         True,
-        config.seed,
+        config.rng,
     )
 
     # %% Get samples of f at evaluation points

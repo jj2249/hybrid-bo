@@ -51,7 +51,7 @@ def get_training_data(
             config.indices_x_measured,
             config.n_starts_max_evaluate_problem,
             config.use_jacobian_evaluate_problem,
-            config.seed,
+            rng,
         )
 
         f_train[i_train] = f_train_current
@@ -110,7 +110,7 @@ def get_evaluation_data(
     use_jacobian_evaluate_problem: bool,
     n_eval_points: list[int],
     original: bool = False,
-    seed: int | None = None,
+    rng: np.random.Generator | None = None,
 ) -> tuple[
     np.ndarray,
     np.ndarray,
@@ -154,14 +154,14 @@ def get_evaluation_data(
                 u_eval[[i_eval]].T,
                 n_starts_max_evaluate_problem,
                 use_jacobian_evaluate_problem,
-                seed,
+                rng,
             )
         else:
             f_current, x_current = problem.evaluate_with_simulation(
                 u_eval[[i_eval]].T,
                 n_starts_max_evaluate_problem,
                 use_jacobian_evaluate_problem,
-                seed,
+                rng,
             )
 
         f_eval[i_eval] = f_current
@@ -250,7 +250,7 @@ def get_f_eval_samples(
                         config.indices_x_output_gp,
                         config.n_starts_max_evaluate_problem,
                         config.use_jacobian_evaluate_problem,
-                        config.seed,
+                        rng,
                     )
                 )
 
@@ -261,7 +261,7 @@ def get_f_eval_samples(
                     config.indices_x_output_gp,
                     config.n_starts_max_evaluate_problem,
                     config.use_jacobian_evaluate_problem,
-                    config.seed,
+                    rng,
                 )
 
     return f_eval_samples
@@ -394,14 +394,14 @@ def compare_results(
     problem: Problem,
     optimizer: Optimizer,
     n_starting_points: int = 10,
-    seed: int | None = None,
+    rng: np.random.Generator | None = None,
 ) -> None:
     # %% Solve original problem
 
     true_solution: dict[str, float | np.ndarray] = problem.solve(
         optimizer,
         n_starting_points,
-        seed,
+        rng,
     )
 
     # %% Create plotting data

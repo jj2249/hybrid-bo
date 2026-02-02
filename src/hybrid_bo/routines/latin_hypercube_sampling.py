@@ -92,8 +92,8 @@ def do_latin_hypercube_sampling(
             gp.optimizer.upper_bounds_starting_points = gp.optimizer.upper_bounds.copy()  # pyright: ignore[reportOptionalMemberAccess]
 
             starting_points: np.ndarray = gp.optimizer.create_lhs_samples(
-                n_starts=config.n_starts_training_gp,
-                seed=config.seed,
+                config.n_starts_training_gp,
+                config.rng,
             )
             gp.optimizer.X0 = starting_points
 
@@ -164,7 +164,7 @@ def do_latin_hypercube_sampling(
                         config.indices_x_measured,
                         config.n_starts_max_evaluate_problem,
                         config.use_jacobian_evaluate_problem,
-                        config.seed,
+                        config.rng,
                     )
                 )
 
@@ -199,8 +199,8 @@ def do_latin_hypercube_sampling(
                     )
 
                     starting_points: np.ndarray = gp.optimizer.create_lhs_samples(
-                        n_starts=config.n_starts_training_gp,
-                        seed=config.seed,
+                        config.n_starts_training_gp,
+                        config.rng,
                     )
                     gp.optimizer.X0 = starting_points
 

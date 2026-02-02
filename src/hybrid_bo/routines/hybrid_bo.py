@@ -109,8 +109,8 @@ def do_hybrid_bo(
             gp.optimizer.upper_bounds_starting_points = gp.optimizer.upper_bounds.copy()  # pyright: ignore[reportOptionalMemberAccess]
 
             starting_points: np.ndarray = gp.optimizer.create_lhs_samples(
-                n_starts=config.n_starts_training_gp,
-                seed=config.seed,
+                config.n_starts_training_gp,
+                config.rng,
             )
             gp.optimizer.X0 = starting_points
 
@@ -196,8 +196,8 @@ def do_hybrid_bo(
                     )
 
                     starting_points: np.ndarray = optimizer.create_lhs_samples(
-                        n_starts=config.n_starts_acq_optimization,
-                        seed=config.seed,
+                        config.n_starts_acq_optimization,
+                        config.rng,
                     )
                     optimizer.X0 = starting_points
 
@@ -223,7 +223,7 @@ def do_hybrid_bo(
                         config.indices_x_measured,
                         config.n_starts_max_evaluate_problem,
                         config.use_jacobian_evaluate_problem,
-                        config.seed,
+                        config.rng,
                     )
                 )
 
@@ -259,8 +259,8 @@ def do_hybrid_bo(
                     )
 
                     starting_points: np.ndarray = gp.optimizer.create_lhs_samples(
-                        n_starts=config.n_starts_training_gp,
-                        seed=config.seed,
+                        config.n_starts_training_gp,
+                        config.rng,
                     )
                     gp.optimizer.X0 = starting_points
 
