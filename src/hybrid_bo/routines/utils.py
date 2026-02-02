@@ -250,7 +250,7 @@ def get_f_eval_samples(
                         config.indices_x_output_gp,
                         config.n_starts_max_evaluate_problem,
                         config.use_jacobian_evaluate_problem,
-                        rng,
+                        config.rng,
                     )
                 )
 
@@ -261,7 +261,7 @@ def get_f_eval_samples(
                     config.indices_x_output_gp,
                     config.n_starts_max_evaluate_problem,
                     config.use_jacobian_evaluate_problem,
-                    rng,
+                    config.rng,
                 )
 
     return f_eval_samples
