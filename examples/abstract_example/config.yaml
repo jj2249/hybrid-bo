@@ -14,19 +14,19 @@ create_plots: True
 save_results: True
 
 # Number of Bayesion optimization runs, int
-n_runs_bo: 1
+n_runs_bo: 5
 
 # Number of Bayesian optimization iterations, int
-n_iterations_bo: 5
+n_iterations_bo: 3
 
 # Configure which acquisition problem formulation to use, str, alternatives: "lcb", "ei"
 formulation_acq: "ei"
 
 # Number of starting points the optimization of the acquisition problem is executed with, int
-n_starts_acq_optimization: 100
+n_starts_acq_optimization: 10
 
 # Number of GP samples used in the acquisition problem, int
-n_samples_gp: 50
+n_samples_gp: 25
 
 ## Acquisition problem formulation specific
 

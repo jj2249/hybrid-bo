@@ -28,7 +28,7 @@ def get_u_train_initial(problem: Problem, config: Config) -> list[np.ndarray]:
     # u_train: np.ndarray = np.array([[-3], [-1], [0]])
     # return [u_train]
 
-    n_initial_points: int = 3
+    n_initial_points: int = 2
     sampler: qmc.LatinHypercube = qmc.LatinHypercube(
         problem.n_u,
         rng=config.rng,
