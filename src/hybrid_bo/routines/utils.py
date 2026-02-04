@@ -51,7 +51,7 @@ def get_training_data(
             config.indices_x_measured,
             config.n_starts_max_evaluate_problem,
             config.use_jacobian_evaluate_problem,
-            rng,
+            config.rng,
         )
 
         f_train[i_train] = f_train_current
