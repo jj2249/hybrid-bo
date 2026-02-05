@@ -348,8 +348,21 @@ def ei_gp(
 ) -> CasadiType | np.ndarray:
     """Returns expected improvement for BO with Gaussian processes as surrogate model.
 
-    See https://botorch.org/docs/acquisition#analytic-acquisition-functions for maximization problem.
-    See https://smt.readthedocs.io/en/latest/_src_docs/applications/ego.html?utm_source=chatgpt.com#ego for minimization problem.
+    Remember: max(a, b) = - min(-a, -b)
+    ei_gp(maximize=True) = E[max(0, f - incumbent)] = - E[min(0, incumbent - f)]
+    ei_gp(maximize=False) = E[max(0, incumbent - f)] = - E[min(0, f - incumbent)]
+
+    If we want to maximize a function f,
+    we use the greatest observed f as incumbent
+    and the acquisition problem reads
+    either max ei_gp(maximize=True)
+    or min -ei_gp(maximize=True).
+
+    If we want to maximize a function f,
+    we use the least observed f as incumbent
+    and the acquisition problem reads
+    either max ei_gp(maximize=False)
+    or min -ei_gp(maximize=False)
 
     Parameters
     ----------
@@ -370,6 +383,11 @@ def ei_gp(
     -------
     CasadiType | np.ndarray
         Expected improvement
+
+    See Also
+    --------
+    https://botorch.org/docs/acquisition#analytic-acquisition-functions for maximization problem.
+    https://smt.readthedocs.io/en/latest/_src_docs/applications/ego.html?utm_source=chatgpt.com#ego for minimization problem.
     """
 
     if mean.shape != std.shape:

@@ -331,7 +331,6 @@ def setup_acq_problem(
         f_expression = mean - config.factor_lcb_std * std
 
     # Expected improvement
-    # Negative sign because max(a, b) = - min(-a, -b)
     else:
         f_expression = -ei_gp(mean, std, incumbent, False)
 
