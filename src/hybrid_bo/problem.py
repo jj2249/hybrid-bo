@@ -183,7 +183,7 @@ class Problem:
             raise Exception(msg)
 
     @final
-    def evaluate_with_simulation_original(
+    def single_evaluate_with_simulation_original(
         self,
         u: np.ndarray,
         n_starts_max: int = 100,
@@ -272,14 +272,14 @@ class Problem:
         msg: str = "Could not get a solution!"
         raise Exception(msg)
 
-    def evaluate_with_simulation(
+    def single_evaluate_with_simulation(
         self,
         u: np.ndarray,
         n_starts_max: int = 100,
         use_jacobian: bool = True,
         rng: np.random.Generator | None = None,
     ) -> tuple[float, np.ndarray]:
-        return self.evaluate_with_simulation_original(
+        return self.single_evaluate_with_simulation_original(
             u,
             n_starts_max,
             use_jacobian,
@@ -287,7 +287,7 @@ class Problem:
         )
 
     @final
-    def evaluate_with_fixed_x_original(
+    def single_evaluate_with_fixed_x_original(
         self,
         u: np.ndarray,
         x_fixed: np.ndarray,
@@ -394,7 +394,7 @@ class Problem:
         msg: str = "Could not get a solution!"
         raise Exception(msg)
 
-    def evaluate_with_fixed_x(
+    def single_evaluate_with_fixed_x(
         self,
         u: np.ndarray,
         x_fixed: np.ndarray,
@@ -403,7 +403,7 @@ class Problem:
         use_jacobian: bool = True,
         rng: np.random.Generator | None = None,
     ) -> tuple[float, np.ndarray]:
-        return self.evaluate_with_fixed_x_original(
+        return self.single_evaluate_with_fixed_x_original(
             u,
             x_fixed,
             indices_x_fixed,
@@ -413,7 +413,7 @@ class Problem:
         )
 
     @final
-    def evaluate_with_noisy_simulation_original(
+    def single_evaluate_with_noisy_simulation_original(
         self,
         u: np.ndarray,
         measurement_noise: np.ndarray,
@@ -426,7 +426,7 @@ class Problem:
 
         f_no_noise: float
         x_no_noise: np.ndarray
-        f_no_noise, x_no_noise = self.evaluate_with_simulation(
+        f_no_noise, x_no_noise = self.single_evaluate_with_simulation(
             u,
             n_starts_max,
             use_jacobian,
@@ -438,7 +438,7 @@ class Problem:
         if (measurement_noise != 0.0).any():
             x_measured: np.ndarray = x_no_noise[indices_x_measured] + measurement_noise
 
-            f, x = self.evaluate_with_fixed_x(
+            f, x = self.single_evaluate_with_fixed_x(
                 u,
                 x_measured,
                 indices_x_measured,
@@ -453,7 +453,7 @@ class Problem:
 
         return f, x, f_no_noise, x_no_noise
 
-    def evaluate_with_noisy_simulation(
+    def single_evaluate_with_noisy_simulation(
         self,
         u: np.ndarray,
         measurement_noise: np.ndarray,
@@ -462,7 +462,7 @@ class Problem:
         use_jacobian: bool = True,
         rng: np.random.Generator | None = None,
     ) -> tuple[float, np.ndarray, float, np.ndarray]:
-        return self.evaluate_with_noisy_simulation_original(
+        return self.single_evaluate_with_noisy_simulation_original(
             u,
             measurement_noise,
             indices_x_measured,

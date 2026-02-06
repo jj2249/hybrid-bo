@@ -163,7 +163,7 @@ class CustomProblem(Problem):
             raise Exception(msg)
 
     @override
-    def evaluate_with_simulation(
+    def single_evaluate_with_simulation(
         self,
         u: np.ndarray,
         n_starts_max: int = 100,
@@ -172,7 +172,7 @@ class CustomProblem(Problem):
     ) -> tuple[float, np.ndarray]:
         f_temp: float
         x_temp: np.ndarray
-        f_temp, x_temp = self.evaluate_with_simulation_original(
+        f_temp, x_temp = self.single_evaluate_with_simulation_original(
             u,
             n_starts_max,
             use_jacobian,
@@ -197,7 +197,7 @@ class CustomProblem(Problem):
         return f, x
 
     @override
-    def evaluate_with_fixed_x(
+    def single_evaluate_with_fixed_x(
         self,
         u: np.ndarray,
         x_fixed: np.ndarray,
@@ -209,7 +209,7 @@ class CustomProblem(Problem):
         f_temp: float
         x_temp: np.ndarray
 
-        f_temp, x_temp = self.evaluate_with_fixed_x_original(
+        f_temp, x_temp = self.single_evaluate_with_fixed_x_original(
             u,
             x_fixed,
             indices_x_fixed,
@@ -237,7 +237,7 @@ class CustomProblem(Problem):
         return f, x
 
     @override
-    def evaluate_with_noisy_simulation(
+    def single_evaluate_with_noisy_simulation(
         self,
         u: np.ndarray,
         measurement_noise: np.ndarray,
@@ -252,7 +252,7 @@ class CustomProblem(Problem):
         x_no_noise_temp: np.ndarray
 
         f_temp, x_temp, f_no_noise_temp, x_no_noise_temp = (
-            self.evaluate_with_noisy_simulation_original(
+            self.single_evaluate_with_noisy_simulation_original(
                 u,
                 measurement_noise,
                 indices_x_measured,
@@ -323,8 +323,10 @@ def plot_physical_boundary(
     for i_eval in range(n_eval_points_total):
         f_eval_current: float
         x_eval_current: np.ndarray
-        f_eval_current, x_eval_current = problem.evaluate_with_simulation_original(
-            u_eval[[i_eval]].T,
+        f_eval_current, x_eval_current = (
+            problem.single_evaluate_with_simulation_original(
+                u_eval[[i_eval]].T,
+            )
         )
 
         f_eval[i_eval] = f_eval_current

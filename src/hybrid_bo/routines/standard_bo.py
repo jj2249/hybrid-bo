@@ -186,7 +186,7 @@ def do_standard_bo(
                 x_next_no_noise: np.ndarray
 
                 f_next, x_next, f_next_no_noise, x_next_no_noise = (
-                    problem.evaluate_with_noisy_simulation(
+                    problem.single_evaluate_with_noisy_simulation(
                         u_next,
                         measurement_noise[[n_points_initial + i_bo]].T,
                         config.indices_x_measured,

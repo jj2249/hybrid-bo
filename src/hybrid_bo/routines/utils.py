@@ -45,7 +45,7 @@ def get_f_and_x(
             x_current,
             f_no_noise_current,
             x_no_noise_current,
-        ) = problem.evaluate_with_noisy_simulation(
+        ) = problem.single_evaluate_with_noisy_simulation(
             u[[i_point]].T,
             measurement_noise[[i_point]].T,
             config.indices_x_measured,
@@ -140,14 +140,14 @@ def get_evaluation_data(
     f_eval: np.ndarray = np.empty((n_eval_points_total, 1))
     for i_eval in range(n_eval_points_total):
         if original:
-            f_current, x_current = problem.evaluate_with_simulation_original(
+            f_current, x_current = problem.single_evaluate_with_simulation_original(
                 u_eval[[i_eval]].T,
                 n_starts_max_evaluate_problem,
                 use_jacobian_evaluate_problem,
                 rng,
             )
         else:
-            f_current, x_current = problem.evaluate_with_simulation(
+            f_current, x_current = problem.single_evaluate_with_simulation(
                 u_eval[[i_eval]].T,
                 n_starts_max_evaluate_problem,
                 use_jacobian_evaluate_problem,
@@ -234,7 +234,7 @@ def get_f_eval_samples(
 
             if original:
                 f_eval_samples[i_samples, i_eval], _ = (
-                    problem.evaluate_with_fixed_x_original(
+                    problem.single_evaluate_with_fixed_x_original(
                         u_eval_current,
                         output_gp_eval_samples_current,
                         config.indices_x_output_gp,
@@ -245,13 +245,15 @@ def get_f_eval_samples(
                 )
 
             else:
-                f_eval_samples[i_samples, i_eval], _ = problem.evaluate_with_fixed_x(
-                    u_eval_current,
-                    output_gp_eval_samples_current,
-                    config.indices_x_output_gp,
-                    config.n_starts_max_evaluate_problem,
-                    config.use_jacobian_evaluate_problem,
-                    config.rng,
+                f_eval_samples[i_samples, i_eval], _ = (
+                    problem.single_evaluate_with_fixed_x(
+                        u_eval_current,
+                        output_gp_eval_samples_current,
+                        config.indices_x_output_gp,
+                        config.n_starts_max_evaluate_problem,
+                        config.use_jacobian_evaluate_problem,
+                        config.rng,
+                    )
                 )
 
     return f_eval_samples
