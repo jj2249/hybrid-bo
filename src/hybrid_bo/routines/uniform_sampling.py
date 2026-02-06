@@ -59,6 +59,8 @@ def do_uniform_sampling(
         # Contains the measurement noise for all training points (initial points and BO iterations)
         measurement_noise: np.ndarray = measurement_noise_complete[i_run_bo]
 
+        n_points_initial: int = n_points_initial_complete[i_run_bo]
+
         f: np.ndarray
         x: np.ndarray
         f_no_noise: np.ndarray
@@ -66,14 +68,12 @@ def do_uniform_sampling(
 
         f, x, f_no_noise, x_no_noise = problem.evaluate_with_noisy_simulation(
             u,
-            measurement_noise,
+            measurement_noise[:n_points_initial],
             config.indices_x_measured,
             config.n_starts_max_evaluate_problem,
             config.use_jacobian_evaluate_problem,
             config.rng,
         )
-
-        n_points_initial: int = n_points_initial_complete[i_run_bo]
 
         # %% Define GP
 

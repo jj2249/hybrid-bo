@@ -348,7 +348,7 @@ class Problem:
             f[i_point] = f_current
             x[[i_point]] = x_current.T
             f_no_noise[i_point] = f_no_noise_current
-            x_no_noise[[i_point]] = x_no_noise_current
+            x_no_noise[[i_point]] = x_no_noise_current.T
 
         return f, x, f_no_noise, x_no_noise
 
@@ -361,7 +361,7 @@ class Problem:
         use_jacobian: bool = True,
         rng: np.random.Generator | None = None,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        return self.evaluate_with_noisy_simulation(
+        return self.evaluate_with_noisy_simulation_original(
             u,
             measurement_noise,
             indices_x_measured,
