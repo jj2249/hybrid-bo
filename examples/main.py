@@ -55,7 +55,7 @@ if __name__ == "__main__":
     gp_standard_bo: GP = example_pkg.get_gp_standard_bo(problem.n_u)
     optimizer_hybrid_bo: Optimizer = example_pkg.get_optimizer_hybrid_bo()
     optimizer_standard_bo: Optimizer = example_pkg.get_optimizer_standard_bo()
-    u_train_initial_complete: list[np.ndarray] = example_pkg.get_u_train_initial(
+    u_train_initial_complete: list[np.ndarray] = example_pkg.get_u_initial(
         problem,
         config,
     )
