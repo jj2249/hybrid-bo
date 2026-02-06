@@ -35,18 +35,19 @@ def do_standard_bo(
         msg: str = "len(u_train) != config.n_runs_bo"
         raise Exception(msg)
 
-    n_training_points_initial_complete: np.ndarray = np.array(
-        [u_train_initial.shape[0] for u_train_initial in u_train_initial_complete],
-        int,
-    )
-    n_training_points_complete: np.ndarray = (
-        n_training_points_initial_complete + config.n_iterations_bo
-    )
+    n_training_points_initial_complete: list[int] = [
+        u_train_initial.shape[0] for u_train_initial in u_train_initial_complete
+    ]
+
+    n_training_points_complete: list[int] = [
+        (n_training_points_initial + config.n_iterations_bo)
+        for n_training_points_initial in n_training_points_initial_complete
+    ]
 
     measurement_noise_train_complete: list[np.ndarray]
-    measurement_noise_train_complete, _ = get_sampling_based_data(
-        config,
-        n_training_points_complete,
+    gaussian_standard_samples_complete: list[np.ndarray]
+    measurement_noise_train_complete, gaussian_standard_samples_complete = (
+        get_sampling_based_data(config, n_training_points_complete)
     )
 
     # %% Results of BO

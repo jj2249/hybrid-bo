@@ -64,44 +64,34 @@ def get_training_data(
 
 def get_sampling_based_data(
     config: Config,
-    n_training_points_complete: np.ndarray,
-) -> tuple[list[np.ndarray], np.ndarray]:
-    n_training_points_total: int = np.sum(n_training_points_complete)
+    n_training_points_complete: list[int],
+) -> tuple[list[np.ndarray], list[np.ndarray]]:
 
-    measurement_noise_train_temp: np.ndarray = np.atleast_2d(
-        scipy.stats.norm.rvs(
-            0,
-            config.std_measurement_noise,
-            n_training_points_total,
-            random_state=config.rng,
-        ),
-    ).T
+    measurement_noise_train_complete: list[np.ndarray] = [
+        np.atleast_2d(
+            scipy.stats.norm.rvs(
+                0,
+                config.std_measurement_noise,
+                n_training_points_complete[i_run_bo],
+                random_state=config.rng,
+            ),
+        ).T
+        for i_run_bo in range(config.n_runs_bo)
+    ]
 
-    measurement_noise_train_complete: list[np.ndarray] = []
-    i_measurement_noise_train: int = 0
-    for i_run_bo in range(config.n_runs_bo):
-        i_measurement_noise_train_new: int = (
-            i_measurement_noise_train + n_training_points_complete[i_run_bo]
-        )
-        measurement_noise_train_complete.append(
-            measurement_noise_train_temp[
-                i_measurement_noise_train:i_measurement_noise_train_new
-            ],
-        )
-        i_measurement_noise_train = i_measurement_noise_train_new
+    gp_gaussian_standard_samples_complete: list[np.ndarray] = [
+        np.atleast_2d(
+            scipy.stats.norm.rvs(
+                0,
+                1,
+                config.n_samples_gp,
+                random_state=config.rng,
+            ),
+        ).T
+        for i_run_bo in range(config.n_runs_bo)
+    ]
 
-    gaussian_standard_samples_temp: np.ndarray = scipy.stats.norm.rvs(
-        size=config.n_samples_gp * config.n_runs_bo,
-        random_state=config.rng,
-    )  # pyright: ignore[reportAssignmentType]
-
-    gaussian_standard_samples_complete: np.ndarray = (
-        gaussian_standard_samples_temp.reshape(
-            (config.n_runs_bo, config.n_samples_gp),
-        )
-    )
-
-    return measurement_noise_train_complete, gaussian_standard_samples_complete
+    return measurement_noise_train_complete, gp_gaussian_standard_samples_complete
 
 
 def get_evaluation_data(
