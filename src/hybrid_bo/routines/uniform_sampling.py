@@ -51,12 +51,6 @@ def do_uniform_sampling(
     # %% Iterate over multiple BO runs
 
     for i_run_bo in range(config.n_runs_bo):
-        # %% Samples of the Gaussian standard distribution for the reparameterization trick
-
-        gaussian_standard_samples: np.ndarray = gaussian_standard_samples_complete[
-            [i_run_bo]
-        ].T
-
         # %% Training data
 
         u_train: np.ndarray = u_train_initial_complete[i_run_bo].copy()
