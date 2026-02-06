@@ -1,4 +1,5 @@
 import pickle
+import traceback
 from collections.abc import Callable
 from pathlib import Path
 
@@ -14,34 +15,34 @@ from hybrid_bo.gp import GP
 from hybrid_bo.optimizers import MultiStartOptimizer
 from hybrid_bo.problem import Problem
 from hybrid_bo.results_bo import ResultsBO
-from hybrid_bo.routines.utils import get_sampling_based_data, get_training_data
+from hybrid_bo.routines.utils import get_sampling_based_data, get_f_and_x
 
 
 def do_uniform_sampling(
     problem: Problem,
     config: Config,
     gp: GP,
-    u_train_initial_complete: list[np.ndarray],
+    u_initial_complete: list[np.ndarray],
     results_dir: Path,
     create_plots: Callable | None = None,
 ) -> None:
-    if len(u_train_initial_complete) != config.n_runs_bo:
-        msg: str = "len(u_train) != config.n_runs_bo"
+    if len(u_initial_complete) != config.n_runs_bo:
+        msg: str = "len(u_initial_complete) != config.n_runs_bo"
         raise Exception(msg)
 
-    n_training_points_initial_complete: list[int] = [
-        u_train_initial.shape[0] for u_train_initial in u_train_initial_complete
+    n_points_initial_complete: list[int] = [
+        u_initial.shape[0] for u_initial in u_initial_complete
     ]
 
-    n_training_points_complete: list[int] = [
-        (n_training_points_initial + config.n_iterations_bo)
-        for n_training_points_initial in n_training_points_initial_complete
+    n_points_complete: list[int] = [
+        (n_points_initial + config.n_iterations_bo)
+        for n_points_initial in n_points_initial_complete
     ]
 
-    measurement_noise_train_complete: list[np.ndarray]
+    measurement_noise_complete: list[np.ndarray]
     gaussian_standard_samples_complete: list[np.ndarray]
-    measurement_noise_train_complete, gaussian_standard_samples_complete = (
-        get_sampling_based_data(config, n_training_points_complete)
+    measurement_noise_complete, gaussian_standard_samples_complete = (
+        get_sampling_based_data(config, n_points_complete)
     )
 
     # %% Results of BO
@@ -53,31 +54,31 @@ def do_uniform_sampling(
     for i_run_bo in range(config.n_runs_bo):
         # %% Training data
 
-        u_train: np.ndarray = u_train_initial_complete[i_run_bo].copy()
+        u: np.ndarray = u_initial_complete[i_run_bo].copy()
 
         # Contains the measurement noise for all training points (initial points and BO iterations)
-        measurement_noise_train: np.ndarray = measurement_noise_train_complete[i_run_bo]
+        measurement_noise: np.ndarray = measurement_noise_complete[i_run_bo]
 
-        f_train: np.ndarray
-        x_train: np.ndarray
-        f_train_no_noise: np.ndarray
-        x_train_no_noise: np.ndarray
+        f: np.ndarray
+        x: np.ndarray
+        f_no_noise: np.ndarray
+        x_no_noise: np.ndarray
 
-        f_train, x_train, f_train_no_noise, x_train_no_noise = get_training_data(
-            u_train,
-            measurement_noise_train,
+        f, x, f_no_noise, x_no_noise = get_f_and_x(
+            u,
+            measurement_noise,
             problem,
             config,
         )
 
-        n_training_points_initial: int = n_training_points_initial_complete[i_run_bo]
+        n_points_initial: int = n_points_initial_complete[i_run_bo]
 
         # %% Define GP
 
         input_transformer_gp: AffineTransformer = MinMaxTransformer()
         output_transformer_gp: AffineTransformer = StandardTransformer()
 
-        set_gp_XY(gp, u_train, f_train, input_transformer_gp, output_transformer_gp)
+        set_gp_XY(gp, u, f, input_transformer_gp, output_transformer_gp)
 
         print("Preparation done.")
 
@@ -101,7 +102,7 @@ def do_uniform_sampling(
 
         # %% Get initial incumbent
 
-        incumbent: float = np.min(f_train)
+        incumbent: float = np.min(f)
 
         # %% Create initial plots
 
@@ -112,10 +113,10 @@ def do_uniform_sampling(
                 gp,
                 input_transformer_gp,
                 output_transformer_gp,
-                f_train,
-                u_train,
-                x_train,
-                n_training_points_initial,
+                f,
+                u,
+                x,
+                n_points_initial,
                 0,
             )
 
@@ -156,7 +157,7 @@ def do_uniform_sampling(
                 f_next, x_next, f_next_no_noise, x_next_no_noise = (
                     problem.evaluate_with_noisy_simulation(
                         u_next,
-                        measurement_noise_train[[n_training_points_initial + i_bo]].T,
+                        measurement_noise[[n_points_initial + i_bo]].T,
                         config.indices_x_measured,
                         config.n_starts_max_evaluate_problem,
                         config.use_jacobian_evaluate_problem,
@@ -164,21 +165,19 @@ def do_uniform_sampling(
                     )
                 )
 
-                print("Getting next training data done.")
+                print("Getting next point done.")
 
                 # %% Update GP
 
-                f_train = np.vstack((f_train, f_next))
-                f_train_no_noise = np.vstack((f_train_no_noise, f_next_no_noise))
+                f = np.vstack((f, f_next))
+                f_no_noise = np.vstack((f_no_noise, f_next_no_noise))
 
-                u_train = np.vstack((u_train, u_next.T))
+                u = np.vstack((u, u_next.T))
 
-                x_train = np.vstack((x_train, x_next.T))
-                x_train_no_noise = np.vstack((x_train_no_noise, x_next_no_noise.T))
+                x = np.vstack((x, x_next.T))
+                x_no_noise = np.vstack((x_no_noise, x_next_no_noise.T))
 
-                set_gp_XY(
-                    gp, u_train, f_train, input_transformer_gp, output_transformer_gp
-                )
+                set_gp_XY(gp, u, f, input_transformer_gp, output_transformer_gp)
 
                 gp.create_training_problem()
 
@@ -214,10 +213,10 @@ def do_uniform_sampling(
                         gp,
                         input_transformer_gp,
                         output_transformer_gp,
-                        f_train,
-                        u_train,
-                        x_train,
-                        n_training_points_initial,
+                        f,
+                        u,
+                        x,
+                        n_points_initial,
                         i_bo + 1,
                     )
 
@@ -235,7 +234,7 @@ def do_uniform_sampling(
                 print(f"BO iteration {i_bo + 1} done.\n---\n")
 
             except Exception as e:
-                print(e)
+                traceback.print_exc()
 
         print(f"BO run {i_run_bo + 1} done.\n\n---\n\n")
 
@@ -252,17 +251,17 @@ def do_uniform_sampling(
 
 def set_gp_XY(
     gp: GP,
-    u_train: np.ndarray,
-    f_train: np.ndarray,
+    u: np.ndarray,
+    f: np.ndarray,
     input_gp_transformer: AffineTransformer,
     output_gp_transformer: AffineTransformer,
 ) -> None:
-    u_train_transformed: np.ndarray = input_gp_transformer.fit_transform(
-        u_train,
+    u_transformed: np.ndarray = input_gp_transformer.fit_transform(
+        u,
     )
 
-    f_train_transformed: np.ndarray = output_gp_transformer.fit_transform(
-        f_train,
+    f_transformed: np.ndarray = output_gp_transformer.fit_transform(
+        f,
     )
 
-    gp.set_XY_train(u_train_transformed, f_train_transformed)
+    gp.set_XY_train(u_transformed, f_transformed)

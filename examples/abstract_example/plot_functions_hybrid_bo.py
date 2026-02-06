@@ -21,11 +21,11 @@ def create_plots(
     gp: GP,
     input_transformer_gp: AffineTransformer,
     output_transformer_gp: AffineTransformer,
-    f_train: np.ndarray,
-    u_train: np.ndarray,
-    x_train: np.ndarray,
+    f: np.ndarray,
+    u: np.ndarray,
+    x: np.ndarray,
     gaussian_standard_samples: np.ndarray,
-    n_initial_training_points: int,
+    n_initial_points: int,
     i_iteration: int,
 ) -> None:
     # See https://en.wikipedia.org/wiki/Standard_deviation#Rules_for_normally_distributed_data
@@ -89,9 +89,9 @@ def create_plots(
         gp,
         input_transformer_gp,
         output_transformer_gp,
-        u_train,
-        x_train,
-        n_initial_training_points,
+        u,
+        x,
+        n_initial_points,
         confidence_factors[config.confidence_level],
     )
 
@@ -103,14 +103,14 @@ def create_plots(
         u_eval,
         f_eval,
         f_eval_samples,
-        u_train,
-        f_train,
-        n_initial_training_points,
+        u,
+        f,
+        n_initial_points,
     )
 
     print("Plotting f done.")
 
-    plot_acq(ax[2], config, u_eval, f_eval_samples, np.min(f_train))
+    plot_acq(ax[2], config, u_eval, f_eval_samples, np.min(f))
 
     print("Plotting acquisition function done")
 
@@ -128,9 +128,9 @@ def plot_gp(
     gp: GP,
     input_transformer_gp: AffineTransformer,
     output_transformer_gp: AffineTransformer,
-    u_train: np.ndarray,
-    x_train: np.ndarray,
-    n_initial_training_points: int,
+    u: np.ndarray,
+    x: np.ndarray,
+    n_initial_points: int,
     confidence_factor: float,
 ) -> None:
     # %% Get plotting data
@@ -158,22 +158,22 @@ def plot_gp(
         y_mean + confidence_factor * y_std
     ).flatten()
 
-    y_train: np.ndarray = x_train[:, config.indices_x_output_gp]
+    y: np.ndarray = x[:, config.indices_x_output_gp]
 
     # %% Plotting
 
     ax.scatter(
-        u_train[:n_initial_training_points],
-        y_train[:n_initial_training_points],
+        u[:n_initial_points],
+        y[:n_initial_points],
         c="k",
-        label="Initial training points",
+        label="Initial points",
     )
 
     ax.scatter(
-        u_train[n_initial_training_points:],
-        y_train[n_initial_training_points:],
+        u[n_initial_points:],
+        y[n_initial_points:],
         c="r",
-        label="Training points found with BO",
+        label="Points found with BO",
     )
 
     ax.plot(u_eval, y_eval, color="k", linestyle="--", label="True")
@@ -197,9 +197,9 @@ def plot_f(
     u_eval: np.ndarray,
     f_eval: np.ndarray,
     f_eval_samples: np.ndarray,
-    u_train: np.ndarray,
-    f_train: np.ndarray,
-    n_initial_training_points: int,
+    u: np.ndarray,
+    f: np.ndarray,
+    n_initial_points: int,
 ) -> None:
     # %% Get sample mean and confidence interval bounds
 
@@ -218,14 +218,14 @@ def plot_f(
     # %%Plotting
 
     ax.scatter(
-        u_train[:n_initial_training_points],
-        f_train[:n_initial_training_points],
+        u[:n_initial_points],
+        f[:n_initial_points],
         c="k",
     )
 
     ax.scatter(
-        u_train[n_initial_training_points:],
-        f_train[n_initial_training_points:],
+        u[n_initial_points:],
+        f[n_initial_points:],
         c="r",
     )
 

@@ -24,34 +24,34 @@ from hybrid_bo.optimizers import (
 from hybrid_bo.parameterization import Parameter
 
 
-def get_u_train_initial(problem: Problem, config: Config) -> list[np.ndarray]:
+def get_u_initial(problem: Problem, config: Config) -> list[np.ndarray]:
     n_initial_points: int = 3
     sampler: qmc.LatinHypercube = qmc.LatinHypercube(
         problem.n_u,
         rng=config.rng,
     )
 
-    u_train_initial_array_unscaled: np.ndarray = sampler.random(
+    u_initial_array_unscaled: np.ndarray = sampler.random(
         config.n_runs_bo * n_initial_points,
     )
 
-    u_train_initial_array: np.ndarray = (
+    u_initial_array: np.ndarray = (
         problem.u_lower_bounds_starting_points.T
         + (
             problem.u_upper_bounds_starting_points.T
             - problem.u_lower_bounds_starting_points.T
         )
-        * u_train_initial_array_unscaled
+        * u_initial_array_unscaled
     )
 
-    u_train_initial: list[np.ndarray] = []
+    u_initial: list[np.ndarray] = []
     i_array: int = 0
     for _ in range(config.n_runs_bo):
         i_array_new = i_array + n_initial_points
-        u_train_initial.append(u_train_initial_array[i_array:i_array_new])
+        u_initial.append(u_initial_array[i_array:i_array_new])
         i_array = i_array_new
 
-    return u_train_initial
+    return u_initial
 
 
 def get_gp_hybrid_bo(n_inputs: int) -> GP:

@@ -22,10 +22,10 @@ def create_plots(
     gp: GP,
     input_transformer_gp: AffineTransformer,
     output_transformer_gp: AffineTransformer,
-    f_train: np.ndarray,
-    u_train: np.ndarray,
-    x_train: np.ndarray,
-    n_initial_training_points: int,
+    f: np.ndarray,
+    u: np.ndarray,
+    x: np.ndarray,
+    n_initial_points: int,
     i_iteration: int,
 ) -> None:
     # See https://en.wikipedia.org/wiki/Standard_deviation#Rules_for_normally_distributed_data
@@ -87,9 +87,9 @@ def create_plots(
         gp,
         input_transformer_gp,
         output_transformer_gp,
-        u_train,
-        f_train,
-        n_initial_training_points,
+        u,
+        f,
+        n_initial_points,
         confidence_factors[config.confidence_level],
     )
 
@@ -108,9 +108,9 @@ def plot_output_gp(
     gp: GP,
     input_transformer_gp: AffineTransformer,
     output_transformer_gp: AffineTransformer,
-    u_train: np.ndarray,
-    f_train: np.ndarray,
-    n_initial_training_points: int,
+    u: np.ndarray,
+    f: np.ndarray,
+    n_initial_points: int,
     confidence_factor: float,
 ) -> None:
     standard_bo_plot_output_gp(
@@ -120,8 +120,8 @@ def plot_output_gp(
         gp,
         input_transformer_gp,
         output_transformer_gp,
-        u_train,
-        f_train,
-        n_initial_training_points,
+        u,
+        f,
+        n_initial_points,
         confidence_factor,
     )

@@ -21,58 +21,58 @@ if TYPE_CHECKING:
     from ..results_bo import ResultsBO
 
 
-def get_training_data(
-    u_train: np.ndarray,
-    measurement_noise_train: np.ndarray,
+def get_f_and_x(
+    u: np.ndarray,
+    measurement_noise: np.ndarray,
     problem: Problem,
     config: Config,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    n_initial_training_points: int = u_train.shape[0]
+    n_points: int = u.shape[0]
 
-    f_train: np.ndarray = np.empty((n_initial_training_points, 1))
-    x_train: np.ndarray = np.empty((n_initial_training_points, problem.n_x))
-    f_train_no_noise: np.ndarray = f_train.copy()
-    x_train_no_noise: np.ndarray = x_train.copy()
+    f: np.ndarray = np.empty((n_points, 1))
+    x: np.ndarray = np.empty((n_points, problem.n_x))
+    f_no_noise: np.ndarray = f.copy()
+    x_no_noise: np.ndarray = x.copy()
 
-    for i_train in range(n_initial_training_points):
-        f_train_current: float
-        x_train_current: np.ndarray
-        f_train_no_noise_current: float
-        x_train_no_noise_current: np.ndarray
+    for i_point in range(n_points):
+        f_current: float
+        x_current: np.ndarray
+        f_no_noise_current: float
+        x_no_noise_current: np.ndarray
 
         (
-            f_train_current,
-            x_train_current,
-            f_train_no_noise_current,
-            x_train_no_noise_current,
+            f_current,
+            x_current,
+            f_no_noise_current,
+            x_no_noise_current,
         ) = problem.evaluate_with_noisy_simulation(
-            u_train[[i_train]].T,
-            measurement_noise_train[[i_train]].T,
+            u[[i_point]].T,
+            measurement_noise[[i_point]].T,
             config.indices_x_measured,
             config.n_starts_max_evaluate_problem,
             config.use_jacobian_evaluate_problem,
             config.rng,
         )
 
-        f_train[i_train] = f_train_current
-        x_train[[i_train]] = x_train_current.T
-        f_train_no_noise[i_train] = f_train_no_noise_current
-        x_train_no_noise[[i_train]] = x_train_no_noise_current.T
+        f[i_point] = f_current
+        x[[i_point]] = x_current.T
+        f_no_noise[i_point] = f_no_noise_current
+        x_no_noise[[i_point]] = x_no_noise_current.T
 
-    return f_train, x_train, f_train_no_noise, x_train_no_noise
+    return f, x, f_no_noise, x_no_noise
 
 
 def get_sampling_based_data(
     config: Config,
-    n_training_points_complete: list[int],
+    n_points_complete: list[int],
 ) -> tuple[list[np.ndarray], list[np.ndarray]]:
 
-    measurement_noise_train_complete: list[np.ndarray] = [
+    measurement_noise_complete: list[np.ndarray] = [
         np.atleast_2d(
             scipy.stats.norm.rvs(
                 0,
                 config.std_measurement_noise,
-                n_training_points_complete[i_run_bo],
+                n_points_complete[i_run_bo],
                 random_state=config.rng,
             ),
         ).T
@@ -91,7 +91,7 @@ def get_sampling_based_data(
         for i_run_bo in range(config.n_runs_bo)
     ]
 
-    return measurement_noise_train_complete, gp_gaussian_standard_samples_complete
+    return measurement_noise_complete, gp_gaussian_standard_samples_complete
 
 
 def get_evaluation_data(

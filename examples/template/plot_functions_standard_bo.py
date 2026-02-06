@@ -10,9 +10,9 @@ def create_plots(
     gp: GP,
     input_transformer_gp: AffineTransformer,
     output_transformer_gp: AffineTransformer,
-    f_train: np.ndarray,
-    u_train: np.ndarray,
-    x_train: np.ndarray,
-    n_initial_training_points: int,
+    f: np.ndarray,
+    u: np.ndarray,
+    x: np.ndarray,
+    n_initial_points: int,
     i_iteration: int,
 ) -> None: ...

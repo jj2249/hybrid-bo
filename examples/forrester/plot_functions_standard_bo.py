@@ -20,10 +20,10 @@ def create_plots(
     gp: GP,
     input_transformer_gp: AffineTransformer,
     output_transformer_gp: AffineTransformer,
-    f_train: np.ndarray,
-    u_train: np.ndarray,
-    x_train: np.ndarray,
-    n_initial_training_points: int,
+    f: np.ndarray,
+    u: np.ndarray,
+    x: np.ndarray,
+    n_initial_points: int,
     i_iteration: int,
 ) -> None:
     # See https://en.wikipedia.org/wiki/Standard_deviation#Rules_for_normally_distributed_data
@@ -85,15 +85,15 @@ def create_plots(
         gp,
         input_transformer_gp,
         output_transformer_gp,
-        u_train,
-        f_train,
-        n_initial_training_points,
+        u,
+        f,
+        n_initial_points,
         confidence_factors[config.confidence_level],
     )
 
     print("Plotting output of GP done.")
 
-    plot_acq(ax[1], config, u_eval, mean_gp_eval, std_gp_eval, np.min(f_train))
+    plot_acq(ax[1], config, u_eval, mean_gp_eval, std_gp_eval, np.min(f))
 
     print("Plotting acquisition function done")
 
@@ -110,9 +110,9 @@ def plot_output_gp(
     gp: GP,
     input_transformer_gp: AffineTransformer,
     output_transformer_gp: AffineTransformer,
-    u_train: np.ndarray,
-    f_train: np.ndarray,
-    n_initial_training_points: int,
+    u: np.ndarray,
+    f: np.ndarray,
+    n_initial_points: int,
     confidence_factor: float,
 ) -> None:
     # %% Get plotting data
@@ -141,17 +141,17 @@ def plot_output_gp(
     # %% Plotting
 
     ax.scatter(
-        u_train[:n_initial_training_points],
-        f_train[:n_initial_training_points],
+        u[:n_initial_points],
+        f[:n_initial_points],
         c="k",
-        label="Initial training points",
+        label="Initial points",
     )
 
     ax.scatter(
-        u_train[n_initial_training_points:],
-        f_train[n_initial_training_points:],
+        u[n_initial_points:],
+        f[n_initial_points:],
         c="r",
-        label="Training points found with BO",
+        label="Points found with BO",
     )
 
     ax.plot(u_eval, f_eval, color="k", linestyle="--", label="True")

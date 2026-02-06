@@ -23,10 +23,10 @@ def create_plots(
     gp: GP,
     input_transformer_gp: AffineTransformer,
     output_transformer_gp: AffineTransformer,
-    f_train: np.ndarray,
-    u_train: np.ndarray,
-    x_train: np.ndarray,
-    n_initial_training_points: int,
+    f: np.ndarray,
+    u: np.ndarray,
+    x: np.ndarray,
+    n_initial_points: int,
     i_iteration: int,
 ) -> None:
     # %% Get evaluation points
@@ -84,8 +84,8 @@ def create_plots(
     ax: Axes = plot_f(
         u_eval_grid,
         f_eval_grid,
-        u_train,
-        n_initial_training_points,
+        u,
+        n_initial_points,
         i_iteration,
         False,
     )
@@ -95,8 +95,8 @@ def create_plots(
     ax: Axes = plot_f(
         u_eval_grid,
         f_eval_grid_original,
-        u_train,
-        n_initial_training_points,
+        u,
+        n_initial_points,
         i_iteration,
         True,
     )
@@ -107,12 +107,12 @@ def create_plots(
 
     ax: Axes = plot_acq(
         config,
-        u_train,
+        u,
         u_eval_grid,
         mean_gp_eval_grid,
         std_gp_eval_grid,
-        np.min(f_train),
-        n_initial_training_points,
+        np.min(f),
+        n_initial_points,
         i_iteration,
     )
 
@@ -126,11 +126,11 @@ def create_plots(
         config,
         u_eval,
         u_eval_grid,
-        u_train,
+        u,
         gp,
         input_transformer_gp,
         output_transformer_gp,
-        n_initial_training_points,
+        n_initial_points,
         i_iteration,
     )
 
@@ -144,8 +144,8 @@ def create_plots(
 def plot_f(
     u_eval_grid: list[np.ndarray],
     f_eval_grid: np.ndarray,
-    u_train: np.ndarray,
-    n_initial_training_points: int,
+    u: np.ndarray,
+    n_initial_points: int,
     i_iteration: int,
     original: bool = False,
 ) -> Axes:
@@ -167,17 +167,17 @@ def plot_f(
     color_bar.ax.set_ylabel("Objective")
 
     ax.scatter(
-        u_train[:n_initial_training_points, 0] * 1000,
-        u_train[:n_initial_training_points, 1],
+        u[:n_initial_points, 0] * 1000,
+        u[:n_initial_points, 1],
         c="k",
-        label="Initial training points",
+        label="Initial points",
     )
 
     ax.scatter(
-        u_train[n_initial_training_points:, 0] * 1000,
-        u_train[n_initial_training_points:, 1],
+        u[n_initial_points:, 0] * 1000,
+        u[n_initial_points:, 1],
         c="r",
-        label="Training points found with BO",
+        label="Points found with BO",
     )
 
     ax.set_xlabel("Temperature / K")
@@ -196,12 +196,12 @@ def plot_f(
 
 def plot_acq(
     config: Config,
-    u_train: np.ndarray,
+    u: np.ndarray,
     u_eval_grid: list[np.ndarray],
     mean_gp_eval_grid: np.ndarray,
     std_gp_eval_grid: np.ndarray,
     incumbent: float,
-    n_initial_training_points: int,
+    n_initial_points: int,
     i_iteration: int,
 ) -> Axes:
     fig: Figure
@@ -245,17 +245,17 @@ def plot_acq(
     color_bar.ax.set_ylabel(label)
 
     ax.scatter(
-        u_train[:n_initial_training_points, 0] * 1000,
-        u_train[:n_initial_training_points, 1],
+        u[:n_initial_points, 0] * 1000,
+        u[:n_initial_points, 1],
         c="k",
-        label="Initial training points",
+        label="Initial points",
     )
 
     ax.scatter(
-        u_train[n_initial_training_points:, 0] * 1000,
-        u_train[n_initial_training_points:, 1],
+        u[n_initial_points:, 0] * 1000,
+        u[n_initial_points:, 1],
         c="r",
-        label="Training points found with BO",
+        label="Points found with BO",
     )
 
     ax.set_xlabel("Temperature / K")
@@ -272,11 +272,11 @@ def plot_output_gp(
     config: Config,
     u_eval: np.ndarray,
     u_eval_grid: list[np.ndarray],
-    u_train: np.ndarray,
+    u: np.ndarray,
     gp: GP,
     input_transformer_gp: AffineTransformer,
     output_transformer_gp: AffineTransformer,
-    n_initial_training_points: int,
+    n_initial_points: int,
     i_iteration: int,
 ) -> tuple[Axes, Axes]:
     def plot_wrt_u(output: np.ndarray, label: str) -> Axes:
@@ -297,17 +297,17 @@ def plot_output_gp(
         color_bar.ax.set_ylabel(label)
 
         ax.scatter(
-            u_train[:n_initial_training_points, 0] * 1000,
-            u_train[:n_initial_training_points, 1],
+            u[:n_initial_points, 0] * 1000,
+            u[:n_initial_points, 1],
             c="k",
-            label="Initial training points",
+            label="Initial points",
         )
 
         ax.scatter(
-            u_train[n_initial_training_points:, 0] * 1000,
-            u_train[n_initial_training_points:, 1],
+            u[n_initial_points:, 0] * 1000,
+            u[n_initial_points:, 1],
             c="r",
-            label="Training points found with BO",
+            label="Points found with BO",
         )
 
         ax.set_xlabel("Temperature / K")

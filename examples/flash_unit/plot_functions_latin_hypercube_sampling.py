@@ -17,10 +17,10 @@ def create_plots(
     gp: GP,
     input_transformer_gp: AffineTransformer,
     output_transformer_gp: AffineTransformer,
-    f_train: np.ndarray,
-    u_train: np.ndarray,
-    x_train: np.ndarray,
-    n_initial_training_points: int,
+    f: np.ndarray,
+    u: np.ndarray,
+    x: np.ndarray,
+    n_initial_points: int,
     i_iteration: int,
 ) -> None:
     # %% Get evaluation points
@@ -67,8 +67,8 @@ def create_plots(
     ax: Axes = plot_f(
         u_eval_grid,
         f_eval_grid,
-        u_train,
-        n_initial_training_points,
+        u,
+        n_initial_points,
         i_iteration,
     )
 
@@ -77,8 +77,8 @@ def create_plots(
     ax: Axes = plot_f(
         u_eval_grid,
         f_eval_grid_original,
-        u_train,
-        n_initial_training_points,
+        u,
+        n_initial_points,
         i_iteration,
         True,
     )
@@ -93,11 +93,11 @@ def create_plots(
         config,
         u_eval,
         u_eval_grid,
-        u_train,
+        u,
         gp,
         input_transformer_gp,
         output_transformer_gp,
-        n_initial_training_points,
+        n_initial_points,
         i_iteration,
     )
 
@@ -112,16 +112,16 @@ def create_plots(
 def plot_f(
     u_eval_grid: list[np.ndarray],
     f_eval_grid: np.ndarray,
-    u_train: np.ndarray,
-    n_initial_training_points: int,
+    u: np.ndarray,
+    n_initial_points: int,
     i_iteration: int,
     original: bool = False,
 ) -> Axes:
     return standard_bo_plot_f(
         u_eval_grid,
         f_eval_grid,
-        u_train,
-        n_initial_training_points,
+        u,
+        n_initial_points,
         i_iteration,
         original,
     )
@@ -131,21 +131,21 @@ def plot_output_gp(
     config: Config,
     u_eval: np.ndarray,
     u_eval_grid: list[np.ndarray],
-    u_train: np.ndarray,
+    u: np.ndarray,
     gp: GP,
     input_transformer_gp: AffineTransformer,
     output_transformer_gp: AffineTransformer,
-    n_initial_training_points: int,
+    n_initial_points: int,
     i_iteration: int,
 ) -> tuple[Axes, Axes]:
     return standard_bo_plot_output_gp(
         config,
         u_eval,
         u_eval_grid,
-        u_train,
+        u,
         gp,
         input_transformer_gp,
         output_transformer_gp,
-        n_initial_training_points,
+        n_initial_points,
         i_iteration,
     )

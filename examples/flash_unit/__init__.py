@@ -3,7 +3,7 @@ from .config import (
     get_gp_standard_bo,
     get_optimizer_hybrid_bo,
     get_optimizer_standard_bo,
-    get_u_train_initial,
+    get_u_initial,
 )
 from .custom_problem import get_custom_problem
 from .plot_functions_hybrid_bo import create_plots as create_plots_hybrid_bo

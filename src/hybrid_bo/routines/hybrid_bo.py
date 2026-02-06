@@ -17,7 +17,7 @@ from hybrid_bo.gp import GP
 from hybrid_bo.optimizers import MultiStartOptimizer, Optimizer
 from hybrid_bo.problem import Problem
 from hybrid_bo.results_bo import ResultsBO
-from hybrid_bo.routines.utils import get_sampling_based_data, get_training_data
+from hybrid_bo.routines.utils import get_sampling_based_data, get_f_and_x
 from hybrid_bo.type_aliases import SymbolicType
 
 
@@ -25,30 +25,30 @@ def do_hybrid_bo(
     problem: Problem,
     config: Config,
     gp: GP,
-    u_train_initial_complete: list[np.ndarray],
+    u_initial_complete: list[np.ndarray],
     optimizer: Optimizer,
     results_dir: Path,
     create_plots: Callable | None = None,
 ) -> None:
     # %% Data to create for all BO runs
 
-    if len(u_train_initial_complete) != config.n_runs_bo:
-        msg: str = "len(u_train) != config.n_runs_bo"
+    if len(u_initial_complete) != config.n_runs_bo:
+        msg: str = "len(u_initial_complete) != config.n_runs_bo"
         raise Exception(msg)
 
-    n_training_points_initial_complete: list[int] = [
-        u_train_initial.shape[0] for u_train_initial in u_train_initial_complete
+    n_points_initial_complete: list[int] = [
+        u_initial.shape[0] for u_initial in u_initial_complete
     ]
 
-    n_training_points_complete: list[int] = [
-        (n_training_points_initial + config.n_iterations_bo)
-        for n_training_points_initial in n_training_points_initial_complete
+    n_points_complete: list[int] = [
+        (n_points_initial + config.n_iterations_bo)
+        for n_points_initial in n_points_initial_complete
     ]
 
-    measurement_noise_train_complete: list[np.ndarray]
+    measurement_noise_complete: list[np.ndarray]
     gaussian_standard_samples_complete: list[np.ndarray]
-    measurement_noise_train_complete, gaussian_standard_samples_complete = (
-        get_sampling_based_data(config, n_training_points_complete)
+    measurement_noise_complete, gaussian_standard_samples_complete = (
+        get_sampling_based_data(config, n_points_complete)
     )
 
     # %% Results of BO
@@ -64,26 +64,26 @@ def do_hybrid_bo(
             i_run_bo
         ]
 
-        # %% Training data
+        # %% Get initial data data
 
-        u_train: np.ndarray = u_train_initial_complete[i_run_bo].copy()
+        u: np.ndarray = u_initial_complete[i_run_bo].copy()
 
         # Contains the measurement noise for all training points (initial points and BO iterations)
-        measurement_noise_train: np.ndarray = measurement_noise_train_complete[i_run_bo]
+        measurement_noise_train: np.ndarray = measurement_noise_complete[i_run_bo]
 
-        f_train: np.ndarray
-        x_train: np.ndarray
-        f_train_no_noise: np.ndarray
-        x_train_no_noise: np.ndarray
+        f: np.ndarray
+        x: np.ndarray
+        f_no_noise: np.ndarray
+        x_no_noise: np.ndarray
 
-        f_train, x_train, f_train_no_noise, x_train_no_noise = get_training_data(
-            u_train,
+        f, x, f_no_noise, x_no_noise = get_f_and_x(
+            u,
             measurement_noise_train,
             problem,
             config,
         )
 
-        n_training_points_initial: int = n_training_points_initial_complete[i_run_bo]
+        n_points_initial: int = n_points_initial_complete[i_run_bo]
 
         # %% Define GP
 
@@ -93,8 +93,8 @@ def do_hybrid_bo(
         _set_gp_XY(
             gp,
             config,
-            u_train,
-            x_train,
+            u,
+            x,
             input_transformer_gp,
             output_transformer_gp,
         )
@@ -121,7 +121,7 @@ def do_hybrid_bo(
 
         # %% Get initial incumbent
 
-        incumbent: float = np.min(f_train)
+        incumbent: float = np.min(f)
 
         # %% Create initial plots
 
@@ -132,11 +132,11 @@ def do_hybrid_bo(
                 gp,
                 input_transformer_gp,
                 output_transformer_gp,
-                f_train,
-                u_train,
-                x_train,
+                f,
+                u,
+                x,
                 gaussian_standard_samples,
-                n_training_points_initial,
+                n_points_initial,
                 0,
             )
 
@@ -153,21 +153,21 @@ def do_hybrid_bo(
                 # %% Get u_next, x_next, f_next with acquisition function problem
 
                 n_variables: int
-                f: cas.Function
-                h: cas.Function
+                f_function: cas.Function
+                h_function: cas.Function
                 lower_bounds: np.ndarray
                 upper_bounds: np.ndarray
                 lower_bounds_starting_points: np.ndarray
                 upper_bounds_starting_points: np.ndarray
                 (
                     n_variables,
-                    f,
-                    h,
+                    f_function,
+                    h_function,
                     lower_bounds,
                     upper_bounds,
                     lower_bounds_starting_points,
                     upper_bounds_starting_points,
-                ) = _setup_acq_problem(
+                ) = setup_acq_problem(
                     config,
                     problem,
                     gp,
@@ -181,9 +181,9 @@ def do_hybrid_bo(
 
                 optimizer.set_problem(
                     n_variables,
-                    f,
+                    f_function,
                     None,
-                    h,
+                    h_function,
                     lower_bounds,
                     upper_bounds,
                 )
@@ -220,7 +220,7 @@ def do_hybrid_bo(
                 f_next, x_next, f_next_no_noise, x_next_no_noise = (
                     problem.evaluate_with_noisy_simulation(
                         u_next,
-                        measurement_noise_train[[n_training_points_initial + i_bo]].T,
+                        measurement_noise_train[[n_points_initial + i_bo]].T,
                         config.indices_x_measured,
                         config.n_starts_max_evaluate_problem,
                         config.use_jacobian_evaluate_problem,
@@ -228,23 +228,23 @@ def do_hybrid_bo(
                     )
                 )
 
-                print("Getting next training data done.")
+                print("Getting next point done.")
 
                 # %% Update GP
 
-                f_train = np.vstack((f_train, f_next))
-                f_train_no_noise = np.vstack((f_train_no_noise, f_next_no_noise))
+                f = np.vstack((f, f_next))
+                f_no_noise = np.vstack((f_no_noise, f_next_no_noise))
 
-                u_train = np.vstack((u_train, u_next.T))
+                u = np.vstack((u, u_next.T))
 
-                x_train = np.vstack((x_train, x_next.T))
-                x_train_no_noise = np.vstack((x_train_no_noise, x_next_no_noise.T))
+                x = np.vstack((x, x_next.T))
+                x_no_noise = np.vstack((x_no_noise, x_next_no_noise.T))
 
                 _set_gp_XY(
                     gp,
                     config,
-                    u_train,
-                    x_train,
+                    u,
+                    x,
                     input_transformer_gp,
                     output_transformer_gp,
                 )
@@ -283,11 +283,11 @@ def do_hybrid_bo(
                         gp,
                         input_transformer_gp,
                         output_transformer_gp,
-                        f_train,
-                        u_train,
-                        x_train,
+                        f,
+                        u,
+                        x,
                         gaussian_standard_samples,
-                        n_training_points_initial,
+                        n_points_initial,
                         i_bo + 1,
                     )
 
@@ -323,19 +323,19 @@ def do_hybrid_bo(
 def _set_gp_XY(
     gp: GP,
     config: Config,
-    u_train: np.ndarray,
-    x_train: np.ndarray,
+    u: np.ndarray,
+    x: np.ndarray,
     input_gp_transformer: AffineTransformer,
     output_gp_transformer: AffineTransformer,
 ) -> None:
     input_gp_train: np.ndarray = np.hstack(
         (
-            u_train[:, config.indices_u_input_gp],
-            x_train[:, config.indices_x_input_gp],
+            u[:, config.indices_u_input_gp],
+            x[:, config.indices_x_input_gp],
         ),
     )
 
-    output_gp_train: np.ndarray = x_train[:, config.indices_x_output_gp]
+    output_gp_train: np.ndarray = x[:, config.indices_x_output_gp]
 
     input_gp_train_transformed: np.ndarray = input_gp_transformer.fit_transform(
         input_gp_train,
@@ -348,7 +348,7 @@ def _set_gp_XY(
     gp.set_XY_train(input_gp_train_transformed, output_gp_train_transformed)
 
 
-def _setup_acq_problem(
+def setup_acq_problem(
     config: Config,
     problem: Problem,
     gp: GP,
