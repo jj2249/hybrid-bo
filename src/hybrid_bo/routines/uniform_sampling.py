@@ -15,7 +15,7 @@ from hybrid_bo.gp import GP
 from hybrid_bo.optimizers import MultiStartOptimizer
 from hybrid_bo.problem import Problem
 from hybrid_bo.results_bo import ResultsBO
-from hybrid_bo.routines.utils import get_sampling_based_data, get_f_and_x
+from hybrid_bo.routines.utils import get_sampling_based_data
 
 
 def do_uniform_sampling(
@@ -64,11 +64,13 @@ def do_uniform_sampling(
         f_no_noise: np.ndarray
         x_no_noise: np.ndarray
 
-        f, x, f_no_noise, x_no_noise = get_f_and_x(
+        f, x, f_no_noise, x_no_noise = problem.evaluate_with_noisy_simulation(
             u,
             measurement_noise,
-            problem,
-            config,
+            config.indices_x_measured,
+            config.n_starts_max_evaluate_problem,
+            config.use_jacobian_evaluate_problem,
+            config.rng,
         )
 
         n_points_initial: int = n_points_initial_complete[i_run_bo]

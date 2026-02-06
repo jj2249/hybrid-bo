@@ -18,48 +18,7 @@ if TYPE_CHECKING:
     from matplotlib.axes import Axes
     from matplotlib.figure import Figure
 
-    from ..results_bo import ResultsBO
-
-
-def get_f_and_x(
-    u: np.ndarray,
-    measurement_noise: np.ndarray,
-    problem: Problem,
-    config: Config,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    n_points: int = u.shape[0]
-
-    f: np.ndarray = np.empty((n_points, 1))
-    x: np.ndarray = np.empty((n_points, problem.n_x))
-    f_no_noise: np.ndarray = f.copy()
-    x_no_noise: np.ndarray = x.copy()
-
-    for i_point in range(n_points):
-        f_current: float
-        x_current: np.ndarray
-        f_no_noise_current: float
-        x_no_noise_current: np.ndarray
-
-        (
-            f_current,
-            x_current,
-            f_no_noise_current,
-            x_no_noise_current,
-        ) = problem.single_evaluate_with_noisy_simulation(
-            u[[i_point]].T,
-            measurement_noise[[i_point]].T,
-            config.indices_x_measured,
-            config.n_starts_max_evaluate_problem,
-            config.use_jacobian_evaluate_problem,
-            config.rng,
-        )
-
-        f[i_point] = f_current
-        x[[i_point]] = x_current.T
-        f_no_noise[i_point] = f_no_noise_current
-        x_no_noise[[i_point]] = x_no_noise_current.T
-
-    return f, x, f_no_noise, x_no_noise
+    from hybrid_bo.results_bo import ResultsBO
 
 
 def get_sampling_based_data(
