@@ -47,7 +47,9 @@ class AffineTransformer:
         self.intercept = intercept
         self.n_inputs = slope.shape[1]
 
-    def fit(self, X: np.ndarray) -> None: ...
+    def fit(self, X: np.ndarray) -> None:
+        """Does nothing. Should be implemented for subclasses."""
+        ...
 
     @overload
     def transform(self, X: cas.SX) -> cas.SX: ...
@@ -133,6 +135,12 @@ class MinMaxTransformer(AffineTransformer):
         )
         self.intercept = -self.min / (self.max - self.min) + self.min_transformed
 
+        # Case that all values are the same
+        # All values are set to self.min_transformed
+        mask_equal: np.ndarray = self.min == self.max
+        self.slope[mask_equal] = 1.0
+        self.intercept[mask_equal] = -self.min[mask_equal] + self.min_transformed
+
     @override
     def set_slope_and_intercept(self, slope: np.ndarray, intercept: np.ndarray) -> None:
         msg: str = "This method is not allowed for this class!"
@@ -166,6 +174,8 @@ class StandardTransformer(AffineTransformer):
 
         if self.with_std:
             self.std = np.std(X, 0, ddof=ddof)[np.newaxis, :]
+            self.std[self.std == 0.0] = 1.0
+
         else:
             self.std = np.ones((1, self.n_inputs))
 
