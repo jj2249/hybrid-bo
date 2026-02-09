@@ -26,9 +26,13 @@ def do_uniform_sampling(
     results_dir: Path,
     create_plots: Callable | None = None,
 ) -> None:
+    # %% Data for all BO runs
+
     if len(u_initial_complete) != config.n_runs_bo:
         msg: str = "len(u_initial_complete) != config.n_runs_bo"
         raise Exception(msg)
+
+    results_bo_complete: list[ResultsBO] = []
 
     n_points_initial_complete: list[int] = [
         u_initial.shape[0] for u_initial in u_initial_complete
@@ -40,49 +44,87 @@ def do_uniform_sampling(
     ]
 
     measurement_noise_complete: list[np.ndarray]
-    gaussian_standard_samples_complete: list[np.ndarray]
-    measurement_noise_complete, gaussian_standard_samples_complete = (
-        get_sampling_based_data(config, n_points_complete)
-    )
-
-    # %% Results of BO
-
-    results_bo: ResultsBO = ResultsBO(problem, config)
+    measurement_noise_complete, _ = get_sampling_based_data(config, n_points_complete)
 
     # %% Iterate over multiple BO runs
 
     for i_run_bo in range(config.n_runs_bo):
-        # %% Training data
+        # %% Data for current run
 
-        u: np.ndarray = u_initial_complete[i_run_bo].copy()
-
-        # Contains the measurement noise for all training points (initial points and BO iterations)
+        # Initial points AND BO iteration points
+        n_points: int = n_points_complete[i_run_bo]
         measurement_noise: np.ndarray = measurement_noise_complete[i_run_bo]
 
+        u: np.ndarray = np.full((n_points, config.n_u), np.nan)
+        x: np.ndarray = np.full((n_points, config.n_x), np.nan)
+        x_no_noise: np.ndarray = np.full((n_points, config.n_x), np.nan)
+        f: np.ndarray = np.full((n_points, 1), np.nan)
+        f_no_noise: np.ndarray = np.full((n_points, 1), np.nan)
+        incumbents: np.ndarray = np.full((n_points, 1), np.nan)
+        incumbents_no_noise: np.ndarray = np.full((n_points, 1), np.nan)
+
+        # Initial points
         n_points_initial: int = n_points_initial_complete[i_run_bo]
+        measurement_noise_initial: np.ndarray = measurement_noise[:n_points_initial, :]
+        u_initial: np.ndarray = u_initial_complete[i_run_bo].copy()
 
-        f: np.ndarray
-        x: np.ndarray
-        f_no_noise: np.ndarray
-        x_no_noise: np.ndarray
+        x_initial: np.ndarray
+        x_no_noise_initial: np.ndarray
+        f_initial: np.ndarray
+        f_no_noise_initial: np.ndarray
+        incumbents_initial: np.ndarray
+        incumbents_no_noise_initial: np.ndarray
 
-        f, x, f_no_noise, x_no_noise = problem.evaluate_with_noisy_simulation(
-            u,
-            measurement_noise[:n_points_initial],
-            config.indices_x_measured,
-            config.n_starts_max_evaluate_problem,
-            config.use_jacobian_evaluate_problem,
-            config.rng,
+        # Incumbents
+        incumbent: float
+        incumbent_no_noise: float
+
+        # %% Get initial points
+
+        f_initial, x_initial, f_no_noise_initial, x_no_noise_initial = (
+            problem.evaluate_with_noisy_simulation(
+                u_initial,
+                measurement_noise_initial,
+                config.indices_x_measured,
+                config.n_starts_max_evaluate_problem,
+                config.use_jacobian_evaluate_problem,
+                config.rng,
+            )
         )
+
+        incumbents_initial = np.minimum.accumulate(f_initial, 0)
+        incumbents_no_noise_initial = np.minimum.accumulate(
+            f_no_noise_initial,
+            0,
+        )
+
+        incumbent = incumbents_initial[-1].item()
+        incumbent_no_noise = incumbents_no_noise_initial[-1].item()
+
+        # %% Fill points with initial values
+
+        u[:n_points_initial, :] = u_initial
+        x[:n_points_initial, :] = x_initial
+        x_no_noise[:n_points_initial, :] = x_no_noise_initial
+        f[:n_points_initial, :] = f_initial
+        f_no_noise[:n_points_initial, :] = f_no_noise_initial
+        incumbents[:n_points_initial, :] = incumbents_initial
+        incumbents_no_noise[:n_points_initial, :] = incumbents_no_noise_initial
+
+        print("Initialization done.")
 
         # %% Define GP
 
         input_transformer_gp: AffineTransformer = MinMaxTransformer()
         output_transformer_gp: AffineTransformer = StandardTransformer()
 
-        set_gp_XY(gp, u, f, input_transformer_gp, output_transformer_gp)
-
-        print("Preparation done.")
+        set_gp_training_data(
+            gp,
+            u_initial,
+            f_initial,
+            input_transformer_gp,
+            output_transformer_gp,
+        )
 
         # %% Train GP
 
@@ -102,10 +144,6 @@ def do_uniform_sampling(
 
         print("Training GP done.")
 
-        # %% Get initial incumbent
-
-        incumbent: float = np.min(f)
-
         # %% Create initial plots
 
         if config.create_plots and create_plots:
@@ -115,9 +153,9 @@ def do_uniform_sampling(
                 gp,
                 input_transformer_gp,
                 output_transformer_gp,
-                f,
-                u,
-                x,
+                f_initial,
+                u_initial,
+                x_initial,
                 n_points_initial,
                 0,
             )
@@ -126,9 +164,7 @@ def do_uniform_sampling(
 
         print("Initialization done.\n---\n")
 
-        # %% BO loop
-
-        # %% Get additional points of u by uniform sampling
+        # %% Get additional points of u for the BO loop by uniform sampling
 
         u_additional: np.ndarray = config.rng.uniform(
             size=(config.n_iterations_bo, problem.n_u),
@@ -143,23 +179,23 @@ def do_uniform_sampling(
             * u_additional
         )
 
-        # %% Actual loop
+        # %% BO loop
 
         for i_bo in range(config.n_iterations_bo):
             try:
-                # %% Get u_next, x_next, f_next
+                # %% Get next point
 
                 u_next: np.ndarray = u_additional[[i_bo], :].T
 
-                f_next: float
                 x_next: np.ndarray
-                f_next_no_noise: float
-                x_next_no_noise: np.ndarray
+                x_no_noise_next: np.ndarray
+                f_next: float
+                f_no_noise_next: float
 
-                f_next, x_next, f_next_no_noise, x_next_no_noise = (
+                f_next, x_next, f_no_noise_next, x_no_noise_next = (
                     problem.single_evaluate_with_noisy_simulation(
                         u_next,
-                        measurement_noise[[n_points_initial + i_bo]].T,
+                        measurement_noise[[n_points_initial + i_bo], :].T,
                         config.indices_x_measured,
                         config.n_starts_max_evaluate_problem,
                         config.use_jacobian_evaluate_problem,
@@ -167,19 +203,30 @@ def do_uniform_sampling(
                     )
                 )
 
+                incumbent = min(incumbent, f_next)
+                incumbent_no_noise = min(incumbent_no_noise, f_no_noise_next)
+
+                # %% Fill points with next value
+
+                u[[n_points_initial + i_bo], :] = u_next.T
+                x[[n_points_initial + i_bo], :] = x_next.T
+                x_no_noise[[n_points_initial + i_bo], :] = x_no_noise_next.T
+                f[[n_points_initial + i_bo], :] = f_next
+                f_no_noise[[n_points_initial + i_bo], :] = f_no_noise_next
+                incumbents[[n_points_initial + i_bo], :] = incumbent
+                incumbents_no_noise[[n_points_initial + i_bo], :] = incumbent_no_noise
+
                 print("Getting next point done.")
 
                 # %% Update GP
 
-                f = np.vstack((f, f_next))
-                f_no_noise = np.vstack((f_no_noise, f_next_no_noise))
-
-                u = np.vstack((u, u_next.T))
-
-                x = np.vstack((x, x_next.T))
-                x_no_noise = np.vstack((x_no_noise, x_next_no_noise.T))
-
-                set_gp_XY(gp, u, f, input_transformer_gp, output_transformer_gp)
+                set_gp_training_data(
+                    gp,
+                    u[: n_points_initial + i_bo + 1, :],
+                    f[: n_points_initial + i_bo + 1, :],
+                    input_transformer_gp,
+                    output_transformer_gp,
+                )
 
                 gp.create_training_problem()
 
@@ -201,11 +248,6 @@ def do_uniform_sampling(
 
                 print("Training GP done.")
 
-                # %% Get new incumbent
-
-                if f_next < incumbent:
-                    incumbent: float = f_next
-
                 # %% Create plots
 
                 if config.create_plots and create_plots:
@@ -215,43 +257,56 @@ def do_uniform_sampling(
                         gp,
                         input_transformer_gp,
                         output_transformer_gp,
-                        f,
-                        u,
-                        x,
+                        f[: n_points_initial + i_bo + 1, :],
+                        u[: n_points_initial + i_bo + 1, :],
+                        x[: n_points_initial + i_bo + 1, :],
                         n_points_initial,
                         i_bo + 1,
                     )
 
                     print("Plotting done.")
 
-                # %% Fill results of BO
-
-                results_bo.f[i_run_bo, i_bo] = f_next
-                results_bo.f_no_noise[i_run_bo, i_bo] = f_next_no_noise
-                results_bo.incumbent[i_run_bo, i_bo] = incumbent
-                results_bo.u[i_run_bo, i_bo] = u_next.flatten()
-                results_bo.x[i_run_bo, i_bo] = x_next.flatten()
-                results_bo.x_no_noise[i_run_bo, i_bo] = x_next_no_noise.flatten()
-
-                print(f"BO iteration {i_bo + 1} done.\n---\n")
+                print(
+                    f"\nBO iteration {i_bo + 1}/{config.n_iterations_bo} done.\n\n---\n",
+                )
 
             except Exception as e:
                 traceback.print_exc()
 
-        print(f"BO run {i_run_bo + 1} done.\n\n---\n\n")
+            finally:
+                results_bo_complete.append(
+                    ResultsBO(
+                        u_initial,
+                        x_initial,
+                        f_initial,
+                        incumbents_initial,
+                        x_no_noise_initial,
+                        f_no_noise_initial,
+                        incumbents_no_noise_initial,
+                        u[n_points_initial:, :],
+                        x[n_points_initial:, :],
+                        f[n_points_initial:, :],
+                        incumbents[n_points_initial:, :],
+                        x_no_noise[n_points_initial:, :],
+                        f_no_noise[n_points_initial:, :],
+                        incumbents_no_noise[n_points_initial:, :],
+                    ),
+                )
+
+        print(f"BO run {i_run_bo + 1}/{config.n_runs_bo} done.\n\n------\n")
 
     # %% Save results of BO
 
     if config.save_results:
-        path: Path = results_dir / "results_uniform_sampling.pkl"
+        path: Path = results_dir / "results_bo_uniform_sampling.pkl"
         if path.exists():
             print(f"WARNING: File {path} exists. Will not overwrite.")
         else:
             with path.open("wb") as file:
-                pickle.dump(results_bo, file, protocol=pickle.HIGHEST_PROTOCOL)
+                pickle.dump(results_bo_complete, file, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def set_gp_XY(
+def set_gp_training_data(
     gp: GP,
     u: np.ndarray,
     f: np.ndarray,
