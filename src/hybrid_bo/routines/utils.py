@@ -100,21 +100,21 @@ def get_evaluation_data(
     for i_eval in range(n_eval_points_total):
         if original:
             f_current, x_current = problem.single_evaluate_with_simulation_original(
-                u_eval[[i_eval]].T,
+                u_eval[[i_eval], :].T,
                 n_starts_max_evaluate_problem,
                 use_jacobian_evaluate_problem,
                 rng,
             )
         else:
             f_current, x_current = problem.single_evaluate_with_simulation(
-                u_eval[[i_eval]].T,
+                u_eval[[i_eval], :].T,
                 n_starts_max_evaluate_problem,
                 use_jacobian_evaluate_problem,
                 rng,
             )
 
         f_eval[i_eval] = f_current
-        x_eval[[i_eval]] = x_current.T
+        x_eval[[i_eval], :] = x_current.T
 
     f_eval_grid: np.ndarray = f_eval.reshape(n_eval_points)
     x_eval_grid: list[np.ndarray] = []
@@ -185,7 +185,7 @@ def get_f_eval_samples(
     f_eval_samples: np.ndarray = np.empty((n_samples_gp, n_eval_points_total))
     for i_samples in range(n_samples_gp):
         for i_eval in range(n_eval_points_total):
-            u_eval_current: np.ndarray = u_eval[[i_eval]].T
+            u_eval_current: np.ndarray = u_eval[[i_eval], :].T
             output_gp_eval_samples_current: np.ndarray = output_gp_eval_samples[
                 [i_samples],
                 i_eval,

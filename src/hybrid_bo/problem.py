@@ -205,14 +205,14 @@ class Problem:
                 f_current,
                 x_current,
             ) = self.single_evaluate_with_simulation_original(
-                u[[i_point]].T,
+                u[[i_point], :].T,
                 n_starts_max,
                 use_jacobian,
                 rng,
             )
 
             f[i_point] = f_current
-            x[[i_point]] = x_current.T
+            x[[i_point], :] = x_current.T
 
         return f, x
 
@@ -269,8 +269,8 @@ class Problem:
                 f_current,
                 x_current,
             ) = self.single_evaluate_with_fixed_x_original(
-                u[[i_point]].T,
-                x_fixed[[i_point]].T,
+                u[[i_point], :].T,
+                x_fixed[[i_point], :].T,
                 indices_x_fixed,
                 n_starts_max,
                 use_jacobian,
@@ -278,7 +278,7 @@ class Problem:
             )
 
             f[i_point] = f_current
-            x[[i_point]] = x_current.T
+            x[[i_point], :] = x_current.T
 
         return f, x
 
@@ -336,8 +336,8 @@ class Problem:
 
             (f_current, x_current, f_no_noise_current, x_no_noise_current) = (
                 self.single_evaluate_with_noisy_simulation_original(
-                    u[[i_point]].T,
-                    measurement_noise[[i_point]].T,
+                    u[[i_point], :].T,
+                    measurement_noise[[i_point], :].T,
                     indices_x_measured,
                     n_starts_max,
                     use_jacobian,
@@ -346,9 +346,9 @@ class Problem:
             )
 
             f[i_point] = f_current
-            x[[i_point]] = x_current.T
+            x[[i_point], :] = x_current.T
             f_no_noise[i_point] = f_no_noise_current
-            x_no_noise[[i_point]] = x_no_noise_current.T
+            x_no_noise[[i_point], :] = x_no_noise_current.T
 
         return f, x, f_no_noise, x_no_noise
 
