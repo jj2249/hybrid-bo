@@ -14,7 +14,6 @@ from hybrid_bo.routines import (
     do_standard_bo,
     do_uniform_sampling,
 )
-from hybrid_bo.routines.utils import compare_results
 
 # Options:
 # "forrester"
