@@ -105,14 +105,5 @@ if __name__ == "__main__":
                 results_dir,
                 create_plots_uniform_sampling,
             )
-        case "results_comparison":
-            compare_results(
-                results_dir,
-                methods_for_comparison,
-                problem,
-                optimizer_hybrid_bo,
-                100,
-                config.rng,
-            )
         case _:
             print("WARNING: Your given routine is not known!")
