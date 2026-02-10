@@ -1,24 +1,14 @@
-import pickle
-from pathlib import Path
-from typing import TYPE_CHECKING, overload
+from typing import overload
 
 import casadi as cas
-import matplotlib.pyplot as plt
 import numpy as np
 import scipy
 
 from hybrid_bo.affine_transformers import AffineTransformer
 from hybrid_bo.config import Config
 from hybrid_bo.gp import GP
-from hybrid_bo.optimizers import Optimizer
 from hybrid_bo.problem import Problem
 from hybrid_bo.type_aliases import CasadiType
-
-if TYPE_CHECKING:
-    from matplotlib.axes import Axes
-    from matplotlib.figure import Figure
-
-    from hybrid_bo.results_bo import ResultsBO
 
 
 def get_sampling_based_data(
