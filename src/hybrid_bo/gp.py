@@ -89,8 +89,8 @@ class GP(Parameterized):
                 msg: str = "X_train.shape[0] != Y_train.shape[0]"
                 raise Exception(msg)
 
-            self.X_train = X_train
-            self.Y_train = Y_train
+            self.X_train = X_train.copy()
+            self.Y_train = Y_train.copy()
             self.n_training_points = X_train.shape[0]
 
         else:  # (X_train is None) and (Y_train is None):
@@ -132,8 +132,8 @@ class GP(Parameterized):
             msg: str = "X_train.shape[0] != Y_train.shape[0]"
             raise Exception(msg)
 
-        self.X_train = X_train
-        self.Y_train = Y_train
+        self.X_train = X_train.copy()
+        self.Y_train = Y_train.copy()
         self.n_training_points = X_train.shape[0]
 
     def create_training_problem(self) -> JoinedParameters:
