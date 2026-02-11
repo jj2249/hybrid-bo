@@ -42,7 +42,7 @@ class Parameter:
             if value.shape != (self.n_rows, self.n_columns):
                 msg: str = "value.shape != (self.n_rows, self.n_columns)"
                 raise Exception(msg)
-            self.value = value.copy()
+            self.value = value
         else:
             self.value = value * np.ones((self.n_rows, self.n_columns))
 
@@ -52,7 +52,7 @@ class Parameter:
             if min.shape != (self.n_rows, self.n_columns):
                 msg: str = "min.shape != (self.n_rows, self.n_columns)"
                 raise Exception(msg)
-            self.min = min.copy()
+            self.min = min
         else:
             self.min = min * np.ones((self.n_rows, self.n_columns))
 
@@ -62,7 +62,7 @@ class Parameter:
             if max.shape != (self.n_rows, self.n_columns):
                 msg: str = "max.shape != (self.n_rows, self.n_columns)"
                 raise Exception(msg)
-            self.max = max.copy()
+            self.max = max
         else:
             self.max = max * np.ones((self.n_rows, self.n_columns))
 
@@ -72,7 +72,7 @@ class Parameter:
             if value.shape != (self.n_rows, self.n_columns):
                 msg: str = "value.shape != (self.n_rows, self.n_columns)"
                 raise Exception(msg)
-            self.value = value.copy()
+            self.value = value
         else:
             self.value = value * np.ones((self.n_rows, self.n_columns))
 

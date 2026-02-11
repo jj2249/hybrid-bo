@@ -71,7 +71,7 @@ def do_standard_bo(
         # Initial points
         n_points_initial: int = n_points_initial_complete[i_run_bo]
         measurement_noise_initial: np.ndarray = measurement_noise[:n_points_initial, :]
-        u_initial: np.ndarray = u_initial_complete[i_run_bo].copy()
+        u_initial: np.ndarray = u_initial_complete[i_run_bo]
 
         x_initial: np.ndarray
         x_no_noise_initial: np.ndarray
@@ -152,7 +152,11 @@ def do_standard_bo(
         gp.solve_training_problem()
 
         if config.save_extended_results:
-            results_gp = ResultsGP(input_transformer_gp, output_transformer_gp, gp)
+            results_gp = ResultsGP(
+                copy.deepcopy(input_transformer_gp),
+                copy.deepcopy(output_transformer_gp),
+                copy.deepcopy(gp),
+            )
 
         print("Training GP done.")
 

@@ -325,8 +325,8 @@ class Problem:
 
         f: np.ndarray = np.empty((n_points, 1))
         x: np.ndarray = np.empty((n_points, self.n_x))
-        f_no_noise: np.ndarray = f.copy()
-        x_no_noise: np.ndarray = x.copy()
+        f_no_noise: np.ndarray = np.empty((n_points, 1))
+        x_no_noise: np.ndarray = np.empty((n_points, self.n_x))
 
         for i_point in range(n_points):
             f_current: float
