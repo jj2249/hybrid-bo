@@ -51,6 +51,14 @@ class Optimizer(ABC):
         """Returns optimal x (np.ndarray), f (float), g (np.ndarray) and h (np.ndarray)."""
         ...
 
+    def __getstate__(self) -> dict:
+        # Required for pickling to be possible
+        state: dict = self.__dict__.copy()
+        state["f"] = cas.Function()
+        state["g"] = None
+        state["h"] = None
+        return state
+
 
 class LocalOptimizer(Optimizer):
     def __init__(self) -> None:
@@ -194,11 +202,17 @@ class CasadiOptimizer(LocalOptimizer):
         solver_options: dict[str, Any] | None = None,
     ) -> None:
         super().__init__()
+
         self.solver: str = solver
         self.type: str = problem_type  # Options: "nonlinear" and "conic"
         self.opti: cas.Opti
         self.plugin_options: dict[str, Any]
         self.solver_options: dict[str, Any]
+
+        if self.type == "conic":
+            self.opti = cas.Opti("conic")
+        else:
+            self.opti = cas.Opti()
 
         if plugin_options is None:
             self.plugin_options = {}
@@ -221,11 +235,6 @@ class CasadiOptimizer(LocalOptimizer):
         upper_bounds: np.ndarray | None = None,
     ) -> None:
         super().set_problem(n_variables, f, g, h, lower_bounds, upper_bounds)
-
-        if self.type == "conic":
-            self.opti = cas.Opti("conic")
-        else:
-            self.opti = cas.Opti()
 
         x: cas.MX = self.opti.variable(self.n_variables)
 
@@ -280,6 +289,18 @@ class CasadiOptimizer(LocalOptimizer):
         else:
             return {"x": x_opt, "f": f_opt, "g": g_opt, "h": h_opt}
 
+    def __getstate__(self) -> dict:
+        state: dict = super().__getstate__()
+        state["opti"] = None
+        return state
+
+    def __setstate__(self, state: dict) -> None:
+        self.__dict__.update(state)
+        if self.type == "conic":
+            self.opti = cas.Opti("conic")
+        else:
+            self.opti = cas.Opti()
+
 
 class SciPyLocalOptimizer(LocalOptimizer):
     # See https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.minimize.html
@@ -292,6 +313,7 @@ class SciPyLocalOptimizer(LocalOptimizer):
         options: dict[str, Any] | None = None,
     ) -> None:
         super().__init__()
+
         self.method: str = method
         self.tolerance: float | None = tolerance
         self.options: dict[str, Any] | None = options
