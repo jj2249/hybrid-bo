@@ -49,7 +49,8 @@ class Config:
     create_plots: bool = False
 
     # Configure if results are supposed to be saved, bool
-    save_results: bool = False
+    save_bo_results: bool = True
+    save_extended_results: bool = False
 
     # Number of Bayesion optimization runs, int
     n_runs_bo: int = 0
