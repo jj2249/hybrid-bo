@@ -377,7 +377,7 @@ def do_hybrid_bo(
 
         print(f"BO run {i_run_bo + 1}/{config.n_runs_bo} done.\n\n------\n")
 
-    # %% Save results of BO
+    # %% Save results
 
     if config.save_bo_results:
         path: Path = results_dir / "results_bo_hybrid_bo.pkl"

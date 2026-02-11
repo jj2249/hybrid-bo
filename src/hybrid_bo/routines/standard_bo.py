@@ -1,3 +1,4 @@
+import copy
 import pickle
 import traceback
 from collections.abc import Callable
@@ -15,7 +16,7 @@ from hybrid_bo.config import Config
 from hybrid_bo.gp import GP
 from hybrid_bo.optimizers import MultiStartOptimizer, Optimizer
 from hybrid_bo.problem import Problem
-from hybrid_bo.results_bo import ResultsBO
+from hybrid_bo.results import ResultsBO, ResultsGP
 from hybrid_bo.routines.utils import ei_gp, get_sampling_based_data
 from hybrid_bo.type_aliases import SymbolicType
 
@@ -36,6 +37,7 @@ def do_standard_bo(
         raise Exception(msg)
 
     results_bo_complete: list[ResultsBO] = []
+    results_gp_complete: list[ResultsGP] = []
 
     n_points_initial_complete: list[int] = [
         u_initial.shape[0] for u_initial in u_initial_complete
@@ -81,6 +83,10 @@ def do_standard_bo(
         # Incumbents
         incumbent: float
         incumbent_no_noise: float
+
+        # Results
+        results_bo: ResultsBO | None = None
+        results_gp: ResultsGP | None = None
 
         # %% Get initial points
 
@@ -144,6 +150,9 @@ def do_standard_bo(
             gp.optimizer.X0 = starting_points
 
         gp.solve_training_problem()
+
+        if config.save_extended_results:
+            results_gp = ResultsGP(input_transformer_gp, output_transformer_gp, gp)
 
         print("Training GP done.")
 
@@ -275,6 +284,17 @@ def do_standard_bo(
 
                 gp.solve_training_problem()
 
+                if results_gp is not None:
+                    results_gp.input_transformers_bo.append(
+                        copy.deepcopy(input_transformer_gp),
+                    )
+                    results_gp.output_transformers_bo.append(
+                        copy.deepcopy(
+                            output_transformer_gp,
+                        ),
+                    )
+                    results_gp.gps_bo.append(copy.deepcopy(gp))
+
                 print("Training GP done.")
 
                 # %% Create plots
@@ -303,8 +323,8 @@ def do_standard_bo(
                 traceback.print_exc()
 
             finally:
-                results_bo_complete.append(
-                    ResultsBO(
+                if config.save_bo_results:
+                    results_bo = ResultsBO(
                         u_initial,
                         x_initial,
                         f_initial,
@@ -319,20 +339,47 @@ def do_standard_bo(
                         x_no_noise[n_points_initial:, :],
                         f_no_noise[n_points_initial:, :],
                         incumbents_no_noise[n_points_initial:, :],
-                    ),
-                )
+                    )
+
+                    results_bo_complete.append(results_bo)
+
+                if results_gp is not None:
+                    results_gp_complete.append(results_gp)
 
         print(f"BO run {i_run_bo + 1}/{config.n_runs_bo} done.\n\n------\n")
 
-    # %% Save results of BO
+    # %% Save results
 
-    if config.save_results:
-        path: Path = results_dir / "results_bo_standard_bo.pkl"
+    if config.save_bo_results:
+        path: Path = results_dir / "results_bo_hybrid_bo.pkl"
         if path.exists():
             print(f"WARNING: File {path} exists. Will not overwrite.")
         else:
             with path.open("wb") as file:
                 pickle.dump(results_bo_complete, file, protocol=pickle.HIGHEST_PROTOCOL)
+
+    if config.save_extended_results:
+        path: Path = results_dir / "measurement_noise.pkl"
+        if path.exists():
+            print(f"WARNING: File {path} exists. Will not overwrite.")
+        else:
+            with path.open("wb") as file:
+                pickle.dump(
+                    measurement_noise_complete,
+                    file,
+                    protocol=pickle.HIGHEST_PROTOCOL,
+                )
+
+        path: Path = results_dir / "results_gp.pkl"
+        if path.exists():
+            print(f"WARNING: File {path} exists. Will not overwrite.")
+        else:
+            with path.open("wb") as file:
+                pickle.dump(
+                    results_gp_complete,
+                    file,
+                    protocol=pickle.HIGHEST_PROTOCOL,
+                )
 
 
 def set_gp_training_data(
