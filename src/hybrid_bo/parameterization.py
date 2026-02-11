@@ -85,6 +85,17 @@ class Parameter:
             return self.symbol
         return self.value
 
+    def __getstate__(self) -> dict:
+        # Required for pickling to be possible
+        state: dict = self.__dict__.copy()
+        state["symbol"] = None
+        return state
+
+    def __setstate__(self, state: dict) -> None:
+        # Required for pickling to be possible
+        self.__dict__.update(state)
+        self.symbol = SymbolicType.sym(self.name, self.n_rows, self.n_columns)  # pyright: ignore[reportArgumentType]
+
 
 class Parameterized:
     def __init__(self, parameters: list[Parameter] | None = None) -> None:
