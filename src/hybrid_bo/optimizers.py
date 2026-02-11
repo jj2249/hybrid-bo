@@ -236,6 +236,11 @@ class CasadiOptimizer(LocalOptimizer):
     ) -> None:
         super().set_problem(n_variables, f, g, h, lower_bounds, upper_bounds)
 
+        if self.type == "conic":
+            self.opti = cas.Opti("conic")
+        else:
+            self.opti = cas.Opti()
+
         x: cas.MX = self.opti.variable(self.n_variables)
 
         self.opti.minimize(self.f(x))
