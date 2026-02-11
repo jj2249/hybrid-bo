@@ -353,24 +353,24 @@ def do_hybrid_bo(
 
             finally:
                 if config.save_bo_results:
-                    results_bo_complete.append(
-                        ResultsBO(
-                            u_initial,
-                            x_initial,
-                            f_initial,
-                            incumbents_initial,
-                            x_no_noise_initial,
-                            f_no_noise_initial,
-                            incumbents_no_noise_initial,
-                            u[n_points_initial:, :],
-                            x[n_points_initial:, :],
-                            f[n_points_initial:, :],
-                            incumbents[n_points_initial:, :],
-                            x_no_noise[n_points_initial:, :],
-                            f_no_noise[n_points_initial:, :],
-                            incumbents_no_noise[n_points_initial:, :],
-                        ),
+                    results_bo = ResultsBO(
+                        u_initial,
+                        x_initial,
+                        f_initial,
+                        incumbents_initial,
+                        x_no_noise_initial,
+                        f_no_noise_initial,
+                        incumbents_no_noise_initial,
+                        u[n_points_initial:, :],
+                        x[n_points_initial:, :],
+                        f[n_points_initial:, :],
+                        incumbents[n_points_initial:, :],
+                        x_no_noise[n_points_initial:, :],
+                        f_no_noise[n_points_initial:, :],
+                        incumbents_no_noise[n_points_initial:, :],
                     )
+
+                    results_bo_complete.append(results_bo)
 
                 if results_gp is not None:
                     results_gp_complete.append(results_gp)
