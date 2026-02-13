@@ -384,7 +384,7 @@ def do_hybrid_bo(
     # %% Save results
 
     if config.save_bo_results:
-        path: Path = results_dir / "results_bo_hybrid_bo.pkl"
+        path: Path = results_dir / "results_bo.pkl"
         if path.exists():
             print(f"WARNING: File {path} exists. Will not overwrite.")
         else:
