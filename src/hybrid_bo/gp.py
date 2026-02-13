@@ -13,6 +13,7 @@ from hybrid_bo.optimizers import (
     CasadiOptimizer,
     LocalOptimizer,
     MultiStartOptimizer,
+    OptimizationResult,
     Optimizer,
 )
 from hybrid_bo.parameterization import (
@@ -188,11 +189,11 @@ class GP(Parameterized):
 
     def solve_training_problem(self) -> None:
         trainables: JoinedParameters = JoinedParameters(self.trainable_parameters())
-        solution: dict[str, float | np.ndarray] | None = self.optimizer.solve()
+        solution: OptimizationResult | None = self.optimizer.solve()
 
         if solution is not None:
             x_opt_original: np.ndarray = inv_transform(  # pyright: ignore[reportCallIssue]
-                solution["x"],  # pyright: ignore[reportArgumentType]
+                solution.x,  # pyright: ignore[reportArgumentType]
                 trainables.transform_mode,
             )
             set_values(x_opt_original, self.trainable_parameters())

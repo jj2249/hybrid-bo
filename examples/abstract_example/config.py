@@ -81,7 +81,10 @@ def get_gp_hybrid_bo(n_inputs: int) -> GP:
     plugin_options: dict[str, Any] = {"print_time": 0}
     solver_options: dict[str, Any] = {"print_level": 0}
     local_optimizer: LocalOptimizer = CasadiOptimizer(
-        "ipopt", "nonlinear", plugin_options, solver_options
+        "ipopt",
+        "nonlinear",
+        plugin_options,
+        solver_options,
     )
     optimizer: Optimizer = MultiStartOptimizer(local_optimizer)
 

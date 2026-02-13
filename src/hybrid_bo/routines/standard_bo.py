@@ -14,7 +14,7 @@ from hybrid_bo.affine_transformers import (
 )
 from hybrid_bo.config import Config
 from hybrid_bo.gp import GP
-from hybrid_bo.optimizers import MultiStartOptimizer, Optimizer
+from hybrid_bo.optimizers import MultiStartOptimizer, OptimizationResult, Optimizer
 from hybrid_bo.problem import Problem
 from hybrid_bo.results import ResultsBO, ResultsGP
 from hybrid_bo.routines.utils import ei_gp, get_sampling_based_data
@@ -219,7 +219,7 @@ def do_standard_bo(
                     )
                     optimizer.X0 = starting_points
 
-                solution: dict[str, float | np.ndarray] | None = optimizer.solve()
+                solution: OptimizationResult | None = optimizer.solve()
 
                 if solution is None:
                     msg: str = "solution is None"
@@ -227,7 +227,7 @@ def do_standard_bo(
 
                 print("Solving acquisition problem done.")
 
-                u_next: np.ndarray = solution["x"][0 : problem.n_u]  # pyright: ignore[reportIndexIssue]
+                u_next: np.ndarray = solution.x[: problem.n_u, :]  # pyright: ignore[reportIndexIssue]
 
                 x_next: np.ndarray
                 x_no_noise_next: np.ndarray

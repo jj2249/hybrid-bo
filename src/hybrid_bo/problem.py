@@ -3,7 +3,7 @@ import numpy as np
 import scipy
 import scipy.optimize
 
-from hybrid_bo.optimizers import MultiStartOptimizer, Optimizer
+from hybrid_bo.optimizers import MultiStartOptimizer, Optimizer, OptimizationResult
 from hybrid_bo.type_aliases import SymbolicType
 
 
@@ -677,7 +677,7 @@ class Problem:
         optimizer: Optimizer,
         n_starting_points: int = 10,
         rng: np.random.Generator | None = None,
-    ) -> dict[str, float | np.ndarray]:
+    ) -> OptimizationResult:
         # Parameters n_starting_points and rng are only important if type(optimizer) == MultistartOptimizer
 
         u: SymbolicType = SymbolicType.sym("u", self.n_u, 1)  # pyright: ignore[reportArgumentType]
@@ -724,15 +724,10 @@ class Problem:
             )
             optimizer.X0 = starting_points
 
-        solution: dict[str, float | np.ndarray] | None = optimizer.solve()
+        solution: OptimizationResult | None = optimizer.solve()
 
         if solution is None:
             msg: str = "solution is None"
             raise Exception(msg)
 
-        solution_formatted: dict[str, float | np.ndarray] = {}
-        solution_formatted["f"] = solution["f"]
-        solution_formatted["u"] = solution["x"][: self.n_u]  # pyright: ignore[reportIndexIssue]
-        solution_formatted["x"] = solution["x"][self.n_u :]  # pyright: ignore[reportIndexIssue]
-
-        return solution_formatted
+        return solution

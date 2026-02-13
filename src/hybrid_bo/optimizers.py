@@ -2,12 +2,21 @@ import traceback
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import Any, override
+from dataclasses import dataclass
 
 import casadi as cas
 import numpy as np
 import scipy
 
 from hybrid_bo.type_aliases import SymbolicType
+
+
+@dataclass
+class OptimizationResult:
+    x: np.ndarray
+    f: float
+    g: np.ndarray | None = None
+    h: np.ndarray | None = None
 
 
 class Optimizer(ABC):
@@ -47,7 +56,7 @@ class Optimizer(ABC):
             raise Exception(msg)
 
     @abstractmethod
-    def solve(self) -> dict[str, float | np.ndarray] | None:
+    def solve(self) -> OptimizationResult | None:
         """Returns optimal x (np.ndarray), f (float), g (np.ndarray) and h (np.ndarray)."""
         ...
 
@@ -171,24 +180,22 @@ class MultiStartOptimizer(Optimizer):
         )
 
     @override
-    def solve(self) -> dict[str, float | np.ndarray] | None:
+    def solve(self) -> OptimizationResult | None:
         if self.n_starts < 1:
             msg: str = "self.n_starts() < 1"
             raise Exception(msg)
 
-        solution: dict[str, float | np.ndarray] | None = None
+        solution: OptimizationResult | None = None
         f_min = np.inf
 
         for i_guess in range(self.n_starts):
             self.local_optimizer.set_x0(self._X0[i_guess, :][:, np.newaxis])
 
-            current_solution: dict[str, float | np.ndarray] | None = (
-                self.local_optimizer.solve()
-            )
+            current_solution: OptimizationResult | None = self.local_optimizer.solve()
 
-            if (current_solution is not None) and (current_solution["f"] < f_min):
+            if (current_solution is not None) and (current_solution.f < f_min):
                 solution = current_solution
-                f_min = current_solution["f"]
+                f_min = current_solution.f
 
         return solution
 
@@ -263,7 +270,7 @@ class CasadiOptimizer(LocalOptimizer):
         self.opti.set_initial(self.opti.x, x0)
 
     @override
-    def solve(self) -> dict[str, float | np.ndarray] | None:
+    def solve(self) -> OptimizationResult | None:
         try:
             self.opti.solver(self.solver, self.plugin_options, self.solver_options)
 
@@ -280,10 +287,10 @@ class CasadiOptimizer(LocalOptimizer):
                 return None
 
             f_opt: float = solution.value(self.opti.f)
-            g_opt: np.ndarray = np.empty([0])
+            g_opt: np.ndarray | None = None
             if self.g is not None:
                 g_opt = self.g(x_opt).full()  # pyright: ignore[reportAttributeAccessIssue, reportOptionalMemberAccess]
-            h_opt: np.ndarray = np.empty([0])
+            h_opt: np.ndarray | None = None
             if self.h is not None:
                 h_opt = self.h(x_opt).full()  # pyright: ignore[reportAttributeAccessIssue, reportOptionalMemberAccess]
 
@@ -292,7 +299,7 @@ class CasadiOptimizer(LocalOptimizer):
             return None
 
         else:
-            return {"x": x_opt, "f": f_opt, "g": g_opt, "h": h_opt}
+            return OptimizationResult(x_opt, f_opt, g_opt, h_opt)
 
     def __getstate__(self) -> dict:
         state: dict = super().__getstate__()
@@ -531,7 +538,7 @@ class SciPyLocalOptimizer(LocalOptimizer):
                 self.constraints.append(g_constraints)
 
     @override
-    def solve(self) -> dict[str, float | np.ndarray] | None:
+    def solve(self) -> OptimizationResult | None:
         try:
             solution: scipy.optimize.OptimizeResult = scipy.optimize.minimize(
                 self.f_np,
@@ -549,7 +556,7 @@ class SciPyLocalOptimizer(LocalOptimizer):
             x_opt: np.ndarray = solution.x[:, np.newaxis]
             f_opt: float = solution.fun
 
-            g_opt: np.ndarray = np.empty([0])
+            g_opt: np.ndarray | None = None
             if self.g is not None:
                 g_opt = self.g(x_opt).full()  # pyright: ignore[reportAttributeAccessIssue, reportOptionalMemberAccess]
             h_opt: np.ndarray = np.empty([0])
@@ -561,4 +568,4 @@ class SciPyLocalOptimizer(LocalOptimizer):
             return None
 
         else:
-            return {"x": x_opt, "f": f_opt, "g": g_opt, "h": h_opt}
+            return OptimizationResult(x_opt, f_opt, g_opt, h_opt)
