@@ -58,7 +58,6 @@ def get_evaluation_data(
     list[np.ndarray],
     np.ndarray,
 ]:
-    """Returns u_eval, x_eval, f_eval."""
 
     if len(n_eval_points) != problem.n_u:
         msg: str = "len(n_eval_points) != problem.n_u"

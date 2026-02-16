@@ -471,31 +471,6 @@ def setup_acq_problem(
     np.ndarray,
     np.ndarray,
 ]:
-    """Sets up the deterministic equivalent of the acquisition function problem according to a selected formulation.
-
-    Parameters
-    ----------
-    gaussian_standard_samples : np.ndarray with shape (n, 1)
-        Samples of the Gaussian standard distribution for the reparameterization trick
-
-    Returns
-    -------
-    int
-        Number of optimization variables
-    cas.Function
-        Objective function of the problem
-    cas.Function
-        Function representing the equality constraints (h(w) = 0)
-    np.ndarray with shape (m, 1)
-        Lower bounds of the optimization variables
-    np.ndarray with shape (m, 1)
-        Upper bounds of the optimization variables
-    np.ndarray with shape (m, 1)
-        Lower bounds of the optimization variables used for generating starting points for multi start optimizers
-    np.ndarray with shape (m, 1)
-        Upper bounds of the optimization variables used for generating starting points for multi start optimizers
-    """
-
     if config.formulation_acq not in ["ei", "lcb"]:
         msg: str = (
             f"The given formulation_acq '{config.formulation_acq}'"
