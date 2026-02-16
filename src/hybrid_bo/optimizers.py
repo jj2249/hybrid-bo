@@ -56,9 +56,7 @@ class Optimizer(ABC):
             raise Exception(msg)
 
     @abstractmethod
-    def solve(self) -> OptimizationResult | None:
-        """Returns optimal x (np.ndarray), f (float), g (np.ndarray) and h (np.ndarray)."""
-        ...
+    def solve(self) -> OptimizationResult | None: ...
 
     def __getstate__(self) -> dict:
         # Required for pickling to be possible
