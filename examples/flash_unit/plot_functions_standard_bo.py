@@ -16,6 +16,10 @@ if TYPE_CHECKING:
     from matplotlib.contour import QuadContourSet
     from matplotlib.figure import Figure
 
+plt.rcParams["text.usetex"] = True
+
+n_eval_points: list[int] = [51, 51]
+
 
 def create_plots(
     problem: Problem,
@@ -38,7 +42,7 @@ def create_plots(
         problem,
         config.n_starts_max_evaluate_problem,
         config.use_jacobian_evaluate_problem,
-        config.n_eval_points,
+        n_eval_points,
         False,
         config.rng,
     )
@@ -55,7 +59,7 @@ def create_plots(
         problem,
         config.n_starts_max_evaluate_problem,
         config.use_jacobian_evaluate_problem,
-        config.n_eval_points,
+        n_eval_points,
         True,
         config.rng,
     )
@@ -74,8 +78,8 @@ def create_plots(
         / output_transformer_gp.slope
     )
 
-    mean_gp_eval_grid: np.ndarray = mean_gp_eval.reshape(config.n_eval_points)
-    std_gp_eval_grid: np.ndarray = std_gp_eval.reshape(config.n_eval_points)
+    mean_gp_eval_grid: np.ndarray = mean_gp_eval.reshape(n_eval_points)
+    std_gp_eval_grid: np.ndarray = std_gp_eval.reshape(n_eval_points)
 
     print("Preparing plotting done.")
 
@@ -343,10 +347,10 @@ def plot_output_gp(
     )
 
     mean_gp_eval_grid: np.ndarray = mean_gp_eval.reshape(
-        config.n_eval_points,
+        n_eval_points,
     )
     std_gp_eval_grid: np.ndarray = std_gp_eval.reshape(
-        config.n_eval_points,
+        n_eval_points,
     )
 
     ax1: Axes = plot_wrt_u(mean_gp_eval_grid, "Modeled GP output: mean")

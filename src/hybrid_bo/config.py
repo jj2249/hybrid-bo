@@ -74,14 +74,6 @@ class Config:
     # EI Standard (no deterministic equivalent)
     epsilon_ei_standard: float = 1.0e-10
 
-    # %% Plotting
-
-    # Number of evaluation points used for every component of u
-    n_eval_points: list[int] = field(default_factory=list)
-
-    # Level of confidence in percent for plotting the confidence intervals, optional
-    confidence_level: int = 95
-
     # %% General
 
     seed: int | None = None
@@ -122,8 +114,5 @@ class Config:
                 "indices_x_opt",
                 list(set(range(self.n_x)) - set(self.indices_x_output_gp)),
             )
-
-        if not self.n_eval_points:
-            object.__setattr__(self, "n_eval_points", [101] * self.n_u)
 
         object.__setattr__(self, "rng", np.random.default_rng(self.seed))

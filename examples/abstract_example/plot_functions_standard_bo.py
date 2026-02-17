@@ -13,6 +13,9 @@ if TYPE_CHECKING:
 
 plt.rcParams["text.usetex"] = True
 
+confidence_level: int = 95
+n_eval_points: list[int] = [101]
+
 
 def create_plots(
     problem: Problem,
@@ -36,7 +39,7 @@ def create_plots(
         95: 1.96,
         99: 2.58,
     }
-    if config.confidence_level not in confidence_factors:
+    if confidence_level not in confidence_factors:
         msg: str = (
             "For 'confidence_level',"
             "only the values 25, 50, 68, 80, 90, 95 and 99 are allowed."
@@ -51,7 +54,7 @@ def create_plots(
         problem,
         config.n_starts_max_evaluate_problem,
         config.use_jacobian_evaluate_problem,
-        config.n_eval_points,
+        n_eval_points,
         False,
         config.rng,
     )
@@ -88,7 +91,7 @@ def create_plots(
         u,
         f,
         n_initial_points,
-        confidence_factors[config.confidence_level],
+        confidence_factors[confidence_level],
     )
 
     print("Plotting output of GP done.")

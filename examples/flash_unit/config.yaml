@@ -74,11 +74,3 @@ use_jacobian_evaluate_problem: True
 
 # Maximum number of executing scipy.optimize.fsolve() when evaluating the problem, int
 n_starts_max_evaluate_problem: 100
-
-# %% Plotting
-
-# Number of evaluation points used for every component of u, list[int]
-n_eval_points: [31, 31]
-
-# Level of confidence in percent for plotting the confidence intervals, int
-confidence_level: 95

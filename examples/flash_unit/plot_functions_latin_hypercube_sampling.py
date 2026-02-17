@@ -10,6 +10,10 @@ from .custom_problem import plot_physical_boundary
 from .plot_functions_standard_bo import plot_f as standard_bo_plot_f
 from .plot_functions_standard_bo import plot_output_gp as standard_bo_plot_output_gp
 
+plt.rcParams["text.usetex"] = True
+
+n_eval_points: list[int] = [51, 51]
+
 
 def create_plots(
     problem: Problem,
@@ -35,7 +39,7 @@ def create_plots(
         problem,
         config.n_starts_max_evaluate_problem,
         config.use_jacobian_evaluate_problem,
-        config.n_eval_points,
+        n_eval_points,
         False,
         config.rng,
     )
@@ -55,7 +59,7 @@ def create_plots(
         problem,
         config.n_starts_max_evaluate_problem,
         config.use_jacobian_evaluate_problem,
-        config.n_eval_points,
+        n_eval_points,
         True,
         config.rng,
     )

@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
@@ -13,6 +14,9 @@ if TYPE_CHECKING:
     from matplotlib.figure import Figure
 
 plt.rcParams["text.usetex"] = True
+
+confidence_level: int = 95
+n_eval_points: list[int] = [101]
 
 
 def create_plots(
@@ -38,7 +42,7 @@ def create_plots(
         95: 1.96,
         99: 2.58,
     }
-    if config.confidence_level not in confidence_factors:
+    if confidence_level not in confidence_factors:
         msg: str = "For 'confidence_level', only the values 25, 50, 68, 80, 90, 95 and 99 are allowed."
         raise Exception(msg)
 
@@ -54,7 +58,7 @@ def create_plots(
         problem,
         config.n_starts_max_evaluate_problem,
         config.use_jacobian_evaluate_problem,
-        config.n_eval_points,
+        n_eval_points,
         True,
         config.rng,
     )
@@ -92,7 +96,7 @@ def create_plots(
         u,
         x,
         n_initial_points,
-        confidence_factors[config.confidence_level],
+        confidence_factors[confidence_level],
     )
 
     print("Plotting output of GP done.")
@@ -205,7 +209,7 @@ def plot_f(
 
     f_mean: np.ndarray = sample_mean(f_eval_samples).T
 
-    exclusive_confidence_quantiles: float = (100 - config.confidence_level) / 200.0
+    exclusive_confidence_quantiles: float = (100 - confidence_level) / 200.0
     f_confidence_bounds: np.ndarray = np.quantile(
         f_eval_samples,
         [exclusive_confidence_quantiles, 1 - exclusive_confidence_quantiles],

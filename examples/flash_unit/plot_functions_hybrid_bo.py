@@ -18,6 +18,8 @@ if TYPE_CHECKING:
 
 plt.rcParams["text.usetex"] = True
 
+n_eval_points: list[int] = [51, 51]
+
 
 def create_plots(
     problem: Problem,
@@ -44,7 +46,7 @@ def create_plots(
         problem,
         config.n_starts_max_evaluate_problem,
         config.use_jacobian_evaluate_problem,
-        config.n_eval_points,
+        n_eval_points,
         False,
         config.rng,
     )
@@ -64,7 +66,7 @@ def create_plots(
         problem,
         config.n_starts_max_evaluate_problem,
         config.use_jacobian_evaluate_problem,
-        config.n_eval_points,
+        n_eval_points,
         True,
         config.rng,
     )
@@ -266,7 +268,7 @@ def plot_acq(
     fig, ax = plt.subplots()
 
     f_eval_samples_grid: np.ndarray = f_eval_samples.T.reshape(
-        [*config.n_eval_points, f_eval_samples.shape[0]],
+        [*n_eval_points, f_eval_samples.shape[0]],
     )
 
     label: str
@@ -406,7 +408,7 @@ def plot_output_gp(
 
     output_gp_eval_true: np.ndarray = x_eval[:, config.indices_x_output_gp]
     output_gp_eval_true_grid: np.ndarray = output_gp_eval_true.reshape(
-        config.n_eval_points,
+        n_eval_points,
     )
 
     output_gp_eval_mean_transformed: np.ndarray
@@ -427,10 +429,10 @@ def plot_output_gp(
     )
 
     output_gp_eval_mean_grid: np.ndarray = output_gp_eval_mean.reshape(
-        config.n_eval_points,
+        n_eval_points,
     )
     output_gp_eval_std_grid: np.ndarray = output_gp_eval_std.reshape(
-        config.n_eval_points,
+        n_eval_points,
     )
 
     ax1: Axes = plot_wrt_u(output_gp_eval_true_grid, "True GP output")
