@@ -89,11 +89,6 @@ class CustomProblem(Problem):
             [[x_1_upper_bound_starting_points, gamma_1_ln_upper_bound_starting_points]],
         ).T
 
-        x_1_lower_bound_evaluation: float = 0.0
-        x_1_upper_bound_evaluation: float = 1.0
-        gamma_1_ln_lower_bound_evaluation: float = -np.inf
-        gamma_1_ln_upper_bound_evaluation: float = np.inf
-
         # %% Helper variables
 
         B: float = self.F - self.D
