@@ -106,6 +106,7 @@ def do_hybrid_bo(
                 config.n_starts_max_evaluate_problem,
                 config.use_jacobian_evaluate_problem,
                 config.rng,
+                False,
             )
         )
 

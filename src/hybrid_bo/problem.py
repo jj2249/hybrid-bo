@@ -180,14 +180,14 @@ class Problem:
             msg: str = "not np.isfinite(self.x_upper_bounds_starting_points).all()"
             raise Exception(msg)
 
-    def evaluate_with_simulation_original(
+    def evaluate_with_simulation(
         self,
         u: np.ndarray,
         n_starts_max: int = 100,
         use_jacobian: bool = True,
         rng: np.random.Generator | None = None,
+        original: bool = False,
     ) -> tuple[np.ndarray, np.ndarray]:
-
         if u.shape[1] != self.n_u:
             msg: str = "u.shape[1] != self.n_u"
             raise Exception(msg)
@@ -201,36 +201,33 @@ class Problem:
             f_current: float
             x_current: np.ndarray
 
-            (
-                f_current,
-                x_current,
-            ) = self.single_evaluate_with_simulation_original(
-                u[[i_point], :].T,
-                n_starts_max,
-                use_jacobian,
-                rng,
-            )
+            if original:
+                (
+                    f_current,
+                    x_current,
+                ) = self.single_evaluate_with_simulation_original(
+                    u[[i_point], :].T,
+                    n_starts_max,
+                    use_jacobian,
+                    rng,
+                )
+            else:
+                (
+                    f_current,
+                    x_current,
+                ) = self.single_evaluate_with_simulation(
+                    u[[i_point], :].T,
+                    n_starts_max,
+                    use_jacobian,
+                    rng,
+                )
 
             f[i_point] = f_current
             x[[i_point], :] = x_current.T
 
         return f, x
 
-    def evaluate_with_simulation(
-        self,
-        u: np.ndarray,
-        n_starts_max: int = 100,
-        use_jacobian: bool = True,
-        rng: np.random.Generator | None = None,
-    ) -> tuple[np.ndarray, np.ndarray]:
-        return self.evaluate_with_simulation_original(
-            u,
-            n_starts_max,
-            use_jacobian,
-            rng,
-        )
-
-    def evaluate_with_fixed_x_original(
+    def evaluate_with_fixed_x(
         self,
         u: np.ndarray,
         x_fixed: np.ndarray,
@@ -238,6 +235,7 @@ class Problem:
         n_starts_max: int = 100,
         use_jacobian: bool = True,
         rng: np.random.Generator | None = None,
+        original: bool = False,
     ) -> tuple[np.ndarray, np.ndarray]:
 
         if u.shape[1] != self.n_u:
@@ -265,42 +263,37 @@ class Problem:
             f_current: float
             x_current: np.ndarray
 
-            (
-                f_current,
-                x_current,
-            ) = self.single_evaluate_with_fixed_x_original(
-                u[[i_point], :].T,
-                x_fixed[[i_point], :].T,
-                indices_x_fixed,
-                n_starts_max,
-                use_jacobian,
-                rng,
-            )
+            if original:
+                (
+                    f_current,
+                    x_current,
+                ) = self.single_evaluate_with_fixed_x_original(
+                    u[[i_point], :].T,
+                    x_fixed[[i_point], :].T,
+                    indices_x_fixed,
+                    n_starts_max,
+                    use_jacobian,
+                    rng,
+                )
+            else:
+                (
+                    f_current,
+                    x_current,
+                ) = self.single_evaluate_with_fixed_x(
+                    u[[i_point], :].T,
+                    x_fixed[[i_point], :].T,
+                    indices_x_fixed,
+                    n_starts_max,
+                    use_jacobian,
+                    rng,
+                )
 
             f[i_point] = f_current
             x[[i_point], :] = x_current.T
 
         return f, x
 
-    def evaluate_with_fixed_x(
-        self,
-        u: np.ndarray,
-        x_fixed: np.ndarray,
-        indices_x_fixed: list[int],
-        n_starts_max: int = 100,
-        use_jacobian: bool = True,
-        rng: np.random.Generator | None = None,
-    ) -> tuple[np.ndarray, np.ndarray]:
-        return self.evaluate_with_fixed_x_original(
-            u,
-            x_fixed,
-            indices_x_fixed,
-            n_starts_max,
-            use_jacobian,
-            rng,
-        )
-
-    def evaluate_with_noisy_simulation_original(
+    def evaluate_with_noisy_simulation(
         self,
         u: np.ndarray,
         measurement_noise: np.ndarray,
@@ -308,6 +301,7 @@ class Problem:
         n_starts_max: int = 100,
         use_jacobian: bool = True,
         rng: np.random.Generator | None = None,
+        original: bool = False,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
 
         if u.shape[1] != self.n_u:
@@ -334,16 +328,28 @@ class Problem:
             f_no_noise_current: float
             x_no_noise_current: np.ndarray
 
-            (f_current, x_current, f_no_noise_current, x_no_noise_current) = (
-                self.single_evaluate_with_noisy_simulation_original(
-                    u[[i_point], :].T,
-                    measurement_noise[[i_point], :].T,
-                    indices_x_measured,
-                    n_starts_max,
-                    use_jacobian,
-                    rng,
+            if original:
+                (f_current, x_current, f_no_noise_current, x_no_noise_current) = (
+                    self.single_evaluate_with_noisy_simulation_original(
+                        u[[i_point], :].T,
+                        measurement_noise[[i_point], :].T,
+                        indices_x_measured,
+                        n_starts_max,
+                        use_jacobian,
+                        rng,
+                    )
                 )
-            )
+            else:
+                (f_current, x_current, f_no_noise_current, x_no_noise_current) = (
+                    self.single_evaluate_with_noisy_simulation(
+                        u[[i_point], :].T,
+                        measurement_noise[[i_point], :].T,
+                        indices_x_measured,
+                        n_starts_max,
+                        use_jacobian,
+                        rng,
+                    )
+                )
 
             f[i_point] = f_current
             x[[i_point], :] = x_current.T
@@ -351,24 +357,6 @@ class Problem:
             x_no_noise[[i_point], :] = x_no_noise_current.T
 
         return f, x, f_no_noise, x_no_noise
-
-    def evaluate_with_noisy_simulation(
-        self,
-        u: np.ndarray,
-        measurement_noise: np.ndarray,
-        indices_x_measured: list[int],
-        n_starts_max: int = 100,
-        use_jacobian: bool = True,
-        rng: np.random.Generator | None = None,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        return self.evaluate_with_noisy_simulation_original(
-            u,
-            measurement_noise,
-            indices_x_measured,
-            n_starts_max,
-            use_jacobian,
-            rng,
-        )
 
     def single_evaluate_with_simulation_original(
         self,
