@@ -200,10 +200,10 @@ def do_uniform_sampling(
 
             # %% BO loop
 
-            for i_bo in range(config.n_iterations_bo):
+            for i_iteration_bo in range(config.n_iterations_bo):
                 # %% Get next point
 
-                u_next: np.ndarray = u_additional[[i_bo], :].T
+                u_next: np.ndarray = u_additional[[i_iteration_bo], :].T
 
                 x_next: np.ndarray
                 x_no_noise_next: np.ndarray
@@ -213,7 +213,7 @@ def do_uniform_sampling(
                 f_next, x_next, f_no_noise_next, x_no_noise_next = (
                     problem.single_evaluate_with_noisy_simulation(
                         u_next,
-                        measurement_noise[[n_points_initial + i_bo], :].T,
+                        measurement_noise[[n_points_initial + i_iteration_bo], :].T,
                         config.indices_x_measured,
                         config.n_starts_max_evaluate_problem,
                         config.use_jacobian_evaluate_problem,
@@ -226,13 +226,15 @@ def do_uniform_sampling(
 
                 # %% Fill points with next value
 
-                u[[n_points_initial + i_bo], :] = u_next.T
-                x[[n_points_initial + i_bo], :] = x_next.T
-                x_no_noise[[n_points_initial + i_bo], :] = x_no_noise_next.T
-                f[[n_points_initial + i_bo], :] = f_next
-                f_no_noise[[n_points_initial + i_bo], :] = f_no_noise_next
-                incumbents[[n_points_initial + i_bo], :] = incumbent
-                incumbents_no_noise[[n_points_initial + i_bo], :] = incumbent_no_noise
+                u[[n_points_initial + i_iteration_bo], :] = u_next.T
+                x[[n_points_initial + i_iteration_bo], :] = x_next.T
+                x_no_noise[[n_points_initial + i_iteration_bo], :] = x_no_noise_next.T
+                f[[n_points_initial + i_iteration_bo], :] = f_next
+                f_no_noise[[n_points_initial + i_iteration_bo], :] = f_no_noise_next
+                incumbents[[n_points_initial + i_iteration_bo], :] = incumbent
+                incumbents_no_noise[[n_points_initial + i_iteration_bo], :] = (
+                    incumbent_no_noise
+                )
 
                 print("Getting next point done.")
 
@@ -240,8 +242,8 @@ def do_uniform_sampling(
 
                 set_gp_training_data(
                     gp,
-                    u[: n_points_initial + i_bo + 1, :],
-                    f[: n_points_initial + i_bo + 1, :],
+                    u[: n_points_initial + i_iteration_bo + 1, :],
+                    f[: n_points_initial + i_iteration_bo + 1, :],
                     input_transformer_gp,
                     output_transformer_gp,
                 )
@@ -286,17 +288,17 @@ def do_uniform_sampling(
                         gp,
                         input_transformer_gp,
                         output_transformer_gp,
-                        f[: n_points_initial + i_bo + 1, :],
-                        u[: n_points_initial + i_bo + 1, :],
-                        x[: n_points_initial + i_bo + 1, :],
+                        f[: n_points_initial + i_iteration_bo + 1, :],
+                        u[: n_points_initial + i_iteration_bo + 1, :],
+                        x[: n_points_initial + i_iteration_bo + 1, :],
                         n_points_initial,
-                        i_bo + 1,
+                        i_iteration_bo + 1,
                     )
 
                     print("Plotting done.")
 
                 print(
-                    f"\nBO iteration {i_bo + 1}/{config.n_iterations_bo} done.\n\n---\n",
+                    f"\nBO iteration {i_iteration_bo + 1}/{config.n_iterations_bo} done.\n\n---\n",
                 )
 
             print(f"BO run {i_run_bo + 1}/{config.n_runs_bo} done.\n\n------\n")
