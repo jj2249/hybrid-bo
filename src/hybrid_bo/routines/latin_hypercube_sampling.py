@@ -71,12 +71,12 @@ def do_latin_hypercube_sampling(
         measurement_noise_initial: np.ndarray = measurement_noise[:n_points_initial, :]
         u_initial: np.ndarray = u_initial_complete[i_run_bo]
 
-        x_initial: np.ndarray
-        x_no_noise_initial: np.ndarray
-        f_initial: np.ndarray
-        f_no_noise_initial: np.ndarray
-        incumbents_initial: np.ndarray
-        incumbents_no_noise_initial: np.ndarray
+        x_initial: np.ndarray = np.full((n_points, config.n_x), np.nan)
+        x_no_noise_initial: np.ndarray = np.full((n_points, config.n_x), np.nan)
+        f_initial: np.ndarray = np.full((n_points, 1), np.nan)
+        f_no_noise_initial: np.ndarray = np.full((n_points, 1), np.nan)
+        incumbents_initial: np.ndarray = np.full((n_points, 1), np.nan)
+        incumbents_no_noise_initial: np.ndarray = np.full((n_points, 1), np.nan)
 
         # Incumbents
         incumbent: float
@@ -86,120 +86,124 @@ def do_latin_hypercube_sampling(
         results_bo: ResultsBO | None = None
         results_gp: ResultsGP | None = None
 
-        # %% Get initial points
+        try:
+            # %% Get initial points
 
-        f_initial, x_initial, f_no_noise_initial, x_no_noise_initial = (
-            problem.evaluate_with_noisy_simulation(
-                u_initial,
-                measurement_noise_initial,
-                config.indices_x_measured,
-                config.n_starts_max_evaluate_problem,
-                config.use_jacobian_evaluate_problem,
-                config.rng,
-                False,
-            )
-        )
-
-        incumbents_initial = np.minimum.accumulate(f_initial, 0)
-        incumbents_no_noise_initial = np.minimum.accumulate(
-            f_no_noise_initial,
-            0,
-        )
-
-        incumbent = incumbents_initial[-1].item()
-        incumbent_no_noise = incumbents_no_noise_initial[-1].item()
-
-        # %% Fill points with initial values
-
-        u[:n_points_initial, :] = u_initial
-        x[:n_points_initial, :] = x_initial
-        x_no_noise[:n_points_initial, :] = x_no_noise_initial
-        f[:n_points_initial, :] = f_initial
-        f_no_noise[:n_points_initial, :] = f_no_noise_initial
-        incumbents[:n_points_initial, :] = incumbents_initial
-        incumbents_no_noise[:n_points_initial, :] = incumbents_no_noise_initial
-
-        print("Initialization done.")
-
-        # %% Define GP
-
-        input_transformer_gp: AffineTransformer = MinMaxTransformer()
-        output_transformer_gp: AffineTransformer = StandardTransformer()
-
-        set_gp_training_data(
-            gp,
-            u_initial,
-            f_initial,
-            input_transformer_gp,
-            output_transformer_gp,
-        )
-
-        # %% Train GP
-
-        gp.create_training_problem()
-
-        if isinstance(gp.optimizer, MultiStartOptimizer):
-            gp.optimizer.lower_bounds_starting_points = gp.optimizer.lower_bounds.copy()  # pyright: ignore[reportOptionalMemberAccess]
-            gp.optimizer.upper_bounds_starting_points = gp.optimizer.upper_bounds.copy()  # pyright: ignore[reportOptionalMemberAccess]
-
-            starting_points: np.ndarray = gp.optimizer.create_lhs_samples(
-                config.n_starts_training_gp,
-                config.rng,
-            )
-            gp.optimizer.X0 = starting_points
-
-        gp.solve_training_problem()
-
-        if config.save_extended_results:
-            results_gp = ResultsGP(
-                copy.deepcopy(input_transformer_gp),
-                copy.deepcopy(output_transformer_gp),
-                copy.deepcopy(gp),
+            f_initial, x_initial, f_no_noise_initial, x_no_noise_initial = (
+                problem.evaluate_with_noisy_simulation(
+                    u_initial,
+                    measurement_noise_initial,
+                    config.indices_x_measured,
+                    config.n_starts_max_evaluate_problem,
+                    config.use_jacobian_evaluate_problem,
+                    config.rng,
+                    False,
+                )
             )
 
-        print("Training GP done.")
-
-        # %% Create initial plots
-
-        if config.create_plots and (create_plots is not None):
-            create_plots(
-                problem,
-                config,
-                gp,
-                input_transformer_gp,
-                output_transformer_gp,
-                f_initial,
-                u_initial,
-                x_initial,
-                n_points_initial,
+            incumbents_initial = np.minimum.accumulate(f_initial, 0)
+            incumbents_no_noise_initial = np.minimum.accumulate(
+                f_no_noise_initial,
                 0,
             )
 
-            print("Plotting done.")
+            incumbent = incumbents_initial[-1].item()
+            incumbent_no_noise = incumbents_no_noise_initial[-1].item()
 
-        print(f"\nBO iteration 0/{config.n_iterations_bo} done.\n\n---\n")
+            # %% Fill points with initial values
 
-        # %% Get additional points of u for the BO loop by latin hypercube sampling
+            u[:n_points_initial, :] = u_initial
+            x[:n_points_initial, :] = x_initial
+            x_no_noise[:n_points_initial, :] = x_no_noise_initial
+            f[:n_points_initial, :] = f_initial
+            f_no_noise[:n_points_initial, :] = f_no_noise_initial
+            incumbents[:n_points_initial, :] = incumbents_initial
+            incumbents_no_noise[:n_points_initial, :] = incumbents_no_noise_initial
 
-        sampler: scipy.stats.qmc.LatinHypercube = scipy.stats.qmc.LatinHypercube(
-            problem.n_u,
-            rng=config.rng,
-        )
+            print("Initialization done.")
 
-        u_additional: np.ndarray = sampler.random(config.n_iterations_bo)
-        u_additional: np.ndarray = (
-            problem.u_lower_bounds_starting_points.T
-            + (
-                problem.u_upper_bounds_starting_points.T
-                - problem.u_lower_bounds_starting_points.T
+            # %% Define GP
+
+            input_transformer_gp: AffineTransformer = MinMaxTransformer()
+            output_transformer_gp: AffineTransformer = StandardTransformer()
+
+            set_gp_training_data(
+                gp,
+                u_initial,
+                f_initial,
+                input_transformer_gp,
+                output_transformer_gp,
             )
-            * u_additional
-        )
 
-        # %% BO loop
+            # %% Train GP
 
-        for i_bo in range(config.n_iterations_bo):
-            try:
+            gp.create_training_problem()
+
+            if isinstance(gp.optimizer, MultiStartOptimizer):
+                gp.optimizer.lower_bounds_starting_points = (
+                    gp.optimizer.lower_bounds.copy()
+                )
+                gp.optimizer.upper_bounds_starting_points = (
+                    gp.optimizer.upper_bounds.copy()
+                )
+
+                starting_points: np.ndarray = gp.optimizer.create_lhs_samples(
+                    config.n_starts_training_gp,
+                    config.rng,
+                )
+                gp.optimizer.X0 = starting_points
+
+            gp.solve_training_problem()
+
+            if config.save_extended_results:
+                results_gp = ResultsGP(
+                    copy.deepcopy(input_transformer_gp),
+                    copy.deepcopy(output_transformer_gp),
+                    copy.deepcopy(gp),
+                )
+
+            print("Training GP done.")
+
+            # %% Create initial plots
+
+            if config.create_plots and (create_plots is not None):
+                create_plots(
+                    problem,
+                    config,
+                    gp,
+                    input_transformer_gp,
+                    output_transformer_gp,
+                    f_initial,
+                    u_initial,
+                    x_initial,
+                    n_points_initial,
+                    0,
+                )
+
+                print("Plotting done.")
+
+            print(f"\nBO iteration 0/{config.n_iterations_bo} done.\n\n---\n")
+
+            # %% Get additional points of u for the BO loop by latin hypercube sampling
+
+            sampler: scipy.stats.qmc.LatinHypercube = scipy.stats.qmc.LatinHypercube(
+                problem.n_u,
+                rng=config.rng,
+            )
+
+            u_additional: np.ndarray = sampler.random(config.n_iterations_bo)
+            u_additional: np.ndarray = (
+                problem.u_lower_bounds_starting_points.T
+                + (
+                    problem.u_upper_bounds_starting_points.T
+                    - problem.u_lower_bounds_starting_points.T
+                )
+                * u_additional
+            )
+
+            # %% BO loop
+
+            for i_bo in range(config.n_iterations_bo):
                 # %% Get next point
 
                 u_next: np.ndarray = u_additional[[i_bo], :].T
@@ -298,34 +302,34 @@ def do_latin_hypercube_sampling(
                     f"\nBO iteration {i_bo + 1}/{config.n_iterations_bo} done.\n\n---\n",
                 )
 
-            except Exception as e:
-                traceback.print_exc()
+            print(f"BO run {i_run_bo + 1}/{config.n_runs_bo} done.\n\n------\n")
 
-            finally:
-                if config.save_bo_results:
-                    results_bo = ResultsBO(
-                        u_initial,
-                        x_initial,
-                        f_initial,
-                        incumbents_initial,
-                        x_no_noise_initial,
-                        f_no_noise_initial,
-                        incumbents_no_noise_initial,
-                        u[n_points_initial:, :],
-                        x[n_points_initial:, :],
-                        f[n_points_initial:, :],
-                        incumbents[n_points_initial:, :],
-                        x_no_noise[n_points_initial:, :],
-                        f_no_noise[n_points_initial:, :],
-                        incumbents_no_noise[n_points_initial:, :],
-                    )
+        except Exception as e:
+            traceback.print_exc()
 
-                    results_bo_complete.append(results_bo)
+        finally:
+            if config.save_bo_results:
+                results_bo = ResultsBO(
+                    u_initial,
+                    x_initial,
+                    f_initial,
+                    incumbents_initial,
+                    x_no_noise_initial,
+                    f_no_noise_initial,
+                    incumbents_no_noise_initial,
+                    u[n_points_initial:, :],
+                    x[n_points_initial:, :],
+                    f[n_points_initial:, :],
+                    incumbents[n_points_initial:, :],
+                    x_no_noise[n_points_initial:, :],
+                    f_no_noise[n_points_initial:, :],
+                    incumbents_no_noise[n_points_initial:, :],
+                )
 
-                if results_gp is not None:
-                    results_gp_complete.append(results_gp)
+                results_bo_complete.append(results_bo)
 
-        print(f"BO run {i_run_bo + 1}/{config.n_runs_bo} done.\n\n------\n")
+            if results_gp is not None:
+                results_gp_complete.append(results_gp)
 
     # %% Save results
 
