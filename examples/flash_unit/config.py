@@ -70,7 +70,7 @@ def get_gp_hybrid_bo(n_inputs: int) -> GP:
     # Options:
     # ZeroMean(n_inputs)
     # ConstantMean(n_inputs, Parameter(min=-1.0, max=1.0))
-    mean: Mean = ConstantMean(n_inputs, Parameter(min=-1.0, max=1.0))
+    mean: Mean = ZeroMean(n_inputs)
 
     # %% Define optimizer
 
@@ -78,7 +78,10 @@ def get_gp_hybrid_bo(n_inputs: int) -> GP:
     plugin_options: dict[str, Any] = {"print_time": 0}
     solver_options: dict[str, Any] = {"print_level": 0}
     local_optimizer: LocalOptimizer = CasadiOptimizer(
-        "ipopt", "nonlinear", plugin_options, solver_options
+        "ipopt",
+        "nonlinear",
+        plugin_options,
+        solver_options,
     )
     optimizer: Optimizer = MultiStartOptimizer(local_optimizer)
 

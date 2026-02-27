@@ -8,10 +8,6 @@ from hybrid_bo import Config, Problem
 from hybrid_bo.type_aliases import SymbolicType
 
 
-def get_custom_problem(config: Config) -> Problem:
-    return CustomProblem(config)
-
-
 class CustomProblem(Problem):
     def __init__(self, config: Config) -> None:
         self.config: Config = config
@@ -165,6 +161,9 @@ class CustomProblem(Problem):
         use_jacobian: bool = True,
         rng: np.random.Generator | None = None,
     ) -> tuple[float, np.ndarray]:
+        if rng is None:
+            rng = np.random.default_rng()
+
         f_temp: float
         x_temp: np.ndarray
         f_temp, x_temp = self.single_evaluate_with_simulation_original(
@@ -177,7 +176,7 @@ class CustomProblem(Problem):
         f: float
         x: np.ndarray
         if x_temp[0, 0] > self.z_1:
-            x = np.array([self.config.rng.uniform(self.z_1, 1.0), 0.0])[:, np.newaxis]
+            x = np.array([rng.uniform(self.z_1, 1.0), 0.0])[:, np.newaxis]
 
             f = (
                 self.zeta * (self.y_1_set**2)
@@ -201,6 +200,9 @@ class CustomProblem(Problem):
         use_jacobian: bool = True,
         rng: np.random.Generator | None = None,
     ) -> tuple[float, np.ndarray]:
+        if rng is None:
+            rng = np.random.default_rng()
+
         f_temp: float
         x_temp: np.ndarray
 
@@ -217,7 +219,7 @@ class CustomProblem(Problem):
         x: np.ndarray
 
         if x_temp[0, 0] > self.z_1:
-            x = np.array([self.config.rng.uniform(self.z_1, 1.0), 0.0])[:, np.newaxis]
+            x = np.array([rng.uniform(self.z_1, 1.0), 0.0])[:, np.newaxis]
 
             f = (
                 self.zeta * (self.y_1_set**2)
@@ -241,6 +243,9 @@ class CustomProblem(Problem):
         use_jacobian: bool = True,
         rng: np.random.Generator | None = None,
     ) -> tuple[float, np.ndarray, float, np.ndarray]:
+        if rng is None:
+            rng = np.random.default_rng()
+
         f_temp: float
         x_temp: np.ndarray
         f_no_noise_temp: float
@@ -262,7 +267,7 @@ class CustomProblem(Problem):
         x_no_noise: np.ndarray
 
         if x_temp[0, 0] > self.z_1:
-            x = np.array([self.config.rng.uniform(self.z_1, 1.0), 0.0])[:, np.newaxis]
+            x = np.array([rng.uniform(self.z_1, 1.0), 0.0])[:, np.newaxis]
 
             f = (
                 self.zeta * (self.y_1_set**2)
@@ -282,62 +287,5 @@ class CustomProblem(Problem):
         return f, x, f_no_noise, x_no_noise
 
 
-def plot_physical_boundary(
-    problem: CustomProblem,
-    ax: Axes,
-) -> None:
-    # %% Variables to create grid with
-
-    n_eval_points: list[int] = [201, 201]
-
-    T: np.ndarray = np.linspace(
-        problem.u_lower_bounds_acquisition[0],
-        problem.u_upper_bounds_acquisition[0],
-        n_eval_points[0],
-    )
-
-    p: np.ndarray = np.linspace(
-        problem.u_lower_bounds_acquisition[1],
-        problem.u_upper_bounds_acquisition[1],
-        n_eval_points[1],
-    )
-
-    # %% Create grid variables
-
-    T_eval_grid: np.ndarray
-    p_eval_grid: np.ndarray
-    T_eval_grid, p_eval_grid = np.meshgrid(T, p)
-
-    # %% Calculate "flat" variables for evaluation
-
-    u_eval: np.ndarray = np.stack((T_eval_grid.flatten(), p_eval_grid.flatten()), 1)
-    n_eval_points_total: int = u_eval.shape[0]
-
-    f_eval: np.ndarray = np.empty((n_eval_points_total, 1))
-    x_eval: np.ndarray = np.empty((n_eval_points_total, problem.n_x))
-    for i_eval in range(n_eval_points_total):
-        f_eval_current: float
-        x_eval_current: np.ndarray
-        f_eval_current, x_eval_current = (
-            problem.single_evaluate_with_simulation_original(
-                u_eval[[i_eval]].T,
-            )
-        )
-
-        f_eval[i_eval] = f_eval_current
-        x_eval[i_eval] = x_eval_current.flatten()
-
-    # %% Get indices of physical boundary
-
-    indices_boundary: np.ndarray = np.nonzero(
-        (x_eval[:, 0] >= problem.z_1) & (x_eval[:, 0] <= (problem.z_1 + 0.001)),
-    )  # pyright: ignore[reportAssignmentType]
-
-    # %% Get u at physical boundary
-
-    T_plot: np.ndarray = u_eval[indices_boundary, 0].flatten() * 1000
-    p_plot: np.ndarray = u_eval[indices_boundary, 1].flatten()
-
-    # %% Plotting
-
-    ax.plot(T_plot, p_plot, c="k", linewidth=3.0)
+def get_custom_problem(config: Config) -> CustomProblem:
+    return CustomProblem(config)
