@@ -1,4 +1,4 @@
-from .config import (
+from .user_definitions import (
     get_gp_hybrid_bo,
     get_gp_standard_bo,
     get_optimizer_hybrid_bo,
