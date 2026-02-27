@@ -59,12 +59,18 @@ if __name__ == "__main__":
         config,
     )
 
-    create_plots_hybrid_bo: Callable = example_pkg.create_plots_hybrid_bo
-    create_plots_standard_bo: Callable = example_pkg.create_plots_standard_bo
-    create_plots_latin_hypercube_sampling: Callable = (
-        example_pkg.create_plots_latin_hypercube_sampling
-    )
-    create_plots_uniform_sampling: Callable = example_pkg.create_plots_uniform_sampling
+    create_plots_hybrid_bo: Callable | None = None
+    create_plots_standard_bo: Callable | None = None
+    create_plots_latin_hypercube_sampling: Callable | None = None
+    create_plots_uniform_sampling: Callable | None = None
+
+    if config.create_plots:
+        create_plots_hybrid_bob = example_pkg.create_plots_hybrid_bo
+        create_plots_standard_bo = example_pkg.create_plots_standard_bo
+        create_plots_latin_hypercube_sampling = (
+            example_pkg.create_plots_latin_hypercube_sampling
+        )
+        create_plots_uniform_sampling = example_pkg.create_plots_uniform_sampling
 
     match routine:
         case "hybrid_bo":
