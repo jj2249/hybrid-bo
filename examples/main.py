@@ -65,7 +65,7 @@ if __name__ == "__main__":
     create_plots_uniform_sampling: Callable | None = None
 
     if config.create_plots:
-        create_plots_hybrid_bob = example_pkg.create_plots_hybrid_bo
+        create_plots_hybrid_bo = example_pkg.create_plots_hybrid_bo
         create_plots_standard_bo = example_pkg.create_plots_standard_bo
         create_plots_latin_hypercube_sampling = (
             example_pkg.create_plots_latin_hypercube_sampling
