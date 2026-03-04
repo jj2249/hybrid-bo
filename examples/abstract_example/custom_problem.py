@@ -1,6 +1,5 @@
 import casadi as cas
 import numpy as np
-
 from hybrid_bo import Config, Problem
 from hybrid_bo.type_aliases import SymbolicType
 
@@ -15,11 +14,11 @@ def get_custom_problem(config: Config) -> Problem:
     h_known_expression: SymbolicType = x[0] + cas.exp(x[0]) - x[1]
     h_known: cas.Function = cas.Function("h_known", [u, x], [h_known_expression])
 
-    h_unkonwn_expression: SymbolicType = u - x[1]
+    h_unkonwn_expression: SymbolicType = cas.sin(u) - x[1]
     h_unknown: cas.Function = cas.Function("h_unknown", [u, x], [h_unkonwn_expression])
 
-    u_lower_bounds_acquisition: np.ndarray = np.array([[0.0]]).T
-    u_upper_bounds_acquisition: np.ndarray = np.array([[1.0]]).T
+    u_lower_bounds_acquisition: np.ndarray = np.array([[-2.0]]).T
+    u_upper_bounds_acquisition: np.ndarray = np.array([[2.0]]).T
 
     x_lower_bounds_acquisition: np.ndarray = np.array([[-np.inf, -np.inf]]).T
     x_upper_bounds_acquisition: np.ndarray = np.array([[np.inf, np.inf]]).T
@@ -27,8 +26,8 @@ def get_custom_problem(config: Config) -> Problem:
     u_lower_bounds_starting_points: np.ndarray = u_lower_bounds_acquisition.copy()
     u_upper_bounds_starting_points: np.ndarray = u_upper_bounds_acquisition.copy()
 
-    x_lower_bounds_starting_points: np.ndarray = np.array([[0.0, 0.0]]).T
-    x_upper_bounds_starting_points: np.ndarray = np.array([[1.0, 1.0]]).T
+    x_lower_bounds_starting_points: np.ndarray = np.array([[-2.5, -2.0]]).T
+    x_upper_bounds_starting_points: np.ndarray = np.array([[1.0, 2.0]]).T
 
     return Problem(
         f,

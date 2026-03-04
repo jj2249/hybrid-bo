@@ -21,13 +21,9 @@ from hybrid_bo.optimizers import (
     Optimizer,
     SciPyLocalOptimizer,
 )
-from hybrid_bo.parameterization import Parameter
 
 
 def get_u_initial(problem: Problem, config: Config) -> list[np.ndarray]:
-    # u_initial: np.ndarray = np.array([[-3], [-1], [0]])
-    # return [u_initial]
-
     n_initial_points: int = 2
     sampler: qmc.LatinHypercube = qmc.LatinHypercube(
         problem.n_u,
@@ -73,7 +69,7 @@ def get_gp_hybrid_bo(n_inputs: int) -> GP:
     # Options:
     # ZeroMean(n_inputs)
     # ConstantMean(n_inputs, Parameter(min=-1.0, max=1.0))
-    mean: Mean = ConstantMean(n_inputs, Parameter(min=-1.0, max=1.0))
+    mean: Mean = ZeroMean(n_inputs)
 
     # %% Define optimizer
 
