@@ -335,6 +335,9 @@ def do_latin_hypercube_sampling(
 
     # %% Save results
 
+    if not results_dir.exists():
+        results_dir.mkdir(parents=True, exist_ok=True)
+
     if config.save_bo_results:
         path: Path = results_dir / "results_bo.pkl"
         if path.exists():
