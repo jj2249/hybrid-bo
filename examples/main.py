@@ -16,26 +16,16 @@ from hybrid_bo.routines import (
 )
 
 # Options:
-# "forrester"
-# "abstract_example"
+# "illustrative_example"
 # "flash_unit"
-example: str = "abstract_example"
+example: str = "illustrative_example"
 
 # Options:
 # "hybrid_bo"
 # "standard_bo"
 # "latin_hypercube_sampling"
 # "uniform_sampling"
-# "results_comparison"
 routine: str = "hybrid_bo"
-
-# Options:
-# "all"
-# "hybrid_bo"
-# "standard_bo"
-# "latin_hypercube_sampling"
-# "uniform_sampling"
-methods_for_comparison: list[str] = ["all"]
 
 this_dir: Path = Path(__file__).parent.resolve()
 results_dir: Path = this_dir / example
@@ -80,7 +70,7 @@ if __name__ == "__main__":
                 gp_hybrid_bo,
                 u_train_initial_complete,
                 optimizer_hybrid_bo,
-                results_dir,
+                results_dir / "hybrid_bo",
                 create_plots_hybrid_bo,
             )
         case "standard_bo":
@@ -90,7 +80,7 @@ if __name__ == "__main__":
                 gp_standard_bo,
                 u_train_initial_complete,
                 optimizer_standard_bo,
-                results_dir,
+                results_dir / "standard_bo",
                 create_plots_standard_bo,
             )
         case "latin_hypercube_sampling":
@@ -99,7 +89,7 @@ if __name__ == "__main__":
                 config,
                 gp_standard_bo,
                 u_train_initial_complete,
-                results_dir,
+                results_dir / "latin_hypercube_sampling",
                 create_plots_latin_hypercube_sampling,
             )
         case "uniform_sampling":
@@ -108,7 +98,7 @@ if __name__ == "__main__":
                 config,
                 gp_standard_bo,
                 u_train_initial_complete,
-                results_dir,
+                results_dir / "uniform_sampling",
                 create_plots_uniform_sampling,
             )
         case _:
