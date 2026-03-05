@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
@@ -7,7 +6,6 @@ from matplotlib.axes import Axes
 
 from hybrid_bo import GP, Config, Problem
 from hybrid_bo.affine_transformers import AffineTransformer
-from hybrid_bo.array_operations import sample_mean
 
 if TYPE_CHECKING:
     from matplotlib.figure import Figure
@@ -30,6 +28,7 @@ def create_plots(
 ) -> None:
 
     # %% User definitions
+
     original: bool = False
     confidence_level: int = 90
     n_points: list[int] = [101]
@@ -123,13 +122,11 @@ def create_plots(
         u_bo,
         x_bo,
         n_points_initial,
-        i_iteration,
         confidence_level,
     )
 
     plot_f(
         ax[1],
-        config,
         u,
         f,
         f_samples,
@@ -137,10 +134,9 @@ def create_plots(
         f_bo,
         n_points_initial,
         confidence_level,
-        i_iteration,
     )
 
-    plot_acq(ax[2], config, u, f_samples, f_bo, i_iteration)
+    plot_acq(ax[2], config, u, f_samples, f_bo)
 
     ax[0].legend(
         ncols=2,
@@ -167,7 +163,6 @@ def plot_gp(
     u_bo: np.ndarray,
     x_bo: np.ndarray,
     n_points_initial: int,
-    i_iteration: int,
     confidence_level: int,
 ) -> None:
 
@@ -229,7 +224,6 @@ def plot_gp(
 
 def plot_f(
     ax: Axes,
-    config: Config,
     u: np.ndarray,
     f: np.ndarray,
     f_samples: np.ndarray,
@@ -237,7 +231,6 @@ def plot_f(
     f_bo: np.ndarray,
     n_points_initial: int,
     confidence_level: int,
-    i_iteration: int,
 ) -> None:
     # %% Get sample mean and confidence interval bounds
 
@@ -289,7 +282,6 @@ def plot_acq(
     u: np.ndarray,
     f_samples: np.ndarray,
     f_bo: np.ndarray,
-    i_iteration: int,
 ) -> None:
     incumbent: float = np.min(f_bo)
 

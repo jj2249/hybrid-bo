@@ -8,7 +8,7 @@ from .plot_functions_latin_hypercube_sampling import (
     create_plots as latin_hypercube_sampling_create_plots,
 )
 
-plt.rcParams["text.usetex"] = True
+# plt.rcParams["text.usetex"] = True
 
 
 def create_plots(
@@ -20,7 +20,7 @@ def create_plots(
     f: np.ndarray,
     u: np.ndarray,
     x: np.ndarray,
-    n_initial_points: int,
+    n_points_initial: int,
     i_iteration: int,
 ) -> None:
     latin_hypercube_sampling_create_plots(
@@ -32,6 +32,6 @@ def create_plots(
         f,
         u,
         x,
-        n_initial_points,
+        n_points_initial,
         i_iteration,
     )
