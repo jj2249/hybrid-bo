@@ -3,6 +3,7 @@ authors = [
     { name = "Luis Kutschat", email = "luis.kutschat@avt.rwth-aachen.de" },
     { name = "Eike Cramer", email = "e.cramer@ucl.ac.uk" },
     { name = "Joel Paulson", email = "joel.paulson@wisc.edu" },
+    { name = "Alexander Mitsos", email = "alexander.Mitsos@avt.rwth-aachen.de" },
 ]
 dependencies = [
     "casadi>=3.7.2,<4",
@@ -38,8 +39,9 @@ python = "3.12.*"
 default = { solve-group = "default" }
 docs = { features = ["docs"], solve-group = "default" }
 examples = { features = ["examples"], solve-group = "default" }
-dev = { features = ["examples", "docs"], solve-group = "default" }
+dev = { features = ["dev"], solve-group = "default" }
 
 [dependency-groups]
 docs = ["sphinx", "sphinx-autoapi", "furo"]
 examples = ["matplotlib"]
+dev = [{ include-group = "docs" }, { include-group = "examples" }]

@@ -386,7 +386,7 @@ packages:
 - pypi: ./
   name: hybrid-bo
   version: 0.1.0
-  sha256: 9d9c3038d5c7403df62409f8622ee35691c81c1137d4792ec65194e425aa182d
+  sha256: dafab607ec63f461280c7c71fa13068da2fa959b455652f41e1af8c359bfafff
   requires_dist:
   - casadi>=3.7.2,<4
   - numpy>=2.4.1,<3
