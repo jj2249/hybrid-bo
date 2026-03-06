@@ -1,0 +1,16 @@
+This project depends on the following third-party packages.
+They are installed separately and remain under their respective licenses.
+
+Runtime dependencies:
+
+CasADi: LGPL-3.0 license (https://github.com/casadi/casadi/blob/main/LICENSE.txt)
+- NumPy: BSD-3-Clause license (https://github.com/numpy/numpy/blob/main/LICENSE.txt)
+- SciPy: BSD-3-Clause license (https://github.com/scipy/scipy/blob/main/LICENSE.txt)
+- PyYAML: MIT license (https://github.com/yaml/pyyaml/blob/main/LICENSE)
+
+Optional dependencies:
+
+- matplotlib: Matplotlib license, based on PSF license (https://github.com/matplotlib/matplotlib/blob/main/LICENSE/LICENSE)
+- Sphinx: BSD-2-Clause license (https://github.com/sphinx-doc/sphinx/blob/master/LICENSE.rst)
+- Sphinx AutoAPI: MIT license (https://github.com/readthedocs/sphinx-autoapi/blob/main/LICENSE.rst)
+- Furo: MIT license (https://github.com/pradyunsg/furo/blob/main/LICENSE)
