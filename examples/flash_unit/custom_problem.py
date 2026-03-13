@@ -2,7 +2,6 @@ from typing import override
 
 import casadi as cas
 import numpy as np
-from matplotlib.axes import Axes
 
 from hybrid_bo import Config, Problem
 from hybrid_bo.type_aliases import SymbolicType
@@ -162,7 +161,7 @@ class CustomProblem(Problem):
         rng: np.random.Generator | None = None,
     ) -> tuple[float, np.ndarray]:
         if rng is None:
-            rng = np.random.default_rng()
+            rng = self.config.rng
 
         f_temp: float
         x_temp: np.ndarray
@@ -201,7 +200,7 @@ class CustomProblem(Problem):
         rng: np.random.Generator | None = None,
     ) -> tuple[float, np.ndarray]:
         if rng is None:
-            rng = np.random.default_rng()
+            rng = self.config.rng
 
         f_temp: float
         x_temp: np.ndarray
@@ -244,7 +243,7 @@ class CustomProblem(Problem):
         rng: np.random.Generator | None = None,
     ) -> tuple[float, np.ndarray, float, np.ndarray]:
         if rng is None:
-            rng = np.random.default_rng()
+            rng = self.config.rng
 
         f_temp: float
         x_temp: np.ndarray
