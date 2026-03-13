@@ -3,7 +3,7 @@ import numpy as np
 import scipy
 import scipy.optimize
 
-from hybrid_bo.optimizers import MultiStartOptimizer, Optimizer, OptimizationResult
+from hybrid_bo.optimizers import MultiStartOptimizer, OptimizationResult, Optimizer
 from hybrid_bo.type_aliases import SymbolicType
 
 
@@ -306,6 +306,7 @@ class Problem:
 
         if u.shape[1] != self.n_u:
             msg: str = "u.shape[1] != self.n_u"
+            raise Exception(msg)
 
         if measurement_noise.shape[1] != len(indices_x_measured):
             msg: str = "measurement_noise.shape[1] != len(indices_x_measured)"
