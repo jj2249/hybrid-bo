@@ -5,12 +5,7 @@ authors = [
     { name = "Joel Paulson", email = "joel.paulson@wisc.edu" },
     { name = "Alexander Mitsos", email = "alexander.Mitsos@avt.rwth-aachen.de" },
 ]
-dependencies = [
-    "casadi>=3.7.2,<4",
-    "numpy>=2.4.1,<3",
-    "scipy>=1.15",
-    "pyyaml>=6.0.3,<7",
-]
+dependencies = ["casadi>=3.7.2,<4", "numpy>=2.4.1,<3", "scipy>=1.15"]
 name = "hybrid-bo"
 requires-python = ">= 3.12"
 version = "0.1.0"
@@ -38,5 +33,5 @@ dev = { features = ["dev"], solve-group = "default" }
 
 [dependency-groups]
 docs = ["sphinx", "sphinx-autoapi", "furo"]
-examples = ["matplotlib"]
+examples = ["pyyaml", "matplotlib"]
 dev = [{ include-group = "docs" }, { include-group = "examples" }]

@@ -26,7 +26,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/vcomp14-14.44.35208-h818238b_32.conda
       - pypi: https://files.pythonhosted.org/packages/3e/b9/5b984124f539656efdf079f3d8f09d73667808ec8d0546e6bce6dc60ade6/casadi-3.7.2-cp312-none-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/92/0f/7ceaaeaacb40567071e94dbf2c9480c0ae453d5bb4f52bea3892c39dc83c/numpy-2.4.2-cp312-cp312-win_amd64.whl
-      - pypi: https://files.pythonhosted.org/packages/86/bf/899e81e4cce32febab4fb42bb97dcdf66bc135272882d1987881a4b519e9/pyyaml-6.0.3-cp312-cp312-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/92/ce/672ed546f96d5d41ae78c4b9b02006cedd0b3d6f2bf5bb76ea455c320c28/scipy-1.17.0-cp312-cp312-win_amd64.whl
       - pypi: ./
   dev:
@@ -386,12 +385,11 @@ packages:
 - pypi: ./
   name: hybrid-bo
   version: 0.1.0
-  sha256: 05adfd0e8ae44ada13fa9cf9fb1858967620ca4b75e0287b2aa6ad6a48819e88
+  sha256: 347a65020677f1e12c76f6f5d891680ec291a0ab6217df0845a7d89af29732cf
   requires_dist:
   - casadi>=3.7.2,<4
   - numpy>=2.4.1,<3
   - scipy>=1.15
-  - pyyaml>=6.0.3,<7
   requires_python: '>=3.12'
 - pypi: https://files.pythonhosted.org/packages/0e/61/66938bbb5fc52dbdf84594873d5b51fb1f7c7794e9c0f5bd885f30bc507b/idna-3.11-py3-none-any.whl
   name: idna
