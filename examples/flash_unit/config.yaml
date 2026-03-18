@@ -8,7 +8,7 @@ seed: 0
 ## General
 
 # Configure if plots are supposed to be created, bool
-create_plots: True
+create_plots: False
 
 # Configure if results are supposed to be saved, bool
 save_bo_results: True
@@ -18,7 +18,7 @@ save_extended_results: True
 n_runs_bo: 1
 
 # Number of Bayesian optimization iterations, int
-n_iterations_bo: 1
+n_iterations_bo: 5
 
 # Configure which acquisition problem formulation to use, str, alternatives: "lcb", "ei"
 formulation_acq: "ei"
@@ -27,7 +27,7 @@ formulation_acq: "ei"
 n_starts_acq_optimization: 10
 
 # Number of GP samples used in the acquisition problem, int
-n_samples_gp: 50
+n_samples_gp: 25
 
 ## Acquisition problem formulation specific
 

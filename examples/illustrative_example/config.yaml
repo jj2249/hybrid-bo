@@ -1,7 +1,7 @@
 # %% General
 
 # int | null
-seed: 0
+seed: null
 
 # %% BO
 
@@ -18,7 +18,7 @@ save_extended_results: True
 n_runs_bo: 1
 
 # Number of Bayesian optimization iterations, int
-n_iterations_bo: 1
+n_iterations_bo: 5
 
 # Configure which acquisition problem formulation to use, str, alternatives: "lcb", "ei"
 formulation_acq: "ei"
@@ -58,7 +58,7 @@ indices_x_input_gp: []
 indices_x_output_gp: [1]
 
 # Number of starting points the training of the GP is executed with, int
-n_starts_training_gp: 100
+n_starts_training_gp: 10
 
 # Indices of the elements of x that are measured, list[int]
 indices_x_measured: [1]
