@@ -30,11 +30,6 @@ platforms = ["win-64"]
 [tool.pixi.pypi-dependencies]
 hybrid_bo = { path = ".", editable = true }
 
-[tool.pixi.tasks]
-
-[tool.pixi.dependencies]
-python = "3.12.*"
-
 [tool.pixi.environments]
 default = { solve-group = "default" }
 docs = { features = ["docs"], solve-group = "default" }
