@@ -1,0 +1,290 @@
+from typing import override
+
+import casadi as cas
+import numpy as np
+
+from hybrid_bo import Config, Problem
+from hybrid_bo.type_aliases import SymbolicType
+
+
+class CustomProblem(Problem):
+    def __init__(self, config: Config) -> None:
+        self.config: Config = config
+
+        # %% Parameters
+
+        self.F: float = 1.0  # Feed stream flow rate (mol/s)
+        self.D: float = 0.3  # Top stream flow rate (mol/s)
+        self.z_1: float = 0.5  # Mole Fraction CH3COOH of Feed Stream (-)
+
+        # Antoine Coefficient A of H2O, to p in Pa and T in Kelvin (-)
+        self.A_1: float = 10.19590302
+        # Antoine Coefficient B of H2O, to p in Pa and T in Kelvin (-)
+        self.B_1: float = 1730.6
+        # Antoine Coefficient C of H2O, to p in Pa and T in Kelvin (-)
+        self.C_1: float = -39.75
+
+        self.a_12: float = 2.28422  # NRTL Aspen Parameter aij of H20, CH3COOH (-)
+        self.a_21: float = -1.56707  # NRTL Aspen Parameter aji of CH3COOH, H2O (-)
+        self.b_12: float = -478.146  # NRTL Aspen Parameter bij of H2O, CH3COOH (K)
+        self.b_21: float = 542.84  # NRTL Aspen Parameter bji of CH3COOH, H2O (K)
+        self.c_12: float = 0.373484  # NRTL Aspen Parameter cij of H2O, CH3COOH (-)
+        self.c_21: float = 0.373484  # NRTL Aspen Parameter cji of CH3COOH, H2O (-)
+        self.d_12: float = 0.0  # NRTL Aspen Parameter dij of H2O, CH3COOH (1/K)
+        self.d_21: float = 0.0  # NRTL Aspen Parameter dji of CH3COOH, H2O (1/K)
+        self.e_12: float = 0.0  # NRTL Aspen Parameter eij of H2O, CH3COOH (-)
+        self.e_21: float = 0.0  # NRTL Aspen Parameter eji of CH3COOH, H2O (-)
+        self.f_12: float = 0.0  # NRTL Aspen Parameter fij of H2O, CH3COOH (-)
+        self.f_21: float = 0.0  # NRTL Aspen Parameter fji of CH3COOH, H2O (-)
+        self.zeta: float = 100  # Violation of purity cost ($)
+        self.beta: float = 0.000001  # Mixture heating cost ($/K^2)
+        self.eta: float = 0.5  # Mixture energy/pressure cost ($/bar^2)
+        self.y_1_set: float = 0.66  # Desired H2O fraction in top stream (-)
+        self.p_amb: float = 1.01325  # Ambient pressure (bar)
+
+        # %% u, x and their bounds
+
+        T: SymbolicType = SymbolicType.sym("T", 1, 1)  # pyright: ignore[reportArgumentType] # Temperature in the flash unit (1000 * K)
+        p: SymbolicType = SymbolicType.sym("p", 1, 1)  # pyright: ignore[reportArgumentType] # Pressure in the flash unit (bar)
+
+        u: SymbolicType = cas.vertcat(T, p)  # pyright: ignore[reportAssignmentType]
+
+        T_lower_bound: float = 363.15 / 1000
+        T_upper_bound: float = 403.15 / 1000
+        p_lower_bound: float = 0.8
+        p_upper_bound: float = 2.6
+
+        u_lower_bounds_acquisition: np.ndarray = np.array(
+            [[T_lower_bound, p_lower_bound]],
+        ).T
+        u_upper_bounds_acquisition: np.ndarray = np.array(
+            [[T_upper_bound, p_upper_bound]],
+        ).T
+
+        u_lower_bounds_starting_points: np.ndarray = u_lower_bounds_acquisition.copy()
+        u_upper_bounds_starting_points: np.ndarray = u_upper_bounds_acquisition.copy()
+
+        x_1: SymbolicType = SymbolicType.sym("x_1", 1, 1)  # pyright: ignore[reportArgumentType] # Mole Fraction of H2O in bottom Stream (-)
+        gamma_1_ln: SymbolicType = SymbolicType.sym("gamma_1_ln", 1, 1)  # pyright: ignore[reportArgumentType] # Activation coefficient (-)
+
+        x: SymbolicType = cas.vertcat(x_1, gamma_1_ln)  # pyright: ignore[reportAssignmentType]
+
+        x_lower_bounds_acquisition: np.ndarray = np.array([[-np.inf, -np.inf]]).T
+        x_upper_bounds_acquisition: np.ndarray = np.array([[np.inf, np.inf]]).T
+
+        x_1_lower_bound_starting_points: float = 0.0
+        x_1_upper_bound_starting_points: float = 1.0
+        gamma_1_ln_lower_bound_starting_points: float = np.log(0.5)
+        gamma_1_ln_upper_bound_starting_points: float = np.log(2.0)
+
+        x_lower_bounds_starting_points: np.ndarray = np.array(
+            [[x_1_lower_bound_starting_points, gamma_1_ln_lower_bound_starting_points]],
+        ).T
+        x_upper_bounds_starting_points: np.ndarray = np.array(
+            [[x_1_upper_bound_starting_points, gamma_1_ln_upper_bound_starting_points]],
+        ).T
+
+        # %% Helper variables
+
+        B: float = self.F - self.D
+        y_1: SymbolicType = (self.F * self.z_1 - B * x_1) / self.D
+        x_2: SymbolicType = 1 - x_1  # (-)
+        p_1_sat: SymbolicType = (
+            cas.power(10, self.A_1 - self.B_1 / (self.C_1 + T * 1000)) / 1e5  # (bar)
+        )
+        tau_12: SymbolicType = self.a_12 + self.b_12 / (T * 1000)  # (-)
+        tau_21: SymbolicType = self.a_21 + self.b_21 / (T * 1000)  # (-)
+        alpha_12: SymbolicType = self.c_12 + self.d_12 * (T * 1000 - 273.15)  # (-)
+        alpha_21: SymbolicType = self.c_21 + self.d_21 * (T * 1000 - 273.15)  # (-)
+        G_12: SymbolicType = cas.exp(-alpha_12 * tau_12)  # (-)
+        G_21: SymbolicType = cas.exp(-alpha_21 * tau_21)  # (-)
+
+        # %% f, h and g
+
+        f_expression: SymbolicType = (
+            self.zeta * ((y_1 - self.y_1_set) ** 2)
+            + self.beta * ((1000 * T) ** 2)
+            + self.eta * ((p - self.p_amb) ** 2)
+        )
+        f: cas.Function = cas.Function("f", [u, x], [f_expression])
+
+        h_known_expression: list[SymbolicType] = [
+            p * y_1 - p_1_sat * x_1 * cas.exp(gamma_1_ln),
+        ]
+
+        h_known: cas.Function = cas.Function(
+            "h_known",
+            [u, x],
+            [cas.vertcat(*h_known_expression)],
+        )
+
+        h_unknown_expression: SymbolicType = gamma_1_ln - x_2**2 * (
+            tau_21 * (G_21 / (x_1 + x_2 * G_21)) ** 2
+            + ((tau_12 * G_12) / (x_2 + x_1 * G_12) ** 2)
+        )
+
+        h_unknown: cas.Function = cas.Function(
+            "h_unknown",
+            [u, x],
+            [h_unknown_expression],
+        )
+
+        # %% Base class constructor
+
+        super().__init__(
+            f,
+            h_known,
+            h_unknown,
+            u_lower_bounds_acquisition,
+            u_upper_bounds_acquisition,
+            x_lower_bounds_acquisition,
+            x_upper_bounds_acquisition,
+            u_lower_bounds_starting_points,
+            u_upper_bounds_starting_points,
+            x_lower_bounds_starting_points,
+            x_upper_bounds_starting_points,
+        )
+
+        if self.n_u != self.config.n_u:
+            msg: str = "self.n_u != self.config.n_u"
+            raise Exception(msg)
+        if self.n_x != self.config.n_x:
+            msg: str = "self.n_x != self.config.n_x"
+            raise Exception(msg)
+
+    @override
+    def single_evaluate_with_simulation(
+        self,
+        u: np.ndarray,
+        n_starts_max: int = 100,
+        use_jacobian: bool = True,
+        rng: np.random.Generator | None = None,
+    ) -> tuple[float, np.ndarray]:
+        if rng is None:
+            rng = self.config.rng
+
+        f_temp: float
+        x_temp: np.ndarray
+        f_temp, x_temp = self.single_evaluate_with_simulation_original(
+            u,
+            n_starts_max,
+            use_jacobian,
+            rng,
+        )
+
+        f: float
+        x: np.ndarray
+        if x_temp[0, 0] > self.z_1:
+            x = np.array([rng.uniform(self.z_1, 1.0), 0.0])[:, np.newaxis]
+
+            f = (
+                self.zeta * (self.y_1_set**2)
+                + self.beta * ((1000 * u[0, 0]) ** 2)
+                + self.eta * ((u[1, 0] - self.p_amb) ** 2)
+            )
+
+        else:
+            f = f_temp
+            x = x_temp
+
+        return f, x
+
+    @override
+    def single_evaluate_with_fixed_x(
+        self,
+        u: np.ndarray,
+        x_fixed: np.ndarray,
+        indices_x_fixed: list[int],
+        n_starts_max: int = 100,
+        use_jacobian: bool = True,
+        rng: np.random.Generator | None = None,
+    ) -> tuple[float, np.ndarray]:
+        if rng is None:
+            rng = self.config.rng
+
+        f_temp: float
+        x_temp: np.ndarray
+
+        f_temp, x_temp = self.single_evaluate_with_fixed_x_original(
+            u,
+            x_fixed,
+            indices_x_fixed,
+            n_starts_max,
+            use_jacobian,
+            rng,
+        )
+
+        f: float
+        x: np.ndarray
+
+        if x_temp[0, 0] > self.z_1:
+            x = np.array([rng.uniform(self.z_1, 1.0), 0.0])[:, np.newaxis]
+
+            f = (
+                self.zeta * (self.y_1_set**2)
+                + self.beta * ((1000 * u[0, 0]) ** 2)
+                + self.eta * ((u[1, 0] - self.p_amb) ** 2)
+            )
+
+        else:
+            f = f_temp
+            x = x_temp
+
+        return f, x
+
+    @override
+    def single_evaluate_with_noisy_simulation(
+        self,
+        u: np.ndarray,
+        measurement_noise: np.ndarray,
+        indices_x_measured: list[int],
+        n_starts_max: int = 100,
+        use_jacobian: bool = True,
+        rng: np.random.Generator | None = None,
+    ) -> tuple[float, np.ndarray, float, np.ndarray]:
+        if rng is None:
+            rng = self.config.rng
+
+        f_temp: float
+        x_temp: np.ndarray
+        f_no_noise_temp: float
+        x_no_noise_temp: np.ndarray
+
+        f_temp, x_temp, f_no_noise_temp, x_no_noise_temp = (
+            self.single_evaluate_with_noisy_simulation_original(
+                u,
+                measurement_noise,
+                indices_x_measured,
+                n_starts_max,
+                use_jacobian,
+            )
+        )
+
+        f: float
+        x: np.ndarray
+        f_no_noise: float
+        x_no_noise: np.ndarray
+
+        if x_temp[0, 0] > self.z_1:
+            x = np.array([rng.uniform(self.z_1, 1.0), 0.0])[:, np.newaxis]
+
+            f = (
+                self.zeta * (self.y_1_set**2)
+                + self.beta * ((1000 * u[0, 0]) ** 2)
+                + self.eta * ((u[1, 0] - self.p_amb) ** 2)
+            )
+
+            f_no_noise = f
+            x_no_noise = x
+
+        else:
+            f = f_temp
+            x = x_temp
+            f_no_noise = f_no_noise_temp
+            x_no_noise = x_no_noise_temp
+
+        return f, x, f_no_noise, x_no_noise
+
+
+def get_custom_problem(config: Config) -> CustomProblem:
+    return CustomProblem(config)

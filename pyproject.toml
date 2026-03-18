@@ -1,0 +1,37 @@
+[project]
+authors = [
+    { name = "Luis Kutschat", email = "luis.kutschat@avt.rwth-aachen.de" },
+    { name = "Eike Cramer", email = "e.cramer@ucl.ac.uk" },
+    { name = "Joel Paulson", email = "joel.paulson@wisc.edu" },
+    { name = "Alexander Mitsos", email = "alexander.Mitsos@avt.rwth-aachen.de" },
+]
+dependencies = ["casadi>=3.7.2,<4", "numpy>=2.4.1,<3", "scipy>=1.15"]
+name = "hybrid-bo"
+requires-python = ">= 3.12"
+version = "0.1.0"
+description = "A package for performing hybrid Bayesian optimization"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+
+[build-system]
+build-backend = "hatchling.build"
+requires = ["hatchling"]
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["win-64"]
+
+[tool.pixi.pypi-dependencies]
+hybrid_bo = { path = ".", editable = true }
+
+[tool.pixi.environments]
+default = { solve-group = "default" }
+docs = { features = ["docs"], solve-group = "default" }
+examples = { features = ["examples"], solve-group = "default" }
+dev = { features = ["dev"], solve-group = "default" }
+
+[dependency-groups]
+docs = ["sphinx", "sphinx-autoapi", "furo"]
+examples = ["pyyaml", "matplotlib"]
+dev = [{ include-group = "docs" }, { include-group = "examples" }]
