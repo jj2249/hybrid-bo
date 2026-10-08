@@ -20,7 +20,7 @@ requires = ["hatchling"]
 
 [tool.pixi.workspace]
 channels = ["conda-forge"]
-platforms = ["win-64"]
+platforms = ["win-64", "osx-arm64"]
 
 [tool.pixi.pypi-dependencies]
 hybrid_bo = { path = ".", editable = true }
@@ -31,7 +31,13 @@ docs = { features = ["docs"], solve-group = "default" }
 examples = { features = ["examples"], solve-group = "default" }
 dev = { features = ["dev"], solve-group = "default" }
 
+[tool.pixi.feature.dev.dependencies]
+ruff = ">=0.16.10,<0.17"
+
 [dependency-groups]
 docs = ["sphinx", "sphinx-autoapi", "furo"]
 examples = ["pyyaml", "matplotlib"]
 dev = [{ include-group = "docs" }, { include-group = "examples" }]
+
+[tool.ruff]
+include = ["src", "examples"]
