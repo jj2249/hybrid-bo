@@ -40,4 +40,4 @@ examples = ["pyyaml", "matplotlib"]
 dev = [{ include-group = "docs" }, { include-group = "examples" }]
 
 [tool.ruff]
-include = ["src", "examples"]
+extend-exclude = [".pixi"]
