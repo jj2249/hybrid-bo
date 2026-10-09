@@ -6,40 +6,28 @@ from hybrid_bo.type_aliases import SymbolicType
 
 
 def get_custom_problem(config: Config) -> Problem:
-    u: SymbolicType = SymbolicType.sym("u", config.n_u, 1)  # pyright: ignore[reportArgumentType]
-    x: SymbolicType = SymbolicType.sym("x", config.n_x, 1)  # pyright: ignore[reportArgumentType]
+    u = SymbolicType.sym("u", config.n_u, 1)
+    x = SymbolicType.sym("x", config.n_x, 1)
 
-    f_expression: SymbolicType = (6 * x[0] - 2) ** 2 * cas.sin(12 * x[0] - 4)
-    f: cas.Function = cas.Function("f", [u, x], [f_expression])
+    # Objective and constraint functions
+    f = cas.Function("f", [u, x], [(6 * x[0] - 2) ** 2 * cas.sin(12 * x[0] - 4)])
+    h_known = cas.Function("h_known", [u, x], [x[0] + cas.exp(x[0]) - x[1]])
+    h_unknown = cas.Function("h_unknown", [u, x], [cas.sin(u) - x[1]])
 
-    h_known_expression: SymbolicType = x[0] + cas.exp(x[0]) - x[1]
-    h_known: cas.Function = cas.Function("h_known", [u, x], [h_known_expression])
+    # Acquisition bounds (lower, upper)
+    u_acq = np.array([[-2.0]]), np.array([[2.0]])
+    x_acq = np.array([[-np.inf], [-np.inf]]), np.array([[np.inf], [np.inf]])
 
-    h_unkonwn_expression: SymbolicType = cas.sin(u) - x[1]
-    h_unknown: cas.Function = cas.Function("h_unknown", [u, x], [h_unkonwn_expression])
-
-    u_lower_bounds_acquisition: np.ndarray = np.array([[-2.0]]).T
-    u_upper_bounds_acquisition: np.ndarray = np.array([[2.0]]).T
-
-    x_lower_bounds_acquisition: np.ndarray = np.array([[-np.inf, -np.inf]]).T
-    x_upper_bounds_acquisition: np.ndarray = np.array([[np.inf, np.inf]]).T
-
-    u_lower_bounds_starting_points: np.ndarray = u_lower_bounds_acquisition.copy()
-    u_upper_bounds_starting_points: np.ndarray = u_upper_bounds_acquisition.copy()
-
-    x_lower_bounds_starting_points: np.ndarray = np.array([[-2.5, -2.0]]).T
-    x_upper_bounds_starting_points: np.ndarray = np.array([[1.0, 2.0]]).T
+    # Starting point bounds (lower, upper)
+    u_sp = u_acq
+    x_sp = np.array([[-2.5], [-2.0]]), np.array([[1.0], [2.0]])
 
     return Problem(
         f,
         h_known,
         h_unknown,
-        u_lower_bounds_acquisition,
-        u_upper_bounds_acquisition,
-        x_lower_bounds_acquisition,
-        x_upper_bounds_acquisition,
-        u_lower_bounds_starting_points,
-        u_upper_bounds_starting_points,
-        x_lower_bounds_starting_points,
-        x_upper_bounds_starting_points,
+        *u_acq,
+        *x_acq,
+        *u_sp,
+        *x_sp,
     )

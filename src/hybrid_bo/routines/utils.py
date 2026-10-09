@@ -4,10 +4,7 @@ import casadi as cas
 import numpy as np
 import scipy
 
-from hybrid_bo.affine_transformers import AffineTransformer
 from hybrid_bo.config import Config
-from hybrid_bo.gp import GP
-from hybrid_bo.problem import Problem
 from hybrid_bo.type_aliases import CasadiType
 
 

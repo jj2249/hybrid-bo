@@ -6,20 +6,15 @@ from scipy.stats import qmc
 from hybrid_bo import GP, Config, Problem
 from hybrid_bo.kernels import (
     Kernel,
-    LinearKernel,
-    Matern12Kernel,
-    Matern32Kernel,
     Matern52Kernel,
     OutputScaleKernel,
-    RBFKernel,
 )
-from hybrid_bo.means import ConstantMean, Mean, ZeroMean
+from hybrid_bo.means import Mean, ZeroMean
 from hybrid_bo.optimizers import (
     CasadiOptimizer,
     LocalOptimizer,
     MultiStartOptimizer,
     Optimizer,
-    SciPyLocalOptimizer,
 )
 
 
