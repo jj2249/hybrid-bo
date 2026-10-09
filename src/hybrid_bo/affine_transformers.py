@@ -49,7 +49,6 @@ class AffineTransformer:
 
     def fit(self, X: np.ndarray) -> None:
         """Does nothing. Should be implemented for subclasses."""
-        ...
 
     @overload
     def transform(self, X: cas.SX) -> cas.SX: ...

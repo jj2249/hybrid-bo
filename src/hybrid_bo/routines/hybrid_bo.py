@@ -361,7 +361,7 @@ def do_hybrid_bo(
 
             print(f"BO run {i_run_bo + 1}/{config.n_runs_bo} done.\n\n------\n")
 
-        except Exception as e:
+        except Exception:
             traceback.print_exc()
 
         finally:

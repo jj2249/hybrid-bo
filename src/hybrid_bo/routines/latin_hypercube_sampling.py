@@ -306,7 +306,7 @@ def do_latin_hypercube_sampling(
 
             print(f"BO run {i_run_bo + 1}/{config.n_runs_bo} done.\n\n------\n")
 
-        except Exception as e:
+        except Exception:
             traceback.print_exc()
 
         finally:

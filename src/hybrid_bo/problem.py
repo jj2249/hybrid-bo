@@ -104,7 +104,7 @@ class Problem:
             msg: str = "self.f.size_out(0) != (1, 1)"
             raise Exception(msg)
 
-        if self.h_known.n_in() != 2:  # noqa: PLR2004
+        if self.h_known.n_in() != 2:
             msg: str = "self.h_known.n_in() != 2"
             raise Exception(msg)
         if self.h_known.n_out() != 1:
@@ -121,7 +121,7 @@ class Problem:
             msg: str = "self.h_known.size_out(0) != (self.n_h, 1)"
             raise Exception(msg)
 
-        if self.h_unknown.n_in() != 2:  # noqa: PLR2004
+        if self.h_unknown.n_in() != 2:
             msg: str = "self.h_unknown.n_in() != 2"
             raise Exception(msg)
         if self.h_unknown.n_out() != 1:

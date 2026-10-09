@@ -6,7 +6,6 @@ from matplotlib.axes import Axes
 
 from hybrid_bo import GP, Config, Problem
 from hybrid_bo.affine_transformers import AffineTransformer
-from hybrid_bo.routines.utils import ei_gp
 
 if TYPE_CHECKING:
     from matplotlib.figure import Figure
