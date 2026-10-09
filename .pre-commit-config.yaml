@@ -1,0 +1,20 @@
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: Ruff lint
+        entry: pixi run -e quality lint
+        language: system
+        types: [python]
+
+      - id: ruff-format
+        name: Ruff format
+        entry: pixi run -e quality format
+        language: system
+        types: [python]
+
+      - id: ty
+        name: ty type check
+        entry: pixi run -e quality typecheck
+        language: system
+        pass_filenames: false

@@ -1,8 +1,8 @@
 import traceback
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import Any, override
 from dataclasses import dataclass
+from typing import Any, override
 
 import casadi as cas
 import numpy as np
@@ -292,7 +292,7 @@ class CasadiOptimizer(LocalOptimizer):
             if self.h is not None:
                 h_opt = self.h(x_opt).full()  # pyright: ignore[reportAttributeAccessIssue, reportOptionalMemberAccess]
 
-        except Exception as e:
+        except Exception:
             traceback.print_exc()
             return None
 
@@ -561,7 +561,7 @@ class SciPyLocalOptimizer(LocalOptimizer):
             if self.h is not None:
                 h_opt = self.h(x_opt).full()  # pyright: ignore[reportAttributeAccessIssue, reportOptionalMemberAccess]
 
-        except Exception as e:
+        except Exception:
             traceback.print_exc()
             return None
 
