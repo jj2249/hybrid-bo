@@ -27,9 +27,9 @@ platforms = ["win-64", "osx-arm64"]
 hybrid_bo = { path = ".", editable = true }
 
 [tool.pixi.feature.quality.dependencies]
-ruff = "*"
-ty = "*"
-pre-commit = "*"
+ruff = ">=0.16.10,<0.17"
+ty = ">=0.0.85,<0.0.86"
+pre-commit = ">=4.6.2,<5"
 
 [tool.pixi.feature.quality.tasks]
 lint = "ruff check --fix"
@@ -40,16 +40,16 @@ setup-hooks = "pre-commit install"
 setup = { depends-on = ["setup-hooks"] }
 
 [tool.pixi.feature.docs.dependencies]
-sphinx = "*"
-sphinx-autoapi = "*"
-furo = "*"
+sphinx = ">=9.1.0,<10"
+sphinx-autoapi = ">=3.8.1,<4"
+furo = ">=2025.12.19,<2026"
 
 [tool.pixi.feature.docs.tasks]
 docs = "sphinx-build -b html docs docs/_build/html"
 
 [tool.pixi.feature.examples.dependencies]
-matplotlib = "*"
-pyyaml = "*"
+matplotlib = ">=3.11.2,<4"
+pyyaml = ">=6.0.3,<7"
 
 [tool.pixi.environments]
 default = { solve-group = "default" }
