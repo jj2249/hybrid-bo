@@ -30,3 +30,7 @@ examples/*/uniform_sampling/
 
 # Personal Claude Code settings (shared skills in .claude/skills are committed)
 .claude/settings.local.json
+
+# Coverage data
+.coverage
+htmlcov/
