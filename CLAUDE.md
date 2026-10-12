@@ -9,9 +9,11 @@ sampling are included as baselines.
 
 ## Goal of the refactor
 
-Make the code easier to work with: clearer, more readable and more concise.
-Each change should reduce complexity or leave it unchanged, never add to it.
-Prefer deleting code over adding abstractions, and keep tests and tooling minimal.
+Make the code easier to read, change and extend, so the library can scale. More
+advanced constructs are fine when they make things clearer at the point of use,
+e.g. grouping related arguments (`f(x, x_bounds)` instead of
+`f(x, x_lower, x_upper)`). Avoid complexity that doesn't serve that, such as
+abstractions with a single use or boilerplate from static languages.
 The `flash_unit` example is out of scope for the refactor; leave it alone.
 
 The roadmap is in [ROADMAP.md](ROADMAP.md). Check it before starting work, and

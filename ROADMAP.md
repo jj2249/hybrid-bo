@@ -3,8 +3,8 @@
 Each item should become one small PR into `refactor/initial`. Tick items off in
 the PR that completes them. `main` stays frozen until every stage is done.
 
-The aim throughout is code that is clearer, more readable and more concise, not
-more complex. `examples/flash_unit` is out of scope.
+The aim throughout is code that is easier to read, change and extend, so the
+library can scale (see the goal in CLAUDE.md). `examples/flash_unit` is out of scope.
 
 ## Stage 0: workflow
 - [x] CLAUDE.md, ROADMAP.md, PR template, `ai-assisted` label
