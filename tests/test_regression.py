@@ -72,12 +72,15 @@ def test_illustrative_example(routine, illustrative_config, tmp_path, update_bas
     run_routine(routine, config, tmp_path)
 
     # Routines catch and print exceptions, so a crash shows up as missing results
+    # or as NaN rows (result arrays are NaN-initialised and saved regardless)
     results_path = tmp_path / "results_bo.pkl"
     assert results_path.exists(), "routine did not save results (check stderr)"
     with results_path.open("rb") as f:
         results = pickle.load(f)
     assert len(results) == config.n_runs_bo
     actual = {fld.name: getattr(results[0], fld.name) for fld in fields(ResultsBO)}
+    for name, value in actual.items():
+        assert not np.isnan(value).any(), f"{name} has NaNs: routine failed mid-run"
 
     baseline_path = BASELINE_DIR / f"illustrative_{routine}.json"
     if update_baselines:
