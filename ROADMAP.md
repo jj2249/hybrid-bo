@@ -26,8 +26,8 @@ library can scale (see the goal in CLAUDE.md). `examples/flash_unit` is out of s
       few iterations, compared against stored results
 - [x] Unit tests: kernels, GP predict/log-MLL against numpy references, Problem
       evaluation
-- [ ] Skill: working on `src/` (what the library does, not how)
-- [ ] Skill: working on `examples/`
+- [x] Skill: working on `src/` (what the library does, not how)
+- [x] Skill: working on `examples/`
 
 ## Stage 3: non-logic cleanup
 - [ ] Remove noisy type annotations and most of the ~100 `pyright: ignore` comments
@@ -82,6 +82,13 @@ library can scale (see the goal in CLAUDE.md). `examples/flash_unit` is out of s
 - `formulation_acq` is validated strictly in `hybrid_bo.py` but with
   `startswith("lcb")` in `standard_bo.py:443`.
 - `Config.epsilon_ei_standard` is unused; `ei_gp` uses its own default.
-- `hybrid_bo.py` checks
-  `len(indices_u_input_gp) + len(indices_x_input_gp) == problem.n_u`. Is that
-  intended?
+- `hybrid_bo.py:491` requires
+  `len(indices_u_input_gp) + len(indices_x_input_gp) == problem.n_u`. This looks
+  like an artifact of `main.py` building the GP with `problem.n_u` inputs; the
+  real requirement is that the GP's `n_inputs` equals the number of GP inputs.
+- `problem.py:514`: the Latin hypercube for the free states' starting points
+  uses `x_fixed.size` dimensions instead of `len(indices_x_free)`. The two are
+  equal in the illustrative example.
+- `Config.indices_x_opt` is computed but never used.
+- Measurement noise is generated with shape `(n_points, 1)`, so only one
+  measured state is supported.

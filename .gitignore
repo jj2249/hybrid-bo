@@ -27,3 +27,6 @@ examples/*/hybrid_bo/
 examples/*/standard_bo/
 examples/*/latin_hypercube_sampling/
 examples/*/uniform_sampling/
+
+# Personal Claude Code settings (shared skills in .claude/skills are committed)
+.claude/settings.local.json
