@@ -56,7 +56,7 @@ default = { solve-group = "default" }
 examples = { features = ["quality", "docs", "examples"], solve-group = "default" }
 dev = { features = ["quality", "docs", "examples"], solve-group = "default" }
 # examples deps are needed so ty can resolve matplotlib/yaml imports in examples/
-quality = ["quality", "examples"]
+quality = { features = ["quality", "examples"], solve-group = "default" }
 
 [tool.ruff]
 # Match the Python version used by your project.
