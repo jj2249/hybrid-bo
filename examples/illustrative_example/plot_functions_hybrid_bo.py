@@ -69,11 +69,6 @@ def create_plots(
         original,
     )
 
-    f_grid: np.ndarray = f.reshape(n_points)
-    x_grid: list[np.ndarray] = [
-        x[:, i_component].reshape(n_points) for i_component in range(problem.n_x)
-    ]
-
     # %% Get GP mean and std
 
     mean_gp: np.ndarray
@@ -87,9 +82,6 @@ def create_plots(
         output_transformer_gp,
     )
 
-    mean_gp_grid: np.ndarray = mean_gp.reshape(n_points)
-    std_gp_grid: np.ndarray = std_gp.reshape(n_points)
-
     # %% Get samples of f depending on GP samples
 
     f_samples: np.ndarray = get_f_samples(
@@ -100,10 +92,6 @@ def create_plots(
         mean_gp,
         std_gp,
         original,
-    )
-
-    f_samples_grid: np.ndarray = f_samples.reshape(
-        [*n_points, f_samples.shape[-1]],
     )
 
     # %% Plotting

@@ -20,6 +20,7 @@ pixi run -e dev check        # lint (with --fix) + format + typecheck
 pixi run -e dev lint | format | typecheck
 pixi run -e dev docs         # sphinx API docs -> docs/_build/html
 pixi run -e dev setup        # install pre-commit hooks
+pixi run -e quality pre-commit run --hook-stage manual ty   # ty hook is manual for now
 pixi run -e dev python examples/main.py   # example and routine are hardcoded at the top of main.py
 ```
 
@@ -54,8 +55,9 @@ There are no tests yet (ROADMAP stage 2).
 - Shapes are mixed. Points passed to `Problem` and the optimisers are column
   vectors `(n, 1)`, while data sets are row-major `(n_points, n)`. Expect `.T`
   calls.
-- `type_aliases.SymbolicType` is used at runtime (`SymbolicType.sym(...)`), so
-  it must stay a real class alias, not a `type` statement.
+- Aliases in `type_aliases.py` and `kernels.py` (e.g. `RBFKernel`) are used at
+  runtime (`SymbolicType.sym(...)`, `isinstance(x, CasadiType)`). Keep them as
+  plain assignments, never `type X = ...` statements.
 - Routines catch and print exceptions for each run. A failing run does not raise.
 - Result pickles are never overwritten. Delete old results dirs before
   re-running.

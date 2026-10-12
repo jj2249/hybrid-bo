@@ -1,11 +1,9 @@
-from typing import TypeAlias
-
 from casadi import DM, MX, SX
 from numpy import ndarray
 
 # Options: SX, MX
-SymbolicType: TypeAlias = SX
+SymbolicType = SX
 
-CasadiType: TypeAlias = SX | MX | DM
+CasadiType = SX | MX | DM
 
-NumericType: TypeAlias = ndarray | float | int
+NumericType = ndarray | float | int

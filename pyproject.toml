@@ -21,7 +21,7 @@ requires = ["hatchling"]
 
 [tool.pixi.workspace]
 channels = ["conda-forge"]
-platforms = ["win-64", "osx-arm64"]
+platforms = ["win-64", "osx-arm64", "linux-64"]
 
 [tool.pixi.pypi-dependencies]
 hybrid_bo = { path = ".", editable = true }
@@ -55,25 +55,31 @@ pyyaml = ">=6.0.3,<7"
 default = { solve-group = "default" }
 examples = { features = ["quality", "docs", "examples"], solve-group = "default" }
 dev = { features = ["quality", "docs", "examples"], solve-group = "default" }
-quality = ["quality"]
+# examples deps are needed so ty can resolve matplotlib/yaml imports in examples/
+quality = ["quality", "examples"]
 
 [tool.ruff]
 # Match the Python version used by your project.
-target-version = "py314"
+target-version = "py312"
 line-length = 88
 
 # Add to Ruff's default exclusions.
 extend-exclude = [".pixi"]
 
 [tool.ruff.lint]
-ignore = ["E501"]
+# TRY002/BLE001: replacing bare `Exception`s and blanket excepts is a logic change (ROADMAP stage 5)
+ignore = ["E501", "TRY002", "BLE001"]
+
+[tool.ruff.lint.per-file-ignores]
+# Re-exports define the public API
+"__init__.py" = ["F401"]
 
 [tool.ruff.format]
 # Use double quotes and standard Ruff formatting.
 quote-style = "double"
 
 [tool.ty.environment]
-python-version = "3.14"
+python-version = "3.12"
 
 [tool.ty.src]
 # Type-check the application source.
