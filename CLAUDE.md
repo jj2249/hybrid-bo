@@ -7,6 +7,13 @@ Bayesian optimisation for partially known systems using hybrid models
 GP samples using CasADi. Standard BO, Latin hypercube sampling and uniform
 sampling are included as baselines.
 
+## Goal of the refactor
+
+Make the code easier to work with: clearer, more readable and more concise.
+Each change should reduce complexity or leave it unchanged, never add to it.
+Prefer deleting code over adding abstractions, and keep tests and tooling minimal.
+The `flash_unit` example is out of scope for the refactor; leave it alone.
+
 The roadmap is in [ROADMAP.md](ROADMAP.md). Check it before starting work, and
 tick items off in the PR that completes them.
 

@@ -3,6 +3,9 @@
 Each item should become one small PR into `refactor/initial`. Tick items off in
 the PR that completes them. `main` stays frozen until every stage is done.
 
+The aim throughout is code that is clearer, more readable and more concise, not
+more complex. `examples/flash_unit` is out of scope.
+
 ## Stage 0: workflow
 - [x] CLAUDE.md, ROADMAP.md, PR template, `ai-assisted` label
 
@@ -21,8 +24,6 @@ the PR that completes them. `main` stays frozen until every stage is done.
 - [x] pytest feature and task
 - [x] Seeded regression tests: each routine on the illustrative example with a
       few iterations, compared against stored results
-- [ ] Regression coverage for `use_output_gp_as_opt_var=True` (flash unit). This
-      path is currently untested.
 - [ ] Unit tests: kernels, GP predict/log-MLL against numpy references, Problem
       evaluation
 - [ ] Skill: working on `src/` (what the library does, not how)
@@ -41,8 +42,6 @@ the PR that completes them. `main` stays frozen until every stage is done.
 - [ ] CLI for `examples/main.py` (example, routine, config overrides)
 - [ ] Only require the minimum from users; make plot functions optional
 - [ ] Decide whether YAML is the right config format
-- [ ] `flash_unit` has no plot functions, so `main.py` crashes for it when
-      `create_plots: True`
 - [ ] Skill: specify an example in markdown (equations, parameters, assumptions)
 
 ## Stage 5: src logic
