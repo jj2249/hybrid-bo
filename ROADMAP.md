@@ -55,6 +55,8 @@ library can scale (see the goal in CLAUDE.md). `examples/flash_unit` is out of s
 - [ ] Remove the duplication between `Config.n_u`/`n_x` and `Problem`
 - [ ] Stop routines mutating `MultiStartOptimizer` internals
 - [ ] Use proper exception types; stop swallowing errors per run
+- [ ] Don't print full tracebacks for expected failures, e.g. a multistart IPOPT
+      start hitting max iterations (`optimizers.py:295`)
 - [ ] Review the OO design overall
 
 ## Stage 6: publishing
@@ -66,10 +68,6 @@ library can scale (see the goal in CLAUDE.md). `examples/flash_unit` is out of s
 - [ ] Packaging and PyPI
 
 ## Known issues (fix only once a test covers them)
-- `examples/main.py` passes an optimizer argument (`None`) to
-  `do_latin_hypercube_sampling`/`do_uniform_sampling`, which don't take one. Those
-  two routines crash from `main.py` with a `TypeError` (found by ty). The tests
-  call the routines directly, so they're unaffected.
 - `routines/hybrid_bo.py:769`: when `use_output_gp_as_opt_var=False`, the upper
   starting-point bounds use `problem.u_upper_bounds_acquisition`; this should
   probably be `u_upper_bounds_starting_points`. The two coincide in the
