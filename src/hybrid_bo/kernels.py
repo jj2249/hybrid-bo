@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import TypeAlias, overload, override
+from typing import overload, override
 
 import casadi as cas
 import numpy as np
@@ -503,7 +503,7 @@ class Matern12Kernel(StationaryKernel):
         return exp(-sqrt(squared_distance))
 
 
-AbsoluteExponentialKernel: TypeAlias = Matern12Kernel
+AbsoluteExponentialKernel = Matern12Kernel
 
 
 class Matern32Kernel(StationaryKernel):
@@ -549,6 +549,6 @@ class MaternInfKernel(StationaryKernel):
         return exp(-0.5 * squared_distance)
 
 
-SquaredExponentialKernel: TypeAlias = MaternInfKernel
-GaussianKernel: TypeAlias = MaternInfKernel
-RBFKernel: TypeAlias = MaternInfKernel
+SquaredExponentialKernel = MaternInfKernel
+GaussianKernel = MaternInfKernel
+RBFKernel = MaternInfKernel

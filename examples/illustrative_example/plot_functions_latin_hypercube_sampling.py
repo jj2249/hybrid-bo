@@ -59,19 +59,13 @@ def create_plots(
         (n_points_total, problem.n_u),
     )
 
-    x: np.ndarray
     f: np.ndarray
-    x, f = get_evaluation_data(
+    _, f = get_evaluation_data(
         problem,
         config,
         u,
         original,
     )
-
-    f_grid: np.ndarray = f.reshape(n_points)
-    x_grid: list[np.ndarray] = [
-        x[:, i_component].reshape(n_points) for i_component in range(problem.n_x)
-    ]
 
     # %% Get GP mean and std
 
@@ -83,9 +77,6 @@ def create_plots(
         input_transformer_gp,
         output_transformer_gp,
     )
-
-    mean_gp_grid: np.ndarray = mean_gp.reshape(n_points)
-    std_gp_grid: np.ndarray = std_gp.reshape(n_points)
 
     # %% Plotting
 

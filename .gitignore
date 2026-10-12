@@ -21,3 +21,9 @@ docs/_templates/
 # Data files
 *.pkl
 
+
+# Example results (written by examples/main.py)
+examples/*/hybrid_bo/
+examples/*/standard_bo/
+examples/*/latin_hypercube_sampling/
+examples/*/uniform_sampling/

@@ -7,14 +7,15 @@ the PR that completes them. `main` stays frozen until every stage is done.
 - [x] CLAUDE.md, ROADMAP.md, PR template, `ai-assisted` label
 
 ## Stage 1: environment and hooks
-- [ ] Target Python >=3.12 everywhere (ruff `target-version`, ty `python-version`)
-- [ ] Add `linux-64` to pixi platforms (for CI)
-- [ ] Ruff passes: fix unused imports/variables (F401, F841) and alias syntax
-      (UP040, except the runtime alias `SymbolicType`); temporarily ignore
-      `TRY002`/`BLE001` (to be fixed in stage 5)
-- [ ] ty: run where the example deps are available; make the hook manual until
-      stage 3/5 removes most errors
-- [ ] Ignore example results dirs in git
+- [x] Target Python >=3.12 everywhere (ruff `target-version`, ty `python-version`)
+- [x] Add `linux-64` to pixi platforms (for CI)
+- [x] Ruff passes. `TRY002`/`BLE001` are ignored until stage 5. `__init__.py`
+      re-exports are exempt from F401. Aliases use plain assignment because
+      they're used at runtime (`isinstance`, `.sym`, kernel instantiation).
+- [x] ty resolves example imports (`quality` env includes the `examples`
+      feature). The hook is manual until the remaining 64 errors are fixed
+      (stage 3/5).
+- [x] Ignore example results dirs in git
 
 ## Stage 2: tests and skills
 - [ ] pytest feature and task
@@ -38,6 +39,8 @@ the PR that completes them. `main` stays frozen until every stage is done.
 - [ ] CLI for `examples/main.py` (example, routine, config overrides)
 - [ ] Only require the minimum from users; make plot functions optional
 - [ ] Decide whether YAML is the right config format
+- [ ] `flash_unit` has no plot functions, so `main.py` crashes for it when
+      `create_plots: True`
 - [ ] Skill: specify an example in markdown (equations, parameters, assumptions)
 
 ## Stage 5: src logic
@@ -58,6 +61,7 @@ the PR that completes them. `main` stays frozen until every stage is done.
 - [ ] README: fix the install section (it mentions `[dependency-groups]`, which
       doesn't exist)
 - [ ] CI (lint, typecheck, tests)
+- [ ] Tidy pixi environments (`examples` and `dev` are currently identical)
 - [ ] Packaging and PyPI
 
 ## Known issues (fix only once a test covers them)
