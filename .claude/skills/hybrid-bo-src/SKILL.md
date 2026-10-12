@@ -82,7 +82,8 @@ A system with decision variables `u` (n_u) and states `x` (n_x):
   numpy inputs. `k_variable` is the symbolic version used to build the training
   problem.
 - **GP numerics.**
-  - `K = k(X, X) + (noise_std**2 + 1e-10) I`. The jitter is always added.
+  - `K = k(X, X) + (noise_std**2 + epsilon) I`, where `epsilon` is a `GP`
+    constructor argument (default 1e-10) and is always added.
   - `predict` returns `(mean, full covariance)`.
   - `log_mll()` returns a (1, 1) array.
 - **Runtime aliases.** `SymbolicType`, `CasadiType` and the kernel aliases
