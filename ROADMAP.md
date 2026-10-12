@@ -18,9 +18,11 @@ the PR that completes them. `main` stays frozen until every stage is done.
 - [x] Ignore example results dirs in git
 
 ## Stage 2: tests and skills
-- [ ] pytest feature and task
-- [ ] Seeded regression tests: each routine on the illustrative example with a
+- [x] pytest feature and task
+- [x] Seeded regression tests: each routine on the illustrative example with a
       few iterations, compared against stored results
+- [ ] Regression coverage for `use_output_gp_as_opt_var=True` (flash unit). This
+      path is currently untested.
 - [ ] Unit tests: kernels, GP predict/log-MLL against numpy references, Problem
       evaluation
 - [ ] Skill: working on `src/` (what the library does, not how)
@@ -65,6 +67,10 @@ the PR that completes them. `main` stays frozen until every stage is done.
 - [ ] Packaging and PyPI
 
 ## Known issues (fix only once a test covers them)
+- `examples/main.py` passes an optimizer argument (`None`) to
+  `do_latin_hypercube_sampling`/`do_uniform_sampling`, which don't take one. Those
+  two routines crash from `main.py` with a `TypeError` (found by ty). The tests
+  call the routines directly, so they're unaffected.
 - `routines/hybrid_bo.py:769`: when `use_output_gp_as_opt_var=False`, the upper
   starting-point bounds use `problem.u_upper_bounds_acquisition`; this should
   probably be `u_upper_bounds_starting_points`. The two coincide in the
