@@ -66,12 +66,15 @@ if __name__ == "__main__":
 
     run, make_gp, make_optimizer, make_plots = routines[routine]
 
+    # Sampling routines take no optimizer
+    optimizer = {"optimizer": make_optimizer()} if make_optimizer else {}
+
     run(
         problem,
         config,
         make_gp(problem.n_u),
         initial_points,
-        make_optimizer() if make_optimizer else None,
-        example_dir / routine,
-        make_plots if config.create_plots else None,
+        **optimizer,
+        results_dir=example_dir / routine,
+        create_plots=make_plots if config.create_plots else None,
     )
