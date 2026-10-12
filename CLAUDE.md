@@ -78,6 +78,8 @@ remove the marker in the PR that fixes the bug.
 - Routines catch and print exceptions for each run. A failing run does not raise.
 - Result pickles are never overwritten. Delete old results dirs before
   re-running.
+- The git hook hardcodes the pixi Python path. If commits fail with
+  "`pre-commit` not found" after a Python upgrade, re-run `pixi run -e quality setup`.
 
 ## Workflow
 
