@@ -7,6 +7,15 @@ Bayesian optimisation for partially known systems using hybrid models
 GP samples using CasADi. Standard BO, Latin hypercube sampling and uniform
 sampling are included as baselines.
 
+## Goal of the refactor
+
+Make the code easier to read, change and extend, so the library can scale. More
+advanced constructs are fine when they make things clearer at the point of use,
+e.g. grouping related arguments (`f(x, x_bounds)` instead of
+`f(x, x_lower, x_upper)`). Avoid complexity that doesn't serve that, such as
+abstractions with a single use or boilerplate from static languages.
+The `flash_unit` example is out of scope for the refactor; leave it alone.
+
 The roadmap is in [ROADMAP.md](ROADMAP.md). Check it before starting work, and
 tick items off in the PR that completes them.
 
@@ -17,6 +26,8 @@ Environments are managed with pixi. `dev` includes everything.
 ```bash
 pixi install -e dev
 pixi run -e dev check        # lint (with --fix) + format + typecheck
+pixi run -e dev test         # pytest (~2s)
+pixi run -e dev test --update-baselines   # regenerate regression results
 pixi run -e dev lint | format | typecheck
 pixi run -e dev docs         # sphinx API docs -> docs/_build/html
 pixi run -e dev setup        # install pre-commit hooks
@@ -24,7 +35,10 @@ pixi run -e quality pre-commit run --hook-stage manual ty   # ty hook is manual 
 pixi run -e dev python examples/main.py   # example and routine are hardcoded at the top of main.py
 ```
 
-There are no tests yet (ROADMAP stage 2).
+`tests/test_regression.py` runs each routine on the illustrative example
+(seed 0, 2 iterations) and compares the results with `tests/data/regression/*.json`.
+Only update the baselines in a PR that is meant to change behaviour, and explain
+the JSON diff in that PR.
 
 ## Architecture
 
@@ -69,8 +83,8 @@ There are no tests yet (ROADMAP stage 2).
 - One PR per issue into `refactor/initial`. Branch from it using the name
   `<stage>-<topic>` (e.g. `s1-hooks`).
 - Agree scope in plan mode before editing.
-- Before opening a PR, run `pixi run -e dev check` (plus the tests once they
-  exist), then `/code-review`.
+- Before opening a PR, run `pixi run -e dev check` and `pixi run -e dev test`,
+  then `/code-review`.
 - Use the PR template. Add the `ai-assisted` label to PRs with AI-written code.
   Commits get a `Co-Authored-By` trailer.
 - Do not change logic in `src/` until regression tests exist (stage 2). Treat

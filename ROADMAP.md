@@ -3,6 +3,9 @@
 Each item should become one small PR into `refactor/initial`. Tick items off in
 the PR that completes them. `main` stays frozen until every stage is done.
 
+The aim throughout is code that is easier to read, change and extend, so the
+library can scale (see the goal in CLAUDE.md). `examples/flash_unit` is out of scope.
+
 ## Stage 0: workflow
 - [x] CLAUDE.md, ROADMAP.md, PR template, `ai-assisted` label
 
@@ -18,8 +21,8 @@ the PR that completes them. `main` stays frozen until every stage is done.
 - [x] Ignore example results dirs in git
 
 ## Stage 2: tests and skills
-- [ ] pytest feature and task
-- [ ] Seeded regression tests: each routine on the illustrative example with a
+- [x] pytest feature and task
+- [x] Seeded regression tests: each routine on the illustrative example with a
       few iterations, compared against stored results
 - [ ] Unit tests: kernels, GP predict/log-MLL against numpy references, Problem
       evaluation
@@ -39,8 +42,6 @@ the PR that completes them. `main` stays frozen until every stage is done.
 - [ ] CLI for `examples/main.py` (example, routine, config overrides)
 - [ ] Only require the minimum from users; make plot functions optional
 - [ ] Decide whether YAML is the right config format
-- [ ] `flash_unit` has no plot functions, so `main.py` crashes for it when
-      `create_plots: True`
 - [ ] Skill: specify an example in markdown (equations, parameters, assumptions)
 
 ## Stage 5: src logic
@@ -65,6 +66,10 @@ the PR that completes them. `main` stays frozen until every stage is done.
 - [ ] Packaging and PyPI
 
 ## Known issues (fix only once a test covers them)
+- `examples/main.py` passes an optimizer argument (`None`) to
+  `do_latin_hypercube_sampling`/`do_uniform_sampling`, which don't take one. Those
+  two routines crash from `main.py` with a `TypeError` (found by ty). The tests
+  call the routines directly, so they're unaffected.
 - `routines/hybrid_bo.py:769`: when `use_output_gp_as_opt_var=False`, the upper
   starting-point bounds use `problem.u_upper_bounds_acquisition`; this should
   probably be `u_upper_bounds_starting_points`. The two coincide in the

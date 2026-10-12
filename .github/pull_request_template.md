@@ -10,7 +10,7 @@
 
 ## How verified
 - [ ] `pixi run -e dev check`
-- [ ] Tests (once available)
+- [ ] `pixi run -e dev test`
 - [ ] Ran an example:
 
 ## AI assistance

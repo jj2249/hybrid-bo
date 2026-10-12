@@ -30,11 +30,13 @@ hybrid_bo = { path = ".", editable = true }
 ruff = ">=0.16.10,<0.17"
 ty = ">=0.0.85,<0.0.86"
 pre-commit = ">=4.6.2,<5"
+pytest = ">=9.1.1,<10"
 
 [tool.pixi.feature.quality.tasks]
 lint = "ruff check --fix"
 format = "ruff format"
 typecheck = "ty check"
+test = "pytest"
 check = { depends-on = ["lint", "format", "typecheck"] }
 setup-hooks = "pre-commit install"
 setup = { depends-on = ["setup-hooks"] }
@@ -78,8 +80,15 @@ ignore = ["E501", "TRY002", "BLE001"]
 # Use double quotes and standard Ruff formatting.
 quote-style = "double"
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Examples are imported as top-level packages, as in examples/main.py
+pythonpath = ["examples"]
+
 [tool.ty.environment]
 python-version = "3.12"
+# Mirrors pytest `pythonpath`: examples are imported as top-level packages
+extra-paths = ["examples"]
 
 [tool.ty.src]
 # Type-check the application source.
