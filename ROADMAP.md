@@ -24,7 +24,7 @@ library can scale (see the goal in CLAUDE.md). `examples/flash_unit` is out of s
 - [x] pytest feature and task
 - [x] Seeded regression tests: each routine on the illustrative example with a
       few iterations, compared against stored results
-- [ ] Unit tests: kernels, GP predict/log-MLL against numpy references, Problem
+- [x] Unit tests: kernels, GP predict/log-MLL against numpy references, Problem
       evaluation
 - [ ] Skill: working on `src/` (what the library does, not how)
 - [ ] Skill: working on `examples/`
@@ -68,6 +68,13 @@ library can scale (see the goal in CLAUDE.md). `examples/flash_unit` is out of s
 - [ ] Packaging and PyPI
 
 ## Known issues (fix only once a test covers them)
+- `MinMaxTransformer.fit` (`affine_transformers.py:135`): the intercept is
+  `-min/(max-min) + min_t`, but it should be `min_t - min*slope`. It's only correct
+  for target ranges of width 1; the routines use the default [0, 1]. Covered by an
+  xfail test. The fix leaves the regression baselines unchanged.
+- `LinearKernel.k_variable` with ARD (`kernels.py:279-290`) uses `scale.value`
+  instead of `scale.variable()`, so the ARD scale is never trained. Covered by
+  an xfail test. `LinearKernel` isn't used by the examples.
 - `routines/hybrid_bo.py:769`: when `use_output_gp_as_opt_var=False`, the upper
   starting-point bounds use `problem.u_upper_bounds_acquisition`; this should
   probably be `u_upper_bounds_starting_points`. The two coincide in the

@@ -39,6 +39,9 @@ pixi run -e dev python examples/main.py   # example and routine are hardcoded at
 (seed 0, 2 iterations) and compares the results with `tests/data/regression/*.json`.
 Only update the baselines in a PR that is meant to change behaviour, and explain
 the JSON diff in that PR.
+The other test files check kernels, the GP, `Problem` and the transformers
+against numpy/scipy references. Known bugs are `xfail(strict=True)` tests:
+remove the marker in the PR that fixes the bug.
 
 ## Architecture
 
