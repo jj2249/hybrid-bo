@@ -1,7 +1,6 @@
 import numpy as np
 
-from hybrid_bo import GP, Config, Problem
-from hybrid_bo.affine_transformers import AffineTransformer
+from hybrid_bo import Config, Problem
 
 from .plot_functions_latin_hypercube_sampling import (
     create_plots as latin_hypercube_sampling_create_plots,
@@ -13,9 +12,6 @@ from .plot_functions_latin_hypercube_sampling import (
 def create_plots(
     problem: Problem,
     config: Config,
-    gp: GP,
-    input_transformer_gp: AffineTransformer,
-    output_transformer_gp: AffineTransformer,
     f: np.ndarray,
     u: np.ndarray,
     x: np.ndarray,
@@ -25,9 +21,6 @@ def create_plots(
     latin_hypercube_sampling_create_plots(
         problem,
         config,
-        gp,
-        input_transformer_gp,
-        output_transformer_gp,
         f,
         u,
         x,

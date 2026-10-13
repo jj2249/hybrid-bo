@@ -21,7 +21,7 @@ when the examples and logic start to change.
       re-exports are exempt from F401. Aliases use plain assignment because
       they're used at runtime (`isinstance`, `.sym`, kernel instantiation).
 - [x] ty resolves example imports (`quality` env includes the `examples`
-      feature). The hook is manual until the remaining 60 errors are fixed
+      feature). The hook is manual until the remaining 57 errors are fixed
       (stage 4).
 - [x] Ignore example results dirs in git
 
@@ -47,7 +47,7 @@ with the restructure, which groups the data (`Bounds`, `Evaluation`, `History`).
 
 ## Stage 4: restructure (see DESIGN.md)
 Every PR keeps the regression baselines unchanged unless it is marked *logic*.
-- [ ] R0 *logic*: per-run randomness; LHS/uniform stop training GPs; noise has one
+- [x] R0 *logic*: per-run randomness; LHS/uniform stop training GPs; noise has one
       column per measured state; regenerate the baselines
 - [ ] R1: tag `pre-refactor` and exclude flash_unit; `Bounds`, `lhs`/`uniform`/`stack`;
       `Problem` as a frozen dataclass
@@ -111,5 +111,3 @@ the code, and that PR removes the entry.
 - `Config.indices_x_opt` is computed but never used. *Goes away in R8.*
 - `MultiStartOptimizer.create_lhs_samples` (`optimizers.py:161`) builds `msg`
   when `upper_bounds_starting_points is None` but never raises it. *Goes away in R3.*
-- Measurement noise is generated with shape `(n_points, 1)`, so only one
-  measured state is supported. *Fixed in R0.*

@@ -37,17 +37,18 @@ A system with decision variables `u` (n_u) and states `x` (n_x):
     solution.
 - **Standard BO** (`routines/standard_bo.py`): a GP directly on `f(u)`, with
   analytic EI or LCB over `u` only. It's the baseline.
-- **Latin hypercube / uniform sampling**: non-adaptive baselines.
+- **Latin hypercube / uniform sampling**: non-adaptive baselines. They draw the
+  whole design at the start of a run and train no GP.
 
 ## Module map
 
 This describes the current code. The restructure (DESIGN.md, PRs R0 to R9)
 replaces it piece by piece, and each restructure PR updates this section.
 
-- `routines/`: the four entry points, all with the signature
-  `(problem, config, gp, u_initial, [optimizer], results_dir, create_plots)`.
-  The sampling routines take no optimizer. They return `None` and pickle results
-  into `results_dir`. Most of the loop is duplicated across the four files.
+- `routines/`: the four entry points, with the signature
+  `(problem, config, [gp], u_initial, rngs, [optimizer], results_dir, create_plots)`.
+  The sampling routines take no GP and no optimizer. They return `None` and pickle
+  results into `results_dir`. Most of the loop is duplicated across the four files.
 - `problem.py`: `Problem` holds `f`, `h_known`, `h_unknown` (CasADi
   functions) and the bounds, and evaluates the system.
 - `gp.py`, `kernels.py`, `means.py`: an exact GP (Cholesky), kernels and means.
@@ -94,6 +95,13 @@ replaces it piece by piece, and each restructure PR updates this section.
   `type X = ...`.
 
 ## Behaviour to know
+
+- **Randomness is per run.** The caller passes one generator per run
+  (`config.rng.spawn(n_runs_bo)`). A run uses only its own generator, in a fixed
+  order: initial points (caller), noise, `z` or the sampling design, then the loop
+  (DESIGN.md has the exact calls). The baselines depend on this order, so changing
+  it, or adding a draw, is a logic change. `config.rng` itself is only for spawning
+  and for plots.
 
 - Routines catch and print exceptions per run, so a failed run doesn't raise.
   Result arrays are NaN-initialised, so a crash shows up as NaN rows.
