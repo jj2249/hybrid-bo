@@ -48,11 +48,11 @@ class Optimizer(ABC):
         self.upper_bounds = upper_bounds
 
         if (lower_bounds is not None) and (lower_bounds.shape != (self.n_variables, 1)):
-            msg: str = "lower_bounds.shape != (self.n_variables, 1)"
+            msg = "lower_bounds.shape != (self.n_variables, 1)"
             raise Exception(msg)
 
         if (upper_bounds is not None) and (upper_bounds.shape != (self.n_variables, 1)):
-            msg: str = "upper_bounds.shape != (self.n_variables, 1)"
+            msg = "upper_bounds.shape != (self.n_variables, 1)"
             raise Exception(msg)
 
     @abstractmethod
@@ -60,7 +60,7 @@ class Optimizer(ABC):
 
     def __getstate__(self) -> dict:
         # Required for pickling to be possible
-        state: dict = self.__dict__.copy()
+        state = self.__dict__.copy()
         state["f"] = cas.Function()
         state["g"] = None
         state["h"] = None
@@ -74,7 +74,7 @@ class LocalOptimizer(Optimizer):
 
     def set_x0(self, x0: np.ndarray) -> None:
         if x0.shape[1] != 1:
-            msg: str = "x0.shape[1] != 1"
+            msg = "x0.shape[1] != 1"
             raise Exception(msg)
         self.x0 = x0
 
@@ -114,15 +114,15 @@ class MultiStartOptimizer(Optimizer):
     @X0.setter
     def X0(self, X0: np.ndarray) -> None:
         if len(X0.shape) != 2:
-            msg: str = "len(X0.shape) != 2"
+            msg = "len(X0.shape) != 2"
             raise Exception(msg)
 
         if X0.shape[1] != self.n_variables:
-            msg: str = "X0.shape[1] != self.n_variables"
+            msg = "X0.shape[1] != self.n_variables"
             raise Exception(msg)
 
         if not np.isfinite(X0).all():
-            msg: str = "not np.isfinite(X0).all()"
+            msg = "not np.isfinite(X0).all()"
             raise Exception(msg)
 
         self._X0 = X0
@@ -156,20 +156,20 @@ class MultiStartOptimizer(Optimizer):
         # lhs: latin hypercube sampling
 
         if self.lower_bounds_starting_points is None:
-            msg: str = "self.lower_bounds_starting_points is None"
+            msg = "self.lower_bounds_starting_points is None"
             raise Exception(msg)
         if self.upper_bounds_starting_points is None:
-            msg: str = "self.upper_bounds_starting_points is None"
+            msg = "self.upper_bounds_starting_points is None"
 
         if rng is None:
             rng = np.random.default_rng()
 
-        sampler: scipy.stats.qmc.LatinHypercube = scipy.stats.qmc.LatinHypercube(
+        sampler = scipy.stats.qmc.LatinHypercube(
             self.n_variables,
             rng=rng,
         )
 
-        samples: np.ndarray = sampler.random(n_starts)
+        samples = sampler.random(n_starts)
 
         return (
             self.lower_bounds_starting_points.T
@@ -180,16 +180,16 @@ class MultiStartOptimizer(Optimizer):
     @override
     def solve(self) -> OptimizationResult | None:
         if self.n_starts < 1:
-            msg: str = "self.n_starts < 1"
+            msg = "self.n_starts < 1"
             raise Exception(msg)
 
-        solution: OptimizationResult | None = None
+        solution = None
         f_min = np.inf
 
         for i_guess in range(self.n_starts):
             self.local_optimizer.set_x0(self._X0[i_guess, :][:, np.newaxis])
 
-            current_solution: OptimizationResult | None = self.local_optimizer.solve()
+            current_solution = self.local_optimizer.solve()
 
             if (current_solution is not None) and (current_solution.f < f_min):
                 solution = current_solution
@@ -246,12 +246,12 @@ class CasadiOptimizer(LocalOptimizer):
         else:
             self.opti = cas.Opti()
 
-        x: cas.MX = self.opti.variable(self.n_variables)
+        x = self.opti.variable(self.n_variables)
 
         self.opti.minimize(self.f(x))
 
         if self.g is not None:
-            self.opti.subject_to(self.g(x) <= 0)  # pyright: ignore[reportOperatorIssue]
+            self.opti.subject_to(self.g(x) <= 0)
 
         if self.h is not None:
             self.opti.subject_to(self.h(x) == 0)
@@ -272,10 +272,9 @@ class CasadiOptimizer(LocalOptimizer):
         try:
             self.opti.solver(self.solver, self.plugin_options, self.solver_options)
 
-            solution: cas.OptiSol = self.opti.solve()
+            solution = self.opti.solve()
 
-            x_opt: np.ndarray
-            x_opt_temp: np.ndarray | float = solution.value(self.opti.x)
+            x_opt_temp = solution.value(self.opti.x)
 
             if isinstance(x_opt_temp, float):
                 x_opt = np.array([[x_opt_temp]])
@@ -284,13 +283,13 @@ class CasadiOptimizer(LocalOptimizer):
             else:
                 return None
 
-            f_opt: float = solution.value(self.opti.f)
-            g_opt: np.ndarray | None = None
+            f_opt = solution.value(self.opti.f)
+            g_opt = None
             if self.g is not None:
-                g_opt = self.g(x_opt).full()  # pyright: ignore[reportAttributeAccessIssue, reportOptionalMemberAccess]
-            h_opt: np.ndarray | None = None
+                g_opt = self.g(x_opt).full()
+            h_opt = None
             if self.h is not None:
-                h_opt = self.h(x_opt).full()  # pyright: ignore[reportAttributeAccessIssue, reportOptionalMemberAccess]
+                h_opt = self.h(x_opt).full()
 
         except Exception:
             traceback.print_exc()
@@ -300,7 +299,7 @@ class CasadiOptimizer(LocalOptimizer):
             return OptimizationResult(x_opt, f_opt, g_opt, h_opt)
 
     def __getstate__(self) -> dict:
-        state: dict = super().__getstate__()
+        state = super().__getstate__()
         state["opti"] = None
         return state
 
@@ -388,49 +387,44 @@ class SciPyLocalOptimizer(LocalOptimizer):
     ) -> None:
         super().set_problem(n_variables, f, g, h, lower_bounds, upper_bounds)
 
-        x: SymbolicType = SymbolicType.sym("x", n_variables, 1)  # pyright: ignore[reportArgumentType]
+        x = SymbolicType.sym("x", n_variables, 1)
 
         # %% Set self.f_np
 
-        self.f_np = lambda x: self.f(x[:, np.newaxis]).full().item()  # pyright: ignore[reportAttributeAccessIssue, reportOptionalMemberAccess]
+        self.f_np = lambda x: self.f(x[:, np.newaxis]).full().item()
 
         # %% Set self.f_gradient_np
 
         if self.method in self.gradient_methods:
-            f_gradient_expression: SymbolicType = cas.gradient(self.f(x), x)
-            f_gradient: cas.Function = cas.Function(
+            f_gradient_expression = cas.gradient(self.f(x), x)
+            f_gradient = cas.Function(
                 "gradient",
                 [x],
                 [f_gradient_expression],
             )
-            self.f_gradient_np = lambda x: f_gradient(x[:, np.newaxis]).full().flatten()  # pyright: ignore[reportAttributeAccessIssue, reportOptionalMemberAccess]
+            self.f_gradient_np = lambda x: f_gradient(x[:, np.newaxis]).full().flatten()
         else:
             self.f_gradient_np = None
 
         # %% Set self.f_hessian_np
 
         if self.method in self.hessian_methods:
-            f_hessian_expression: SymbolicType
             f_hessian_expression, _ = cas.hessian(self.f(x), x)
-            f_hessian: cas.Function = cas.Function(
+            f_hessian = cas.Function(
                 "hessian",
                 [x],
                 [f_hessian_expression],
             )
-            self.f_hessian_np = lambda x: f_hessian(x[:, np.newaxis]).full()  # pyright: ignore[reportAttributeAccessIssue, reportOptionalMemberAccess]
+            self.f_hessian_np = lambda x: f_hessian(x[:, np.newaxis]).full()
         else:
             self.f_hessian_np = None
 
         # %% Set self.bounds
 
         if self.method in self.bounds_methods:
-            lb: float | np.ndarray = (
-                -np.inf if self.lower_bounds is None else self.lower_bounds[:, 0]
-            )
+            lb = -np.inf if self.lower_bounds is None else self.lower_bounds[:, 0]
 
-            ub: float | np.ndarray = (
-                np.inf if self.upper_bounds is None else self.upper_bounds[:, 0]
-            )
+            ub = np.inf if self.upper_bounds is None else self.upper_bounds[:, 0]
 
             self.bounds = scipy.optimize.Bounds(lb, ub)
 
@@ -447,31 +441,29 @@ class SciPyLocalOptimizer(LocalOptimizer):
             if (self.h is not None) and (self.method != "COBYLA"):
 
                 def h_np(x: np.ndarray) -> np.ndarray:
-                    return self.h(x[:, np.newaxis]).full().flatten()  # pyright: ignore[reportOptionalCall, reportAttributeAccessIssue, reportOptionalMemberAccess]
+                    return self.h(x[:, np.newaxis]).full().flatten()
 
-                h_jacobian_expression: SymbolicType = cas.jacobian(self.h(x), x)
-                h_jacobian: cas.Function = cas.Function(
+                h_jacobian_expression = cas.jacobian(self.h(x), x)
+                h_jacobian = cas.Function(
                     "h_jacobian",
                     [x],
                     [h_jacobian_expression],
                 )
 
                 def h_jacobian_np(x: np.ndarray) -> np.ndarray:
-                    return h_jacobian(x[:, np.newaxis]).full()  # pyright: ignore[reportAttributeAccessIssue, reportOptionalMemberAccess]
+                    return h_jacobian(x[:, np.newaxis]).full()
 
-                h_constraints: scipy.optimize.NonlinearConstraint | dict[str, Any]
                 if self.method in ("trust-constr", "COBYQA"):
-                    v: SymbolicType = SymbolicType.sym("v", self.h.numel_out(0), 1)  # pyright: ignore[reportArgumentType]
-                    h_v_hessian_expression: SymbolicType
+                    v = SymbolicType.sym("v", self.h.numel_out(0), 1)
                     h_v_hessian_expression, _ = cas.hessian(v.T @ self.h(x), x)
-                    h_v_hessian: cas.Function = cas.Function(
+                    h_v_hessian = cas.Function(
                         "h_v_hessian",
                         [x, v],
                         [h_v_hessian_expression],
                     )
 
                     def h_v_hessian_np(x: np.ndarray, v: np.ndarray) -> np.ndarray:
-                        return h_v_hessian(x[:, np.newaxis], v[:, np.newaxis]).full()  # pyright: ignore[reportAttributeAccessIssue, reportOptionalMemberAccess]
+                        return h_v_hessian(x[:, np.newaxis], v[:, np.newaxis]).full()
 
                     # Type: scipy.optimize.NonlinearConstraint
                     h_constraints = scipy.optimize.NonlinearConstraint(
@@ -493,30 +485,26 @@ class SciPyLocalOptimizer(LocalOptimizer):
             if self.g is not None:
 
                 def g_np(x: np.ndarray) -> np.ndarray:
-                    return self.g(x[:, np.newaxis]).full().flatten()  # pyright: ignore[reportOptionalCall, reportAttributeAccessIssue, reportOptionalMemberAccess]
+                    return self.g(x[:, np.newaxis]).full().flatten()
 
-                g_jacobian_expression: SymbolicType = cas.jacobian(self.g(x), x)
-                g_jacobian: cas.Function = cas.Function(
-                    "g_jacobian", [x], [g_jacobian_expression]
-                )
+                g_jacobian_expression = cas.jacobian(self.g(x), x)
+                g_jacobian = cas.Function("g_jacobian", [x], [g_jacobian_expression])
 
                 def g_jacobian_np(x: np.ndarray) -> np.ndarray:
-                    return g_jacobian(x[:, np.newaxis]).full()  # pyright: ignore[reportAttributeAccessIssue, reportOptionalMemberAccess]
+                    return g_jacobian(x[:, np.newaxis]).full()
 
-                g_constraints: scipy.optimize.NonlinearConstraint | dict[str, Any]
                 if self.method in ("trust-constr", "COBYQA"):
-                    v: SymbolicType = SymbolicType.sym("v", self.g.numel_out(0), 1)  # pyright: ignore[reportArgumentType]
-                    g_v_hessian_expression: SymbolicType
+                    v = SymbolicType.sym("v", self.g.numel_out(0), 1)
                     g_v_hessian_expression, _ = cas.hessian(v.T @ self.g(x), x)
 
-                    g_v_hessian: cas.Function = cas.Function(
+                    g_v_hessian = cas.Function(
                         "g_v_hessian",
                         [x, v],
                         [g_v_hessian_expression],
                     )
 
                     def g_v_hessian_np(x: np.ndarray, v: np.ndarray) -> np.ndarray:
-                        return g_v_hessian(x[:, np.newaxis], v[:, np.newaxis]).full()  # pyright: ignore[reportAttributeAccessIssue, reportOptionalMemberAccess]
+                        return g_v_hessian(x[:, np.newaxis], v[:, np.newaxis]).full()
 
                     g_constraints = scipy.optimize.NonlinearConstraint(
                         g_np,
@@ -538,7 +526,7 @@ class SciPyLocalOptimizer(LocalOptimizer):
     @override
     def solve(self) -> OptimizationResult | None:
         try:
-            solution: scipy.optimize.OptimizeResult = scipy.optimize.minimize(
+            solution = scipy.optimize.minimize(
                 self.f_np,
                 self.x0[:, 0],
                 method=self.method,
@@ -551,15 +539,15 @@ class SciPyLocalOptimizer(LocalOptimizer):
                 options=self.options,
             )
 
-            x_opt: np.ndarray = solution.x[:, np.newaxis]
-            f_opt: float = solution.fun
+            x_opt = solution.x[:, np.newaxis]
+            f_opt = solution.fun
 
-            g_opt: np.ndarray | None = None
+            g_opt = None
             if self.g is not None:
-                g_opt = self.g(x_opt).full()  # pyright: ignore[reportAttributeAccessIssue, reportOptionalMemberAccess]
-            h_opt: np.ndarray = np.empty([0])
+                g_opt = self.g(x_opt).full()
+            h_opt = np.empty([0])
             if self.h is not None:
-                h_opt = self.h(x_opt).full()  # pyright: ignore[reportAttributeAccessIssue, reportOptionalMemberAccess]
+                h_opt = self.h(x_opt).full()
 
         except Exception:
             traceback.print_exc()

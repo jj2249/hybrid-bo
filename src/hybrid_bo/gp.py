@@ -1,4 +1,4 @@
-from typing import Any, overload
+from typing import overload
 
 import casadi as cas
 import numpy as np
@@ -11,9 +11,7 @@ from hybrid_bo.kernels import Kernel
 from hybrid_bo.means import Mean
 from hybrid_bo.optimizers import (
     CasadiOptimizer,
-    LocalOptimizer,
     MultiStartOptimizer,
-    OptimizationResult,
     Optimizer,
 )
 from hybrid_bo.parameterization import (
@@ -51,10 +49,10 @@ class GP(Parameterized):
         self.epsilon: float = epsilon
 
         if kernel.n_inputs != n_inputs:
-            msg: str = "kernel.n_inputs != n_inputs"
+            msg = "kernel.n_inputs != n_inputs"
             raise Exception(msg)
         if mean.n_inputs != n_inputs:
-            msg: str = "mean.n_inputs != n_inputs"
+            msg = "mean.n_inputs != n_inputs"
             raise Exception(msg)
 
         if noise_std is None:
@@ -68,26 +66,26 @@ class GP(Parameterized):
 
         else:
             if noise_std.shape != (1, 1):
-                msg: str = "noise_std.shape != (1, 1)"
+                msg = "noise_std.shape != (1, 1)"
                 raise Exception(msg)
 
             self.noise_std = noise_std
             self.noise_std.set_name("noise_std")
 
         if (X_train is None) and (Y_train is not None):
-            msg: str = "(X_train is None) and (Y_train is not None)"
+            msg = "(X_train is None) and (Y_train is not None)"
             raise Exception(msg)
 
         if (X_train is not None) and (Y_train is None):
-            msg: str = "(X_train is not None) and (Y_train is None)"
+            msg = "(X_train is not None) and (Y_train is None)"
             raise Exception(msg)
 
         if (X_train is not None) and (Y_train is not None):
             if X_train.shape[1] != n_inputs:
-                msg: str = "X_train.shape[1] != n_inputs"
+                msg = "X_train.shape[1] != n_inputs"
                 raise Exception(msg)
             if X_train.shape[0] != Y_train.shape[0]:
-                msg: str = "X_train.shape[0] != Y_train.shape[0]"
+                msg = "X_train.shape[0] != Y_train.shape[0]"
                 raise Exception(msg)
 
             self.X_train = X_train
@@ -110,9 +108,9 @@ class GP(Parameterized):
         self.parameters += self.mean.parameters
 
         if optimizer is None:
-            plugin_options: dict[str, Any] = {"print_time": 0}
-            solver_options: dict[str, Any] = {"print_level": 0}
-            local_optimizer: LocalOptimizer = CasadiOptimizer(
+            plugin_options = {"print_time": 0}
+            solver_options = {"print_level": 0}
+            local_optimizer = CasadiOptimizer(
                 "ipopt",
                 "nonlinear",
                 plugin_options,
@@ -124,13 +122,13 @@ class GP(Parameterized):
 
     def set_XY_train(self, X_train: np.ndarray, Y_train: np.ndarray) -> None:
         if X_train.shape[1] != self.n_inputs:
-            msg: str = "X_train.shape[1] != self.n_inputs"
+            msg = "X_train.shape[1] != self.n_inputs"
             raise Exception(msg)
         if Y_train.shape[1] != 1:
-            msg: str = "Y_train.shape[1] != 1"
+            msg = "Y_train.shape[1] != 1"
             raise Exception(msg)
         if X_train.shape[0] != Y_train.shape[0]:
-            msg: str = "X_train.shape[0] != Y_train.shape[0]"
+            msg = "X_train.shape[0] != Y_train.shape[0]"
             raise Exception(msg)
 
         self.X_train = X_train
@@ -138,39 +136,39 @@ class GP(Parameterized):
         self.n_training_points = X_train.shape[0]
 
     def create_training_problem(self) -> JoinedParameters:
-        trainables: JoinedParameters = JoinedParameters(self.trainable_parameters())
+        trainables = JoinedParameters(self.trainable_parameters())
 
         if trainables.n_elements == 0:
             self.optimizer.set_problem(0, cas.Function())
 
         else:
             # Transformed domain, used for optimization problem
-            x: SymbolicType = SymbolicType.sym("x", trainables.n_elements, 1)  # pyright: ignore[reportArgumentType]
+            x = SymbolicType.sym("x", trainables.n_elements, 1)
 
             # Original domain
-            x_original: SymbolicType = inv_transform(x, trainables.transform_mode)
+            x_original = inv_transform(x, trainables.transform_mode)
 
             # Transformed domain
-            lower_bounds: np.ndarray = transform(
+            lower_bounds = transform(
                 trainables.min,
                 trainables.transform_mode,
             )
 
             # Transformed domain
-            upper_bounds: np.ndarray = transform(
+            upper_bounds = transform(
                 trainables.max,
                 trainables.transform_mode,
             )
 
             # Original domain
-            negative_log_mll_function: cas.Function = cas.Function(
+            negative_log_mll_function = cas.Function(
                 "log_mll_function",
                 [trainables.symbol],
                 [-self.log_mll_variable()],
             )
 
             # Transformed domain
-            f: cas.Function = cas.Function(
+            f = cas.Function(
                 "f",
                 [x],
                 [negative_log_mll_function(x_original)],
@@ -188,12 +186,12 @@ class GP(Parameterized):
         return trainables
 
     def solve_training_problem(self) -> None:
-        trainables: JoinedParameters = JoinedParameters(self.trainable_parameters())
-        solution: OptimizationResult | None = self.optimizer.solve()
+        trainables = JoinedParameters(self.trainable_parameters())
+        solution = self.optimizer.solve()
 
         if solution is not None:
-            x_opt_original: np.ndarray = inv_transform(  # pyright: ignore[reportCallIssue]
-                solution.x,  # pyright: ignore[reportArgumentType]
+            x_opt_original = inv_transform(
+                solution.x,
                 trainables.transform_mode,
             )
             set_values(x_opt_original, self.trainable_parameters())
@@ -213,32 +211,32 @@ class GP(Parameterized):
     def predict(
         self, X: CasadiType | np.ndarray
     ) -> tuple[CasadiType | np.ndarray, CasadiType | np.ndarray]:
-        m_t: np.ndarray = self.mean.m(self.X_train)
-        K_tt: np.ndarray = self.kernel.k(self.X_train, self.X_train) + (
+        m_t = self.mean.m(self.X_train)
+        K_tt = self.kernel.k(self.X_train, self.X_train) + (
             self.noise_std.value**2 + self.epsilon
         ) * np.eye(self.n_training_points)
-        L_tt: np.ndarray = np.linalg.cholesky(K_tt)
+        L_tt = np.linalg.cholesky(K_tt)
 
-        m_x: CasadiType | np.ndarray = self.mean.m(X)
-        K_xx: CasadiType | np.ndarray = self.kernel.k(X, X)  # pyright: ignore[reportArgumentType, reportCallIssue]
-        K_xt: CasadiType | np.ndarray = self.kernel.k(X, self.X_train)
+        m_x = self.mean.m(X)
+        K_xx = self.kernel.k(X, X)
+        K_xt = self.kernel.k(X, self.X_train)
 
-        alpha: CasadiType | np.ndarray = solve(L_tt, (self.Y_train - m_t))
-        beta: CasadiType | np.ndarray = solve(L_tt, K_xt.T)
+        alpha = solve(L_tt, (self.Y_train - m_t))
+        beta = solve(L_tt, K_xt.T)
 
-        mean: CasadiType | np.ndarray = m_x + beta.T @ alpha
-        covariance: CasadiType | np.ndarray = K_xx - beta.T @ beta
+        mean = m_x + beta.T @ alpha
+        covariance = K_xx - beta.T @ beta
 
         return mean, covariance
 
     def log_mll(self) -> float:
-        m_t: np.ndarray = self.mean.m(self.X_train)  # pyright: ignore[reportAssignmentType]
-        K_tt: np.ndarray = self.kernel.k(self.X_train, self.X_train) + (
+        m_t = self.mean.m(self.X_train)
+        K_tt = self.kernel.k(self.X_train, self.X_train) + (
             self.noise_std.value**2 + self.epsilon
         ) * np.eye(self.n_training_points)
 
-        L_tt: np.ndarray = np.linalg.cholesky(K_tt)
-        alpha: np.ndarray = np.linalg.solve(
+        L_tt = np.linalg.cholesky(K_tt)
+        alpha = np.linalg.solve(
             L_tt.T,
             np.linalg.solve(L_tt, (self.Y_train - m_t)),
         )
@@ -250,21 +248,21 @@ class GP(Parameterized):
         )
 
     def log_mll_variable(self) -> CasadiType | float:
-        trainables: JoinedParameters = JoinedParameters(self.trainable_parameters())
+        trainables = JoinedParameters(self.trainable_parameters())
         if trainables.n_elements == 0:
             return self.log_mll()
 
-        m_t: CasadiType | np.ndarray = self.mean.m_variable(self.X_train)
+        m_t = self.mean.m_variable(self.X_train)
 
-        K_tt: CasadiType | np.ndarray = self.kernel.k_variable(
+        K_tt = self.kernel.k_variable(
             self.X_train,
             self.X_train,
         ) + (self.noise_std.variable() ** 2 + self.epsilon) * np.eye(
             self.n_training_points,
         )
 
-        L_tt: CasadiType | np.ndarray = cholesky(K_tt)
-        alpha: CasadiType | np.ndarray = solve(
+        L_tt = cholesky(K_tt)
+        alpha = solve(
             L_tt.T,
             solve(L_tt, (self.Y_train - m_t)),
         )

@@ -13,7 +13,7 @@ def get_sampling_based_data(
     n_points_complete: list[int],
 ) -> tuple[list[np.ndarray], list[np.ndarray]]:
 
-    measurement_noise_complete: list[np.ndarray] = [
+    measurement_noise_complete = [
         np.atleast_2d(
             scipy.stats.norm.rvs(
                 0,
@@ -25,7 +25,7 @@ def get_sampling_based_data(
         for i_run_bo in range(config.n_runs_bo)
     ]
 
-    gp_gaussian_standard_samples_complete: list[np.ndarray] = [
+    gp_gaussian_standard_samples_complete = [
         np.atleast_2d(
             scipy.stats.norm.rvs(
                 0,
@@ -51,7 +51,6 @@ def pdf_normal(x: np.ndarray) -> np.ndarray: ...
 
 
 def pdf_normal(x: CasadiType | np.ndarray) -> CasadiType | np.ndarray:
-    pdf: CasadiType | np.ndarray
     if isinstance(x, CasadiType):
         pdf = cas.exp(-0.5 * x**2) / np.sqrt(2 * np.pi)
     else:
@@ -70,7 +69,6 @@ def cdf_normal(x: np.ndarray) -> np.ndarray: ...
 
 
 def cdf_normal(x: CasadiType | np.ndarray) -> CasadiType | np.ndarray:
-    cdf: CasadiType | np.ndarray
     if isinstance(x, CasadiType):
         cdf = 0.5 * (1 + cas.erf(x / np.sqrt(2)))
     else:
@@ -164,15 +162,15 @@ def ei_gp(
     """
 
     if mean.shape != std.shape:
-        msg: str = "mean.shape != std.shape"
+        msg = "mean.shape != std.shape"
         raise Exception(msg)
 
-    sign: float = 1.0
+    sign = 1.0
     if not maximize:
         sign = -1.0
 
-    gamma: CasadiType | np.ndarray = sign * (mean - incumbent) / (std + epsilon)
-    ei: CasadiType | np.ndarray = sign * (mean - incumbent) * cdf_normal(
+    gamma = sign * (mean - incumbent) / (std + epsilon)
+    ei = sign * (mean - incumbent) * cdf_normal(
         gamma,
     ) + std * pdf_normal(gamma)
 

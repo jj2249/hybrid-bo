@@ -73,7 +73,7 @@ class OutputScaleKernel(Kernel):
             )
         else:
             if outputscale.n_elements != 1:
-                msg: str = "outputscale.n_elements != 1"
+                msg = "outputscale.n_elements != 1"
                 raise Exception(msg)
 
             self.outputscale = outputscale
@@ -87,19 +87,19 @@ class OutputScaleKernel(Kernel):
         self.parameters += self.base_kernel.parameters
 
     @override
-    def k(  # pyright: ignore[reportIncompatibleMethodOverride]
+    def k(
         self,
         X1: CasadiType | np.ndarray,
         X2: CasadiType | np.ndarray,
     ) -> CasadiType | np.ndarray:
         if X1.shape[1] != self.n_inputs:
-            msg: str = "X1.shape[1] != self.n_inputs"
+            msg = "X1.shape[1] != self.n_inputs"
             raise Exception(msg)
         if X2.shape[1] != self.n_inputs:
-            msg: str = "X2.shape[1] != self.n_inputs"
+            msg = "X2.shape[1] != self.n_inputs"
             raise Exception(msg)
 
-        return self.outputscale.value * self.base_kernel.k(X1, X2)  # pyright: ignore[reportCallIssue, reportArgumentType]
+        return self.outputscale.value * self.base_kernel.k(X1, X2)
 
     @override
     def k_variable(
@@ -108,10 +108,10 @@ class OutputScaleKernel(Kernel):
         X2: CasadiType | np.ndarray,
     ) -> CasadiType | np.ndarray:
         if X1.shape[1] != self.n_inputs:
-            msg: str = "X1.shape[1] != self.n_inputs"
+            msg = "X1.shape[1] != self.n_inputs"
             raise Exception(msg)
         if X2.shape[1] != self.n_inputs:
-            msg: str = "X2.shape[1] != self.n_inputs"
+            msg = "X2.shape[1] != self.n_inputs"
             raise Exception(msg)
 
         return self.outputscale.variable() * self.base_kernel.k_variable(X1, X2)
@@ -122,19 +122,19 @@ class ZeroKernel(Kernel):
         super().__init__(n_inputs)
 
     @override
-    def k(  # pyright: ignore[reportIncompatibleMethodOverride]
+    def k(
         self,
         X1: CasadiType | np.ndarray,
         X2: CasadiType | np.ndarray,
     ) -> CasadiType | np.ndarray:
         if X1.shape[1] != X2.shape[1]:
-            msg: str = "X1.shape[1] != X2.shape[1]"
+            msg = "X1.shape[1] != X2.shape[1]"
             raise Exception(msg)
 
         if isinstance(X1, CasadiType):
-            return type(X1).zeros(X1.shape[0], X2.shape[0])  # pyright: ignore[reportArgumentType]
+            return type(X1).zeros(X1.shape[0], X2.shape[0])
         if isinstance(X2, CasadiType):
-            return type(X2).zeros(X1.shape[0], X2.shape[0])  # pyright: ignore[reportArgumentType]
+            return type(X2).zeros(X1.shape[0], X2.shape[0])
         return np.zeros((X1.shape[0], X2.shape[0]))
 
     @override
@@ -161,7 +161,7 @@ class ConstantKernel(Kernel):
             )
         else:
             if constant.n_elements != 1:
-                msg: str = "constant.n_elements != 1"
+                msg = "constant.n_elements != 1"
                 raise Exception(msg)
 
             self.constant = constant
@@ -170,26 +170,26 @@ class ConstantKernel(Kernel):
         self.parameters.append(self.constant)
 
     @override
-    def k(  # pyright: ignore[reportIncompatibleMethodOverride]
+    def k(
         self,
         X1: CasadiType | np.ndarray,
         X2: CasadiType | np.ndarray,
     ) -> CasadiType | np.ndarray:
         if X1.shape[1] != X2.shape[1]:
-            msg: str = "X1.shape[1] != X2.shape[1]"
+            msg = "X1.shape[1] != X2.shape[1]"
             raise Exception(msg)
 
         if isinstance(X1, CasadiType):
-            return self.constant.value * type(X1).ones(X1.shape[0], X2.shape[0])  # pyright: ignore[reportArgumentType]
+            return self.constant.value * type(X1).ones(X1.shape[0], X2.shape[0])
         if isinstance(X2, CasadiType):
-            return self.constant.value * type(X2).ones(X1.shape[0], X2.shape[0])  # pyright: ignore[reportArgumentType]
+            return self.constant.value * type(X2).ones(X1.shape[0], X2.shape[0])
         return self.constant.value * np.ones((X1.shape[0], X2.shape[0]))
 
     def k_variable(
         self, X1: CasadiType | np.ndarray, X2: CasadiType | np.ndarray
     ) -> CasadiType | np.ndarray:
         if X1.shape[1] != X2.shape[1]:
-            msg: str = "X1.shape[1] != X2.shape[1]"
+            msg = "X1.shape[1] != X2.shape[1]"
             raise Exception(msg)
 
         return self.constant.variable() * np.ones((X1.shape[0], X2.shape[0]))
@@ -226,9 +226,7 @@ class LinearKernel(Kernel):
 
         else:
             if (scale.n_elements != 1) and (scale.shape != (self.n_inputs, 1)):
-                msg: str = (
-                    "(scale.n_elements != 1) and (scale.shape != (self.n_inputs, 1))"
-                )
+                msg = "(scale.n_elements != 1) and (scale.shape != (self.n_inputs, 1))"
                 raise Exception(msg)
 
             if scale.n_elements == 1:
@@ -241,23 +239,23 @@ class LinearKernel(Kernel):
 
         self.parameters.append(self.scale)
 
-    def k(  # pyright: ignore[reportIncompatibleMethodOverride]
+    def k(
         self, X1: CasadiType | np.ndarray, X2: CasadiType | np.ndarray
     ) -> CasadiType | np.ndarray:
         if X1.shape[1] != self.n_inputs:
-            msg: str = "X1.shape[1] != self.n_inputs"
+            msg = "X1.shape[1] != self.n_inputs"
             raise Exception(msg)
         if X2.shape[1] != self.n_inputs:
-            msg: str = "X2.shape[1] != self.n_inputs"
+            msg = "X2.shape[1] != self.n_inputs"
             raise Exception(msg)
 
         if self.ARD:
-            scale_sqrt_tiled_1: np.ndarray = np.tile(
+            scale_sqrt_tiled_1 = np.tile(
                 np.sqrt(self.scale.value.T),
                 (X1.shape[0], 1),
             )
 
-            scale_sqrt_tiled_2: np.ndarray = np.tile(
+            scale_sqrt_tiled_2 = np.tile(
                 np.sqrt(self.scale.value.T),
                 (X2.shape[0], 1),
             )
@@ -270,19 +268,19 @@ class LinearKernel(Kernel):
         self, X1: CasadiType | np.ndarray, X2: CasadiType | np.ndarray
     ) -> CasadiType | np.ndarray:
         if X1.shape[1] != self.n_inputs:
-            msg: str = "X1.shape[1] != self.n_inputs"
+            msg = "X1.shape[1] != self.n_inputs"
             raise Exception(msg)
         if X2.shape[1] != self.n_inputs:
-            msg: str = "X2.shape[1] != self.n_inputs"
+            msg = "X2.shape[1] != self.n_inputs"
             raise Exception(msg)
 
         if self.ARD:
-            scale_sqrt_tiled_1: np.ndarray = np.tile(
+            scale_sqrt_tiled_1 = np.tile(
                 np.sqrt(self.scale.value.T),
                 (X1.shape[0], 1),
             )
 
-            scale_sqrt_tiled_2: np.ndarray = np.tile(
+            scale_sqrt_tiled_2 = np.tile(
                 np.sqrt(self.scale.value.T),
                 (X2.shape[0], 1),
             )
@@ -330,7 +328,7 @@ class StationaryKernel(Kernel, ABC):
             if (lengthscale.n_elements != 1) and (
                 lengthscale.shape != (self.n_inputs, 1)
             ):
-                msg: str = (
+                msg = (
                     "(lengthscale.n_elements != 1)"
                     " and (lengthscale.shape != (self.n_inputs, 1))"
                 )
@@ -347,24 +345,22 @@ class StationaryKernel(Kernel, ABC):
         self.parameters.append(self.lengthscale)
 
     @override
-    def k(  # pyright: ignore[reportIncompatibleMethodOverride]
+    def k(
         self,
         X1: CasadiType | np.ndarray,
         X2: CasadiType | np.ndarray,
     ) -> CasadiType | np.ndarray:
         if X1.shape[1] != self.n_inputs:
-            msg: str = "X1.shape[1] != self.n_inputs"
+            msg = "X1.shape[1] != self.n_inputs"
             raise Exception(msg)
         if X2.shape[1] != self.n_inputs:
-            msg: str = "X2.shape[1] != self.n_inputs"
+            msg = "X2.shape[1] != self.n_inputs"
             raise Exception(msg)
 
         # choice of 1e-30:
         # https://github.com/cornellius-gp/gpytorch/blob/main/gpytorch/kernels/kernel.py,
         # function dist()
-        squared_distance: CasadiType | np.ndarray = (
-            self._squared_distance_with_lengthscale(X1, X2, 1e-30)  # pyright: ignore[reportArgumentType, reportCallIssue]
-        )
+        squared_distance = self._squared_distance_with_lengthscale(X1, X2, 1e-30)
         return self.k_from_squared_distance(squared_distance)
 
     @override
@@ -374,17 +370,17 @@ class StationaryKernel(Kernel, ABC):
         X2: CasadiType | np.ndarray,
     ) -> CasadiType | np.ndarray:
         if X1.shape[1] != self.n_inputs:
-            msg: str = "X1.shape[1] != self.n_inputs"
+            msg = "X1.shape[1] != self.n_inputs"
             raise Exception(msg)
         if X2.shape[1] != self.n_inputs:
-            msg: str = "X2.shape[1] != self.n_inputs"
+            msg = "X2.shape[1] != self.n_inputs"
             raise Exception(msg)
 
         # choice of 1e-30:
         # https://github.com/cornellius-gp/gpytorch/blob/main/gpytorch/kernels/kernel.py,
         # function dist()
-        squared_distance: CasadiType | np.ndarray = (
-            self._squared_distance_with_lengthscale_variable(X1, X2, 1e-30)
+        squared_distance = self._squared_distance_with_lengthscale_variable(
+            X1, X2, 1e-30
         )
         return self.k_from_squared_distance(squared_distance)
 

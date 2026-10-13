@@ -21,10 +21,10 @@ def tile(
     repetitions: list[int],
 ) -> CasadiType | np.ndarray:
     if len(X.shape) != 2:
-        msg: str = "len(X.shape) != 2."
+        msg = "len(X.shape) != 2."
         raise Exception(msg)
     if len(repetitions) != 2:
-        msg: str = "len(repetitions) != 2"
+        msg = "len(repetitions) != 2"
         raise Exception(msg)
 
     if isinstance(X, CasadiType):
@@ -44,13 +44,13 @@ def diag(X: np.ndarray) -> np.ndarray: ...
 
 def diag(X: CasadiType | np.ndarray) -> CasadiType | np.ndarray:
     if len(X.shape) != 2:
-        msg: str = "len(X.shape) != 2"
+        msg = "len(X.shape) != 2"
         raise Exception(msg)
 
     if isinstance(X, CasadiType):
         return cas.diag(X)
 
-    X_diag: np.ndarray = np.diag(X)
+    X_diag = np.diag(X)
     if len(X_diag.shape) == 1:
         X_diag = X_diag[:, np.newaxis]
     return X_diag

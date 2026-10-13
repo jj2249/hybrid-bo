@@ -38,9 +38,9 @@ class ZeroMean(Mean):
         super().__init__(n_inputs)
 
     @override
-    def m(self, X: CasadiType | np.ndarray) -> CasadiType | np.ndarray:  # pyright: ignore[reportIncompatibleMethodOverride]
+    def m(self, X: CasadiType | np.ndarray) -> CasadiType | np.ndarray:
         if isinstance(X, CasadiType):
-            return type(X).zeros(X.shape[0], 1)  # pyright: ignore[reportArgumentType]
+            return type(X).zeros(X.shape[0], 1)
         return np.zeros((X.shape[0], 1))
 
     @override
@@ -63,7 +63,7 @@ class ConstantMean(Mean):
             )
         else:
             if constant.n_elements != 1:
-                msg: str = "constant.n_elements != 1"
+                msg = "constant.n_elements != 1"
                 raise Exception(msg)
 
             self.constant = constant
@@ -72,9 +72,9 @@ class ConstantMean(Mean):
         self.parameters.append(self.constant)
 
     @override
-    def m(self, X: CasadiType | np.ndarray) -> CasadiType | np.ndarray:  # pyright: ignore[reportIncompatibleMethodOverride]
+    def m(self, X: CasadiType | np.ndarray) -> CasadiType | np.ndarray:
         if isinstance(X, CasadiType):
-            return self.constant.value * type(X).ones(X.shape[0], 1)  # pyright: ignore[reportArgumentType]
+            return self.constant.value * type(X).ones(X.shape[0], 1)
         return self.constant.value * np.ones((X.shape[0], 1))
 
     @override
