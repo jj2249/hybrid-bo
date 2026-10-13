@@ -6,6 +6,10 @@ the PR that completes them. `main` stays frozen until every stage is done.
 The aim throughout is code that is easier to read, change and extend, so the
 library can scale (see the goal in CLAUDE.md). `examples/flash_unit` is out of scope.
 
+Keep the README up to date: any PR that changes usage, the public API or
+behaviour updates it in the same PR. This matters most from stage 4 onwards,
+when the examples and logic start to change.
+
 ## Stage 0: workflow
 - [x] CLAUDE.md, ROADMAP.md, PR template, `ai-assisted` label
 
