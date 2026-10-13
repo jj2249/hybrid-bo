@@ -41,10 +41,14 @@ See `illustrative_example/custom_problem.py`:
 ```python
 u = SymbolicType.sym("u", config.n_u, 1)
 x = SymbolicType.sym("x", config.n_x, 1)
-f = cas.Function("f", [u, x], [...])                  # scalar (1,1)
-h_known = cas.Function("h_known", [u, x], [...])      # known residuals
-h_unknown = cas.Function("h_unknown", [u, x], [...])  # true residuals, simulation only
-Problem(f, h_known, h_unknown, *u_acq, *x_acq, *u_sp, *x_sp)  # each a (lower, upper) pair
+# Objective, scalar (1, 1)
+f = cas.Function("f", [u, x], [...])
+# Known residuals
+h_known = cas.Function("h_known", [u, x], [...])
+# True residuals, only used in the simulation
+h_unknown = cas.Function("h_unknown", [u, x], [...])
+# Bounds: each of u_acq, x_acq, u_sp, x_sp is a (lower, upper) pair
+Problem(f, h_known, h_unknown, *u_acq, *x_acq, *u_sp, *x_sp)
 ```
 
 - Each function takes exactly `[u, x]`, as column vectors, and has one output.
