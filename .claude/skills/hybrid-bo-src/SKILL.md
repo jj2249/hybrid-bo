@@ -41,6 +41,9 @@ A system with decision variables `u` (n_u) and states `x` (n_x):
 
 ## Module map
 
+This describes the current code. The restructure (DESIGN.md, PRs R0 to R9)
+replaces it piece by piece, and each restructure PR updates this section.
+
 - `routines/`: the four entry points, all with the signature
   `(problem, config, gp, u_initial, [optimizer], results_dir, create_plots)`.
   The sampling routines take no optimizer. They return `None` and pickle results

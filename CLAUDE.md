@@ -17,7 +17,9 @@ abstractions with a single use or boilerplate from static languages.
 The `flash_unit` example is out of scope for the refactor; leave it alone.
 
 The roadmap is in [ROADMAP.md](ROADMAP.md). Check it before starting work, and
-tick items off in the PR that completes them.
+tick items off in the PR that completes them. The target API and the plan for
+each restructure PR (R0 to R9) are in [DESIGN.md](DESIGN.md). Read it before any
+restructure PR, and update it when a PR changes the design.
 
 ## Commands
 
@@ -75,3 +77,15 @@ remove the marker in the PR that fixes the bug.
 ## Conventions
 
 <!-- Grown incrementally: record decisions here as they are made. -->
+
+- Data in, data out: functions return new values and don't mutate their inputs.
+  No set-then-call sequences (`set_problem` → `solve()`).
+- Frozen dataclasses for data and configuration. Use classes only where users
+  swap implementations (kernels, means, solvers, strategies).
+- Functions take what they use, not a `Config`. Randomness is an explicit `rng`.
+- Rows are points: a point is `(n,)`, a set is `(n_points, n)`, `f` is
+  `(n_points,)`. Column vectors only in CasADi glue code.
+- The library returns results; examples save them.
+- Errors raise specific exceptions; the caller decides whether to continue.
+- Annotate signatures and dataclass fields, not local variables (to be confirmed
+  in the annotation PR).
