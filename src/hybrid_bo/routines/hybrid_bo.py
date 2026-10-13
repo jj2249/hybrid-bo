@@ -499,22 +499,22 @@ def setup_acq_problem(
     input_gp_samples = cas.horzcat(u_input_gp_samples, x_input_gp_samples)
 
     x_lower_bounds_samples = np.tile(
-        problem.x_lower_bounds_acquisition.T,
+        problem.x_bounds.lower,
         (config.n_samples_gp, 1),
     )
 
     x_upper_bounds_samples = np.tile(
-        problem.x_upper_bounds_acquisition.T,
+        problem.x_bounds.upper,
         (config.n_samples_gp, 1),
     )
 
     x_lower_bounds_starting_points_samples = np.tile(
-        problem.x_lower_bounds_starting_points.T,
+        problem.x_start_bounds.lower,
         (config.n_samples_gp, 1),
     )
 
     x_upper_bounds_starting_points_samples = np.tile(
-        problem.x_upper_bounds_starting_points.T,
+        problem.x_start_bounds.upper,
         (config.n_samples_gp, 1),
     )
 
@@ -591,7 +591,7 @@ def setup_acq_problem(
 
         lower_bounds = np.concatenate(
             (
-                problem.u_lower_bounds_acquisition,
+                problem.u_bounds.lower[:, np.newaxis],
                 x_lower_bounds_samples[:, config.indices_x_input_gp].flatten("F")[
                     :,
                     np.newaxis,
@@ -609,7 +609,7 @@ def setup_acq_problem(
 
         upper_bounds = np.concatenate(
             (
-                problem.u_upper_bounds_acquisition,
+                problem.u_bounds.upper[:, np.newaxis],
                 x_upper_bounds_samples[:, config.indices_x_input_gp].flatten("F")[
                     :,
                     np.newaxis,
@@ -627,7 +627,7 @@ def setup_acq_problem(
 
         lower_bounds_starting_points = np.concatenate(
             (
-                problem.u_lower_bounds_starting_points,
+                problem.u_start_bounds.lower[:, np.newaxis],
                 x_lower_bounds_starting_points_samples[
                     :,
                     config.indices_x_input_gp,
@@ -654,7 +654,7 @@ def setup_acq_problem(
 
         upper_bounds_starting_points = np.concatenate(
             (
-                problem.u_upper_bounds_starting_points,
+                problem.u_start_bounds.upper[:, np.newaxis],
                 x_upper_bounds_starting_points_samples[
                     :,
                     config.indices_x_input_gp,
@@ -688,7 +688,7 @@ def setup_acq_problem(
 
         lower_bounds = np.concatenate(
             (
-                problem.u_lower_bounds_acquisition,
+                problem.u_bounds.lower[:, np.newaxis],
                 x_lower_bounds_samples[:, config.indices_x_input_gp].flatten("F")[
                     :,
                     np.newaxis,
@@ -702,7 +702,7 @@ def setup_acq_problem(
 
         upper_bounds = np.concatenate(
             (
-                problem.u_upper_bounds_acquisition,
+                problem.u_bounds.upper[:, np.newaxis],
                 x_upper_bounds_samples[:, config.indices_x_input_gp].flatten("F")[
                     :,
                     np.newaxis,
@@ -716,7 +716,7 @@ def setup_acq_problem(
 
         lower_bounds_starting_points = np.concatenate(
             (
-                problem.u_lower_bounds_starting_points,
+                problem.u_start_bounds.lower[:, np.newaxis],
                 x_lower_bounds_starting_points_samples[
                     :,
                     config.indices_x_input_gp,
@@ -736,7 +736,8 @@ def setup_acq_problem(
 
         upper_bounds_starting_points = np.concatenate(
             (
-                problem.u_upper_bounds_acquisition,
+                # Known issue (ROADMAP): probably meant u_start_bounds.upper
+                problem.u_bounds.upper[:, np.newaxis],
                 x_upper_bounds_starting_points_samples[
                     :,
                     config.indices_x_input_gp,

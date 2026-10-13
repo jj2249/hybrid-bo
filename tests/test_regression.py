@@ -1,7 +1,7 @@
 """Regression tests: each routine on the illustrative example vs stored results.
 
-These lock in the *current* behaviour, including the suspected bound bug at
-`routines/hybrid_bo.py:769` (see ROADMAP Known issues). If a PR intentionally
+These lock in the *current* behaviour, including the suspected bound bug in
+`routines/hybrid_bo.py` `setup_acq_problem` (see ROADMAP Known issues). If a PR intentionally
 changes behaviour, regenerate with `pixi run -e dev test --update-baselines` and
 review the JSON diff.
 """

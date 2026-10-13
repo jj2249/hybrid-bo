@@ -1,14 +1,17 @@
+from dataclasses import dataclass
+
 import casadi as cas
 import numpy as np
 import scipy
 import scipy.optimize
 
-from hybrid_bo.optimizers import MultiStartOptimizer, OptimizationResult, Optimizer
+from hybrid_bo.bounds import Bounds, lhs
 from hybrid_bo.type_aliases import SymbolicType
 
 
+@dataclass(frozen=True)
 class Problem:
-    """Class that defines a problem.
+    """A partially known system.
 
     min     f(u, x)
 
@@ -23,163 +26,81 @@ class Problem:
 
     - u: input (degrees of freedom)
     - x: states
+
+    Bounds:
+    - u_bounds, x_bounds: box constraints of the acquisition problem. x_bounds also
+      decide whether a root found when evaluating the system is accepted; they may be
+      infinite (`Bounds.unbounded(n_x)`).
+    - u_start_bounds, x_start_bounds: finite ranges for starting points and initial
+      guesses.
     """
 
-    def __init__(
-        self,
-        f: cas.Function,
-        h_known: cas.Function,
-        h_unknown: cas.Function,
-        u_lower_bounds_acquisition: np.ndarray,
-        u_upper_bounds_acquisition: np.ndarray,
-        x_lower_bounds_acquisition: np.ndarray,
-        x_upper_bounds_acquisition: np.ndarray,
-        u_lower_bounds_starting_points: np.ndarray,
-        u_upper_bounds_starting_points: np.ndarray,
-        x_lower_bounds_starting_points: np.ndarray,
-        x_upper_bounds_starting_points: np.ndarray,
-        threshold_equality: float = 1.0e-10,
-    ) -> None:
-        # %% Attributes
+    f: cas.Function
+    h_known: cas.Function
+    h_unknown: cas.Function
+    u_bounds: Bounds
+    x_bounds: Bounds
+    u_start_bounds: Bounds
+    x_start_bounds: Bounds
+    # Residual norm below which an equation system counts as solved
+    threshold_equality: float = 1.0e-10
 
-        self.f: cas.Function = f  # Objective function to minimize
-        self.h_known: cas.Function = h_known  # Known state equations
-        self.h_unknown: cas.Function = h_unknown  # Unknown state equations
+    @property
+    def n_u(self) -> int:
+        return self.f.numel_in(0)
 
-        self.n_u: int = self.f.numel_in(0)  # Number of elements in u
-        self.n_x: int = self.f.numel_in(1)  # Number of elements in x
+    @property
+    def n_x(self) -> int:
+        return self.f.numel_in(1)
 
-        # Number of equations in h_known and h_unknown
-        self.n_h_known: int = self.h_known.numel_out(0)
-        self.n_h_unknown: int = self.h_unknown.numel_out(0)
+    @property
+    def n_h_known(self) -> int:
+        return self.h_known.numel_out(0)
 
-        # The following bounds are used
-        # - as box constraints in the original problem formulation
-        # - as box constraints in the acquisition problem formulation
-        self.u_lower_bounds_acquisition: np.ndarray = u_lower_bounds_acquisition.copy()
-        self.u_upper_bounds_acquisition: np.ndarray = u_upper_bounds_acquisition.copy()
+    @property
+    def n_h_unknown(self) -> int:
+        return self.h_unknown.numel_out(0)
 
-        # The following bounds are used
-        # - as box constraints in the original problem formulation
-        # - as box constraints in the acquisition problem formulation
-        # - for checking if a solution is valid when evaluating the system at a specific u
-        self.x_lower_bounds_acquisition: np.ndarray = x_lower_bounds_acquisition.copy()
-        self.x_upper_bounds_acquisition: np.ndarray = x_upper_bounds_acquisition.copy()
+    def __post_init__(self) -> None:
+        n_u, n_x = self.n_u, self.n_x
 
-        # The following bounds are important when using a method that relies on multiple starting points
-        # They can be used to generate starting points
-        self.u_lower_bounds_starting_points: np.ndarray = (
-            u_lower_bounds_starting_points.copy()
-        )
-        self.u_upper_bounds_starting_points: np.ndarray = (
-            u_upper_bounds_starting_points.copy()
-        )
+        for name, function, n_out in (
+            ("f", self.f, 1),
+            ("h_known", self.h_known, self.n_h_known),
+            ("h_unknown", self.h_unknown, self.n_h_unknown),
+        ):
+            if function.n_in() != 2 or function.n_out() != 1:
+                msg = f"{name} must take (u, x) and have one output"
+                raise ValueError(msg)
+            if function.size_in(0) != (n_u, 1) or function.size_in(1) != (n_x, 1):
+                msg = (
+                    f"{name} inputs must be columns ({n_u}, 1) and ({n_x}, 1), "
+                    f"got {function.size_in(0)} and {function.size_in(1)}"
+                )
+                raise ValueError(msg)
+            if function.size_out(0) != (n_out, 1):
+                msg = f"{name} output must be ({n_out}, 1), got {function.size_out(0)}"
+                raise ValueError(msg)
 
-        # The following bounds are important when using a method that relies on multiple starting points
-        # They can be used to generate starting points
-        self.x_lower_bounds_starting_points: np.ndarray = (
-            x_lower_bounds_starting_points.copy()
-        )
-        self.x_upper_bounds_starting_points: np.ndarray = (
-            x_upper_bounds_starting_points.copy()
-        )
+        for name, bounds, n in (
+            ("u_bounds", self.u_bounds, n_u),
+            ("x_bounds", self.x_bounds, n_x),
+            ("u_start_bounds", self.u_start_bounds, n_u),
+            ("x_start_bounds", self.x_start_bounds, n_x),
+        ):
+            if bounds.lower.shape != (n,):
+                msg = f"{name} must have size {n}, got {bounds.lower.size}"
+                raise ValueError(msg)
 
-        self.threshold_equality: float = threshold_equality  # Threshold that defines if two floats are considered equal
-
-        # %% Exceptions
-
-        if self.f.n_in() != 2:
-            msg = "self.f.n_in() != 2"
-            raise Exception(msg)
-        if self.f.n_out() != 1:
-            msg = "self.f.n_out() != 1"
-            raise Exception(msg)
-
-        if self.f.size_in(0) != (self.n_u, 1):
-            msg = "self.f.size_in(0) != (self.n_u, 1)"
-            raise Exception(msg)
-        if self.f.size_in(1) != (self.n_x, 1):
-            msg = "self.f.size_in(1) != (self.n_x, 1)"
-            raise Exception(msg)
-        if self.f.size_out(0) != (1, 1):
-            msg = "self.f.size_out(0) != (1, 1)"
-            raise Exception(msg)
-
-        if self.h_known.n_in() != 2:
-            msg = "self.h_known.n_in() != 2"
-            raise Exception(msg)
-        if self.h_known.n_out() != 1:
-            msg = "self.h_known.n_out() != 1"
-            raise Exception(msg)
-
-        if self.h_known.size_in(0) != (self.n_u, 1):
-            msg = "self.h_known.size_in(0) != (self.n_u, 1)"
-            raise Exception(msg)
-        if self.h_known.size_in(1) != (self.n_x, 1):
-            msg = "self.h_known.size_in(1) != (self.n_x, 1)"
-            raise Exception(msg)
-        if self.h_known.size_out(0) != (self.n_h_known, 1):
-            msg = "self.h_known.size_out(0) != (self.n_h_known, 1)"
-            raise Exception(msg)
-
-        if self.h_unknown.n_in() != 2:
-            msg = "self.h_unknown.n_in() != 2"
-            raise Exception(msg)
-        if self.h_unknown.n_out() != 1:
-            msg = "self.h_unknown.n_out() != 1"
-            raise Exception(msg)
-
-        if self.h_unknown.size_in(0) != (self.n_u, 1):
-            msg = "self.h_unknown.size_in(0) != (self.n_u, 1)"
-            raise Exception(msg)
-        if self.h_unknown.size_in(1) != (self.n_x, 1):
-            msg = "self.h_unknown.size_in(1) != (self.n_x, 1)"
-            raise Exception(msg)
-        if self.h_unknown.size_out(0) != (self.n_h_unknown, 1):
-            msg = "self.h_unknown.size_out(0) != (self.n_h_unknown, 1)"
-            raise Exception(msg)
-
-        if self.u_lower_bounds_acquisition.shape != (self.n_u, 1):
-            msg = "self.u_lower_bounds_acquisition.shape != (self.n_u, 1)"
-            raise Exception(msg)
-        if self.u_upper_bounds_acquisition.shape != (self.n_u, 1):
-            msg = "self.u_upper_bounds_acquisition.shape != (self.n_u, 1)"
-            raise Exception(msg)
-
-        if self.x_lower_bounds_acquisition.shape != (self.n_x, 1):
-            msg = "self.x_lower_bounds_acquisition.shape != (self.n_x, 1)"
-            raise Exception(msg)
-        if self.x_upper_bounds_acquisition.shape != (self.n_x, 1):
-            msg = "self.x_upper_bounds_acquisition.shape != (self.n_x, 1)"
-            raise Exception(msg)
-
-        if self.u_lower_bounds_starting_points.shape != (self.n_u, 1):
-            msg = "self.u_lower_bounds_starting_points.shape != (self.n_u, 1)"
-            raise Exception(msg)
-        if self.u_upper_bounds_starting_points.shape != (self.n_u, 1):
-            msg = "self.u_upper_bounds_starting_points.shape != (self.n_u, 1)"
-            raise Exception(msg)
-
-        if self.x_lower_bounds_starting_points.shape != (self.n_x, 1):
-            msg = "self.x_lower_bounds_starting_points.shape != (self.n_x, 1)"
-            raise Exception(msg)
-        if self.x_upper_bounds_starting_points.shape != (self.n_x, 1):
-            msg = "self.x_upper_bounds_starting_points.shape != (self.n_x, 1)"
-            raise Exception(msg)
-
-        if not np.isfinite(self.u_lower_bounds_starting_points).all():
-            msg = "not np.isfinite(self.u_lower_bounds_starting_points).all()"
-            raise Exception(msg)
-        if not np.isfinite(self.u_upper_bounds_starting_points).all():
-            msg = "not np.isfinite(self.u_upper_bounds_starting_points).all()"
-            raise Exception(msg)
-
-        if not np.isfinite(self.x_lower_bounds_starting_points).all():
-            msg = "not np.isfinite(self.x_lower_bounds_starting_points).all()"
-            raise Exception(msg)
-        if not np.isfinite(self.x_upper_bounds_starting_points).all():
-            msg = "not np.isfinite(self.x_upper_bounds_starting_points).all()"
-            raise Exception(msg)
+        for name, bounds in (
+            ("u_start_bounds", self.u_start_bounds),
+            ("x_start_bounds", self.x_start_bounds),
+        ):
+            if not (
+                np.isfinite(bounds.lower).all() and np.isfinite(bounds.upper).all()
+            ):
+                msg = f"{name} must be finite"
+                raise ValueError(msg)
 
     def evaluate_with_simulation(
         self,
@@ -371,20 +292,7 @@ class Problem:
         if rng is None:
             rng = np.random.default_rng()
 
-        sampler = scipy.stats.qmc.LatinHypercube(
-            self.n_x,
-            rng=rng,
-        )
-
-        samples = sampler.random(n_starts_max)
-        X_0 = (
-            self.x_lower_bounds_starting_points.T
-            + (
-                self.x_upper_bounds_starting_points
-                - self.x_lower_bounds_starting_points
-            ).T
-            * samples
-        )
+        X_0 = lhs(self.x_start_bounds, n_starts_max, rng)
 
         # %% Setup equations to be solved
 
@@ -428,8 +336,8 @@ class Problem:
 
             if (
                 (np.linalg.norm(h_np(roots.ravel())) < self.threshold_equality)
-                and ((roots >= self.x_lower_bounds_acquisition).all())
-                and ((roots <= self.x_upper_bounds_acquisition).all())
+                and ((roots.ravel() >= self.x_bounds.lower).all())
+                and ((roots.ravel() <= self.x_bounds.upper).all())
             ):
                 ready_to_return = True
 
@@ -505,15 +413,11 @@ class Problem:
             rng=rng,
         )
 
+        # Known issue: the sampler uses x_fixed.size dimensions, not len(indices_x_free)
         samples = sampler.random(n_starts_max)
-        X_free_0 = (
-            self.x_lower_bounds_starting_points[indices_x_free].T
-            + (
-                self.x_upper_bounds_starting_points[indices_x_free]
-                - self.x_lower_bounds_starting_points[indices_x_free]
-            ).T
-            * samples
-        )
+        lower = self.x_start_bounds.lower[indices_x_free]
+        upper = self.x_start_bounds.upper[indices_x_free]
+        X_free_0 = lower + (upper - lower) * samples
 
         # %% Setup equations to be solved
 
@@ -549,8 +453,8 @@ class Problem:
 
             if (
                 (np.linalg.norm(h_np(roots.ravel())) < self.threshold_equality)
-                and ((roots >= self.x_lower_bounds_acquisition[indices_x_free]).all())
-                and ((roots <= self.x_upper_bounds_acquisition[indices_x_free]).all())
+                and ((roots.ravel() >= self.x_bounds.lower[indices_x_free]).all())
+                and ((roots.ravel() <= self.x_bounds.upper[indices_x_free]).all())
             ):
                 ready_to_return = True
 
@@ -646,63 +550,3 @@ class Problem:
             use_jacobian,
             rng,
         )
-
-    def solve(
-        self,
-        optimizer: Optimizer,
-        n_starting_points: int = 10,
-        rng: np.random.Generator | None = None,
-    ) -> OptimizationResult:
-        # Parameters n_starting_points and rng are only important if type(optimizer) == MultiStartOptimizer
-
-        u = SymbolicType.sym("u", self.n_u, 1)
-        x = SymbolicType.sym("x", self.n_x, 1)
-        w = cas.vertcat(u, x)
-
-        n_variables = self.n_u + self.n_x
-
-        h_expression = cas.vertcat(
-            self.h_known(u, x),
-            self.h_unknown(u, x),
-        )
-        h = cas.Function("h", [w], [h_expression])
-
-        lower_bounds = np.vstack(
-            (self.u_lower_bounds_acquisition, self.x_lower_bounds_acquisition),
-        )
-        upper_bounds = np.vstack(
-            (self.u_upper_bounds_acquisition, self.x_upper_bounds_acquisition),
-        )
-
-        f_expression = self.f(u, x)
-        f = cas.Function("f", [w], [f_expression])
-
-        optimizer.set_problem(n_variables, f, None, h, lower_bounds, upper_bounds)
-
-        if isinstance(optimizer, MultiStartOptimizer):
-            optimizer.lower_bounds_starting_points = np.vstack(
-                (
-                    self.u_lower_bounds_starting_points,
-                    self.x_lower_bounds_starting_points,
-                ),
-            )
-            optimizer.upper_bounds_starting_points = np.vstack(
-                (
-                    self.u_upper_bounds_starting_points,
-                    self.x_upper_bounds_starting_points,
-                ),
-            )
-
-            starting_points = optimizer.create_lhs_samples(
-                n_starting_points,
-                rng,
-            )
-            optimizer.X0 = starting_points
-
-        solution = optimizer.solve()
-
-        if solution is None:
-            msg = "solution is None"
-            raise Exception(msg)
-
-        return solution

@@ -57,30 +57,33 @@ The code is hard to change for three reasons:
 
 All snippets are illustrative. `hb` is `import hybrid_bo as hb`.
 
-### Bounds and sampling (R1)
+### Bounds and sampling (R1, done; `src/hybrid_bo/bounds.py`)
 
 ```python
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class Bounds:
-    lower: np.ndarray  # (n,)
-    upper: np.ndarray  # (n,)
-    # __post_init__: convert to float arrays, check shapes match and lower <= upper
+    lower: np.ndarray  # (n,), read-only float
+    upper: np.ndarray  # (n,), read-only float
+
+    # Accepts array-likes; rejects non-1-D input, shape mismatch and lower > upper
+    def __init__(self, lower: ArrayLike, upper: ArrayLike): ...
+    @classmethod
+    def unbounded(cls, n: int) -> "Bounds": ...
 
 
-# Each returns (n, d). lhs replaces the 5 LHS copies.
+# Each returns (n, d)
 def lhs(bounds: Bounds, n: int, rng) -> np.ndarray: ...
 def uniform(bounds: Bounds, n: int, rng) -> np.ndarray: ...
-
-
-# Concatenate, e.g. for the acquisition variables
-def stack(*bounds: Bounds) -> Bounds: ...
 ```
 
-The 5 LHS copies are `problem.py` (×2), `optimizers.py`, `routines/latin_hypercube_sampling.py`
-and `examples/illustrative_example/user_definitions.py`. The new helper must draw exactly as
-they do (`scipy.stats.qmc.LatinHypercube(d, rng=rng).random(n)`, then scale).
+`lhs` draws exactly like the code it replaced: `scipy.stats.qmc.LatinHypercube(d, rng=rng).random(n)`,
+scaled as `lower + (upper - lower) * samples`. Two hand-written copies remain:
+- the fixed-x solve in `problem.py`, which keeps its Known issue until R2;
+- `MultiStartOptimizer.create_lhs_samples`, which goes in R3.
 
-### Problem (R1)
+`stack(*bounds)` arrives with its first user, R6.
+
+### Problem (R1, done)
 
 ```python
 @dataclass(frozen=True)
@@ -89,21 +92,18 @@ class Problem:
     h_known: cas.Function  # h_known(u, x) -> (n_h_known, 1)
     h_unknown: cas.Function  # the true system; only the simulator uses it
     u_bounds: Bounds  # box for u in the acquisition problem
-    x_start_bounds: Bounds  # finite; starting points for x (fsolve, multistart)
-    # Optional at construction; __post_init__ fills them in, so they are always Bounds.
-    # x_bounds defaults to unbounded, u_start_bounds to u_bounds (which must then be finite).
-    x_bounds: Bounds | None = None
-    u_start_bounds: Bounds | None = None
+    x_bounds: Bounds  # box for x; Bounds.unbounded(n_x) if none
+    u_start_bounds: Bounds  # finite; initial points, multistart starts
+    x_start_bounds: Bounds  # finite; fsolve guesses, multistart starts
+    threshold_equality: float = 1e-10  # moves to Simulator.tol in R2
 
-    n_u: int  # property, from f
-    n_x: int  # property, from f
-    # __post_init__ also runs the checks in today's Problem.__init__
-    # (function arities and sizes, finite start bounds)
+    n_u: int  # property, from f (also n_x, n_h_known, n_h_unknown)
+    # __post_init__: function arities and sizes, bound sizes, finite start bounds
 ```
 
-`threshold_equality` moves to `Simulator.tol`. `Problem.solve` (the true optimum, with
-`h_unknown` known) is called nowhere, so it is deleted. If someone needs it later, it
-becomes a function built on `minimize`.
+All four bounds are required, so there are no defaults computed from other arguments
+(CLAUDE.md Conventions). `Problem.solve` was deleted, since nothing called it. If someone
+needs the true optimum later, it becomes a function built on `minimize`.
 
 ### Simulation (R2)
 
@@ -310,9 +310,9 @@ def standard_acquisition(problem, model: FittedGP, incumbent, kind) -> Acquisiti
 ```
 
 `hybrid_acquisition` replaces `routines/hybrid_bo.py:setup_acq_problem`. The four
-repeated bound concatenations become `stack(...)` over per-block `Bounds`. Keep the Known
-issue at `hybrid_bo.py:769` (`u_upper_bounds_acquisition` used as a start bound) until its
-fix PR. The new structure makes it a one-word fix. `formulation_acq` strings become
+repeated bound concatenations become `stack(...)` over per-block `Bounds` (add `stack` to
+`bounds.py` here). Keep the Known issue (`problem.u_bounds.upper` used as an upper start
+bound, marked with a comment in `setup_acq_problem`) until its fix PR. The new structure makes it a one-word fix. `formulation_acq` strings become
 `EI()`/`LCB()`, and both routines validate them the same way.
 
 ### The loop (R7)
@@ -451,6 +451,8 @@ problem = hb.Problem(
     h_known=cas.Function("h_known", [u, x], [x[0] + cas.exp(x[0]) - x[1]]),
     h_unknown=cas.Function("h_unknown", [u, x], [cas.sin(u) - x[1]]),
     u_bounds=hb.Bounds([-2.0], [2.0]),
+    x_bounds=hb.Bounds.unbounded(2),
+    u_start_bounds=hb.Bounds([-2.0], [2.0]),
     x_start_bounds=hb.Bounds([-2.5, -2.0], [1.0, 2.0]),
 )
 strategy = hb.HybridBO(
@@ -485,9 +487,11 @@ the example API changes, the README if usage changes, and this file if the desig
     (R5).
   - Noise has one column per measured state (fixes that Known issue).
   - Plot functions still use `config.rng`, which no longer affects the runs.
-- **R1: `Bounds`, `lhs`/`uniform`/`stack`, `Problem` as a frozen dataclass.**
-  - First: tag `pre-refactor` and exclude flash_unit.
-  - Update the illustrative example, `user_definitions.get_u_initial` and `test_problem.py`.
+- **R1: `Bounds`, `lhs`/`uniform`, `Problem` as a frozen dataclass. Done.**
+  - `pre-refactor` tag (at `main`'s `94396db`) pushed; flash_unit excluded from ty.
+  - `Problem.solve` deleted; `tests/test_bounds.py` added.
+  - `examples/main.py` dispatches with `match` and looks up plot functions only when
+    plotting is on.
 - **R2: `Simulator`, `Measurement`, `Evaluation`.** Delete the 9 evaluation methods.
 - **R3: `NLP`, `Solution`, `Ipopt`, `Scipy`, `minimize`.**
   - Routines and `GP` stop setting optimiser attributes.

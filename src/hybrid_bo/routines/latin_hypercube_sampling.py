@@ -4,8 +4,8 @@ from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
-import scipy
 
+from hybrid_bo.bounds import lhs
 from hybrid_bo.config import Config
 from hybrid_bo.problem import Problem
 from hybrid_bo.results import ResultsBO
@@ -46,11 +46,7 @@ def do_latin_hypercube_sampling(
         measurement_noise_complete.append(measurement_noise)
 
         # Additional points of u for the BO loop by latin hypercube sampling
-        sampler = scipy.stats.qmc.LatinHypercube(problem.n_u, rng=rng)
-        u_additional = problem.u_lower_bounds_starting_points.T + (
-            problem.u_upper_bounds_starting_points.T
-            - problem.u_lower_bounds_starting_points.T
-        ) * sampler.random(config.n_iterations_bo)
+        u_additional = lhs(problem.u_start_bounds, config.n_iterations_bo, rng)
 
         u = np.full((n_points, config.n_u), np.nan)
         x = np.full((n_points, config.n_x), np.nan)

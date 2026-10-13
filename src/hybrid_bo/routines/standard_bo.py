@@ -203,10 +203,10 @@ def do_standard_bo(
 
                 if isinstance(optimizer, MultiStartOptimizer):
                     optimizer.lower_bounds_starting_points = (
-                        problem.u_lower_bounds_starting_points
+                        problem.u_start_bounds.lower[:, np.newaxis]
                     )
                     optimizer.upper_bounds_starting_points = (
-                        problem.u_upper_bounds_starting_points
+                        problem.u_start_bounds.upper[:, np.newaxis]
                     )
 
                     starting_points = optimizer.create_lhs_samples(
@@ -415,8 +415,9 @@ def setup_acq_problem(
     n_variables = problem.n_u
     w = u
 
-    lower_bounds = problem.u_lower_bounds_acquisition
-    upper_bounds = problem.u_upper_bounds_acquisition
+    # Optimisers take (n, 1) bounds until R3
+    lower_bounds = problem.u_bounds.lower[:, np.newaxis]
+    upper_bounds = problem.u_bounds.upper[:, np.newaxis]
 
     mean_transformed, var_transformed = gp.predict(u_transformed.T)
 

@@ -49,8 +49,9 @@ replaces it piece by piece, and each restructure PR updates this section.
   `(problem, config, [gp], u_initial, rngs, [optimizer], results_dir, create_plots)`.
   The sampling routines take no GP and no optimizer. They return `None` and pickle
   results into `results_dir`. Most of the loop is duplicated across the four files.
-- `problem.py`: `Problem` holds `f`, `h_known`, `h_unknown` (CasADi
-  functions) and the bounds, and evaluates the system.
+- `bounds.py`: `Bounds` (lower/upper pair) and the samplers `lhs` and `uniform`.
+- `problem.py`: `Problem`, a frozen dataclass, holds `f`, `h_known`, `h_unknown`
+  (CasADi functions) and four `Bounds`, and evaluates the system.
 - `gp.py`, `kernels.py`, `means.py`: an exact GP (Cholesky), kernels and means.
 - `parameterization.py`: `Parameter` (symbol, value, bounds, transform) and
   `Parameterized`, the base of GP, Kernel and Mean.
@@ -66,15 +67,22 @@ replaces it piece by piece, and each restructure PR updates this section.
 
 ## Conventions and contracts
 
-- **Shapes are mixed.** Single points passed to `Problem` methods and the
-  optimisers are column vectors `(n, 1)`. Data sets are row-major
-  `(n_points, n)`. Expect `.T` calls.
-- **Bounds.** `Problem` has 8 `(n, 1)` arrays: {u, x} x {acquisition, starting
-  points} x {lower, upper}.
-  - Acquisition bounds are the box constraints of the acquisition problem. They
-    also decide whether an `fsolve` root is accepted, and may be infinite.
-  - Starting-point bounds set the ranges for multistart and `fsolve` initial
-    guesses, so they must be finite.
+- **Shapes are mixed** (until the restructure finishes). Single points passed to
+  `Problem` methods and the optimisers are column vectors `(n, 1)`. Data sets
+  are row-major `(n_points, n)`. `Bounds` are 1-D `(n,)`. Expect `.T` and
+  `[:, np.newaxis]` calls.
+  - **Pitfall:** comparing or combining a column `(n, 1)` with a 1-D `(n,)`
+    array broadcasts to `(n, n)` without any error. Use `col.ravel()` or
+    `bounds.lower[:, np.newaxis]`.
+- **Bounds.** `Bounds(lower, upper)` stores read-only 1-D float arrays.
+  `Problem` has four, all required:
+  - `u_bounds`/`x_bounds` are the box constraints of the acquisition problem.
+    `x_bounds` also decides whether an `fsolve` root is accepted, and may be
+    infinite (`Bounds.unbounded(n_x)`).
+  - `u_start_bounds`/`x_start_bounds` set the ranges for initial points,
+    multistart starts and `fsolve` guesses, so they must be finite.
+  - Sample with `lhs(bounds, n, rng)` / `uniform(bounds, n, rng)`, not by
+    hand. Their draws are part of the regression baselines.
 - **`Problem` methods come in pairs.** `single_evaluate_*_original` does the
   real solve, and the plain `single_evaluate_*` delegates to it. Subclasses
   override the plain method (e.g. to add a fallback). Routines call the plain

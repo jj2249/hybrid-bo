@@ -21,7 +21,7 @@ when the examples and logic start to change.
       re-exports are exempt from F401. Aliases use plain assignment because
       they're used at runtime (`isinstance`, `.sym`, kernel instantiation).
 - [x] ty resolves example imports (`quality` env includes the `examples`
-      feature). The hook is manual until the remaining 57 errors are fixed
+      feature). The hook is manual until the remaining 52 errors are fixed
       (stage 4).
 - [x] Ignore example results dirs in git
 
@@ -49,7 +49,7 @@ with the restructure, which groups the data (`Bounds`, `Evaluation`, `History`).
 Every PR keeps the regression baselines unchanged unless it is marked *logic*.
 - [x] R0 *logic*: per-run randomness; LHS/uniform stop training GPs; noise has one
       column per measured state; regenerate the baselines
-- [ ] R1: tag `pre-refactor` and exclude flash_unit; `Bounds`, `lhs`/`uniform`/`stack`;
+- [x] R1: tag `pre-refactor` and exclude flash_unit; `Bounds`, `lhs`/`uniform`;
       `Problem` as a frozen dataclass
 - [ ] R2: `Simulator`, `Measurement`, `Evaluation` replace the 9 evaluation methods
 - [ ] R3: `NLP`, solvers, `minimize`; nothing mutates optimisers; no tracebacks for
@@ -92,9 +92,10 @@ the code, and that PR removes the entry.
   instead of `scale.variable()`, so the ARD scale is never trained. Covered by
   an xfail test. `LinearKernel` isn't used by the examples. *Goes away in R4*: with
   a single code path the bug can't exist. R4 removes the xfail marker and says so.
-- `routines/hybrid_bo.py:769`: when `use_output_gp_as_opt_var=False`, the upper
-  starting-point bounds use `problem.u_upper_bounds_acquisition`; this should
-  probably be `u_upper_bounds_starting_points`. The two coincide in the
+- `routines/hybrid_bo.py` `setup_acq_problem` (marked with a comment): when
+  `use_output_gp_as_opt_var=False`, the upper starting-point bounds use
+  `problem.u_bounds.upper`; this should probably be `problem.u_start_bounds.upper`.
+  The two coincide in the
   illustrative example, which hides it. *R6 keeps it; logic PR after R6.*
 - `formulation_acq` is validated strictly in `hybrid_bo.py` but with
   `startswith("lcb")` in `standard_bo.py:443`. *Goes away in R6 (`EI`/`LCB`).*

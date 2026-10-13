@@ -13,7 +13,7 @@ from hybrid_bo.routines import (
 
 # Options:
 # "illustrative_example"
-# "flash_unit"
+# "flash_unit" (only at the `pre-refactor` tag; see examples/flash_unit/README.md)
 example = "illustrative_example"
 
 # Options:
@@ -40,46 +40,38 @@ if __name__ == "__main__":
     rngs = config.rng.spawn(config.n_runs_bo)
     initial_points = [pkg.get_u_initial(problem, rng) for rng in rngs]
 
-    routines = {
-        "hybrid_bo": (
-            do_hybrid_bo,
-            pkg.get_gp_hybrid_bo,
-            pkg.get_optimizer_hybrid_bo,
-            pkg.create_plots_hybrid_bo,
-        ),
-        "standard_bo": (
-            do_standard_bo,
-            pkg.get_gp_standard_bo,
-            pkg.get_optimizer_standard_bo,
-            pkg.create_plots_standard_bo,
-        ),
-        "latin_hypercube_sampling": (
-            do_latin_hypercube_sampling,
-            None,
-            None,
-            pkg.create_plots_latin_hypercube_sampling,
-        ),
-        "uniform_sampling": (
-            do_uniform_sampling,
-            None,
-            None,
-            pkg.create_plots_uniform_sampling,
-        ),
-    }
+    results_dir = example_dir / routine
+    # Plot functions are only needed (and looked up) when plotting is on
+    plots = getattr(pkg, f"create_plots_{routine}") if config.create_plots else None
 
-    run, make_gp, make_optimizer, make_plots = routines[routine]
-
-    # Sampling routines take no GP and no optimizer
-    model = (
-        {"gp": make_gp(problem.n_u), "optimizer": make_optimizer()} if make_gp else {}
-    )
-
-    run(
-        problem,
-        config,
-        u_initial_complete=initial_points,
-        rngs=rngs,
-        **model,
-        results_dir=example_dir / routine,
-        create_plots=make_plots if config.create_plots else None,
-    )
+    match routine:
+        case "hybrid_bo":
+            do_hybrid_bo(
+                problem,
+                config,
+                pkg.get_gp_hybrid_bo(problem.n_u),
+                initial_points,
+                rngs,
+                pkg.get_optimizer_hybrid_bo(),
+                results_dir,
+                plots,
+            )
+        case "standard_bo":
+            do_standard_bo(
+                problem,
+                config,
+                pkg.get_gp_standard_bo(problem.n_u),
+                initial_points,
+                rngs,
+                pkg.get_optimizer_standard_bo(),
+                results_dir,
+                plots,
+            )
+        case "latin_hypercube_sampling":
+            do_latin_hypercube_sampling(
+                problem, config, initial_points, rngs, results_dir, plots
+            )
+        case "uniform_sampling":
+            do_uniform_sampling(
+                problem, config, initial_points, rngs, results_dir, plots
+            )

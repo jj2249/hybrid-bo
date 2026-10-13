@@ -6,7 +6,8 @@ description: Use when writing, modifying or running an example under examples/. 
 # Writing and running examples
 
 `examples/illustrative_example/` is the reference. `examples/flash_unit/` is out
-of scope for the current refactor, so leave it alone. This describes the current
+of scope for the current refactor, so leave it alone. It targets the
+`pre-refactor` tag and is excluded from ty and tests. This describes the current
 contract. The restructure (ROADMAP stage 4, DESIGN.md) and stage 5 will simplify
 it, and this skill should be updated alongside.
 
@@ -34,10 +35,8 @@ it, and this skill should be updated alongside.
 to the routine as `rngs`. Plot callbacks may use `config.rng`; it doesn't affect
 the runs.
 
-`examples/main.py` currently looks up all four `create_plots_*` even when
-`create_plots: False`, so an example without them crashes there. Copy the
-illustrative plot modules, or call the routines directly as
-`tests/test_regression.py` does.
+`main.py` looks up `create_plots_<routine>` only when `create_plots: True`, so an
+example without plot functions runs with plotting off.
 
 ## Defining the problem
 
@@ -52,18 +51,28 @@ f = cas.Function("f", [u, x], [...])
 h_known = cas.Function("h_known", [u, x], [...])
 # True residuals, only used in the simulation
 h_unknown = cas.Function("h_unknown", [u, x], [...])
-# Bounds: each of u_acq, x_acq, u_sp, x_sp is a (lower, upper) pair
-Problem(f, h_known, h_unknown, *u_acq, *x_acq, *u_sp, *x_sp)
+u_bounds = Bounds([-2.0], [2.0])
+Problem(
+    f,
+    h_known,
+    h_unknown,
+    u_bounds=u_bounds,
+    x_bounds=Bounds.unbounded(2),
+    u_start_bounds=u_bounds,
+    x_start_bounds=Bounds([-2.5, -2.0], [1.0, 2.0]),
+)
 ```
 
 - Each function takes exactly `[u, x]`, as column vectors, and has one output.
   `n_u` and `n_x` are read from `f`.
 - `h_known` and `h_unknown` together must have `n_x` equations, so the system is
   square for `fsolve`.
-- All bounds are `(n, 1)` arrays.
-  - Acquisition bounds (`*_acq`) may be `±inf` for `x`.
-  - Starting-point bounds (`*_sp`) must be finite. They are the ranges for
-    initial guesses and initial points.
+- All four `Bounds` are required. Each takes lists or 1-D arrays of length
+  `n_u`/`n_x`.
+  - `u_bounds`/`x_bounds` are the acquisition box; `x_bounds` may be infinite.
+  - `u_start_bounds`/`x_start_bounds` must be finite. They are the ranges for
+    initial points and initial guesses.
+- Draw initial points with `hybrid_bo.lhs(problem.u_start_bounds, n, rng)`.
 - Use `hybrid_bo.type_aliases.SymbolicType` for symbols.
 
 ## config.yaml

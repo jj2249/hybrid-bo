@@ -33,8 +33,8 @@ def create_plots(
     u_components = []
     for i_component in range(problem.n_u):
         u_component = np.linspace(
-            problem.u_lower_bounds_acquisition[i_component],
-            problem.u_upper_bounds_acquisition[i_component],
+            problem.u_bounds.lower[i_component],
+            problem.u_bounds.upper[i_component],
             n_points[i_component],
         )
         u_components.append(u_component)

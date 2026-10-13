@@ -5,6 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
+from hybrid_bo.bounds import uniform
 from hybrid_bo.config import Config
 from hybrid_bo.problem import Problem
 from hybrid_bo.results import ResultsBO
@@ -45,10 +46,7 @@ def do_uniform_sampling(
         measurement_noise_complete.append(measurement_noise)
 
         # Additional points of u for the BO loop by uniform sampling
-        u_additional = problem.u_lower_bounds_starting_points.T + (
-            problem.u_upper_bounds_starting_points.T
-            - problem.u_lower_bounds_starting_points.T
-        ) * rng.uniform(size=(config.n_iterations_bo, problem.n_u))
+        u_additional = uniform(problem.u_start_bounds, config.n_iterations_bo, rng)
 
         u = np.full((n_points, config.n_u), np.nan)
         x = np.full((n_points, config.n_x), np.nan)

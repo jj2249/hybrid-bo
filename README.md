@@ -69,7 +69,7 @@ To be able to compare the performance with other approaches, we also provide
 
 For the function `do_hybrid_bo()`, you need to provide
 
-* A `Problem` (see [`./src/hybrid_bo/problem.py`](./src/hybrid_bo/problem.py)) as in equation (4) in the [publication](https://arxiv.org/abs/2603.11199)
+* A `Problem` (see [`./src/hybrid_bo/problem.py`](./src/hybrid_bo/problem.py)) as in equation (4) in the [publication](https://arxiv.org/abs/2603.11199), with `Bounds` for u and x (see [`./examples/illustrative_example/custom_problem.py`](./examples/illustrative_example/custom_problem.py))
 * A `Config` (see [`./src/hybrid_bo/config.py`](./src/hybrid_bo/config.py))
 * A `GP` (Gaussian process, see [`./src/hybrid_bo/gp.py`](./src/hybrid_bo/gp.py))
 * An `Optimizer` (see [`./src/hybrid_bo/optimizers.py`](./src/hybrid_bo/optimizers.py))

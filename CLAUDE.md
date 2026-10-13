@@ -90,3 +90,7 @@ remove the marker in the PR that fixes the bug.
 - Annotate signatures and dataclass fields, not local variables. Type errors are
   fixed, not suppressed; if a suppression is unavoidable, use
   `# ty: ignore[rule]` (ty doesn't read `pyright:` comments).
+- Prefer explicit required arguments over defaults computed from other arguments
+  (e.g. `Problem` takes all four `Bounds`; `Bounds.unbounded(n)` covers "no bounds").
+- A dataclass whose constructor converts its inputs (e.g. lists to arrays) gets a
+  typed `__init__` (`init=False`), so fields keep their precise types.
