@@ -31,16 +31,16 @@ class Parameter:
         self.trainable: bool = trainable
         self.transform_mode: str = transform_mode  # Options: "identity" and "log"
         self.symbol: SymbolicType = SymbolicType.sym(
-            self.name,  # pyright: ignore[reportArgumentType]
-            self.n_rows,  # pyright: ignore[reportArgumentType]
-            self.n_columns,  # pyright: ignore[reportArgumentType]
+            self.name,
+            self.n_rows,
+            self.n_columns,
         )
 
         if value is None:
             self.value = np.ones((self.n_rows, self.n_columns))
         elif isinstance(value, np.ndarray):
             if value.shape != (self.n_rows, self.n_columns):
-                msg: str = "value.shape != (self.n_rows, self.n_columns)"
+                msg = "value.shape != (self.n_rows, self.n_columns)"
                 raise Exception(msg)
             self.value = value
         else:
@@ -50,7 +50,7 @@ class Parameter:
             self.min = -np.inf * np.ones((self.n_rows, self.n_columns))
         elif isinstance(min, np.ndarray):
             if min.shape != (self.n_rows, self.n_columns):
-                msg: str = "min.shape != (self.n_rows, self.n_columns)"
+                msg = "min.shape != (self.n_rows, self.n_columns)"
                 raise Exception(msg)
             self.min = min
         else:
@@ -60,7 +60,7 @@ class Parameter:
             self.max = np.inf * np.ones((self.n_rows, self.n_columns))
         elif isinstance(max, np.ndarray):
             if max.shape != (self.n_rows, self.n_columns):
-                msg: str = "max.shape != (self.n_rows, self.n_columns)"
+                msg = "max.shape != (self.n_rows, self.n_columns)"
                 raise Exception(msg)
             self.max = max
         else:
@@ -70,7 +70,7 @@ class Parameter:
         self.trainable = False
         if isinstance(value, np.ndarray):
             if value.shape != (self.n_rows, self.n_columns):
-                msg: str = "value.shape != (self.n_rows, self.n_columns)"
+                msg = "value.shape != (self.n_rows, self.n_columns)"
                 raise Exception(msg)
             self.value = value
         else:
@@ -78,7 +78,7 @@ class Parameter:
 
     def set_name(self, name: str) -> None:
         self.name = name
-        self.symbol = SymbolicType.sym(self.name, self.n_rows, self.n_columns)  # pyright: ignore[reportArgumentType]
+        self.symbol = SymbolicType.sym(self.name, self.n_rows, self.n_columns)
 
     def variable(self) -> SymbolicType | np.ndarray:
         if self.trainable:
@@ -87,14 +87,14 @@ class Parameter:
 
     def __getstate__(self) -> dict:
         # Required for pickling to be possible
-        state: dict = self.__dict__.copy()
+        state = self.__dict__.copy()
         state["symbol"] = None
         return state
 
     def __setstate__(self, state: dict) -> None:
         # Required for pickling to be possible
         self.__dict__.update(state)
-        self.symbol = SymbolicType.sym(self.name, self.n_rows, self.n_columns)  # pyright: ignore[reportArgumentType]
+        self.symbol = SymbolicType.sym(self.name, self.n_rows, self.n_columns)
 
 
 class Parameterized:
@@ -121,10 +121,10 @@ class JoinedParameters:
         self.transform_mode: list[str] = []
         self.symbol: SymbolicType
 
-        value_list: list[np.ndarray] = []
-        min_list: list[np.ndarray] = []
-        max_list: list[np.ndarray] = []
-        symbol_list: list[SymbolicType] = []
+        value_list = []
+        min_list = []
+        max_list = []
+        symbol_list = []
 
         for parameter in parameters:
             self.n_elements += parameter.n_elements
@@ -137,15 +137,15 @@ class JoinedParameters:
         self.value = np.concatenate(value_list)[:, np.newaxis]
         self.min = np.concatenate(min_list)[:, np.newaxis]
         self.max = np.concatenate(max_list)[:, np.newaxis]
-        self.symbol = cas.vertcat(*symbol_list)  # pyright: ignore[reportAttributeAccessIssue]
+        self.symbol = cas.vertcat(*symbol_list)
 
 
 def set_values(values_flattened: np.ndarray, parameters: list[Parameter]) -> None:
     if values_flattened.shape[1] != 1:
-        msg: str = "values_flattened.shape[1] != 1"
+        msg = "values_flattened.shape[1] != 1"
         raise Exception(msg)
 
-    i_values: int = 0
+    i_values = 0
 
     for parameter in parameters:
         value_current = values_flattened[i_values : i_values + parameter.n_elements, 0]
@@ -193,7 +193,7 @@ def transform_single(
         return X
     if transform_mode == "log":
         return log(X)
-    msg: str = f"transform_mode '{transform_mode}' not known."
+    msg = f"transform_mode '{transform_mode}' not known."
     raise Exception(msg)
 
 
@@ -212,14 +212,14 @@ def transform_multiple(
     transform_mode: list[str],
 ) -> CasadiType | np.ndarray:
     if X.shape[1] != 1:
-        msg: str = "X.shape[1] != 1"
+        msg = "X.shape[1] != 1"
         raise Exception(msg)
 
     if X.shape[0] != len(transform_mode):
-        msg: str = "X.shape[0] != len(transform_mode)"
+        msg = "X.shape[0] != len(transform_mode)"
         raise Exception(msg)
 
-    X_transformed: CasadiType | np.ndarray = empty_like(X)
+    X_transformed = empty_like(X)
     for i_mode, mode in enumerate(transform_mode):
         if mode == "identity":
             X_transformed[i_mode, 0] = X[i_mode, 0]
@@ -228,7 +228,7 @@ def transform_multiple(
             X_transformed[i_mode, 0] = log(X[i_mode, 0])
 
         else:
-            msg: str = f"transform_mode '{mode}' not known."
+            msg = f"transform_mode '{mode}' not known."
             raise Exception(msg)
 
     return X_transformed
@@ -280,7 +280,7 @@ def inv_transform_single(
         return X_transformed
     if transform_mode == "log":
         return exp(X_transformed)
-    msg: str = f"transform_mode '{transform_mode}' not known."
+    msg = f"transform_mode '{transform_mode}' not known."
     raise Exception(msg)
 
 
@@ -311,21 +311,21 @@ def inv_transform_multiple(
     transform_mode: list[str],
 ) -> CasadiType | np.ndarray:
     if X_transformed.shape[1] != 1:
-        msg: str = "X_transformed.shape[1] != 1"
+        msg = "X_transformed.shape[1] != 1"
         raise Exception(msg)
 
     if X_transformed.shape[0] != len(transform_mode):
-        msg: str = "X_transformed.shape[0] != len(transform_mode)"
+        msg = "X_transformed.shape[0] != len(transform_mode)"
         raise Exception(msg)
 
-    X: CasadiType | np.ndarray = empty_like(X_transformed)
+    X = empty_like(X_transformed)
     for i_mode, mode in enumerate(transform_mode):
         if mode == "identity":
             X[i_mode, 0] = X_transformed[i_mode, 0]
         elif mode == "log":
             X[i_mode, 0] = exp(X_transformed[i_mode, 0])
         else:
-            msg: str = f"transform_mode '{mode}' not known."
+            msg = f"transform_mode '{mode}' not known."
             raise Exception(msg)
 
     return X

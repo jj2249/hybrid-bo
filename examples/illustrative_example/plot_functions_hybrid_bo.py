@@ -1,14 +1,9 @@
-from typing import TYPE_CHECKING
-
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes
 
 from hybrid_bo import GP, Config, Problem
 from hybrid_bo.affine_transformers import AffineTransformer
-
-if TYPE_CHECKING:
-    from matplotlib.figure import Figure
 
 # plt.rcParams["text.usetex"] = True
 
@@ -29,39 +24,37 @@ def create_plots(
 
     # %% User definitions
 
-    original: bool = False
-    confidence_level: int = 90
-    n_points: list[int] = [101]
+    original = False
+    confidence_level = 90
+    n_points = [101]
 
     # %% Get evaluation points
 
     if len(n_points) != problem.n_u:
-        msg: str = "len(n_points) != problem.n_u"
+        msg = "len(n_points) != problem.n_u"
         raise Exception(msg)
 
-    n_points_total: np.int64 = np.prod(n_points)
+    n_points_total = np.prod(n_points)
 
-    u_components: list[np.ndarray] = []
+    u_components = []
     for i_component in range(problem.n_u):
-        u_component: np.ndarray = np.linspace(
+        u_component = np.linspace(
             problem.u_lower_bounds_acquisition[i_component],
             problem.u_upper_bounds_acquisition[i_component],
             n_points[i_component],
         )
         u_components.append(u_component)
 
-    u_grid: list[np.ndarray] = np.meshgrid(*u_components, indexing="ij")  # pyright: ignore[reportAssignmentType]
+    u_grid = np.meshgrid(*u_components, indexing="ij")
 
     # np.stack():
     #   shape (n_points[0], n_points[1],..., problem.n_u)
     #   Every vector spanning along the last axis corresponds to one evaluation point
     # reshape(): concatenates the evaluation points row-wise
-    u: np.ndarray = np.stack(u_grid, axis=-1).reshape(
+    u = np.stack(u_grid, axis=-1).reshape(
         (n_points_total, problem.n_u),
     )
 
-    x: np.ndarray
-    f: np.ndarray
     x, f = get_evaluation_data(
         problem,
         config,
@@ -71,8 +64,6 @@ def create_plots(
 
     # %% Get GP mean and std
 
-    mean_gp: np.ndarray
-    std_gp: np.ndarray
     mean_gp, std_gp = get_gp_mean_and_std(
         config,
         u,
@@ -84,7 +75,7 @@ def create_plots(
 
     # %% Get samples of f depending on GP samples
 
-    f_samples: np.ndarray = get_f_samples(
+    f_samples = get_f_samples(
         problem,
         config,
         u,
@@ -96,8 +87,6 @@ def create_plots(
 
     # %% Plotting
 
-    fig: Figure
-    ax: np.ndarray  # of Axes
     fig, ax = plt.subplots(3, 1, sharex=True, figsize=(6, 6))
 
     plot_gp(
@@ -166,21 +155,17 @@ def plot_gp(
         99: 2.58,
     }
     if confidence_level not in confidence_factors:
-        msg: str = "For 'confidence_level', only the values 25, 50, 68, 80, 90, 95 and 99 are allowed."
+        msg = "For 'confidence_level', only the values 25, 50, 68, 80, 90, 95 and 99 are allowed."
         raise Exception(msg)
 
-    confidence_factor: float = confidence_factors[confidence_level]
+    confidence_factor = confidence_factors[confidence_level]
 
-    output_gp_lower_confidence_bound: np.ndarray = (
-        mean_gp - confidence_factor * std_gp
-    ).flatten()
-    output_gp_upper_confidence_bound: np.ndarray = (
-        mean_gp + confidence_factor * std_gp
-    ).flatten()
+    output_gp_lower_confidence_bound = (mean_gp - confidence_factor * std_gp).flatten()
+    output_gp_upper_confidence_bound = (mean_gp + confidence_factor * std_gp).flatten()
 
     # %% Plotting
 
-    output_gp: np.ndarray = x[:, config.indices_x_output_gp].flatten()
+    output_gp = x[:, config.indices_x_output_gp].flatten()
 
     ax.scatter(
         u_bo[:n_points_initial, 0],
@@ -222,17 +207,17 @@ def plot_f(
 ) -> None:
     # %% Get sample mean and confidence interval bounds
 
-    f_mean: np.ndarray = np.mean(f_samples, 1)
+    f_mean = np.mean(f_samples, 1)
 
-    exclusive_confidence_quantiles: float = (100 - confidence_level) / 200.0
-    f_confidence_bounds: np.ndarray = np.quantile(
+    exclusive_confidence_quantiles = (100 - confidence_level) / 200.0
+    f_confidence_bounds = np.quantile(
         f_samples,
         [exclusive_confidence_quantiles, 1 - exclusive_confidence_quantiles],
         axis=1,
     )
 
-    f_lower_confidence_bound: np.ndarray = f_confidence_bounds[0, :]
-    f_upper_confidence_bound: np.ndarray = f_confidence_bounds[1, :]
+    f_lower_confidence_bound = f_confidence_bounds[0, :]
+    f_upper_confidence_bound = f_confidence_bounds[1, :]
 
     # %% Plotting
 
@@ -271,16 +256,13 @@ def plot_acq(
     f_samples: np.ndarray,
     f_bo: np.ndarray,
 ) -> None:
-    incumbent: float = np.min(f_bo)
-
-    label: str
-    acq_eval: np.ndarray
+    incumbent = np.min(f_bo)
 
     # %% Lower confidence bound
 
     if config.formulation_acq.startswith("lcb"):
-        f_mean: np.ndarray = np.mean(f_samples, 1)
-        f_std: np.ndarray = np.std(f_samples, 1)
+        f_mean = np.mean(f_samples, 1)
+        f_std = np.std(f_samples, 1)
 
         # We want to minimize the lower confidence bound
         acq_eval = f_mean - config.factor_lcb_std * f_std
@@ -304,8 +286,6 @@ def get_evaluation_data(
     u: np.ndarray,
     original: bool = False,
 ) -> tuple[np.ndarray, np.ndarray]:
-    f: np.ndarray
-    x: np.ndarray
 
     f, x = problem.evaluate_with_simulation(
         u,
@@ -327,29 +307,27 @@ def get_gp_mean_and_std(
     output_transformer_gp: AffineTransformer,
 ) -> tuple[np.ndarray, np.ndarray]:
 
-    input_gp: np.ndarray = np.hstack(
+    input_gp = np.hstack(
         (
             u[:, config.indices_u_input_gp],
             x[:, config.indices_x_input_gp],
         ),
     )
 
-    input_gp_transformed: np.ndarray = input_transformer_gp.transform(
+    input_gp_transformed = input_transformer_gp.transform(
         input_gp,
     )
 
-    mean_gp_transformed: np.ndarray
-    cov_gp_transformed: np.ndarray
     mean_gp_transformed, cov_gp_transformed = gp.predict(
         input_gp_transformed,
     )
 
-    std_gp_transformed: np.ndarray = np.sqrt(np.diag(cov_gp_transformed))[:, np.newaxis]
+    std_gp_transformed = np.sqrt(np.diag(cov_gp_transformed))[:, np.newaxis]
 
-    mean_gp: np.ndarray = output_transformer_gp.inverse_transform(
+    mean_gp = output_transformer_gp.inverse_transform(
         mean_gp_transformed,
     )
-    std_gp: np.ndarray = std_gp_transformed / output_transformer_gp.slope.item()
+    std_gp = std_gp_transformed / output_transformer_gp.slope.item()
 
     return mean_gp, std_gp
 
@@ -363,12 +341,12 @@ def get_f_samples(
     std_gp: np.ndarray,
     original: bool,
 ) -> np.ndarray:
-    n_points_total: int = u.shape[0]
+    n_points_total = u.shape[0]
 
     # Shape: (n_points_total, n_samples_gp)
-    output_gp_samples: np.ndarray = mean_gp + std_gp @ gaussian_standard_samples.T
+    output_gp_samples = mean_gp + std_gp @ gaussian_standard_samples.T
 
-    f_samples: np.ndarray = np.empty((n_points_total, config.n_samples_gp))
+    f_samples = np.empty((n_points_total, config.n_samples_gp))
     for i_sample in range(config.n_samples_gp):
         f_samples[:, [i_sample]], _ = problem.evaluate_with_fixed_x(
             u,

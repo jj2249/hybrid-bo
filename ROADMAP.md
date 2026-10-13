@@ -21,8 +21,8 @@ when the examples and logic start to change.
       re-exports are exempt from F401. Aliases use plain assignment because
       they're used at runtime (`isinstance`, `.sym`, kernel instantiation).
 - [x] ty resolves example imports (`quality` env includes the `examples`
-      feature). The hook is manual until the remaining 64 errors are fixed
-      (stage 3/4).
+      feature). The hook is manual until the remaining 60 errors are fixed
+      (stage 4).
 - [x] Ignore example results dirs in git
 
 ## Stage 2: tests and skills
@@ -36,7 +36,9 @@ when the examples and logic start to change.
 
 ## Stage 3: non-logic cleanup
 - [x] Design the target API ([DESIGN.md](DESIGN.md))
-- [ ] Remove noisy type annotations and the ~100 `pyright: ignore` comments
+- [x] Remove local-variable annotations and the ~100 `pyright: ignore` comments
+      (`self.x: T` annotations stay until the restructure turns those classes into
+      dataclasses)
 - [x] Fix typos (`n_colums` in parameterization.py, "Bayesion" in config.py,
       shape-check messages in problem.py)
 

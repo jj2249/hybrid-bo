@@ -43,31 +43,31 @@ def squared_distance(
     # method Stationary._unscaled_dist()
 
     if (len(X1.shape) != 2) or (len(X2.shape) != 2):
-        msg: str = "(len(X1.shape) != 2) or (len(X2.shape) != 2)"
+        msg = "(len(X1.shape) != 2) or (len(X2.shape) != 2)"
         raise Exception(msg)
 
     if X1.shape[1] != X2.shape[1]:
-        msg: str = "X1.shape[1] != X2.shape[1]"
+        msg = "X1.shape[1] != X2.shape[1]"
         raise Exception(msg)
 
-    n_rows: int = X1.shape[0]
-    n_columns: int = X2.shape[0]
+    n_rows = X1.shape[0]
+    n_columns = X2.shape[0]
 
-    X1_squared_summed_tiled: CasadiType | np.ndarray = tile(
+    X1_squared_summed_tiled = tile(
         sum(X1**2, 1),
         [1, n_columns],
     )
 
-    X2_squared_summed_tiled: CasadiType | np.ndarray = tile(
+    X2_squared_summed_tiled = tile(
         sum(X2**2, 1).T,
         [n_rows, 1],
     )
 
-    squared_distances: CasadiType | np.ndarray = -2.0 * (X1 @ X2.T) + (
+    squared_distances = -2.0 * (X1 @ X2.T) + (
         X1_squared_summed_tiled + X2_squared_summed_tiled
     )
 
-    return fmax(squared_distances, min)  # pyright: ignore[reportCallIssue, reportArgumentType]
+    return fmax(squared_distances, min)
 
 
 @overload
@@ -97,4 +97,4 @@ def distance(
     X2: CasadiType | np.ndarray,
     min_squared: float = 0.0,
 ) -> CasadiType | np.ndarray:
-    return sqrt(squared_distance(X1, X2, min_squared))  # pyright: ignore[reportArgumentType, reportCallIssue]
+    return sqrt(squared_distance(X1, X2, min_squared))

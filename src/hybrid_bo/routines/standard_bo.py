@@ -14,7 +14,7 @@ from hybrid_bo.affine_transformers import (
 )
 from hybrid_bo.config import Config
 from hybrid_bo.gp import GP
-from hybrid_bo.optimizers import MultiStartOptimizer, OptimizationResult, Optimizer
+from hybrid_bo.optimizers import MultiStartOptimizer, Optimizer
 from hybrid_bo.problem import Problem
 from hybrid_bo.results import ResultsBO, ResultsGP
 from hybrid_bo.routines.utils import ei_gp, get_sampling_based_data
@@ -33,22 +33,19 @@ def do_standard_bo(
     # %% Data for all BO runs
 
     if len(u_initial_complete) != config.n_runs_bo:
-        msg: str = "len(u_initial_complete) != config.n_runs_bo"
+        msg = "len(u_initial_complete) != config.n_runs_bo"
         raise Exception(msg)
 
-    results_bo_complete: list[ResultsBO] = []
-    results_gp_complete: list[ResultsGP] = []
+    results_bo_complete = []
+    results_gp_complete = []
 
-    n_points_initial_complete: list[int] = [
-        u_initial.shape[0] for u_initial in u_initial_complete
-    ]
+    n_points_initial_complete = [u_initial.shape[0] for u_initial in u_initial_complete]
 
-    n_points_complete: list[int] = [
+    n_points_complete = [
         (n_points_initial + config.n_iterations_bo)
         for n_points_initial in n_points_initial_complete
     ]
 
-    measurement_noise_complete: list[np.ndarray]
     measurement_noise_complete, _ = get_sampling_based_data(config, n_points_complete)
 
     # %% Iterate over multiple BO runs
@@ -57,36 +54,34 @@ def do_standard_bo(
         # %% Data for current run
 
         # Initial points AND BO iteration points
-        n_points: int = n_points_complete[i_run_bo]
-        measurement_noise: np.ndarray = measurement_noise_complete[i_run_bo]
+        n_points = n_points_complete[i_run_bo]
+        measurement_noise = measurement_noise_complete[i_run_bo]
 
-        u: np.ndarray = np.full((n_points, config.n_u), np.nan)
-        x: np.ndarray = np.full((n_points, config.n_x), np.nan)
-        x_no_noise: np.ndarray = np.full((n_points, config.n_x), np.nan)
-        f: np.ndarray = np.full((n_points, 1), np.nan)
-        f_no_noise: np.ndarray = np.full((n_points, 1), np.nan)
-        incumbents: np.ndarray = np.full((n_points, 1), np.nan)
-        incumbents_no_noise: np.ndarray = np.full((n_points, 1), np.nan)
+        u = np.full((n_points, config.n_u), np.nan)
+        x = np.full((n_points, config.n_x), np.nan)
+        x_no_noise = np.full((n_points, config.n_x), np.nan)
+        f = np.full((n_points, 1), np.nan)
+        f_no_noise = np.full((n_points, 1), np.nan)
+        incumbents = np.full((n_points, 1), np.nan)
+        incumbents_no_noise = np.full((n_points, 1), np.nan)
 
         # Initial points
-        n_points_initial: int = n_points_initial_complete[i_run_bo]
-        measurement_noise_initial: np.ndarray = measurement_noise[:n_points_initial, :]
-        u_initial: np.ndarray = u_initial_complete[i_run_bo]
+        n_points_initial = n_points_initial_complete[i_run_bo]
+        measurement_noise_initial = measurement_noise[:n_points_initial, :]
+        u_initial = u_initial_complete[i_run_bo]
 
-        x_initial: np.ndarray = np.full((n_points, config.n_x), np.nan)
-        x_no_noise_initial: np.ndarray = np.full((n_points, config.n_x), np.nan)
-        f_initial: np.ndarray = np.full((n_points, 1), np.nan)
-        f_no_noise_initial: np.ndarray = np.full((n_points, 1), np.nan)
-        incumbents_initial: np.ndarray = np.full((n_points, 1), np.nan)
-        incumbents_no_noise_initial: np.ndarray = np.full((n_points, 1), np.nan)
+        x_initial = np.full((n_points, config.n_x), np.nan)
+        x_no_noise_initial = np.full((n_points, config.n_x), np.nan)
+        f_initial = np.full((n_points, 1), np.nan)
+        f_no_noise_initial = np.full((n_points, 1), np.nan)
+        incumbents_initial = np.full((n_points, 1), np.nan)
+        incumbents_no_noise_initial = np.full((n_points, 1), np.nan)
 
         # Incumbents
-        incumbent: float
-        incumbent_no_noise: float
 
         # Results
-        results_bo: ResultsBO | None = None
-        results_gp: ResultsGP | None = None
+        results_bo = None
+        results_gp = None
 
         try:
             # %% Get initial points
@@ -126,8 +121,8 @@ def do_standard_bo(
 
             # %% Define GP
 
-            input_transformer_gp: AffineTransformer = MinMaxTransformer()
-            output_transformer_gp: AffineTransformer = StandardTransformer()
+            input_transformer_gp = MinMaxTransformer()
+            output_transformer_gp = StandardTransformer()
 
             set_gp_training_data(
                 gp,
@@ -144,12 +139,12 @@ def do_standard_bo(
             if isinstance(gp.optimizer, MultiStartOptimizer):
                 gp.optimizer.lower_bounds_starting_points = (
                     gp.optimizer.lower_bounds.copy()
-                )  # pyright: ignore[reportOptionalMemberAccess]
+                )
                 gp.optimizer.upper_bounds_starting_points = (
                     gp.optimizer.upper_bounds.copy()
-                )  # pyright: ignore[reportOptionalMemberAccess]
+                )
 
-                starting_points: np.ndarray = gp.optimizer.create_lhs_samples(
+                starting_points = gp.optimizer.create_lhs_samples(
                     config.n_starts_training_gp,
                     config.rng,
                 )
@@ -191,10 +186,6 @@ def do_standard_bo(
             for i_iteration_bo in range(config.n_iterations_bo):
                 # %% Get next point with acquisition function problem
 
-                n_variables: int
-                f_function: cas.Function
-                lower_bounds: np.ndarray
-                upper_bounds: np.ndarray
                 n_variables, f_function, lower_bounds, upper_bounds = setup_acq_problem(
                     config,
                     problem,
@@ -218,26 +209,21 @@ def do_standard_bo(
                         problem.u_upper_bounds_starting_points
                     )
 
-                    starting_points: np.ndarray = optimizer.create_lhs_samples(
+                    starting_points = optimizer.create_lhs_samples(
                         config.n_starts_acq_optimization,
                         config.rng,
                     )
                     optimizer.X0 = starting_points
 
-                solution: OptimizationResult | None = optimizer.solve()
+                solution = optimizer.solve()
 
                 if solution is None:
-                    msg: str = "solution is None"
+                    msg = "solution is None"
                     raise Exception(msg)
 
                 print("Solving acquisition problem done.")
 
-                u_next: np.ndarray = solution.x[: problem.n_u, :]  # pyright: ignore[reportIndexIssue]
-
-                x_next: np.ndarray
-                x_no_noise_next: np.ndarray
-                f_next: float
-                f_no_noise_next: float
+                u_next = solution.x[: problem.n_u, :]
 
                 f_next, x_next, f_no_noise_next, x_no_noise_next = (
                     problem.single_evaluate_with_noisy_simulation(
@@ -281,13 +267,13 @@ def do_standard_bo(
 
                 if isinstance(gp.optimizer, MultiStartOptimizer):
                     gp.optimizer.lower_bounds_starting_points = (
-                        gp.optimizer.lower_bounds.copy()  # pyright: ignore[reportOptionalMemberAccess]
+                        gp.optimizer.lower_bounds.copy()
                     )
                     gp.optimizer.upper_bounds_starting_points = (
-                        gp.optimizer.upper_bounds.copy()  # pyright: ignore[reportOptionalMemberAccess]
+                        gp.optimizer.upper_bounds.copy()
                     )
 
-                    starting_points: np.ndarray = gp.optimizer.create_lhs_samples(
+                    starting_points = gp.optimizer.create_lhs_samples(
                         config.n_starts_training_gp,
                         config.rng,
                     )
@@ -365,7 +351,7 @@ def do_standard_bo(
         results_dir.mkdir(parents=True, exist_ok=True)
 
     if config.save_bo_results:
-        path: Path = results_dir / "results_bo.pkl"
+        path = results_dir / "results_bo.pkl"
         if path.exists():
             print(f"WARNING: File {path} exists. Will not overwrite.")
         else:
@@ -373,7 +359,7 @@ def do_standard_bo(
                 pickle.dump(results_bo_complete, file, protocol=pickle.HIGHEST_PROTOCOL)
 
     if config.save_extended_results:
-        path: Path = results_dir / "measurement_noise.pkl"
+        path = results_dir / "measurement_noise.pkl"
         if path.exists():
             print(f"WARNING: File {path} exists. Will not overwrite.")
         else:
@@ -384,7 +370,7 @@ def do_standard_bo(
                     protocol=pickle.HIGHEST_PROTOCOL,
                 )
 
-        path: Path = results_dir / "results_gp.pkl"
+        path = results_dir / "results_gp.pkl"
         if path.exists():
             print(f"WARNING: File {path} exists. Will not overwrite.")
         else:
@@ -403,11 +389,11 @@ def set_gp_training_data(
     input_gp_transformer: AffineTransformer,
     output_gp_transformer: AffineTransformer,
 ) -> None:
-    u_transformed: np.ndarray = input_gp_transformer.fit_transform(
+    u_transformed = input_gp_transformer.fit_transform(
         u,
     )
 
-    f_transformed: np.ndarray = output_gp_transformer.fit_transform(
+    f_transformed = output_gp_transformer.fit_transform(
         f,
     )
 
@@ -424,22 +410,18 @@ def setup_acq_problem(
 ) -> tuple[int, cas.Function, np.ndarray, np.ndarray]:
     # n_variables, f, lower_bounds, upper_bounds
 
-    u: SymbolicType = SymbolicType.sym("u", problem.n_u, 1)  # pyright: ignore[reportArgumentType]
-    u_transformed: SymbolicType = input_transformer_gp.transform(u.T).T  # pyright: ignore[reportAssignmentType]
-    n_variables: int = problem.n_u
-    w: SymbolicType = u
+    u = SymbolicType.sym("u", problem.n_u, 1)
+    u_transformed = input_transformer_gp.transform(u.T).T
+    n_variables = problem.n_u
+    w = u
 
-    lower_bounds: np.ndarray = problem.u_lower_bounds_acquisition
-    upper_bounds: np.ndarray = problem.u_upper_bounds_acquisition
+    lower_bounds = problem.u_lower_bounds_acquisition
+    upper_bounds = problem.u_upper_bounds_acquisition
 
-    mean_transformed: SymbolicType
-    var_transformed: SymbolicType
-    mean_transformed, var_transformed = gp.predict(u_transformed.T)  # pyright: ignore[reportAssignmentType]
+    mean_transformed, var_transformed = gp.predict(u_transformed.T)
 
-    mean: SymbolicType = output_transformer_gp.inverse_transform(mean_transformed)  # pyright: ignore[reportAssignmentType]
-    std: SymbolicType = cas.sqrt(var_transformed) / output_transformer_gp.slope
-
-    f_expression: SymbolicType
+    mean = output_transformer_gp.inverse_transform(mean_transformed)
+    std = cas.sqrt(var_transformed) / output_transformer_gp.slope
 
     # Lower confidence bound
     if config.formulation_acq.startswith("lcb"):
@@ -449,6 +431,6 @@ def setup_acq_problem(
     else:
         f_expression = -ei_gp(mean, std, incumbent, False)
 
-    f: cas.Function = cas.Function("f", [w], [f_expression])
+    f = cas.Function("f", [w], [f_expression])
 
     return n_variables, f, lower_bounds, upper_bounds

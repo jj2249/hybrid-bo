@@ -89,96 +89,96 @@ class Problem:
         # %% Exceptions
 
         if self.f.n_in() != 2:
-            msg: str = "self.f.n_in() != 2"
+            msg = "self.f.n_in() != 2"
             raise Exception(msg)
         if self.f.n_out() != 1:
-            msg: str = "self.f.n_out() != 1"
+            msg = "self.f.n_out() != 1"
             raise Exception(msg)
 
         if self.f.size_in(0) != (self.n_u, 1):
-            msg: str = "self.f.size_in(0) != (self.n_u, 1)"
+            msg = "self.f.size_in(0) != (self.n_u, 1)"
             raise Exception(msg)
         if self.f.size_in(1) != (self.n_x, 1):
-            msg: str = "self.f.size_in(1) != (self.n_x, 1)"
+            msg = "self.f.size_in(1) != (self.n_x, 1)"
             raise Exception(msg)
         if self.f.size_out(0) != (1, 1):
-            msg: str = "self.f.size_out(0) != (1, 1)"
+            msg = "self.f.size_out(0) != (1, 1)"
             raise Exception(msg)
 
         if self.h_known.n_in() != 2:
-            msg: str = "self.h_known.n_in() != 2"
+            msg = "self.h_known.n_in() != 2"
             raise Exception(msg)
         if self.h_known.n_out() != 1:
-            msg: str = "self.h_known.n_out() != 1"
+            msg = "self.h_known.n_out() != 1"
             raise Exception(msg)
 
         if self.h_known.size_in(0) != (self.n_u, 1):
-            msg: str = "self.h_known.size_in(0) != (self.n_u, 1)"
+            msg = "self.h_known.size_in(0) != (self.n_u, 1)"
             raise Exception(msg)
         if self.h_known.size_in(1) != (self.n_x, 1):
-            msg: str = "self.h_known.size_in(1) != (self.n_x, 1)"
+            msg = "self.h_known.size_in(1) != (self.n_x, 1)"
             raise Exception(msg)
         if self.h_known.size_out(0) != (self.n_h_known, 1):
-            msg: str = "self.h_known.size_out(0) != (self.n_h_known, 1)"
+            msg = "self.h_known.size_out(0) != (self.n_h_known, 1)"
             raise Exception(msg)
 
         if self.h_unknown.n_in() != 2:
-            msg: str = "self.h_unknown.n_in() != 2"
+            msg = "self.h_unknown.n_in() != 2"
             raise Exception(msg)
         if self.h_unknown.n_out() != 1:
-            msg: str = "self.h_unknown.n_out() != 1"
+            msg = "self.h_unknown.n_out() != 1"
             raise Exception(msg)
 
         if self.h_unknown.size_in(0) != (self.n_u, 1):
-            msg: str = "self.h_unknown.size_in(0) != (self.n_u, 1)"
+            msg = "self.h_unknown.size_in(0) != (self.n_u, 1)"
             raise Exception(msg)
         if self.h_unknown.size_in(1) != (self.n_x, 1):
-            msg: str = "self.h_unknown.size_in(1) != (self.n_x, 1)"
+            msg = "self.h_unknown.size_in(1) != (self.n_x, 1)"
             raise Exception(msg)
         if self.h_unknown.size_out(0) != (self.n_h_unknown, 1):
-            msg: str = "self.h_unknown.size_out(0) != (self.n_h_unknown, 1)"
+            msg = "self.h_unknown.size_out(0) != (self.n_h_unknown, 1)"
             raise Exception(msg)
 
         if self.u_lower_bounds_acquisition.shape != (self.n_u, 1):
-            msg: str = "self.u_lower_bounds_acquisition.shape != (self.n_u, 1)"
+            msg = "self.u_lower_bounds_acquisition.shape != (self.n_u, 1)"
             raise Exception(msg)
         if self.u_upper_bounds_acquisition.shape != (self.n_u, 1):
-            msg: str = "self.u_upper_bounds_acquisition.shape != (self.n_u, 1)"
+            msg = "self.u_upper_bounds_acquisition.shape != (self.n_u, 1)"
             raise Exception(msg)
 
         if self.x_lower_bounds_acquisition.shape != (self.n_x, 1):
-            msg: str = "self.x_lower_bounds_acquisition.shape != (self.n_x, 1)"
+            msg = "self.x_lower_bounds_acquisition.shape != (self.n_x, 1)"
             raise Exception(msg)
         if self.x_upper_bounds_acquisition.shape != (self.n_x, 1):
-            msg: str = "self.x_upper_bounds_acquisition.shape != (self.n_x, 1)"
+            msg = "self.x_upper_bounds_acquisition.shape != (self.n_x, 1)"
             raise Exception(msg)
 
         if self.u_lower_bounds_starting_points.shape != (self.n_u, 1):
-            msg: str = "self.u_lower_bounds_starting_points.shape != (self.n_u, 1)"
+            msg = "self.u_lower_bounds_starting_points.shape != (self.n_u, 1)"
             raise Exception(msg)
         if self.u_upper_bounds_starting_points.shape != (self.n_u, 1):
-            msg: str = "self.u_upper_bounds_starting_points.shape != (self.n_u, 1)"
+            msg = "self.u_upper_bounds_starting_points.shape != (self.n_u, 1)"
             raise Exception(msg)
 
         if self.x_lower_bounds_starting_points.shape != (self.n_x, 1):
-            msg: str = "self.x_lower_bounds_starting_points.shape != (self.n_x, 1)"
+            msg = "self.x_lower_bounds_starting_points.shape != (self.n_x, 1)"
             raise Exception(msg)
         if self.x_upper_bounds_starting_points.shape != (self.n_x, 1):
-            msg: str = "self.x_upper_bounds_starting_points.shape != (self.n_x, 1)"
+            msg = "self.x_upper_bounds_starting_points.shape != (self.n_x, 1)"
             raise Exception(msg)
 
         if not np.isfinite(self.u_lower_bounds_starting_points).all():
-            msg: str = "not np.isfinite(self.u_lower_bounds_starting_points).all()"
+            msg = "not np.isfinite(self.u_lower_bounds_starting_points).all()"
             raise Exception(msg)
         if not np.isfinite(self.u_upper_bounds_starting_points).all():
-            msg: str = "not np.isfinite(self.u_upper_bounds_starting_points).all()"
+            msg = "not np.isfinite(self.u_upper_bounds_starting_points).all()"
             raise Exception(msg)
 
         if not np.isfinite(self.x_lower_bounds_starting_points).all():
-            msg: str = "not np.isfinite(self.x_lower_bounds_starting_points).all()"
+            msg = "not np.isfinite(self.x_lower_bounds_starting_points).all()"
             raise Exception(msg)
         if not np.isfinite(self.x_upper_bounds_starting_points).all():
-            msg: str = "not np.isfinite(self.x_upper_bounds_starting_points).all()"
+            msg = "not np.isfinite(self.x_upper_bounds_starting_points).all()"
             raise Exception(msg)
 
     def evaluate_with_simulation(
@@ -190,18 +190,15 @@ class Problem:
         original: bool = False,
     ) -> tuple[np.ndarray, np.ndarray]:
         if u.shape[1] != self.n_u:
-            msg: str = "u.shape[1] != self.n_u"
+            msg = "u.shape[1] != self.n_u"
             raise Exception(msg)
 
-        n_points: int = u.shape[0]
+        n_points = u.shape[0]
 
-        f: np.ndarray = np.empty((n_points, 1))
-        x: np.ndarray = np.empty((n_points, self.n_x))
+        f = np.empty((n_points, 1))
+        x = np.empty((n_points, self.n_x))
 
         for i_point in range(n_points):
-            f_current: float
-            x_current: np.ndarray
-
             if original:
                 (
                     f_current,
@@ -240,30 +237,27 @@ class Problem:
     ) -> tuple[np.ndarray, np.ndarray]:
 
         if u.shape[1] != self.n_u:
-            msg: str = "u.shape[1] != self.n_u"
+            msg = "u.shape[1] != self.n_u"
             raise Exception(msg)
 
         if x_fixed.shape[1] != len(indices_x_fixed):
-            msg: str = "x_fixed.shape[1] != len(indices_x_fixed)"
+            msg = "x_fixed.shape[1] != len(indices_x_fixed)"
             raise Exception(msg)
 
         if x_fixed.shape[1] != self.n_h_unknown:
-            msg: str = "x_fixed.shape[1] != self.n_h_unknown"
+            msg = "x_fixed.shape[1] != self.n_h_unknown"
             raise Exception(msg)
 
         if u.shape[0] != x_fixed.shape[0]:
-            msg: str = "u.shape[0] != x_fixed.shape[0]"
+            msg = "u.shape[0] != x_fixed.shape[0]"
             raise Exception(msg)
 
-        n_points: int = u.shape[0]
+        n_points = u.shape[0]
 
-        f: np.ndarray = np.empty((n_points, 1))
-        x: np.ndarray = np.empty((n_points, self.n_x))
+        f = np.empty((n_points, 1))
+        x = np.empty((n_points, self.n_x))
 
         for i_point in range(n_points):
-            f_current: float
-            x_current: np.ndarray
-
             if original:
                 (
                     f_current,
@@ -306,30 +300,25 @@ class Problem:
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
 
         if u.shape[1] != self.n_u:
-            msg: str = "u.shape[1] != self.n_u"
+            msg = "u.shape[1] != self.n_u"
             raise Exception(msg)
 
         if measurement_noise.shape[1] != len(indices_x_measured):
-            msg: str = "measurement_noise.shape[1] != len(indices_x_measured)"
+            msg = "measurement_noise.shape[1] != len(indices_x_measured)"
             raise Exception(msg)
 
         if u.shape[0] != measurement_noise.shape[0]:
-            msg: str = "u.shape[0] != measurement_noise.shape[0]"
+            msg = "u.shape[0] != measurement_noise.shape[0]"
             raise Exception(msg)
 
-        n_points: int = u.shape[0]
+        n_points = u.shape[0]
 
-        f: np.ndarray = np.empty((n_points, 1))
-        x: np.ndarray = np.empty((n_points, self.n_x))
-        f_no_noise: np.ndarray = np.empty((n_points, 1))
-        x_no_noise: np.ndarray = np.empty((n_points, self.n_x))
+        f = np.empty((n_points, 1))
+        x = np.empty((n_points, self.n_x))
+        f_no_noise = np.empty((n_points, 1))
+        x_no_noise = np.empty((n_points, self.n_x))
 
         for i_point in range(n_points):
-            f_current: float
-            x_current: np.ndarray
-            f_no_noise_current: float
-            x_no_noise_current: np.ndarray
-
             if original:
                 (f_current, x_current, f_no_noise_current, x_no_noise_current) = (
                     self.single_evaluate_with_noisy_simulation_original(
@@ -370,25 +359,25 @@ class Problem:
         """Returns f and x from u using h_known and h_unknown. No measurement noise is considered."""
 
         if u.shape != (self.n_u, 1):
-            msg: str = "u.shape != (self.n_u, 1)"
+            msg = "u.shape != (self.n_u, 1)"
             raise Exception(msg)
 
         # %% Setup variables to be solved for
 
-        x: SymbolicType = SymbolicType.sym("x", self.n_x, 1)  # pyright: ignore[reportArgumentType]
+        x = SymbolicType.sym("x", self.n_x, 1)
 
         # %% Get initial guesses for x
 
         if rng is None:
             rng = np.random.default_rng()
 
-        sampler: scipy.stats.qmc.LatinHypercube = scipy.stats.qmc.LatinHypercube(
+        sampler = scipy.stats.qmc.LatinHypercube(
             self.n_x,
             rng=rng,
         )
 
-        samples: np.ndarray = sampler.random(n_starts_max)
-        X_0: np.ndarray = (
+        samples = sampler.random(n_starts_max)
+        X_0 = (
             self.x_lower_bounds_starting_points.T
             + (
                 self.x_upper_bounds_starting_points
@@ -399,58 +388,58 @@ class Problem:
 
         # %% Setup equations to be solved
 
-        h: cas.Function = cas.Function(
+        h = cas.Function(
             "h",
             [x],
             [cas.vertcat(self.h_known(u, x), self.h_unknown(u, x))],
         )
 
-        h_jacobian: cas.Function = cas.Function(
+        h_jacobian = cas.Function(
             "h_jacobian",
             [x],
             [cas.jacobian(h(x), x)],
         )
 
         def h_np(x: np.ndarray) -> np.ndarray:
-            return h(x[:, np.newaxis]).full().flatten()  # pyright: ignore[reportAttributeAccessIssue, reportOptionalMemberAccess]
+            return h(x[:, np.newaxis]).full().flatten()
 
         def h_np_jacobian(x: np.ndarray) -> np.ndarray:
-            return h_jacobian(x[:, np.newaxis]).full()  # pyright: ignore[reportAttributeAccessIssue, reportOptionalMemberAccess]
+            return h_jacobian(x[:, np.newaxis]).full()
 
         # %% Solve for x and get corresponding values of f
 
-        i_start: int = 0
-        ready_to_return: bool = False
+        i_start = 0
+        ready_to_return = False
         while i_start < n_starts_max:
             if use_jacobian:
-                roots: np.ndarray = scipy.optimize.fsolve(
+                roots = scipy.optimize.fsolve(
                     h_np,
                     X_0[i_start, :],
                     fprime=h_np_jacobian,
                 )[
                     :,
                     np.newaxis,
-                ]  # pyright: ignore[reportArgumentType, reportCallIssue]
+                ]
             else:
-                roots: np.ndarray = scipy.optimize.fsolve(h_np, X_0[i_start, :])[
+                roots = scipy.optimize.fsolve(h_np, X_0[i_start, :])[
                     :,
                     np.newaxis,
-                ]  # pyright: ignore[reportArgumentType, reportCallIssue]
+                ]
 
             if (
                 (np.linalg.norm(h_np(roots.ravel())) < self.threshold_equality)
                 and ((roots >= self.x_lower_bounds_acquisition).all())
                 and ((roots <= self.x_upper_bounds_acquisition).all())
             ):
-                ready_to_return: bool = True
+                ready_to_return = True
 
             if ready_to_return:
-                f_at_roots: float = self.f(u, roots).full().item()  # pyright: ignore[reportAttributeAccessIssue, reportOptionalMemberAccess]
+                f_at_roots = self.f(u, roots).full().item()
                 return f_at_roots, roots
 
             i_start = i_start + 1
 
-        msg: str = "Could not get a solution!"
+        msg = "Could not get a solution!"
         raise Exception(msg)
 
     def single_evaluate_with_simulation(
@@ -479,30 +468,30 @@ class Problem:
         """Returns f and x from u and fixed parts of x using h_known. The fixed part of x is either measured or an output from a GP."""
 
         if u.shape != (self.n_u, 1):
-            msg: str = "u.shape != (self.n_u, 1)"
+            msg = "u.shape != (self.n_u, 1)"
             raise Exception(msg)
 
         if x_fixed.shape != (len(indices_x_fixed), 1):
-            msg: str = "x_fixed.shape != (len(indices_x_fixed), 1)"
+            msg = "x_fixed.shape != (len(indices_x_fixed), 1)"
             raise Exception(msg)
 
         if x_fixed.shape != (self.n_h_unknown, 1):
-            msg: str = "x_fixed.shape != (self.n_h_unknown, 1)"
+            msg = "x_fixed.shape != (self.n_h_unknown, 1)"
             raise Exception(msg)
 
         # %% Get the indices of the elements of x that are not measured
 
-        mask_x_free: np.ndarray = np.ones((self.n_x,), dtype=bool)
+        mask_x_free = np.ones((self.n_x,), dtype=bool)
         mask_x_free[indices_x_fixed] = False
-        indices_x_free: list[int] = np.nonzero(mask_x_free)[0].tolist()
+        indices_x_free = np.nonzero(mask_x_free)[0].tolist()
 
         # %% Setup variables to be solved for
 
-        x_free = SymbolicType.sym("x_free", len(indices_x_free), 1)  # pyright: ignore[reportArgumentType]
+        x_free = SymbolicType.sym("x_free", len(indices_x_free), 1)
 
         # %% Setup helper variables
 
-        x: SymbolicType = SymbolicType(self.n_x, 1)
+        x = SymbolicType(self.n_x, 1)
         x[indices_x_fixed] = x_fixed
         x[indices_x_free] = x_free
 
@@ -511,13 +500,13 @@ class Problem:
         if rng is None:
             rng = np.random.default_rng()
 
-        sampler: scipy.stats.qmc.LatinHypercube = scipy.stats.qmc.LatinHypercube(
+        sampler = scipy.stats.qmc.LatinHypercube(
             x_fixed.size,
             rng=rng,
         )
 
-        samples: np.ndarray = sampler.random(n_starts_max)
-        X_free_0: np.ndarray = (
+        samples = sampler.random(n_starts_max)
+        X_free_0 = (
             self.x_lower_bounds_starting_points[indices_x_free].T
             + (
                 self.x_upper_bounds_starting_points[indices_x_free]
@@ -528,54 +517,54 @@ class Problem:
 
         # %% Setup equations to be solved
 
-        h: cas.Function = cas.Function("h", [x_free], [self.h_known(u, x)])
-        h_jacobian: cas.Function = cas.Function(
+        h = cas.Function("h", [x_free], [self.h_known(u, x)])
+        h_jacobian = cas.Function(
             "h_jacobian",
             [x_free],
             [cas.jacobian(h(x_free), x_free)],
         )
 
         def h_np(x: np.ndarray) -> np.ndarray:
-            return h(x[:, np.newaxis]).full().flatten()  # pyright: ignore[reportAttributeAccessIssue, reportOptionalMemberAccess]
+            return h(x[:, np.newaxis]).full().flatten()
 
         def h_np_jacobian(x: np.ndarray) -> np.ndarray:
-            return h_jacobian(x[:, np.newaxis]).full()  # pyright: ignore[reportAttributeAccessIssue, reportOptionalMemberAccess]
+            return h_jacobian(x[:, np.newaxis]).full()
 
         # %% Solve for x_free and get corresponding values of f
 
-        i_start: int = 0
-        ready_to_return: bool = False
+        i_start = 0
+        ready_to_return = False
         while i_start < n_starts_max:
             if use_jacobian:
-                roots: np.ndarray = scipy.optimize.fsolve(
+                roots = scipy.optimize.fsolve(
                     h_np,
                     X_free_0[i_start, :],
                     fprime=h_np_jacobian,
-                )[:, np.newaxis]  # pyright: ignore[reportArgumentType, reportCallIssue]
+                )[:, np.newaxis]
             else:
-                roots: np.ndarray = scipy.optimize.fsolve(h_np, X_free_0[i_start, :])[
+                roots = scipy.optimize.fsolve(h_np, X_free_0[i_start, :])[
                     :,
                     np.newaxis,
-                ]  # pyright: ignore[reportArgumentType, reportCallIssue]
+                ]
 
             if (
                 (np.linalg.norm(h_np(roots.ravel())) < self.threshold_equality)
                 and ((roots >= self.x_lower_bounds_acquisition[indices_x_free]).all())
                 and ((roots <= self.x_upper_bounds_acquisition[indices_x_free]).all())
             ):
-                ready_to_return: bool = True
+                ready_to_return = True
 
             if ready_to_return:
-                x_solution: np.ndarray = np.empty((self.n_x, 1))
+                x_solution = np.empty((self.n_x, 1))
                 x_solution[indices_x_fixed] = x_fixed
                 x_solution[indices_x_free] = roots
-                f_at_solution: float = self.f(u, x_solution).full().item()  # pyright: ignore[reportAttributeAccessIssue, reportOptionalMemberAccess]
+                f_at_solution = self.f(u, x_solution).full().item()
 
                 return f_at_solution, x_solution
 
             i_start = i_start + 1
 
-        msg: str = "Could not get a solution!"
+        msg = "Could not get a solution!"
         raise Exception(msg)
 
     def single_evaluate_with_fixed_x(
@@ -608,15 +597,13 @@ class Problem:
         """Returns f and x (with and without consideration of measurement noise) from u using h_known and h_unknown."""
 
         if u.shape != (self.n_u, 1):
-            msg: str = "u.shape != (self.n_u, 1)"
+            msg = "u.shape != (self.n_u, 1)"
             raise Exception(msg)
 
         if measurement_noise.shape != (len(indices_x_measured), 1):
-            msg: str = "measurement_noise.shape != (len(indices_x_measured), 1)"
+            msg = "measurement_noise.shape != (len(indices_x_measured), 1)"
             raise Exception(msg)
 
-        f_no_noise: float
-        x_no_noise: np.ndarray
         f_no_noise, x_no_noise = self.single_evaluate_with_simulation(
             u,
             n_starts_max,
@@ -624,10 +611,8 @@ class Problem:
             rng,
         )
 
-        f: float
-        x: np.ndarray
         if (measurement_noise != 0.0).any():
-            x_measured: np.ndarray = x_no_noise[indices_x_measured] + measurement_noise
+            x_measured = x_no_noise[indices_x_measured] + measurement_noise
 
             f, x = self.single_evaluate_with_fixed_x(
                 u,
@@ -670,27 +655,27 @@ class Problem:
     ) -> OptimizationResult:
         # Parameters n_starting_points and rng are only important if type(optimizer) == MultiStartOptimizer
 
-        u: SymbolicType = SymbolicType.sym("u", self.n_u, 1)  # pyright: ignore[reportArgumentType]
-        x: SymbolicType = SymbolicType.sym("x", self.n_x, 1)  # pyright: ignore[reportArgumentType]
-        w: SymbolicType = cas.vertcat(u, x)  # pyright: ignore[reportAssignmentType]
+        u = SymbolicType.sym("u", self.n_u, 1)
+        x = SymbolicType.sym("x", self.n_x, 1)
+        w = cas.vertcat(u, x)
 
-        n_variables: int = self.n_u + self.n_x
+        n_variables = self.n_u + self.n_x
 
-        h_expression: SymbolicType = cas.vertcat(
+        h_expression = cas.vertcat(
             self.h_known(u, x),
             self.h_unknown(u, x),
-        )  # pyright: ignore[reportAssignmentType]
-        h: cas.Function = cas.Function("h", [w], [h_expression])
+        )
+        h = cas.Function("h", [w], [h_expression])
 
-        lower_bounds: np.ndarray = np.vstack(
+        lower_bounds = np.vstack(
             (self.u_lower_bounds_acquisition, self.x_lower_bounds_acquisition),
         )
-        upper_bounds: np.ndarray = np.vstack(
+        upper_bounds = np.vstack(
             (self.u_upper_bounds_acquisition, self.x_upper_bounds_acquisition),
         )
 
-        f_expression: SymbolicType = self.f(u, x)  # pyright: ignore[reportAssignmentType]
-        f: cas.Function = cas.Function("f", [w], [f_expression])
+        f_expression = self.f(u, x)
+        f = cas.Function("f", [w], [f_expression])
 
         optimizer.set_problem(n_variables, f, None, h, lower_bounds, upper_bounds)
 
@@ -708,16 +693,16 @@ class Problem:
                 ),
             )
 
-            starting_points: np.ndarray = optimizer.create_lhs_samples(
+            starting_points = optimizer.create_lhs_samples(
                 n_starting_points,
                 rng,
             )
             optimizer.X0 = starting_points
 
-        solution: OptimizationResult | None = optimizer.solve()
+        solution = optimizer.solve()
 
         if solution is None:
-            msg: str = "solution is None"
+            msg = "solution is None"
             raise Exception(msg)
 
         return solution

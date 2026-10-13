@@ -87,5 +87,6 @@ remove the marker in the PR that fixes the bug.
   `(n_points,)`. Column vectors only in CasADi glue code.
 - The library returns results; examples save them.
 - Errors raise specific exceptions; the caller decides whether to continue.
-- Annotate signatures and dataclass fields, not local variables (to be confirmed
-  in the annotation PR).
+- Annotate signatures and dataclass fields, not local variables. Type errors are
+  fixed, not suppressed; if a suppression is unavoidable, use
+  `# ty: ignore[rule]` (ty doesn't read `pyright:` comments).

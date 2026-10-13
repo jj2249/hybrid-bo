@@ -27,20 +27,20 @@ class AffineTransformer:
 
     def set_slope_and_intercept(self, slope: np.ndarray, intercept: np.ndarray) -> None:
         if len(slope.shape) != 2:
-            msg: str = "len(slope.shape) != 2"
+            msg = "len(slope.shape) != 2"
             raise Exception(msg)
         if len(intercept.shape) != 2:
-            msg: str = "len(intercept.shape) != 2"
+            msg = "len(intercept.shape) != 2"
             raise Exception(msg)
 
         if slope.shape[0] != 1:
-            msg: str = "slope.shape[0] != 1"
+            msg = "slope.shape[0] != 1"
             raise Exception(msg)
         if intercept.shape[0] != 1:
-            msg: str = "intercept.shape[0] != 1"
+            msg = "intercept.shape[0] != 1"
             raise Exception(msg)
         if slope.shape[1] != intercept.shape[1]:
-            msg: str = "slope.shape[1] != intercept.shape[1]"
+            msg = "slope.shape[1] != intercept.shape[1]"
             raise Exception(msg)
 
         self.slope = slope
@@ -61,15 +61,15 @@ class AffineTransformer:
 
     def transform(self, X: CasadiType | np.ndarray) -> CasadiType | np.ndarray:
         if len(X.shape) != 2:
-            msg: str = "len(X.shape) != 2"
+            msg = "len(X.shape) != 2"
             raise Exception(msg)
 
         if X.shape[1] != self.n_inputs:
-            msg: str = "X.shape[1] != self.n_inputs"
+            msg = "X.shape[1] != self.n_inputs"
             raise Exception(msg)
 
-        slope_tiled: np.ndarray = np.tile(self.slope, (X.shape[0], 1))
-        intercept_tiled: np.ndarray = np.tile(self.intercept, (X.shape[0], 1))
+        slope_tiled = np.tile(self.slope, (X.shape[0], 1))
+        intercept_tiled = np.tile(self.intercept, (X.shape[0], 1))
 
         return slope_tiled * X + intercept_tiled
 
@@ -91,14 +91,14 @@ class AffineTransformer:
         X_transformed: CasadiType | np.ndarray,
     ) -> CasadiType | np.ndarray:
         if len(X_transformed.shape) != 2:
-            msg: str = "len(X_transformed.shape) != 2"
+            msg = "len(X_transformed.shape) != 2"
             raise Exception(msg)
 
         if X_transformed.shape[1] != self.n_inputs:
-            msg: str = "X_transformed.shape[1] != self.n_inputs"
+            msg = "X_transformed.shape[1] != self.n_inputs"
             raise Exception(msg)
 
-        slope_tiled: np.ndarray = np.tile(self.slope, (X_transformed.shape[0], 1))
+        slope_tiled = np.tile(self.slope, (X_transformed.shape[0], 1))
         intercept_tiled = np.tile(self.intercept, (X_transformed.shape[0], 1))
 
         return (X_transformed - intercept_tiled) / slope_tiled
@@ -121,7 +121,7 @@ class MinMaxTransformer(AffineTransformer):
     @override
     def fit(self, X: np.ndarray) -> None:
         if len(X.shape) != 2:
-            msg: str = "len(X.shape) != 2"
+            msg = "len(X.shape) != 2"
             raise Exception(msg)
 
         self.n_inputs = X.shape[1]
@@ -136,13 +136,13 @@ class MinMaxTransformer(AffineTransformer):
 
         # Case that all values are the same
         # All values are set to self.min_transformed
-        mask_equal: np.ndarray = self.min == self.max
+        mask_equal = self.min == self.max
         self.slope[mask_equal] = 1.0
         self.intercept[mask_equal] = -self.min[mask_equal] + self.min_transformed
 
     @override
     def set_slope_and_intercept(self, slope: np.ndarray, intercept: np.ndarray) -> None:
-        msg: str = "This method is not allowed for this class!"
+        msg = "This method is not allowed for this class!"
         raise Exception(msg)
 
 
@@ -161,7 +161,7 @@ class StandardTransformer(AffineTransformer):
         # Parameter ddof: see parameter in numpy.std()
 
         if len(X.shape) != 2:
-            msg: str = "len(X.shape) != 2"
+            msg = "len(X.shape) != 2"
             raise Exception(msg)
 
         self.n_inputs = X.shape[1]
@@ -183,5 +183,5 @@ class StandardTransformer(AffineTransformer):
 
     @override
     def set_slope_and_intercept(self, slope: np.ndarray, intercept: np.ndarray) -> None:
-        msg: str = "This method is not allowed for this class!"
+        msg = "This method is not allowed for this class!"
         raise Exception(msg)

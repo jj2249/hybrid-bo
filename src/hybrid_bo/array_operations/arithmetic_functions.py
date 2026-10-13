@@ -18,11 +18,11 @@ def sum(X: np.ndarray, axis: int | None = None) -> np.ndarray: ...
 
 def sum(X: CasadiType | np.ndarray, axis: int | None = None) -> CasadiType | np.ndarray:
     if len(X.shape) != 2:
-        msg: str = "len(X.shape) != 2."
+        msg = "len(X.shape) != 2."
         raise Exception(msg)
 
     if (axis is not None) and (axis not in {0, 1}):
-        msg: str = "(axis is not None) and (axis not in {0, 1})"
+        msg = "(axis is not None) and (axis not in {0, 1})"
         raise Exception(msg)
 
     if isinstance(X, CasadiType):

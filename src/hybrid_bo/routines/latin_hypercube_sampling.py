@@ -31,22 +31,19 @@ def do_latin_hypercube_sampling(
     # %% Data for all BO runs
 
     if len(u_initial_complete) != config.n_runs_bo:
-        msg: str = "len(u_initial_complete) != config.n_runs_bo"
+        msg = "len(u_initial_complete) != config.n_runs_bo"
         raise Exception(msg)
 
-    results_bo_complete: list[ResultsBO] = []
-    results_gp_complete: list[ResultsGP] = []
+    results_bo_complete = []
+    results_gp_complete = []
 
-    n_points_initial_complete: list[int] = [
-        u_initial.shape[0] for u_initial in u_initial_complete
-    ]
+    n_points_initial_complete = [u_initial.shape[0] for u_initial in u_initial_complete]
 
-    n_points_complete: list[int] = [
+    n_points_complete = [
         (n_points_initial + config.n_iterations_bo)
         for n_points_initial in n_points_initial_complete
     ]
 
-    measurement_noise_complete: list[np.ndarray]
     measurement_noise_complete, _ = get_sampling_based_data(config, n_points_complete)
 
     # %% Iterate over multiple BO runs
@@ -55,36 +52,34 @@ def do_latin_hypercube_sampling(
         # %% Data for current run
 
         # Initial points AND BO iteration points
-        n_points: int = n_points_complete[i_run_bo]
-        measurement_noise: np.ndarray = measurement_noise_complete[i_run_bo]
+        n_points = n_points_complete[i_run_bo]
+        measurement_noise = measurement_noise_complete[i_run_bo]
 
-        u: np.ndarray = np.full((n_points, config.n_u), np.nan)
-        x: np.ndarray = np.full((n_points, config.n_x), np.nan)
-        x_no_noise: np.ndarray = np.full((n_points, config.n_x), np.nan)
-        f: np.ndarray = np.full((n_points, 1), np.nan)
-        f_no_noise: np.ndarray = np.full((n_points, 1), np.nan)
-        incumbents: np.ndarray = np.full((n_points, 1), np.nan)
-        incumbents_no_noise: np.ndarray = np.full((n_points, 1), np.nan)
+        u = np.full((n_points, config.n_u), np.nan)
+        x = np.full((n_points, config.n_x), np.nan)
+        x_no_noise = np.full((n_points, config.n_x), np.nan)
+        f = np.full((n_points, 1), np.nan)
+        f_no_noise = np.full((n_points, 1), np.nan)
+        incumbents = np.full((n_points, 1), np.nan)
+        incumbents_no_noise = np.full((n_points, 1), np.nan)
 
         # Initial points
-        n_points_initial: int = n_points_initial_complete[i_run_bo]
-        measurement_noise_initial: np.ndarray = measurement_noise[:n_points_initial, :]
-        u_initial: np.ndarray = u_initial_complete[i_run_bo]
+        n_points_initial = n_points_initial_complete[i_run_bo]
+        measurement_noise_initial = measurement_noise[:n_points_initial, :]
+        u_initial = u_initial_complete[i_run_bo]
 
-        x_initial: np.ndarray = np.full((n_points, config.n_x), np.nan)
-        x_no_noise_initial: np.ndarray = np.full((n_points, config.n_x), np.nan)
-        f_initial: np.ndarray = np.full((n_points, 1), np.nan)
-        f_no_noise_initial: np.ndarray = np.full((n_points, 1), np.nan)
-        incumbents_initial: np.ndarray = np.full((n_points, 1), np.nan)
-        incumbents_no_noise_initial: np.ndarray = np.full((n_points, 1), np.nan)
+        x_initial = np.full((n_points, config.n_x), np.nan)
+        x_no_noise_initial = np.full((n_points, config.n_x), np.nan)
+        f_initial = np.full((n_points, 1), np.nan)
+        f_no_noise_initial = np.full((n_points, 1), np.nan)
+        incumbents_initial = np.full((n_points, 1), np.nan)
+        incumbents_no_noise_initial = np.full((n_points, 1), np.nan)
 
         # Incumbents
-        incumbent: float
-        incumbent_no_noise: float
 
         # Results
-        results_bo: ResultsBO | None = None
-        results_gp: ResultsGP | None = None
+        results_bo = None
+        results_gp = None
 
         try:
             # %% Get initial points
@@ -124,8 +119,8 @@ def do_latin_hypercube_sampling(
 
             # %% Define GP
 
-            input_transformer_gp: AffineTransformer = MinMaxTransformer()
-            output_transformer_gp: AffineTransformer = StandardTransformer()
+            input_transformer_gp = MinMaxTransformer()
+            output_transformer_gp = StandardTransformer()
 
             set_gp_training_data(
                 gp,
@@ -147,7 +142,7 @@ def do_latin_hypercube_sampling(
                     gp.optimizer.upper_bounds.copy()
                 )
 
-                starting_points: np.ndarray = gp.optimizer.create_lhs_samples(
+                starting_points = gp.optimizer.create_lhs_samples(
                     config.n_starts_training_gp,
                     config.rng,
                 )
@@ -186,13 +181,13 @@ def do_latin_hypercube_sampling(
 
             # %% Get additional points of u for the BO loop by latin hypercube sampling
 
-            sampler: scipy.stats.qmc.LatinHypercube = scipy.stats.qmc.LatinHypercube(
+            sampler = scipy.stats.qmc.LatinHypercube(
                 problem.n_u,
                 rng=config.rng,
             )
 
-            u_additional: np.ndarray = sampler.random(config.n_iterations_bo)
-            u_additional: np.ndarray = (
+            u_additional = sampler.random(config.n_iterations_bo)
+            u_additional = (
                 problem.u_lower_bounds_starting_points.T
                 + (
                     problem.u_upper_bounds_starting_points.T
@@ -206,12 +201,7 @@ def do_latin_hypercube_sampling(
             for i_iteration_bo in range(config.n_iterations_bo):
                 # %% Get next point
 
-                u_next: np.ndarray = u_additional[[i_iteration_bo], :].T
-
-                x_next: np.ndarray
-                x_no_noise_next: np.ndarray
-                f_next: float
-                f_no_noise_next: float
+                u_next = u_additional[[i_iteration_bo], :].T
 
                 f_next, x_next, f_no_noise_next, x_no_noise_next = (
                     problem.single_evaluate_with_noisy_simulation(
@@ -255,13 +245,13 @@ def do_latin_hypercube_sampling(
 
                 if isinstance(gp.optimizer, MultiStartOptimizer):
                     gp.optimizer.lower_bounds_starting_points = (
-                        gp.optimizer.lower_bounds.copy()  # pyright: ignore[reportOptionalMemberAccess]
+                        gp.optimizer.lower_bounds.copy()
                     )
                     gp.optimizer.upper_bounds_starting_points = (
-                        gp.optimizer.upper_bounds.copy()  # pyright: ignore[reportOptionalMemberAccess]
+                        gp.optimizer.upper_bounds.copy()
                     )
 
-                    starting_points: np.ndarray = gp.optimizer.create_lhs_samples(
+                    starting_points = gp.optimizer.create_lhs_samples(
                         config.n_starts_training_gp,
                         config.rng,
                     )
@@ -339,7 +329,7 @@ def do_latin_hypercube_sampling(
         results_dir.mkdir(parents=True, exist_ok=True)
 
     if config.save_bo_results:
-        path: Path = results_dir / "results_bo.pkl"
+        path = results_dir / "results_bo.pkl"
         if path.exists():
             print(f"WARNING: File {path} exists. Will not overwrite.")
         else:
@@ -347,7 +337,7 @@ def do_latin_hypercube_sampling(
                 pickle.dump(results_bo_complete, file, protocol=pickle.HIGHEST_PROTOCOL)
 
     if config.save_extended_results:
-        path: Path = results_dir / "measurement_noise.pkl"
+        path = results_dir / "measurement_noise.pkl"
         if path.exists():
             print(f"WARNING: File {path} exists. Will not overwrite.")
         else:
@@ -358,7 +348,7 @@ def do_latin_hypercube_sampling(
                     protocol=pickle.HIGHEST_PROTOCOL,
                 )
 
-        path: Path = results_dir / "results_gp.pkl"
+        path = results_dir / "results_gp.pkl"
         if path.exists():
             print(f"WARNING: File {path} exists. Will not overwrite.")
         else:
@@ -377,11 +367,11 @@ def set_gp_training_data(
     input_gp_transformer: AffineTransformer,
     output_gp_transformer: AffineTransformer,
 ) -> None:
-    u_transformed: np.ndarray = input_gp_transformer.fit_transform(
+    u_transformed = input_gp_transformer.fit_transform(
         u,
     )
 
-    f_transformed: np.ndarray = output_gp_transformer.fit_transform(
+    f_transformed = output_gp_transformer.fit_transform(
         f,
     )
 

@@ -21,11 +21,11 @@ def cholesky(
     epsilon: float = 1.0e-10,
 ) -> CasadiType | np.ndarray:
     if isinstance(X, cas.MX):
-        n_rows: int = X.size1()
-        L: cas.MX = cas.MX.zeros(n_rows, n_rows)  # pyright: ignore[reportArgumentType]
+        n_rows = X.size1()
+        L = cas.MX.zeros(n_rows, n_rows)
         for i in range(n_rows):
             for j in range(i + 1):
-                s: cas.MX | float = cas.dot(L[i, :j], L[j, :j]) if j > 0 else 0.0
+                s = cas.dot(L[i, :j], L[j, :j]) if j > 0 else 0.0
                 if j < i:
                     # Off-diagonal
                     L[i, j] = (X[i, j] - s) / L[j, j]

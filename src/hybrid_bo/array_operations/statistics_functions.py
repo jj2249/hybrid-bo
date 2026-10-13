@@ -20,7 +20,7 @@ def sample_mean(samples: CasadiType | np.ndarray) -> CasadiType | np.ndarray:
     # Every row of parameter samples represents a sample
 
     if len(samples.shape) != 2:
-        msg: str = "len(samples.shape) != 2"
+        msg = "len(samples.shape) != 2"
         raise Exception(msg)
 
     if isinstance(samples, CasadiType):
@@ -46,12 +46,11 @@ def sample_covariance(
     # Parameter ddof: see numpy.var()
 
     if len(samples.shape) != 2:
-        msg: str = "len(samples.shape) != 2"
+        msg = "len(samples.shape) != 2"
         raise Exception(msg)
 
-    mean: CasadiType | np.ndarray = sample_mean(samples)
+    mean = sample_mean(samples)
 
-    covariance: CasadiType | np.ndarray
     if isinstance(samples, CasadiType):
         covariance = type(samples).zeros(samples.shape[1], samples.shape[1])
     else:
@@ -82,14 +81,13 @@ def sample_variance(
     # Parameter ddof: see numpy.var()
 
     if len(samples.shape) != 2:
-        msg: str = "len(samples.shape) != 2"
+        msg = "len(samples.shape) != 2"
         raise Exception(msg)
 
-    variance: CasadiType | np.ndarray
     if isinstance(samples, CasadiType):
-        mean: CasadiType = sample_mean(samples)
-        mean_tiled: CasadiType = cas.repmat(mean, samples.shape[0], 1)
-        samples_minus_mean_squared: CasadiType = (samples - mean_tiled) ** 2
+        mean = sample_mean(samples)
+        mean_tiled = cas.repmat(mean, samples.shape[0], 1)
+        samples_minus_mean_squared = (samples - mean_tiled) ** 2
         variance = cas.sum1(samples_minus_mean_squared) / (samples.shape[0] - ddof)
 
     else:

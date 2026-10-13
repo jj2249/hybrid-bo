@@ -15,7 +15,7 @@ from hybrid_bo.affine_transformers import (
 from hybrid_bo.array_operations.statistics_functions import sample_mean, sample_variance
 from hybrid_bo.config import Config
 from hybrid_bo.gp import GP
-from hybrid_bo.optimizers import MultiStartOptimizer, OptimizationResult, Optimizer
+from hybrid_bo.optimizers import MultiStartOptimizer, Optimizer
 from hybrid_bo.problem import Problem
 from hybrid_bo.results import ResultsBO, ResultsGP
 from hybrid_bo.routines.utils import get_sampling_based_data
@@ -34,23 +34,19 @@ def do_hybrid_bo(
     # %% Data for all BO runs
 
     if len(u_initial_complete) != config.n_runs_bo:
-        msg: str = "len(u_initial_complete) != config.n_runs_bo"
+        msg = "len(u_initial_complete) != config.n_runs_bo"
         raise Exception(msg)
 
-    results_bo_complete: list[ResultsBO] = []
-    results_gp_complete: list[ResultsGP] = []
+    results_bo_complete = []
+    results_gp_complete = []
 
-    n_points_initial_complete: list[int] = [
-        u_initial.shape[0] for u_initial in u_initial_complete
-    ]
+    n_points_initial_complete = [u_initial.shape[0] for u_initial in u_initial_complete]
 
-    n_points_complete: list[int] = [
+    n_points_complete = [
         (n_points_initial + config.n_iterations_bo)
         for n_points_initial in n_points_initial_complete
     ]
 
-    measurement_noise_complete: list[np.ndarray]
-    gaussian_standard_samples_complete: list[np.ndarray]
     measurement_noise_complete, gaussian_standard_samples_complete = (
         get_sampling_based_data(config, n_points_complete)
     )
@@ -60,41 +56,37 @@ def do_hybrid_bo(
     for i_run_bo in range(config.n_runs_bo):
         # %% Data for current run
 
-        gaussian_standard_samples: np.ndarray = gaussian_standard_samples_complete[
-            i_run_bo
-        ]
+        gaussian_standard_samples = gaussian_standard_samples_complete[i_run_bo]
 
         # Initial points AND BO iteration points
-        n_points: int = n_points_complete[i_run_bo]
-        measurement_noise: np.ndarray = measurement_noise_complete[i_run_bo]
+        n_points = n_points_complete[i_run_bo]
+        measurement_noise = measurement_noise_complete[i_run_bo]
 
-        u: np.ndarray = np.full((n_points, config.n_u), np.nan)
-        x: np.ndarray = np.full((n_points, config.n_x), np.nan)
-        x_no_noise: np.ndarray = np.full((n_points, config.n_x), np.nan)
-        f: np.ndarray = np.full((n_points, 1), np.nan)
-        f_no_noise: np.ndarray = np.full((n_points, 1), np.nan)
-        incumbents: np.ndarray = np.full((n_points, 1), np.nan)
-        incumbents_no_noise: np.ndarray = np.full((n_points, 1), np.nan)
+        u = np.full((n_points, config.n_u), np.nan)
+        x = np.full((n_points, config.n_x), np.nan)
+        x_no_noise = np.full((n_points, config.n_x), np.nan)
+        f = np.full((n_points, 1), np.nan)
+        f_no_noise = np.full((n_points, 1), np.nan)
+        incumbents = np.full((n_points, 1), np.nan)
+        incumbents_no_noise = np.full((n_points, 1), np.nan)
 
         # Initial points
-        n_points_initial: int = n_points_initial_complete[i_run_bo]
-        measurement_noise_initial: np.ndarray = measurement_noise[:n_points_initial, :]
-        u_initial: np.ndarray = u_initial_complete[i_run_bo]
+        n_points_initial = n_points_initial_complete[i_run_bo]
+        measurement_noise_initial = measurement_noise[:n_points_initial, :]
+        u_initial = u_initial_complete[i_run_bo]
 
-        x_initial: np.ndarray = np.full((n_points, config.n_x), np.nan)
-        x_no_noise_initial: np.ndarray = np.full((n_points, config.n_x), np.nan)
-        f_initial: np.ndarray = np.full((n_points, 1), np.nan)
-        f_no_noise_initial: np.ndarray = np.full((n_points, 1), np.nan)
-        incumbents_initial: np.ndarray = np.full((n_points, 1), np.nan)
-        incumbents_no_noise_initial: np.ndarray = np.full((n_points, 1), np.nan)
+        x_initial = np.full((n_points, config.n_x), np.nan)
+        x_no_noise_initial = np.full((n_points, config.n_x), np.nan)
+        f_initial = np.full((n_points, 1), np.nan)
+        f_no_noise_initial = np.full((n_points, 1), np.nan)
+        incumbents_initial = np.full((n_points, 1), np.nan)
+        incumbents_no_noise_initial = np.full((n_points, 1), np.nan)
 
         # Incumbents
-        incumbent: float
-        incumbent_no_noise: float
 
         # Results
-        results_bo: ResultsBO | None = None
-        results_gp: ResultsGP | None = None
+        results_bo = None
+        results_gp = None
 
         try:
             # %% Get initial points
@@ -134,8 +126,8 @@ def do_hybrid_bo(
 
             # %% Define GP
 
-            input_transformer_gp: AffineTransformer = MinMaxTransformer()
-            output_transformer_gp: AffineTransformer = StandardTransformer()
+            input_transformer_gp = MinMaxTransformer()
+            output_transformer_gp = StandardTransformer()
 
             set_gp_training_data(
                 gp,
@@ -153,12 +145,12 @@ def do_hybrid_bo(
             if isinstance(gp.optimizer, MultiStartOptimizer):
                 gp.optimizer.lower_bounds_starting_points = (
                     gp.optimizer.lower_bounds.copy()
-                )  # pyright: ignore[reportOptionalMemberAccess]
+                )
                 gp.optimizer.upper_bounds_starting_points = (
                     gp.optimizer.upper_bounds.copy()
-                )  # pyright: ignore[reportOptionalMemberAccess]
+                )
 
-                starting_points: np.ndarray = gp.optimizer.create_lhs_samples(
+                starting_points = gp.optimizer.create_lhs_samples(
                     config.n_starts_training_gp,
                     config.rng,
                 )
@@ -201,13 +193,6 @@ def do_hybrid_bo(
             for i_iteration_bo in range(config.n_iterations_bo):
                 # %% Get next point with acquisition function problem
 
-                n_variables: int
-                f_function: cas.Function
-                h_function: cas.Function
-                lower_bounds: np.ndarray
-                upper_bounds: np.ndarray
-                lower_bounds_starting_points: np.ndarray
-                upper_bounds_starting_points: np.ndarray
                 (
                     n_variables,
                     f_function,
@@ -245,26 +230,21 @@ def do_hybrid_bo(
                         upper_bounds_starting_points
                     )
 
-                    starting_points: np.ndarray = optimizer.create_lhs_samples(
+                    starting_points = optimizer.create_lhs_samples(
                         config.n_starts_acq_optimization,
                         config.rng,
                     )
                     optimizer.X0 = starting_points
 
-                solution: OptimizationResult | None = optimizer.solve()
+                solution = optimizer.solve()
 
                 if solution is None:
-                    msg: str = "solution is None"
+                    msg = "solution is None"
                     raise Exception(msg)
 
                 print("Solving acquisition problem done.")
 
-                u_next: np.ndarray = solution.x[: problem.n_u, :]  # pyright: ignore[reportIndexIssue]
-
-                x_next: np.ndarray
-                x_no_noise_next: np.ndarray
-                f_next: float
-                f_no_noise_next: float
+                u_next = solution.x[: problem.n_u, :]
 
                 f_next, x_next, f_no_noise_next, x_no_noise_next = (
                     problem.single_evaluate_with_noisy_simulation(
@@ -309,13 +289,13 @@ def do_hybrid_bo(
 
                 if isinstance(gp.optimizer, MultiStartOptimizer):
                     gp.optimizer.lower_bounds_starting_points = (
-                        gp.optimizer.lower_bounds.copy()  # pyright: ignore[reportOptionalMemberAccess]
+                        gp.optimizer.lower_bounds.copy()
                     )
                     gp.optimizer.upper_bounds_starting_points = (
-                        gp.optimizer.upper_bounds.copy()  # pyright: ignore[reportOptionalMemberAccess]
+                        gp.optimizer.upper_bounds.copy()
                     )
 
-                    starting_points: np.ndarray = gp.optimizer.create_lhs_samples(
+                    starting_points = gp.optimizer.create_lhs_samples(
                         config.n_starts_training_gp,
                         config.rng,
                     )
@@ -394,7 +374,7 @@ def do_hybrid_bo(
         results_dir.mkdir(parents=True, exist_ok=True)
 
     if config.save_bo_results:
-        path: Path = results_dir / "results_bo.pkl"
+        path = results_dir / "results_bo.pkl"
         if path.exists():
             print(f"WARNING: File {path} exists. Will not overwrite.")
         else:
@@ -402,7 +382,7 @@ def do_hybrid_bo(
                 pickle.dump(results_bo_complete, file, protocol=pickle.HIGHEST_PROTOCOL)
 
     if config.save_extended_results:
-        path: Path = results_dir / "measurement_noise.pkl"
+        path = results_dir / "measurement_noise.pkl"
         if path.exists():
             print(f"WARNING: File {path} exists. Will not overwrite.")
         else:
@@ -413,7 +393,7 @@ def do_hybrid_bo(
                     protocol=pickle.HIGHEST_PROTOCOL,
                 )
 
-        path: Path = results_dir / "gaussian_standard_samples.pkl"
+        path = results_dir / "gaussian_standard_samples.pkl"
         if path.exists():
             print(f"WARNING: File {path} exists. Will not overwrite.")
         else:
@@ -424,7 +404,7 @@ def do_hybrid_bo(
                     protocol=pickle.HIGHEST_PROTOCOL,
                 )
 
-        path: Path = results_dir / "results_gp.pkl"
+        path = results_dir / "results_gp.pkl"
         if path.exists():
             print(f"WARNING: File {path} exists. Will not overwrite.")
         else:
@@ -444,20 +424,20 @@ def set_gp_training_data(
     input_gp_transformer: AffineTransformer,
     output_gp_transformer: AffineTransformer,
 ) -> None:
-    input_gp_train: np.ndarray = np.hstack(
+    input_gp_train = np.hstack(
         (
             u[:, config.indices_u_input_gp],
             x[:, config.indices_x_input_gp],
         ),
     )
 
-    output_gp_train: np.ndarray = x[:, config.indices_x_output_gp]
+    output_gp_train = x[:, config.indices_x_output_gp]
 
-    input_gp_train_transformed: np.ndarray = input_gp_transformer.fit_transform(
+    input_gp_train_transformed = input_gp_transformer.fit_transform(
         input_gp_train,
     )
 
-    output_gp_train_transformed: np.ndarray = output_gp_transformer.fit_transform(
+    output_gp_train_transformed = output_gp_transformer.fit_transform(
         output_gp_train,
     )
 
@@ -482,14 +462,14 @@ def setup_acq_problem(
     np.ndarray,
 ]:
     if config.formulation_acq not in ["ei", "lcb"]:
-        msg: str = (
+        msg = (
             f"The given formulation_acq '{config.formulation_acq}'"
             " is not among the allowed options."
         )
         raise Exception(msg)
 
     if len(config.indices_u_input_gp) + len(config.indices_x_input_gp) != problem.n_u:
-        msg: str = (
+        msg = (
             "len(config.indices_u_input_gp) + len(config.indices_x_input_gp)"
             " != problem.n_u"
         )
@@ -497,81 +477,72 @@ def setup_acq_problem(
 
     # %% Get some important variables and bounds
 
-    u: SymbolicType = SymbolicType.sym("u", problem.n_u, 1)  # pyright: ignore[reportArgumentType]
-    u_input_gp: SymbolicType = u[config.indices_u_input_gp]
-    u_input_gp_samples: SymbolicType = cas.repmat(u_input_gp.T, config.n_samples_gp, 1)
+    u = SymbolicType.sym("u", problem.n_u, 1)
+    u_input_gp = u[config.indices_u_input_gp]
+    u_input_gp_samples = cas.repmat(u_input_gp.T, config.n_samples_gp, 1)
 
-    x_input_gp_samples: SymbolicType = SymbolicType.sym(
-        "x_input_gp",  # pyright: ignore[reportArgumentType]
-        config.n_samples_gp,  # pyright: ignore[reportArgumentType]
-        len(config.indices_x_input_gp),  # pyright: ignore[reportArgumentType]
+    x_input_gp_samples = SymbolicType.sym(
+        "x_input_gp",
+        config.n_samples_gp,
+        len(config.indices_x_input_gp),
     )
-    x_no_gp_samples: SymbolicType = SymbolicType.sym(
-        "x_no_gp_samples",  # pyright: ignore[reportArgumentType]
-        config.n_samples_gp,  # pyright: ignore[reportArgumentType]
-        len(config.indices_x_no_gp),  # pyright: ignore[reportArgumentType]
+    x_no_gp_samples = SymbolicType.sym(
+        "x_no_gp_samples",
+        config.n_samples_gp,
+        len(config.indices_x_no_gp),
     )
-    x_output_gp_samples: SymbolicType = SymbolicType.sym(
-        "x_output_gp_samples",  # pyright: ignore[reportArgumentType]
-        config.n_samples_gp,  # pyright: ignore[reportArgumentType]
-        len(config.indices_x_output_gp),  # pyright: ignore[reportArgumentType]
+    x_output_gp_samples = SymbolicType.sym(
+        "x_output_gp_samples",
+        config.n_samples_gp,
+        len(config.indices_x_output_gp),
     )
 
-    input_gp_samples: SymbolicType = cas.horzcat(u_input_gp_samples, x_input_gp_samples)  # pyright: ignore[reportAssignmentType]
+    input_gp_samples = cas.horzcat(u_input_gp_samples, x_input_gp_samples)
 
-    x_lower_bounds_samples: np.ndarray = np.tile(
+    x_lower_bounds_samples = np.tile(
         problem.x_lower_bounds_acquisition.T,
         (config.n_samples_gp, 1),
     )
 
-    x_upper_bounds_samples: np.ndarray = np.tile(
+    x_upper_bounds_samples = np.tile(
         problem.x_upper_bounds_acquisition.T,
         (config.n_samples_gp, 1),
     )
 
-    x_lower_bounds_starting_points_samples: np.ndarray = np.tile(
+    x_lower_bounds_starting_points_samples = np.tile(
         problem.x_lower_bounds_starting_points.T,
         (config.n_samples_gp, 1),
     )
 
-    x_upper_bounds_starting_points_samples: np.ndarray = np.tile(
+    x_upper_bounds_starting_points_samples = np.tile(
         problem.x_upper_bounds_starting_points.T,
         (config.n_samples_gp, 1),
     )
 
     # %% Samples of GP
 
-    output_gp_mean_transformed: SymbolicType
-    output_gp_variance_transformed: SymbolicType
     output_gp_mean_transformed, output_gp_variance_transformed = gp.predict(
         input_transformer_gp.transform(input_gp_samples),
-    )  # pyright: ignore[reportAssignmentType]
+    )
 
-    output_gp_samples_transformed: SymbolicType = (
+    output_gp_samples_transformed = (
         output_gp_mean_transformed
         + cas.sqrt(cas.diag(output_gp_variance_transformed)) * gaussian_standard_samples
     )
 
-    output_gp_samples: SymbolicType = output_transformer_gp.inverse_transform(
+    output_gp_samples = output_transformer_gp.inverse_transform(
         output_gp_samples_transformed,
-    )  # pyright: ignore[reportAssignmentType]
+    )
 
     # %% Get optimization variables w, f_expression, h_expression,
     # lower_bounds, upper_bounds, lower_bounds_starting_points, and upper_bounds_starting_points
 
-    w: SymbolicType
-    n_variables: int
-    f_expression: SymbolicType
-    h_expression: list[SymbolicType] = []
-    lower_bounds: np.ndarray
-    upper_bounds: np.ndarray
-    lower_bounds_starting_points: np.ndarray
-    upper_bounds_starting_points: np.ndarray
+    h_expression = []
 
-    f_expression_parts: SymbolicType = SymbolicType(config.n_samples_gp, 1)
+    f_expression_parts = SymbolicType(config.n_samples_gp, 1)
 
     for i_sample in range(config.n_samples_gp):
-        x_sample: SymbolicType = SymbolicType(problem.n_x, 1)
+        x_sample = SymbolicType(problem.n_x, 1)
 
         if config.indices_x_input_gp:
             x_sample[config.indices_x_input_gp] = x_input_gp_samples[i_sample, :].T
@@ -587,25 +558,25 @@ def setup_acq_problem(
         if config.use_output_gp_as_opt_var:
             h_expression.extend(
                 [
-                    problem.h_known(u, x_sample),  # pyright: ignore[reportArgumentType]
+                    problem.h_known(u, x_sample),
                     x_sample[config.indices_x_output_gp]
                     - output_gp_samples[i_sample, :].T,
                 ],
             )
         else:
-            h_expression.append(problem.h_known(u, x_sample))  # pyright: ignore[reportArgumentType]
+            h_expression.append(problem.h_known(u, x_sample))
 
         if config.formulation_acq == "ei":
             f_expression_parts[i_sample] = cas.fmin(
-                problem.f(u, x_sample) - incumbent,  # pyright: ignore[reportOperatorIssue]
+                problem.f(u, x_sample) - incumbent,
                 0,
-            )  # pyright: ignore[reportOperatorIssue]
+            )
 
         else:  # lcb
             f_expression_parts[i_sample] = problem.f(u, x_sample)
 
     if config.formulation_acq == "ei":
-        f_expression = sample_mean(f_expression_parts)  # pyright: ignore[reportAssignmentType]
+        f_expression = sample_mean(f_expression_parts)
     else:  # lcb
         f_expression = sample_mean(
             f_expression_parts,
@@ -617,7 +588,7 @@ def setup_acq_problem(
             cas.vec(x_input_gp_samples),
             cas.vec(x_output_gp_samples),
             cas.vec(x_no_gp_samples),
-        )  # pyright: ignore[reportAssignmentType]
+        )
 
         lower_bounds = np.concatenate(
             (
@@ -714,7 +685,7 @@ def setup_acq_problem(
             u,
             cas.vec(x_input_gp_samples),
             cas.vec(x_no_gp_samples),
-        )  # pyright: ignore[reportAssignmentType]
+        )
 
         lower_bounds = np.concatenate(
             (
@@ -787,8 +758,8 @@ def setup_acq_problem(
     # %% Get number of optimization variables, f, and h
 
     n_variables = w.shape[0]
-    h: cas.Function = cas.Function("h", [w], [cas.vertcat(*h_expression)])
-    f: cas.Function = cas.Function("f", [w], [f_expression])
+    h = cas.Function("h", [w], [cas.vertcat(*h_expression)])
+    f = cas.Function("f", [w], [f_expression])
 
     return (
         n_variables,
