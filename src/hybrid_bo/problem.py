@@ -49,8 +49,9 @@ class Problem:
         self.n_u: int = self.f.numel_in(0)  # Number of elements in u
         self.n_x: int = self.f.numel_in(1)  # Number of elements in x
 
-        self.n_h_known: int = self.h_known.numel_out(0)  # Number of equations in h_hown
-        self.n_h_unknown: int = self.h_unknown.numel_out(0)  # Number of equations in g
+        # Number of equations in h_known and h_unknown
+        self.n_h_known: int = self.h_known.numel_out(0)
+        self.n_h_unknown: int = self.h_unknown.numel_out(0)
 
         # The following bounds are used
         # - as box constraints in the original problem formulation
@@ -91,7 +92,7 @@ class Problem:
             msg: str = "self.f.n_in() != 2"
             raise Exception(msg)
         if self.f.n_out() != 1:
-            msg: str = "self.f.n_out()!= 1"
+            msg: str = "self.f.n_out() != 1"
             raise Exception(msg)
 
         if self.f.size_in(0) != (self.n_u, 1):
@@ -108,48 +109,48 @@ class Problem:
             msg: str = "self.h_known.n_in() != 2"
             raise Exception(msg)
         if self.h_known.n_out() != 1:
-            msg: str = "self.h_known.n_out()!= 1"
+            msg: str = "self.h_known.n_out() != 1"
             raise Exception(msg)
 
         if self.h_known.size_in(0) != (self.n_u, 1):
-            msg: str = "self.h_known.size_in(0) != (self.nu, 1)"
+            msg: str = "self.h_known.size_in(0) != (self.n_u, 1)"
             raise Exception(msg)
         if self.h_known.size_in(1) != (self.n_x, 1):
             msg: str = "self.h_known.size_in(1) != (self.n_x, 1)"
             raise Exception(msg)
         if self.h_known.size_out(0) != (self.n_h_known, 1):
-            msg: str = "self.h_known.size_out(0) != (self.n_h, 1)"
+            msg: str = "self.h_known.size_out(0) != (self.n_h_known, 1)"
             raise Exception(msg)
 
         if self.h_unknown.n_in() != 2:
             msg: str = "self.h_unknown.n_in() != 2"
             raise Exception(msg)
         if self.h_unknown.n_out() != 1:
-            msg: str = "self.h_unknown.n_out()!= 1"
+            msg: str = "self.h_unknown.n_out() != 1"
             raise Exception(msg)
 
         if self.h_unknown.size_in(0) != (self.n_u, 1):
-            msg: str = "self.h_unknown.size_in(0) != (self.nu, 1)"
+            msg: str = "self.h_unknown.size_in(0) != (self.n_u, 1)"
             raise Exception(msg)
         if self.h_unknown.size_in(1) != (self.n_x, 1):
             msg: str = "self.h_unknown.size_in(1) != (self.n_x, 1)"
             raise Exception(msg)
         if self.h_unknown.size_out(0) != (self.n_h_unknown, 1):
-            msg: str = "self.h_unknown.size_out(0) != (self.n_g, 1)"
+            msg: str = "self.h_unknown.size_out(0) != (self.n_h_unknown, 1)"
             raise Exception(msg)
 
         if self.u_lower_bounds_acquisition.shape != (self.n_u, 1):
-            msg: str = "self.u_lower_bounds.shape != (self.n_u, 1)"
+            msg: str = "self.u_lower_bounds_acquisition.shape != (self.n_u, 1)"
             raise Exception(msg)
         if self.u_upper_bounds_acquisition.shape != (self.n_u, 1):
-            msg: str = "self.u_upper_bounds.shape != (self.n_u, 1)"
+            msg: str = "self.u_upper_bounds_acquisition.shape != (self.n_u, 1)"
             raise Exception(msg)
 
         if self.x_lower_bounds_acquisition.shape != (self.n_x, 1):
-            msg: str = "self.x_lower_bounds.shape != (self.x_u, 1)"
+            msg: str = "self.x_lower_bounds_acquisition.shape != (self.n_x, 1)"
             raise Exception(msg)
         if self.x_upper_bounds_acquisition.shape != (self.n_x, 1):
-            msg: str = "self.x_upper_bounds.shape != (self.n_x, 1)"
+            msg: str = "self.x_upper_bounds_acquisition.shape != (self.n_x, 1)"
             raise Exception(msg)
 
         if self.u_lower_bounds_starting_points.shape != (self.n_u, 1):
@@ -160,7 +161,7 @@ class Problem:
             raise Exception(msg)
 
         if self.x_lower_bounds_starting_points.shape != (self.n_x, 1):
-            msg: str = "self.x_lower_bounds_starting_points.shape != (self.x_u, 1)"
+            msg: str = "self.x_lower_bounds_starting_points.shape != (self.n_x, 1)"
             raise Exception(msg)
         if self.x_upper_bounds_starting_points.shape != (self.n_x, 1):
             msg: str = "self.x_upper_bounds_starting_points.shape != (self.n_x, 1)"
@@ -667,7 +668,7 @@ class Problem:
         n_starting_points: int = 10,
         rng: np.random.Generator | None = None,
     ) -> OptimizationResult:
-        # Parameters n_starting_points and rng are only important if type(optimizer) == MultistartOptimizer
+        # Parameters n_starting_points and rng are only important if type(optimizer) == MultiStartOptimizer
 
         u: SymbolicType = SymbolicType.sym("u", self.n_u, 1)  # pyright: ignore[reportArgumentType]
         x: SymbolicType = SymbolicType.sym("x", self.n_x, 1)  # pyright: ignore[reportArgumentType]

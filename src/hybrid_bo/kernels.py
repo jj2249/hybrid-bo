@@ -332,7 +332,7 @@ class StationaryKernel(Kernel, ABC):
             ):
                 msg: str = (
                     "(lengthscale.n_elements != 1)"
-                    "and (lengthscale.shape != (self.n_inputs, 1))"
+                    " and (lengthscale.shape != (self.n_inputs, 1))"
                 )
                 raise Exception(msg)
 

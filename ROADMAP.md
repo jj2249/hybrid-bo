@@ -35,7 +35,7 @@ library can scale (see the goal in CLAUDE.md). `examples/flash_unit` is out of s
       `*_complete`/`*_initial`/`*_no_noise` variants in `routines/hybrid_bo.py`)
 - [ ] Condense long argument lists (`Problem.__init__` takes 11 positional
       arrays; `evaluate_with_noisy_simulation` is called with a bare `False`)
-- [ ] Fix typos (`n_colums` in parameterization.py, "Bayesion" in config.py,
+- [x] Fix typos (`n_colums` in parameterization.py, "Bayesion" in config.py,
       shape-check messages in problem.py)
 
 ## Stage 4: examples
@@ -90,5 +90,7 @@ library can scale (see the goal in CLAUDE.md). `examples/flash_unit` is out of s
   uses `x_fixed.size` dimensions instead of `len(indices_x_free)`. The two are
   equal in the illustrative example.
 - `Config.indices_x_opt` is computed but never used.
+- `MultiStartOptimizer.create_lhs_samples` (`optimizers.py:161`) builds `msg`
+  when `upper_bounds_starting_points is None` but never raises it.
 - Measurement noise is generated with shape `(n_points, 1)`, so only one
   measured state is supported.

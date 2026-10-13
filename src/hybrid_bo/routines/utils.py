@@ -131,7 +131,7 @@ def ei_gp(
     either max ei_gp(maximize=True)
     or min -ei_gp(maximize=True).
 
-    If we want to maximize a function f,
+    If we want to minimize a function f,
     we use the least observed f as incumbent
     and the acquisition problem reads
     either max ei_gp(maximize=False)
@@ -149,7 +149,7 @@ def ei_gp(
         Determines if dealing with a maximization (True) or minimization (False) problem.
         By default True
     epsilon : float, optional
-        Sometimes added to the standard deviation to prevent devision by zero.
+        Sometimes added to the standard deviation to prevent division by zero.
         By default 1.0e-10
 
     Returns

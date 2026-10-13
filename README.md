@@ -12,7 +12,7 @@ Instead, you have to clone the repository or download the code and perform a loc
 
 The file [`pyproject.toml`](./pyproject.toml) can be used by installation tools to install the package and its dependencies.  
 It defines the core dependencies of the package (see `[project.dependencies]`).  
-Additionaly, it defines multiple optional dependency groups (see `[dependency-groups]`).
+Additionally, it defines multiple optional dependency groups (see `[dependency-groups]`).
 
 ### pip
 
@@ -23,7 +23,7 @@ If you want to install the package and its core dependencies, in a terminal, cha
 pip install .
 ```
 
-If you additionaly want to install a dependency group, type:
+If you additionally want to install a dependency group, type:
 
 ```bash
 pip install --group {group-name} .
@@ -59,13 +59,13 @@ Pixi handles different dependency groups by creating different environments.
 ## Usage
 
 To perform Bayesian optimization for partially known systems using hybrid models, you have to call the function
-`do_hybrid_bo()` in [`./src/hybrid_bo/routines/hybrid_bo.py`](./src/hybrid_bo/routines/hybrid_bo.py)).
+`do_hybrid_bo()` in [`./src/hybrid_bo/routines/hybrid_bo.py`](./src/hybrid_bo/routines/hybrid_bo.py).
 
 To be able to compare the performance with other approaches, we also provide
 
 * Standard Bayesian optimization (function `do_standard_bo()` in [`./src/hybrid_bo/routines/standard_bo.py`](./src/hybrid_bo/routines/standard_bo.py))
-* Latin hypercube sampling (function `do_latin_hybercube_sampling_bo()` in [`./src/hybrid_bo/routines/latin_hypercube_sampling.py`](./src/hybrid_bo/routines/latin_hypercube_sampling.py))
-* Uniform sampling (function `do_uniform_sampling_bo()` in [`./src/hybrid_bo/routines/uniform_sampling.py`](./src/hybrid_bo/routines/uniform_sampling.py))
+* Latin hypercube sampling (function `do_latin_hypercube_sampling()` in [`./src/hybrid_bo/routines/latin_hypercube_sampling.py`](./src/hybrid_bo/routines/latin_hypercube_sampling.py))
+* Uniform sampling (function `do_uniform_sampling()` in [`./src/hybrid_bo/routines/uniform_sampling.py`](./src/hybrid_bo/routines/uniform_sampling.py))
 
 For the function `do_hybrid_bo()`, you need to provide
 
