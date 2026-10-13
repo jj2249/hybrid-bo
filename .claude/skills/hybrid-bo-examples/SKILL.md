@@ -7,8 +7,8 @@ description: Use when writing, modifying or running an example under examples/. 
 
 `examples/illustrative_example/` is the reference. `examples/flash_unit/` is out
 of scope for the current refactor, so leave it alone. This describes the current
-contract; ROADMAP stage 4 will simplify it, and this skill should be updated
-alongside.
+contract. The restructure (ROADMAP stage 4, DESIGN.md) and stage 5 will simplify
+it, and this skill should be updated alongside.
 
 ## Layout
 
