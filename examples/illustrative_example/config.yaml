@@ -14,7 +14,7 @@ create_plots: True
 save_bo_results: True
 save_extended_results: True
 
-# Number of Bayesion optimization runs, int
+# Number of Bayesian optimization runs, int
 n_runs_bo: 1
 
 # Number of Bayesian optimization iterations, int

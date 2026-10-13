@@ -180,7 +180,7 @@ class MultiStartOptimizer(Optimizer):
     @override
     def solve(self) -> OptimizationResult | None:
         if self.n_starts < 1:
-            msg: str = "self.n_starts() < 1"
+            msg: str = "self.n_starts < 1"
             raise Exception(msg)
 
         solution: OptimizationResult | None = None
@@ -437,7 +437,7 @@ class SciPyLocalOptimizer(LocalOptimizer):
         else:
             self.bounds = None
 
-        # Set %% self.constraints
+        # %% Set self.constraints
 
         self.constraints = []
         if self.method in self.constraints_methods:

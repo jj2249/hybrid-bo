@@ -105,7 +105,7 @@ class AffineTransformer:
 
 
 class MinMaxTransformer(AffineTransformer):
-    # y_transformed = (max - min) / (max_transformed - min_transformed) * (y - min) + min_transformed
+    # y_transformed = (max_transformed - min_transformed) / (max - min) * (y - min) + min_transformed
 
     def __init__(
         self,

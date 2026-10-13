@@ -51,11 +51,11 @@ def squared_distance(
         raise Exception(msg)
 
     n_rows: int = X1.shape[0]
-    n_colums: int = X2.shape[0]
+    n_columns: int = X2.shape[0]
 
     X1_squared_summed_tiled: CasadiType | np.ndarray = tile(
         sum(X1**2, 1),
-        [1, n_colums],
+        [1, n_columns],
     )
 
     X2_squared_summed_tiled: CasadiType | np.ndarray = tile(

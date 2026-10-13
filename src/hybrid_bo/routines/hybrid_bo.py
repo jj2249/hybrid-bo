@@ -484,14 +484,14 @@ def setup_acq_problem(
     if config.formulation_acq not in ["ei", "lcb"]:
         msg: str = (
             f"The given formulation_acq '{config.formulation_acq}'"
-            "is not among the allowed options."
+            " is not among the allowed options."
         )
         raise Exception(msg)
 
     if len(config.indices_u_input_gp) + len(config.indices_x_input_gp) != problem.n_u:
         msg: str = (
             "len(config.indices_u_input_gp) + len(config.indices_x_input_gp)"
-            "!= problem.n_u"
+            " != problem.n_u"
         )
         raise Exception(msg)
 

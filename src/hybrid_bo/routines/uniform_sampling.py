@@ -181,7 +181,7 @@ def do_uniform_sampling(
 
                 print("Plotting done.")
 
-            print("Initialization done.\n---\n")
+            print(f"\nBO iteration 0/{config.n_iterations_bo} done.\n\n---\n")
 
             # %% Get additional points of u for the BO loop by uniform sampling
 

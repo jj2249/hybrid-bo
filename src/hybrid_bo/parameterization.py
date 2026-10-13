@@ -13,7 +13,7 @@ class Parameter:
         self,
         name: str = "parameter",
         n_rows: int = 1,
-        n_colums: int = 1,
+        n_columns: int = 1,
         value: NumericType | None = None,
         min: NumericType | None = None,
         max: NumericType | None = None,
@@ -22,7 +22,7 @@ class Parameter:
     ) -> None:
         self.name: str = name
         self.n_rows: int = n_rows
-        self.n_columns: int = n_colums
+        self.n_columns: int = n_columns
         self.shape: tuple[int, int] = (self.n_rows, self.n_columns)
         self.n_elements: int = self.n_rows * self.n_columns
         self.value: np.ndarray
@@ -193,7 +193,7 @@ def transform_single(
         return X
     if transform_mode == "log":
         return log(X)
-    msg: str = f"Transform_mode '{transform_mode}' not known."
+    msg: str = f"transform_mode '{transform_mode}' not known."
     raise Exception(msg)
 
 
@@ -228,7 +228,7 @@ def transform_multiple(
             X_transformed[i_mode, 0] = log(X[i_mode, 0])
 
         else:
-            msg: str = f"Transform_mode '{mode}' not known."
+            msg: str = f"transform_mode '{mode}' not known."
             raise Exception(msg)
 
     return X_transformed
@@ -311,11 +311,11 @@ def inv_transform_multiple(
     transform_mode: list[str],
 ) -> CasadiType | np.ndarray:
     if X_transformed.shape[1] != 1:
-        msg: str = "X.shape[1] != 1"
+        msg: str = "X_transformed.shape[1] != 1"
         raise Exception(msg)
 
     if X_transformed.shape[0] != len(transform_mode):
-        msg: str = "X.shape[0] != len(transform_mode)"
+        msg: str = "X_transformed.shape[0] != len(transform_mode)"
         raise Exception(msg)
 
     X: CasadiType | np.ndarray = empty_like(X_transformed)
