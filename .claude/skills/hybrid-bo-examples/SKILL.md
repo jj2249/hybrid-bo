@@ -24,10 +24,15 @@ it, and this skill should be updated alongside.
 | Function | Returns |
 |---|---|
 | `get_custom_problem(config)` | `Problem` |
-| `get_u_initial(problem, config)` | `list` of `n_runs_bo` arrays, each `(n_initial, n_u)` |
+| `get_u_initial(problem, rng)` | one run's initial points `(n_initial, n_u)`, drawn only from `rng` |
 | `get_gp_hybrid_bo(n_inputs)` / `get_gp_standard_bo(n_inputs)` | `GP` |
 | `get_optimizer_hybrid_bo()` / `get_optimizer_standard_bo()` | `Optimizer` (e.g. `MultiStartOptimizer(CasadiOptimizer("ipopt", ...))`) |
-| `create_plots_{hybrid_bo,standard_bo,latin_hypercube_sampling,uniform_sampling}` | plot callbacks |
+| `create_plots_{hybrid_bo,standard_bo,latin_hypercube_sampling,uniform_sampling}` | plot callbacks; the sampling ones take `(problem, config, f, u, x, n_points_initial, i_iteration)` (no GP) |
+
+`main.py` spawns one generator per run (`config.rng.spawn(n_runs_bo)`), calls
+`get_u_initial` once per run with that run's generator, and passes the generators
+to the routine as `rngs`. Plot callbacks may use `config.rng`; it doesn't affect
+the runs.
 
 `examples/main.py` currently looks up all four `create_plots_*` even when
 `create_plots: False`, so an example without them crashes there. Copy the
@@ -90,8 +95,7 @@ Problem(f, h_known, h_unknown, *u_acq, *x_acq, *u_sp, *x_sp)
   `len(indices_u_input_gp) + len(indices_x_input_gp) == n_u`, because `main.py`
   builds the GP with `problem.n_u` inputs.
 - **Measured states:** `len(indices_x_measured)` must equal the number of
-  `h_unknown` equations. In practice measurement noise supports a single
-  measured state.
+  `h_unknown` equations. Noise is drawn per measured state.
 - **Noise:** with `std_measurement_noise > 0`, remove `gp.noise_std.fix(0.0)` in
   `get_gp_*` so the GP can learn the noise.
 - **Index lists** are lists, even with a single entry (`[0]`, not `0`), and an

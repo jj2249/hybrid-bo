@@ -17,7 +17,7 @@ from hybrid_bo.gp import GP
 from hybrid_bo.optimizers import MultiStartOptimizer, Optimizer
 from hybrid_bo.problem import Problem
 from hybrid_bo.results import ResultsBO, ResultsGP
-from hybrid_bo.routines.utils import ei_gp, get_sampling_based_data
+from hybrid_bo.routines.utils import draw_measurement_noise, ei_gp
 from hybrid_bo.type_aliases import SymbolicType
 
 
@@ -26,6 +26,7 @@ def do_standard_bo(
     config: Config,
     gp: GP,
     u_initial_complete: list[np.ndarray],
+    rngs: list[np.random.Generator],
     optimizer: Optimizer,
     results_dir: Path,
     create_plots: Callable | None = None,
@@ -35,27 +36,26 @@ def do_standard_bo(
     if len(u_initial_complete) != config.n_runs_bo:
         msg = "len(u_initial_complete) != config.n_runs_bo"
         raise Exception(msg)
+    if len(rngs) != config.n_runs_bo:
+        msg = "len(rngs) != config.n_runs_bo"
+        raise Exception(msg)
 
     results_bo_complete = []
     results_gp_complete = []
-
-    n_points_initial_complete = [u_initial.shape[0] for u_initial in u_initial_complete]
-
-    n_points_complete = [
-        (n_points_initial + config.n_iterations_bo)
-        for n_points_initial in n_points_initial_complete
-    ]
-
-    measurement_noise_complete, _ = get_sampling_based_data(config, n_points_complete)
+    measurement_noise_complete = []
 
     # %% Iterate over multiple BO runs
 
     for i_run_bo in range(config.n_runs_bo):
         # %% Data for current run
 
+        # Each run draws only from its own generator: noise, then the loop
+        rng = rngs[i_run_bo]
+
         # Initial points AND BO iteration points
-        n_points = n_points_complete[i_run_bo]
-        measurement_noise = measurement_noise_complete[i_run_bo]
+        n_points = u_initial_complete[i_run_bo].shape[0] + config.n_iterations_bo
+        measurement_noise = draw_measurement_noise(config, n_points, rng)
+        measurement_noise_complete.append(measurement_noise)
 
         u = np.full((n_points, config.n_u), np.nan)
         x = np.full((n_points, config.n_x), np.nan)
@@ -66,7 +66,7 @@ def do_standard_bo(
         incumbents_no_noise = np.full((n_points, 1), np.nan)
 
         # Initial points
-        n_points_initial = n_points_initial_complete[i_run_bo]
+        n_points_initial = u_initial_complete[i_run_bo].shape[0]
         measurement_noise_initial = measurement_noise[:n_points_initial, :]
         u_initial = u_initial_complete[i_run_bo]
 
@@ -93,7 +93,7 @@ def do_standard_bo(
                     config.indices_x_measured,
                     config.n_starts_max_evaluate_problem,
                     config.use_jacobian_evaluate_problem,
-                    config.rng,
+                    rng,
                     False,
                 )
             )
@@ -146,7 +146,7 @@ def do_standard_bo(
 
                 starting_points = gp.optimizer.create_lhs_samples(
                     config.n_starts_training_gp,
-                    config.rng,
+                    rng,
                 )
                 gp.optimizer.X0 = starting_points
 
@@ -211,7 +211,7 @@ def do_standard_bo(
 
                     starting_points = optimizer.create_lhs_samples(
                         config.n_starts_acq_optimization,
-                        config.rng,
+                        rng,
                     )
                     optimizer.X0 = starting_points
 
@@ -232,7 +232,7 @@ def do_standard_bo(
                         config.indices_x_measured,
                         config.n_starts_max_evaluate_problem,
                         config.use_jacobian_evaluate_problem,
-                        config.rng,
+                        rng,
                     )
                 )
 
@@ -275,7 +275,7 @@ def do_standard_bo(
 
                     starting_points = gp.optimizer.create_lhs_samples(
                         config.n_starts_training_gp,
-                        config.rng,
+                        rng,
                     )
                     gp.optimizer.X0 = starting_points
 

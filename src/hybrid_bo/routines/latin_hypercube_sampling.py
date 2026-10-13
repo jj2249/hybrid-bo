@@ -1,4 +1,3 @@
-import copy
 import pickle
 import traceback
 from collections.abc import Callable
@@ -7,24 +6,17 @@ from pathlib import Path
 import numpy as np
 import scipy
 
-from hybrid_bo.affine_transformers import (
-    AffineTransformer,
-    MinMaxTransformer,
-    StandardTransformer,
-)
 from hybrid_bo.config import Config
-from hybrid_bo.gp import GP
-from hybrid_bo.optimizers import MultiStartOptimizer
 from hybrid_bo.problem import Problem
-from hybrid_bo.results import ResultsBO, ResultsGP
-from hybrid_bo.routines.utils import get_sampling_based_data
+from hybrid_bo.results import ResultsBO
+from hybrid_bo.routines.utils import draw_measurement_noise
 
 
 def do_latin_hypercube_sampling(
     problem: Problem,
     config: Config,
-    gp: GP,
     u_initial_complete: list[np.ndarray],
+    rngs: list[np.random.Generator],
     results_dir: Path,
     create_plots: Callable | None = None,
 ) -> None:
@@ -33,27 +25,32 @@ def do_latin_hypercube_sampling(
     if len(u_initial_complete) != config.n_runs_bo:
         msg = "len(u_initial_complete) != config.n_runs_bo"
         raise Exception(msg)
+    if len(rngs) != config.n_runs_bo:
+        msg = "len(rngs) != config.n_runs_bo"
+        raise Exception(msg)
 
     results_bo_complete = []
-    results_gp_complete = []
-
-    n_points_initial_complete = [u_initial.shape[0] for u_initial in u_initial_complete]
-
-    n_points_complete = [
-        (n_points_initial + config.n_iterations_bo)
-        for n_points_initial in n_points_initial_complete
-    ]
-
-    measurement_noise_complete, _ = get_sampling_based_data(config, n_points_complete)
+    measurement_noise_complete = []
 
     # %% Iterate over multiple BO runs
 
     for i_run_bo in range(config.n_runs_bo):
         # %% Data for current run
 
+        # Each run draws only from its own generator: noise, then the design, then the loop
+        rng = rngs[i_run_bo]
+
         # Initial points AND BO iteration points
-        n_points = n_points_complete[i_run_bo]
-        measurement_noise = measurement_noise_complete[i_run_bo]
+        n_points = u_initial_complete[i_run_bo].shape[0] + config.n_iterations_bo
+        measurement_noise = draw_measurement_noise(config, n_points, rng)
+        measurement_noise_complete.append(measurement_noise)
+
+        # Additional points of u for the BO loop by latin hypercube sampling
+        sampler = scipy.stats.qmc.LatinHypercube(problem.n_u, rng=rng)
+        u_additional = problem.u_lower_bounds_starting_points.T + (
+            problem.u_upper_bounds_starting_points.T
+            - problem.u_lower_bounds_starting_points.T
+        ) * sampler.random(config.n_iterations_bo)
 
         u = np.full((n_points, config.n_u), np.nan)
         x = np.full((n_points, config.n_x), np.nan)
@@ -64,7 +61,7 @@ def do_latin_hypercube_sampling(
         incumbents_no_noise = np.full((n_points, 1), np.nan)
 
         # Initial points
-        n_points_initial = n_points_initial_complete[i_run_bo]
+        n_points_initial = u_initial_complete[i_run_bo].shape[0]
         measurement_noise_initial = measurement_noise[:n_points_initial, :]
         u_initial = u_initial_complete[i_run_bo]
 
@@ -75,11 +72,8 @@ def do_latin_hypercube_sampling(
         incumbents_initial = np.full((n_points, 1), np.nan)
         incumbents_no_noise_initial = np.full((n_points, 1), np.nan)
 
-        # Incumbents
-
         # Results
         results_bo = None
-        results_gp = None
 
         try:
             # %% Get initial points
@@ -91,7 +85,7 @@ def do_latin_hypercube_sampling(
                     config.indices_x_measured,
                     config.n_starts_max_evaluate_problem,
                     config.use_jacobian_evaluate_problem,
-                    config.rng,
+                    rng,
                     False,
                 )
             )
@@ -117,57 +111,12 @@ def do_latin_hypercube_sampling(
 
             print("Initialization done.")
 
-            # %% Define GP
-
-            input_transformer_gp = MinMaxTransformer()
-            output_transformer_gp = StandardTransformer()
-
-            set_gp_training_data(
-                gp,
-                u_initial,
-                f_initial,
-                input_transformer_gp,
-                output_transformer_gp,
-            )
-
-            # %% Train GP
-
-            gp.create_training_problem()
-
-            if isinstance(gp.optimizer, MultiStartOptimizer):
-                gp.optimizer.lower_bounds_starting_points = (
-                    gp.optimizer.lower_bounds.copy()
-                )
-                gp.optimizer.upper_bounds_starting_points = (
-                    gp.optimizer.upper_bounds.copy()
-                )
-
-                starting_points = gp.optimizer.create_lhs_samples(
-                    config.n_starts_training_gp,
-                    config.rng,
-                )
-                gp.optimizer.X0 = starting_points
-
-            gp.solve_training_problem()
-
-            if config.save_extended_results:
-                results_gp = ResultsGP(
-                    copy.deepcopy(input_transformer_gp),
-                    copy.deepcopy(output_transformer_gp),
-                    copy.deepcopy(gp),
-                )
-
-            print("Training GP done.")
-
             # %% Create initial plots
 
             if config.create_plots and (create_plots is not None):
                 create_plots(
                     problem,
                     config,
-                    gp,
-                    input_transformer_gp,
-                    output_transformer_gp,
                     f_initial,
                     u_initial,
                     x_initial,
@@ -178,23 +127,6 @@ def do_latin_hypercube_sampling(
                 print("Plotting done.")
 
             print(f"\nBO iteration 0/{config.n_iterations_bo} done.\n\n---\n")
-
-            # %% Get additional points of u for the BO loop by latin hypercube sampling
-
-            sampler = scipy.stats.qmc.LatinHypercube(
-                problem.n_u,
-                rng=config.rng,
-            )
-
-            u_additional = sampler.random(config.n_iterations_bo)
-            u_additional = (
-                problem.u_lower_bounds_starting_points.T
-                + (
-                    problem.u_upper_bounds_starting_points.T
-                    - problem.u_lower_bounds_starting_points.T
-                )
-                * u_additional
-            )
 
             # %% BO loop
 
@@ -210,7 +142,7 @@ def do_latin_hypercube_sampling(
                         config.indices_x_measured,
                         config.n_starts_max_evaluate_problem,
                         config.use_jacobian_evaluate_problem,
-                        config.rng,
+                        rng,
                     )
                 )
 
@@ -231,56 +163,12 @@ def do_latin_hypercube_sampling(
 
                 print("Getting next point done.")
 
-                # %% Update GP
-
-                set_gp_training_data(
-                    gp,
-                    u[: n_points_initial + i_iteration_bo + 1, :],
-                    f[: n_points_initial + i_iteration_bo + 1, :],
-                    input_transformer_gp,
-                    output_transformer_gp,
-                )
-
-                gp.create_training_problem()
-
-                if isinstance(gp.optimizer, MultiStartOptimizer):
-                    gp.optimizer.lower_bounds_starting_points = (
-                        gp.optimizer.lower_bounds.copy()
-                    )
-                    gp.optimizer.upper_bounds_starting_points = (
-                        gp.optimizer.upper_bounds.copy()
-                    )
-
-                    starting_points = gp.optimizer.create_lhs_samples(
-                        config.n_starts_training_gp,
-                        config.rng,
-                    )
-                    gp.optimizer.X0 = starting_points
-
-                gp.solve_training_problem()
-
-                if results_gp is not None:
-                    results_gp.input_transformers_bo.append(
-                        copy.deepcopy(input_transformer_gp),
-                    )
-                    results_gp.output_transformers_bo.append(
-                        copy.deepcopy(
-                            output_transformer_gp,
-                        ),
-                    )
-                    results_gp.gps_bo.append(copy.deepcopy(gp))
-
-                print("Training GP done.")
-
                 # %% Create plots
 
                 if config.create_plots and create_plots:
                     create_plots(
                         problem,
                         config,
-                        gp,
-                        input_transformer_gp,
-                        output_transformer_gp,
                         f[: n_points_initial + i_iteration_bo + 1, :],
                         u[: n_points_initial + i_iteration_bo + 1, :],
                         x[: n_points_initial + i_iteration_bo + 1, :],
@@ -320,9 +208,6 @@ def do_latin_hypercube_sampling(
 
                 results_bo_complete.append(results_bo)
 
-            if results_gp is not None:
-                results_gp_complete.append(results_gp)
-
     # %% Save results
 
     if not results_dir.exists():
@@ -347,32 +232,3 @@ def do_latin_hypercube_sampling(
                     file,
                     protocol=pickle.HIGHEST_PROTOCOL,
                 )
-
-        path = results_dir / "results_gp.pkl"
-        if path.exists():
-            print(f"WARNING: File {path} exists. Will not overwrite.")
-        else:
-            with path.open("wb") as file:
-                pickle.dump(
-                    results_gp_complete,
-                    file,
-                    protocol=pickle.HIGHEST_PROTOCOL,
-                )
-
-
-def set_gp_training_data(
-    gp: GP,
-    u: np.ndarray,
-    f: np.ndarray,
-    input_gp_transformer: AffineTransformer,
-    output_gp_transformer: AffineTransformer,
-) -> None:
-    u_transformed = input_gp_transformer.fit_transform(
-        u,
-    )
-
-    f_transformed = output_gp_transformer.fit_transform(
-        f,
-    )
-
-    gp.set_XY_train(u_transformed, f_transformed)

@@ -380,11 +380,23 @@ This replaces the four routines, `ResultsBO`, `ResultsGP` and `get_sampling_base
 Plotting is a `callback`, which the example supplies. A plot that needs randomness takes
 its own `rng`, not the run's.
 
-**Order of random draws inside `run_bo`**, defined by R0 and then fixed:
-1. noise for all `n_initial + n_iterations` points;
-2. `strategy.init`;
+**Order of random draws for one run**, set in R0 and fixed from then on. Every draw
+comes from the run's own generator, `config.rng.spawn(n_runs)[i]`:
+0. the caller draws the initial points: `qmc.LatinHypercube(n_u, rng=rng).random(n_initial)`,
+   scaled to the u start bounds;
+1. noise for all `n_initial + n_iterations` points:
+   `rng.normal(0.0, noise_std, size=(n_points, len(measured)))`;
+2. `strategy.init`:
+   - hybrid: `z = rng.standard_normal((n_samples, 1))`;
+   - standard BO: no draw;
+   - LHS: `qmc.LatinHypercube(n_u, rng=rng).random(n_iterations)`, scaled;
+   - uniform: `rng.uniform(size=(n_iterations, n_u))`, scaled;
 3. evaluate the initial points;
 4. per iteration, `propose` (GP fit starts, then acquisition starts), then evaluate.
+
+The new code must make exactly these calls, in this order (e.g. `lhs()` is
+`LatinHypercube(...).random(n)` scaled, not some other sampler). Otherwise the
+baselines move.
 
 Today the GP is also retrained after the last evaluation. That extra fit comes last, so
 dropping it doesn't change the history.
@@ -464,15 +476,15 @@ baselines in a non-logic PR.
 Each PR also updates `hybrid-bo-src` (module map, contracts), `hybrid-bo-examples` if
 the example API changes, the README if usage changes, and this file if the design moves.
 
-- **R0 (logic): per-run randomness.**
-  - Each run gets its own generator (`rng.spawn(n_runs)`). It draws, in order: noise
-    for that run, then `z`, then the loop.
-  - The example draws each run's initial points from that run's generator.
-  - LHS/uniform stop training GPs; their plots fit one with the plot's own rng if needed.
-  - Noise is drawn with shape `(n_points, len(indices_x_measured))`, which fixes the
-    one-measured-state Known issue. The illustrative example is unchanged by this
-    because it has one measured state.
-  - Regenerate the baselines and explain the diff.
+- **R0 (logic): per-run randomness. Done.**
+  - Each run gets its own generator, and the draws follow the order above.
+  - The routines take `rngs` after `u_initial_complete`.
+    `get_u_initial(problem, rng)` returns one run's points.
+  - LHS/uniform no longer train a GP or take one. Their plots show only the true function
+    and the sampled points. A GP can come back in the plot callback once `fit_gp` exists
+    (R5).
+  - Noise has one column per measured state (fixes that Known issue).
+  - Plot functions still use `config.rng`, which no longer affects the runs.
 - **R1: `Bounds`, `lhs`/`uniform`/`stack`, `Problem` as a frozen dataclass.**
   - First: tag `pre-refactor` and exclude flash_unit.
   - Update the illustrative example, `user_definitions.get_u_initial` and `test_problem.py`.

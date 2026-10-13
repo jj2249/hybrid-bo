@@ -73,7 +73,7 @@ For the function `do_hybrid_bo()`, you need to provide
 * A `Config` (see [`./src/hybrid_bo/config.py`](./src/hybrid_bo/config.py))
 * A `GP` (Gaussian process, see [`./src/hybrid_bo/gp.py`](./src/hybrid_bo/gp.py))
 * An `Optimizer` (see [`./src/hybrid_bo/optimizers.py`](./src/hybrid_bo/optimizers.py))
-* Initial points
+* Initial points and a random number generator for each run (e.g. `config.rng.spawn(config.n_runs_bo)`; see [`./examples/main.py`](./examples/main.py))
 
 A `GP` needs
 

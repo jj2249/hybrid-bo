@@ -35,7 +35,10 @@ if __name__ == "__main__":
     pkg = import_module(example)
 
     problem = pkg.get_custom_problem(config)
-    initial_points = pkg.get_u_initial(problem, config)
+
+    # One generator per run; each run's initial points come from its own generator
+    rngs = config.rng.spawn(config.n_runs_bo)
+    initial_points = [pkg.get_u_initial(problem, rng) for rng in rngs]
 
     routines = {
         "hybrid_bo": (
@@ -52,13 +55,13 @@ if __name__ == "__main__":
         ),
         "latin_hypercube_sampling": (
             do_latin_hypercube_sampling,
-            pkg.get_gp_standard_bo,
+            None,
             None,
             pkg.create_plots_latin_hypercube_sampling,
         ),
         "uniform_sampling": (
             do_uniform_sampling,
-            pkg.get_gp_standard_bo,
+            None,
             None,
             pkg.create_plots_uniform_sampling,
         ),
@@ -66,15 +69,17 @@ if __name__ == "__main__":
 
     run, make_gp, make_optimizer, make_plots = routines[routine]
 
-    # Sampling routines take no optimizer
-    optimizer = {"optimizer": make_optimizer()} if make_optimizer else {}
+    # Sampling routines take no GP and no optimizer
+    model = (
+        {"gp": make_gp(problem.n_u), "optimizer": make_optimizer()} if make_gp else {}
+    )
 
     run(
         problem,
         config,
-        make_gp(problem.n_u),
-        initial_points,
-        **optimizer,
+        u_initial_complete=initial_points,
+        rngs=rngs,
+        **model,
         results_dir=example_dir / routine,
         create_plots=make_plots if config.create_plots else None,
     )

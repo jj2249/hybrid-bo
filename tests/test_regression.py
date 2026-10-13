@@ -29,7 +29,9 @@ RTOL, ATOL = 1e-6, 1e-8
 
 def run_routine(routine, config, results_dir):
     problem = ex.get_custom_problem(config)
-    u_initial = ex.get_u_initial(problem, config)
+    # As in examples/main.py: one generator per run, initial points drawn from it
+    rngs = config.rng.spawn(config.n_runs_bo)
+    u_initial = [ex.get_u_initial(problem, rng) for rng in rngs]
     match routine:
         case "hybrid_bo":
             gp = ex.get_gp_hybrid_bo(problem.n_u)
@@ -38,6 +40,7 @@ def run_routine(routine, config, results_dir):
                 config,
                 gp,
                 u_initial,
+                rngs,
                 ex.get_optimizer_hybrid_bo(),
                 results_dir,
                 None,
@@ -49,18 +52,17 @@ def run_routine(routine, config, results_dir):
                 config,
                 gp,
                 u_initial,
+                rngs,
                 ex.get_optimizer_standard_bo(),
                 results_dir,
                 None,
             )
         case "latin_hypercube_sampling":
-            gp = ex.get_gp_standard_bo(problem.n_u)
             do_latin_hypercube_sampling(
-                problem, config, gp, u_initial, results_dir, None
+                problem, config, u_initial, rngs, results_dir, None
             )
         case "uniform_sampling":
-            gp = ex.get_gp_standard_bo(problem.n_u)
-            do_uniform_sampling(problem, config, gp, u_initial, results_dir, None)
+            do_uniform_sampling(problem, config, u_initial, rngs, results_dir, None)
 
 
 @pytest.mark.parametrize(

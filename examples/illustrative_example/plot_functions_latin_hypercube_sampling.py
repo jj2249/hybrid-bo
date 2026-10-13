@@ -2,8 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes
 
-from hybrid_bo import GP, Config, Problem
-from hybrid_bo.affine_transformers import AffineTransformer
+from hybrid_bo import Config, Problem
 
 # plt.rcParams["text.usetex"] = True
 
@@ -11,9 +10,6 @@ from hybrid_bo.affine_transformers import AffineTransformer
 def create_plots(
     problem: Problem,
     config: Config,
-    gp: GP,
-    input_transformer_gp: AffineTransformer,
-    output_transformer_gp: AffineTransformer,
     f_bo: np.ndarray,
     u_bo: np.ndarray,
     x_bo: np.ndarray,
@@ -24,7 +20,6 @@ def create_plots(
     # %% User definitions
 
     original = False
-    confidence_level = 90
     n_points = [101]
 
     # %% Get evaluation points
@@ -61,30 +56,11 @@ def create_plots(
         original,
     )
 
-    # %% Get GP mean and std
-
-    mean_gp, std_gp = get_gp_mean_and_std(
-        u,
-        gp,
-        input_transformer_gp,
-        output_transformer_gp,
-    )
-
     # %% Plotting
 
     fig, ax = plt.subplots()
 
-    plot_gp(
-        ax,
-        u,
-        f,
-        mean_gp,
-        std_gp,
-        u_bo,
-        f_bo,
-        n_points_initial,
-        confidence_level,
-    )
+    plot_samples(ax, u, f, u_bo, f_bo, n_points_initial)
 
     ax.legend(
         ncols=2,
@@ -101,42 +77,14 @@ def create_plots(
     plt.show()
 
 
-def plot_gp(
+def plot_samples(
     ax: Axes,
     u: np.ndarray,
     f: np.ndarray,
-    mean_gp: np.ndarray,
-    std_gp: np.ndarray,
     u_bo: np.ndarray,
     f_bo: np.ndarray,
     n_points_initial: int,
-    confidence_level: int,
 ) -> None:
-
-    # %% Get confidence factor
-
-    confidence_factors = {
-        25: 0.32,
-        50: 0.67,
-        68: 0.99,
-        80: 1.28,
-        90: 1.64,
-        95: 1.96,
-        99: 2.58,
-    }
-    if confidence_level not in confidence_factors:
-        msg = "For 'confidence_level', only the values 25, 50, 68, 80, 90, 95 and 99 are allowed."
-        raise Exception(msg)
-
-    confidence_factor = confidence_factors[confidence_level]
-
-    output_gp_lower_confidence_bound = (mean_gp - confidence_factor * std_gp).flatten()
-    output_gp_upper_confidence_bound = (mean_gp + confidence_factor * std_gp).flatten()
-
-    # %% Plotting
-
-    output_gp = f.flatten()
-
     ax.scatter(
         u_bo[:n_points_initial, 0],
         f_bo[:n_points_initial, 0],
@@ -148,19 +96,10 @@ def plot_gp(
         u_bo[n_points_initial:, 0],
         f_bo[n_points_initial:, 0],
         c="r",
-        label="Points found with BO",
+        label="Sampled points",
     )
 
-    ax.plot(u.flatten(), output_gp, color="k", linestyle="--", label="True")
-    ax.plot(u.flatten(), mean_gp, color="b", label="Predicted mean")
-    ax.fill_between(
-        u.flatten(),
-        output_gp_lower_confidence_bound,
-        output_gp_upper_confidence_bound,
-        alpha=0.2,
-        color="b",
-        label="Confidence interval",
-    )
+    ax.plot(u.flatten(), f.flatten(), color="k", linestyle="--", label="True")
 
     ax.set_ylabel("Objective")
 
@@ -181,30 +120,3 @@ def get_evaluation_data(
     )
 
     return x, f
-
-
-def get_gp_mean_and_std(
-    u: np.ndarray,
-    gp: GP,
-    input_transformer_gp: AffineTransformer,
-    output_transformer_gp: AffineTransformer,
-) -> tuple[np.ndarray, np.ndarray]:
-
-    input_gp = u
-
-    input_gp_transformed = input_transformer_gp.transform(
-        input_gp,
-    )
-
-    mean_gp_transformed, cov_gp_transformed = gp.predict(
-        input_gp_transformed,
-    )
-
-    std_gp_transformed = np.sqrt(np.diag(cov_gp_transformed))[:, np.newaxis]
-
-    mean_gp = output_transformer_gp.inverse_transform(
-        mean_gp_transformed,
-    )
-    std_gp = std_gp_transformed / output_transformer_gp.slope.item()
-
-    return mean_gp, std_gp

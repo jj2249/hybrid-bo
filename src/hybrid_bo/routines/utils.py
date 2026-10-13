@@ -8,36 +8,17 @@ from hybrid_bo.config import Config
 from hybrid_bo.type_aliases import CasadiType
 
 
-def get_sampling_based_data(
+def draw_measurement_noise(
     config: Config,
-    n_points_complete: list[int],
-) -> tuple[list[np.ndarray], list[np.ndarray]]:
-
-    measurement_noise_complete = [
-        np.atleast_2d(
-            scipy.stats.norm.rvs(
-                0,
-                config.std_measurement_noise,
-                n_points_complete[i_run_bo],
-                random_state=config.rng,
-            ),
-        ).T
-        for i_run_bo in range(config.n_runs_bo)
-    ]
-
-    gp_gaussian_standard_samples_complete = [
-        np.atleast_2d(
-            scipy.stats.norm.rvs(
-                0,
-                1,
-                config.n_samples_gp,
-                random_state=config.rng,
-            ),
-        ).T
-        for i_run_bo in range(config.n_runs_bo)
-    ]
-
-    return measurement_noise_complete, gp_gaussian_standard_samples_complete
+    n_points: int,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """Measurement noise for one run: one row per point, one column per measured state."""
+    return rng.normal(
+        0.0,
+        config.std_measurement_noise,
+        size=(n_points, len(config.indices_x_measured)),
+    )
 
 
 @overload
