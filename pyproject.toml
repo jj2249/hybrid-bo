@@ -23,6 +23,11 @@ requires = ["hatchling"]
 channels = ["conda-forge"]
 platforms = ["win-64", "osx-arm64", "linux-64"]
 
+[tool.pixi.dependencies]
+# conda-forge's Python 3.15 on Windows installs to lib/python/site-packages,
+# which ty can't find yet. Lift the cap once ty supports that layout.
+python = ">=3.12,<3.15"
+
 [tool.pixi.pypi-dependencies]
 hybrid_bo = { path = ".", editable = true }
 
