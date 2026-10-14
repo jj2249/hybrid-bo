@@ -61,10 +61,17 @@ current code predates them; this is the mapping:
 add modules here, and PR 9 switches the example and the regression test over and
 deletes `legacy/`.
 
+- `problem.py`: `Var` (name, bounds, start bounds), `System` (`u`, `x`, `y`, `g`,
+  `h_inputs`, `measured`) and `Problem` (`system`, `f`). `g` and `f` are user
+  callables over a namespace `v` of symbols (`v.x`), traced once in `_trace` into
+  `cas.Function`s with column-vector inputs in the paper's order `(x, y, u)`. All
+  input checks live in the constructors and raise `ValueError` (`NotImplementedError`
+  for `P > 1`). `Symbolic` (default `cas.SX`) is the one place the symbol type is
+  chosen.
 - `sampling.py`: `lhs(lower, upper, n, rng)` and `uniform(...)` over a box, shape
-  `(n, d)`. Use them for any Latin hypercube or uniform draw; the two remaining
-  hand-written copies (fixed-x root-finding guesses, `create_lhs_samples`) go in
-  PRs 5 and 6.
+  `(n, d)`; `initial_points(variables, n, rng)` is `lhs` over `Var` start bounds.
+  Use them for any Latin hypercube or uniform draw; the two remaining hand-written
+  copies (fixed-x root-finding guesses, `create_lhs_samples`) go in PRs 5 and 6.
 
 **The old code** is in `hybrid_bo/legacy/` (`from hybrid_bo.legacy import Config,
 GP, Problem`). It may import new code (`legacy/problem.py` uses `lhs`), never the
@@ -161,7 +168,7 @@ reverse. Paths below are relative to `legacy/`.
   `tests/data/regression/`. A logic PR regenerates them with
   `--update-baselines` and explains the diff.
 - Unit tests (`test_kernels.py`, `test_gp.py`, `test_problem.py`,
-  `test_sampling.py`, `test_transformers.py`) compare against numpy/scipy references. Add one when
+  `test_sampling.py`, `test_system.py`, `test_transformers.py`) compare against numpy/scipy references. Add one when
   changing math.
 - A known bug gets a `pytest.mark.xfail(strict=True)` test and a ROADMAP
   Known issues entry. The PR that fixes it removes the marker.

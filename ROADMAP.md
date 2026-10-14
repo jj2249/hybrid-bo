@@ -57,7 +57,7 @@ earlier R1-R9.
 - [x] 2 *logic*: draw order from DESIGN.md; always reconstruct after the experiment;
       regenerate the baselines
 - [x] 3: move the old code to `hybrid_bo/legacy/`
-- [ ] 4: `Var`, `System`, `Problem`
+- [x] 4: `Var`, `System`, `Problem`
 - [ ] 5: `oracle_experiment`, root-finding, `evaluate`, `History`, error types (removes
       the ruff `TRY002`/`BLE001` ignores once nothing raises bare `Exception`)
 - [ ] 6: `NLP`, `Ipopt`, `multistart`; no tracebacks for expected failures

@@ -88,7 +88,7 @@ settings = hb.HybridBOSettings(acquisition=hb.EI(), n_scenarios=25)  # default G
 rng = np.random.default_rng(0)
 runs = []
 for run_rng in rng.spawn(10):
-    initial_points = hb.lhs(system.u, n=2, rng=run_rng)
+    initial_points = hb.initial_points(system.u, n=2, rng=run_rng)
     runs.append(hb.hybrid_bo(problem, experiment, initial_points, 5, settings, run_rng))
 
 hb.plots.convergence(runs)
@@ -98,42 +98,59 @@ hb.plots.convergence(runs)
 
 All snippets are illustrative.
 
-### Problem
+### Problem (PR 4, done; `problem.py`, `sampling.py`)
 
 ```python
-@dataclass(frozen=True)
+Symbolic = cas.SX  # the one place the symbol type is chosen
+
+
+@dataclass(frozen=True, init=False)
 class Var:
-    name: str
-    lower: float = -np.inf
-    upper: float = np.inf
-    start: tuple[float, float] | None = None  # defaults to (lower, upper) if finite
+    name: str  # a Python identifier, used as v.name
+    lower: float
+    upper: float
+    start: tuple[float, float]  # finite, inside the bounds
+
+    # start defaults to (lower, upper) when both are finite, else it is required
+    def __init__(self, name, lower=-np.inf, upper=np.inf, start=None): ...
 
 
 @dataclass(frozen=True, init=False)
 class System:
-    u: list[Var]  # N decision variables
-    x: list[Var]  # M mechanistic states
-    y: list[Var]  # P unknown states (P = 1 for now; P > 1 raises)
-    g: cas.Function  # built from the callable: g(x, y, u) -> (M,)
-    h_inputs: list[Var]  # the arguments of h, from u and x
-    measured: list[Var]  # the states the sensors read, len(measured) == P
+    u: tuple[Var, ...]  # N decision variables
+    x: tuple[Var, ...]  # M mechanistic states
+    y: tuple[Var, ...]  # P unknown states (P > 1 raises NotImplementedError)
+    g: cas.Function  # g(x, y, u) -> (M, 1), column-vector inputs
+    h_inputs: tuple[Var, ...]  # the arguments of h, from u and x
+    measured: tuple[Var, ...]  # the states the sensors read, from x and y; P of them
 
     def __init__(self, u, x, y, g: Callable, h_inputs, measured): ...
+
+    # n_u, n_x, n_y properties
 
 
 @dataclass(frozen=True, init=False)
 class Problem:
     system: System
-    f: cas.Function  # built from the callable: f(x, y, u) -> scalar
+    f: cas.Function  # f(x, y, u) -> scalar
 
     def __init__(self, system: System, f: Callable): ...
+
+
+def initial_points(variables, n, rng) -> np.ndarray: ...  # lhs over the start bounds
 ```
 
-Construction calls each callable once with CasADi symbols (`v.name` for every variable)
-and builds the `cas.Function`s in declaration order. It checks: unique names, finite
-start bounds, `len(g) == M`, `len(measured) == P`, `h_inputs` drawn from `u` and `x`.
-Variables are looked up by identity or name, never with `==`, because CasADi's `==` is
-symbolic.
+Construction calls each callable once with a read-only namespace `v` of `Symbolic`
+scalars (an unknown name raises `AttributeError` listing the available ones; `g` may
+return one expression or a list) and builds the `cas.Function`s in declaration order,
+with inputs and outputs named `x`, `y`, `u` → `g`/`f`. It checks: names are identifiers
+and unique; `lower <= upper`; start bounds finite, ordered and inside the bounds;
+`u`, `x`, `y` non-empty; `len(g) == M`; `f` scalar; `h_inputs` from `u` and `x`,
+`measured` from `x` and `y`, each without repeats; `len(measured) == P`. `Var` is a plain
+frozen dataclass, so membership checks use its equality; no CasADi `==` is involved.
+
+`lhs(lower, upper, n, rng)` and `uniform(...)` stay the array primitives the library
+uses for starts; `initial_points` is the `Var` front end for examples.
 
 ### Evaluation
 
@@ -475,7 +492,7 @@ draw-order PR exactly.
 0. **Design** (docs): CONTEXT.md, ADRs, this file, ROADMAP.md, CLAUDE.md conventions.
 1. **R1 trimmed** (#17). *Done.* flash_unit excluded from ty (it targets the
    `pre-refactor` tag); `lhs(lower, upper, n, rng)`/`uniform(...)` in `sampling.py`
-   (PR 4 changes them to take `Var`s); `Problem.solve` and `use_jacobian` deleted;
+   (they stay array-based; PR 4 adds `initial_points` for `Var`s); `Problem.solve` and `use_jacobian` deleted;
    `examples/main.py` dispatches with `match`. Two hand-written LHS copies remain until
    their PRs: the fixed-x root-finding guesses (PR 5) and
    `MultiStartOptimizer.create_lhs_samples` (PR 6).
@@ -487,7 +504,7 @@ draw-order PR exactly.
    `hybrid_bo.legacy`; the top-level `hybrid_bo` exports only the new API. Legacy may
    import new code, never the reverse. Result pickles saved before this PR
    (`hybrid_bo.results.ResultsBO`) need the old path to unpickle.
-4. **Problem**: `Var`, `System`, `Problem`.
+4. **Problem**: `Var`, `System`, `Problem`, `initial_points`. *Done.*
 5. **Evaluation**: `oracle_experiment`, root-finding, `evaluate`, `History`, error types.
 6. **Solvers**: `NLP`, `Ipopt`, `multistart`.
 7. **GP**: `Hyper`, kernel functions, `GP`, `fit_gp`, `predict`, scalers, `default_gp`;
