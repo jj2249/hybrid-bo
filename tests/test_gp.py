@@ -4,10 +4,10 @@ import numpy as np
 import pytest
 from scipy.stats import multivariate_normal
 
-from hybrid_bo import GP
-from hybrid_bo.kernels import Matern52Kernel, OutputScaleKernel
-from hybrid_bo.means import ConstantMean, ZeroMean
-from hybrid_bo.parameterization import Parameter
+from hybrid_bo.legacy import GP
+from hybrid_bo.legacy.kernels import Matern52Kernel, OutputScaleKernel
+from hybrid_bo.legacy.means import ConstantMean, ZeroMean
+from hybrid_bo.legacy.parameterization import Parameter
 
 TOL = {"rtol": 1e-8, "atol": 1e-10}
 NOISE_STD = 0.1

@@ -3,8 +3,8 @@ import numpy as np
 import scipy
 import scipy.optimize
 
+from hybrid_bo.legacy.type_aliases import SymbolicType
 from hybrid_bo.sampling import lhs
-from hybrid_bo.type_aliases import SymbolicType
 
 
 class Problem:

@@ -89,6 +89,8 @@ remove the marker in the PR that fixes the bug.
   implementation exists.
 - American spelling everywhere, in code and prose (`optimization_loop`,
   "optimization loop").
+- New code lives at the top level of `hybrid_bo` and never imports
+  `hybrid_bo.legacy` (the old code, deleted in DESIGN.md PR 9).
 - Functions take what they use, not a `Config`. Randomness is an explicit `rng`.
 - Rows are points: a point is `(n,)`, a set is `(n_points, n)`, `f` is
   `(n_points,)`. Column vectors only in CasADi glue code.

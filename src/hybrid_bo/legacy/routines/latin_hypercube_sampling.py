@@ -5,9 +5,9 @@ from pathlib import Path
 
 import numpy as np
 
-from hybrid_bo.config import Config
-from hybrid_bo.problem import Problem
-from hybrid_bo.results import ResultsBO
+from hybrid_bo.legacy.config import Config
+from hybrid_bo.legacy.problem import Problem
+from hybrid_bo.legacy.results import ResultsBO
 from hybrid_bo.sampling import lhs
 
 

@@ -67,7 +67,7 @@ Problem(f, h_known, h_unknown, *u_acq, *x_acq, *u_sp, *x_sp)
   - Acquisition bounds (`*_acq`) may be `±inf` for `x`.
   - Starting-point bounds (`*_sp`) must be finite. They are the ranges for
     initial guesses and initial points.
-- Use `hybrid_bo.type_aliases.SymbolicType` for symbols.
+- Use `hybrid_bo.legacy.type_aliases.SymbolicType` for symbols. Everything an example needs from the old library comes from `hybrid_bo.legacy` (`Config`, `GP`, `Problem`, `kernels`, `optimizers`, ...); only new API such as `lhs` comes from `hybrid_bo`.
 
 ## config.yaml
 

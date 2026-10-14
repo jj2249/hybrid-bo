@@ -3,9 +3,9 @@ from typing import overload
 import casadi as cas
 import numpy as np
 
-from hybrid_bo.array_operations.creation_functions import empty_like
-from hybrid_bo.array_operations.nonlinear_functions import exp, log
-from hybrid_bo.type_aliases import CasadiType, NumericType, SymbolicType
+from hybrid_bo.legacy.array_operations.creation_functions import empty_like
+from hybrid_bo.legacy.array_operations.nonlinear_functions import exp, log
+from hybrid_bo.legacy.type_aliases import CasadiType, NumericType, SymbolicType
 
 
 class Parameter:

@@ -59,30 +59,30 @@ Pixi handles different dependency groups by creating different environments.
 ## Usage
 
 To perform Bayesian optimization for partially known systems using hybrid models, you have to call the function
-`do_hybrid_bo()` in [`./src/hybrid_bo/routines/hybrid_bo.py`](./src/hybrid_bo/routines/hybrid_bo.py).
+`do_hybrid_bo()` in [`./src/hybrid_bo/legacy/routines/hybrid_bo.py`](./src/hybrid_bo/legacy/routines/hybrid_bo.py).
 
 To be able to compare the performance with other approaches, we also provide
 
-* Standard Bayesian optimization (function `do_standard_bo()` in [`./src/hybrid_bo/routines/standard_bo.py`](./src/hybrid_bo/routines/standard_bo.py))
-* Latin hypercube sampling (function `do_latin_hypercube_sampling()` in [`./src/hybrid_bo/routines/latin_hypercube_sampling.py`](./src/hybrid_bo/routines/latin_hypercube_sampling.py))
-* Uniform sampling (function `do_uniform_sampling()` in [`./src/hybrid_bo/routines/uniform_sampling.py`](./src/hybrid_bo/routines/uniform_sampling.py))
+* Standard Bayesian optimization (function `do_standard_bo()` in [`./src/hybrid_bo/legacy/routines/standard_bo.py`](./src/hybrid_bo/legacy/routines/standard_bo.py))
+* Latin hypercube sampling (function `do_latin_hypercube_sampling()` in [`./src/hybrid_bo/legacy/routines/latin_hypercube_sampling.py`](./src/hybrid_bo/legacy/routines/latin_hypercube_sampling.py))
+* Uniform sampling (function `do_uniform_sampling()` in [`./src/hybrid_bo/legacy/routines/uniform_sampling.py`](./src/hybrid_bo/legacy/routines/uniform_sampling.py))
 
 For the function `do_hybrid_bo()`, you need to provide
 
-* A `Problem` (see [`./src/hybrid_bo/problem.py`](./src/hybrid_bo/problem.py)) as in equation (4) in the [publication](https://arxiv.org/abs/2603.11199)
-* A `Config` (see [`./src/hybrid_bo/config.py`](./src/hybrid_bo/config.py))
-* A `GP` (Gaussian process, see [`./src/hybrid_bo/gp.py`](./src/hybrid_bo/gp.py))
-* An `Optimizer` (see [`./src/hybrid_bo/optimizers.py`](./src/hybrid_bo/optimizers.py))
+* A `Problem` (see [`./src/hybrid_bo/legacy/problem.py`](./src/hybrid_bo/legacy/problem.py)) as in equation (4) in the [publication](https://arxiv.org/abs/2603.11199)
+* A `Config` (see [`./src/hybrid_bo/legacy/config.py`](./src/hybrid_bo/legacy/config.py))
+* A `GP` (Gaussian process, see [`./src/hybrid_bo/legacy/gp.py`](./src/hybrid_bo/legacy/gp.py))
+* An `Optimizer` (see [`./src/hybrid_bo/legacy/optimizers.py`](./src/hybrid_bo/legacy/optimizers.py))
 * Initial points and a random number generator for each run (e.g. `config.rng.spawn(config.n_runs_bo)`; see [`./examples/main.py`](./examples/main.py))
 
 A `GP` needs
 
-* A `Kernel` (see [`./src/hybrid_bo/kernels.py`](./src/hybrid_bo/kernels.py))
-* A `Mean` (see [`./src/hybrid_bo/means.py`](./src/hybrid_bo/means.py))
-* A standard deviation `Parameter` (see [`./src/hybrid_bo/parameterization.py`](./src/hybrid_bo/parameterization.py))
-* An `Optimizer` (see [`./src/hybrid_bo/optimizers.py`](./src/hybrid_bo/optimizers.py))
+* A `Kernel` (see [`./src/hybrid_bo/legacy/kernels.py`](./src/hybrid_bo/legacy/kernels.py))
+* A `Mean` (see [`./src/hybrid_bo/legacy/means.py`](./src/hybrid_bo/legacy/means.py))
+* A standard deviation `Parameter` (see [`./src/hybrid_bo/legacy/parameterization.py`](./src/hybrid_bo/legacy/parameterization.py))
+* An `Optimizer` (see [`./src/hybrid_bo/legacy/optimizers.py`](./src/hybrid_bo/legacy/optimizers.py))
 
-All hyperparameters of a `GP` are objects of `Parameter` (see [`./src/hybrid_bo/parameterization.py`](./src/hybrid_bo/parameterization.py)).
+All hyperparameters of a `GP` are objects of `Parameter` (see [`./src/hybrid_bo/legacy/parameterization.py`](./src/hybrid_bo/legacy/parameterization.py)).
 
 **Important**: Currently, only one unknown equation is supported. For more information, see the [publication](https://arxiv.org/abs/2603.11199).
 

@@ -481,7 +481,10 @@ draw-order PR exactly.
    noise per evaluation (`noise_std` instead of a pre-drawn array), root-finding
    always runs, `measurement_noise.pkl` dropped (it is `x - x_no_noise` on the
    measured states). Baselines regenerated.
-3. **Legacy**: move the old code to `hybrid_bo/legacy/`.
+3. **Legacy**. *Done.* The old code is in `hybrid_bo/legacy/`, imported as
+   `hybrid_bo.legacy`; the top-level `hybrid_bo` exports only the new API. Legacy may
+   import new code, never the reverse. Result pickles saved before this PR
+   (`hybrid_bo.results.ResultsBO`) need the old path to unpickle.
 4. **Problem**: `Var`, `System`, `Problem`.
 5. **Evaluation**: `oracle_experiment`, root-finding, `evaluate`, `History`, error types.
 6. **Solvers**: `NLP`, `Ipopt`, `multistart`.

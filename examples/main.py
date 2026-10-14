@@ -3,8 +3,8 @@ from pathlib import Path
 
 import yaml
 
-from hybrid_bo import Config
-from hybrid_bo.routines import (
+from hybrid_bo.legacy import Config
+from hybrid_bo.legacy.routines import (
     do_hybrid_bo,
     do_latin_hypercube_sampling,
     do_standard_bo,
