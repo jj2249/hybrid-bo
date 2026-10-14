@@ -188,16 +188,28 @@ def evaluate(
   (root-finding with CasADi Jacobians), reads the measured variables and adds
   `rng.normal(0, noise_std)`. Its full states are the **oracle values**, returned in an
   `OracleMeasurement`.
+- **Oracle vs real system.** Being simulated doesn't make a system an oracle. An in
+  silico simulation of a plant (a flowsheet simulator, say) is a real system to the
+  library: a custom experiment that returns only the measured variables, with no
+  oracle values and no disagreement check. An oracle is the test case stating the
+  unknown equations in closed form, next to `g`, so the oracle values are known and a
+  method can be scored against them. The method never sees the oracle either way. A
+  custom experiment that knows its oracle values can return an `OracleMeasurement`.
 - The library then always solves the **root-finding problem**: `g` for the unmeasured
   states given `u` and the measured variables, from Latin hypercube starts over the
   unmeasured variables' start bounds, then computes `f` (and `f` at the oracle values).
 - A root is accepted when its residual norm is below `tol` and it lies within the
   bounds; if no start gives one, `RootFindingError`.
-- **Disagreement with the oracle.** With noise the reconstruction never equals the
-  oracle values, so it is checked against the root of the same root-finding problem
-  nearest the oracle values (one extra solve started there, which draws nothing). If they
-  differ, the measured variables do not determine the states uniquely, and `evaluate`
-  warns with `ReconstructionWarning`.
+- **Disagreement with the oracle.** Comparing the reconstruction directly with the
+  oracle values would warn at every noisy point. Instead `evaluate` solves the same
+  root-finding problem (same noisy measured variables) once more, started at the
+  oracle values. That extra solve draws nothing, so the draw order is unchanged. If it
+  gives a different root (`rtol = atol = 1e-6`) or none, the measured variables don't
+  determine the states uniquely and the method may learn from states the system didn't
+  settle at. `evaluate` then warns with `ReconstructionWarning` and keeps the
+  reconstruction, because a real system would give nothing else. The fix is in the
+  problem: measure other variables, or narrow the unmeasured start bounds to the right
+  branch.
 - `fsolve` always uses the CasADi Jacobian (`use_jacobian` is removed). A failed start is an
   expected failure (Principle 6), so fsolve's convergence warnings are caught and
   nothing is printed; only `RootFindingError` reports that every start failed.

@@ -1,10 +1,33 @@
 """Evaluation: running experiments at trial points and reconstructing the states.
 
-An experiment maps the decision variables to the measured variables (ADR 0001); a real
-application supplies only this. After every experiment the library solves the
-root-finding problem, the known equations `g` for the unmeasured states, and computes
-the objective. In test cases the oracle simulation is the experiment, and it also gives
-the oracle values.
+An experiment maps the decision variables to the measured variables (ADR 0001). After
+every experiment the library solves the root-finding problem, the known equations `g`
+for the unmeasured states, and computes the objective. The experiment can be:
+
+- **A real system**: the plant itself, or an in silico simulation that stands in for it
+  (e.g. a flowsheet simulator). You write the experiment as a function that runs it and
+  returns only the measured variables as an array. The library sees nothing else, so
+  there are no oracle values and no check against them. This is what a real application
+  supplies.
+- **The oracle simulation** (`oracle_experiment`), for test cases that benchmark a
+  method. You write the unknown equations in closed form, as the oracle, in the same
+  CasADi namespace as `g`, and the library simulates the system from `g` and the oracle
+  together. It returns an `OracleMeasurement`: the noisy measured variables, which are
+  all the method sees, plus the oracle values of every state, kept for benchmarking.
+
+The difference is not whether the system is simulated: an in silico simulation of a
+plant is a real system here, because the method doesn't know its unknown equations.
+What makes an oracle is that the test case states the unknown equations exactly, so the
+oracle values are known and results can be scored against them. A custom experiment
+that knows its oracle values can also return an `OracleMeasurement`.
+
+**Disagreement warnings.** With an oracle, `evaluate` checks that the reconstruction
+lies on the same root as the oracle values. Noise moves the measured variables, so the
+two are compared after one extra solve of the root-finding problem started at the
+oracle values (no random draws). If that solve gives a different root, or none, the
+measured variables don't determine the states uniquely: the method would learn from
+states the system didn't settle at. `evaluate` then warns with `ReconstructionWarning`
+and keeps the reconstruction, since a real system would give nothing else.
 """
 
 import warnings
@@ -25,7 +48,8 @@ from hybrid_bo.sampling import lhs
 @dataclass(frozen=True)
 class OracleMeasurement:
     """What the oracle simulation returns for one trial point: the measured variables
-    and the oracle values of the states."""
+    (with noise; all the method sees) and the oracle values of the states (for
+    benchmarking only)."""
 
     measured: np.ndarray  # (P,), in the order of system.measured
     x: np.ndarray  # (M,)
@@ -33,7 +57,8 @@ class OracleMeasurement:
 
 
 # Runs the system at u (N,) and returns the measured variables (P,) in the order of
-# `system.measured`, or an OracleMeasurement in test cases
+# `system.measured`. A real system (the plant or an in silico simulation of it) returns
+# an array; the oracle simulation returns an OracleMeasurement.
 Experiment = Callable[[np.ndarray, np.random.Generator], np.ndarray | OracleMeasurement]
 
 
@@ -98,10 +123,12 @@ def oracle_experiment(
     n_starts: int = 100,
     tol: float = 1e-10,
 ) -> Experiment:
-    """The oracle simulation as an experiment, for test cases.
+    """The oracle simulation as an experiment, for test cases that benchmark a method.
 
-    `oracle` is a callable over the variables like `g` (`lambda v: [cas.sin(v.u)]`)
-    and gives the unknown states, y = oracle(x, u). The experiment solves `g` and the
+    `oracle` is the unknown equations in closed form, a callable over the variables
+    like `g` (`lambda v: [cas.sin(v.u)]`), giving y = oracle(x, u). The method never
+    sees it; only the experiment uses it. For a real system, including an in silico
+    simulation of a plant, write your own experiment instead (see the module docs). The experiment solves `g` and the
     oracle together for every state, from `n_starts` Latin hypercube starts over the
     start bounds, reads the measured variables and adds normal noise with std
     `noise_std`. The noise is drawn even when `noise_std` is 0, so the draws don't
@@ -266,7 +293,8 @@ def evaluate(
     Each evaluation runs the experiment, then solves the root-finding problem for the
     unmeasured states from `n_starts` Latin hypercube starts over their start bounds,
     then computes `f`. With an oracle, it also computes `f` at the oracle values and
-    warns with `ReconstructionWarning` when the reconstruction is a different root.
+    warns with `ReconstructionWarning` when the reconstruction is a different root
+    from the one the oracle values lie on (see the module docs).
 
     Raises `ValueError` if the experiment returns the wrong shape, and
     `RootFindingError` (from the oracle simulation or the root-finding problem) with

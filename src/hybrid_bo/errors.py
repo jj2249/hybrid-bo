@@ -18,7 +18,13 @@ class RootFindingError(HybridBOError):
 
 
 class ReconstructionWarning(UserWarning):
-    """The root-finding problem found other states than the oracle's.
+    """The root-finding problem found a different root from the oracle values.
 
-    The measured variables then do not determine the states uniquely.
+    Only raised with an oracle. Noise alone doesn't trigger it: the reconstruction is
+    compared with the root nearest the oracle values, for the same noisy measured
+    variables. A warning means the measured variables don't determine the states
+    uniquely, so the method may learn from states the system didn't settle at. Measure
+    other variables, or narrow the start bounds of the unmeasured ones to the right
+    branch. Silence it with `warnings.filterwarnings("ignore",
+    category=ReconstructionWarning)`.
     """
