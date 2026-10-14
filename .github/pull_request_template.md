@@ -1,22 +1,25 @@
 ## Summary
-<!-- What does this PR change, and why? Keep it to a single issue. -->
 
-## Issue
-<!-- Closes #<n>, plus the ROADMAP item (e.g. Stage 4: evaluation) -->
+<!-- The smallest view that makes the change clear: a diff sketch of a file or call
+tree, pseudocode or Mermaid, next to a sentence or two. Use CONTEXT.md terms. -->
+
+## Evidence
+
+<!-- Before and after, ideally the exact test that changes, as pseudocode. Then the
+checks: `pixi run -e dev check`, `pixi run -e dev test`, and the
+`/mattpocock-skills:code-review` findings since `refactor/initial` with what was
+done about each. Bug fixes: the confirmed root cause. -->
+
+- **Before:**
+  **After:**
+
+## Merge Danger
+
+**Door:** <!-- one-way or two-way -->
+
+**Blast Radius:** <!-- one word, then what could break -->
+
+<!-- Logic change? None, new API (baselines can't move), or logic: say how the
+results change and explain the tests/data/regression diff. -->
+
 Closes #
-
-## Logic change?
-- [ ] No: behavior is identical (refactor, docs, tooling)
-- [ ] New code: adds API, existing behavior unchanged (the regression baselines can't move)
-- [ ] Yes: changes the results of existing code; describe how, and explain the baseline diff
-
-## How verified
-- [ ] `pixi run -e dev check`
-- [ ] `pixi run -e dev test`
-- [ ] `/mattpocock-skills:code-review` since `refactor/initial`: <!-- findings and what was done about them -->
-- [ ] Ran an example:
-
-Root cause (bug fixes only; delete otherwise): <!-- the confirmed hypothesis -->
-
-## AI assistance
-- [ ] This PR contains AI-generated code (add the `ai-assisted` label)
