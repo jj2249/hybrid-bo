@@ -85,7 +85,8 @@ test), and #30 switches the example over and deletes `legacy/`.
   `problem.py`, an equation as text in the variable names) are shared helpers.
 - `history.py`: `History` (`u`, `x`, `y`, `f`, oracle values or `None`, `n_initial`)
   and `incumbents`.
-- `run.py`: `Run` (`history`, `record`), pure data that pickles without user code
+- `run.py`: `Run` (`history`, `record`, `surrogates`: empty for the baselines;
+  typed `list[object]` until `FittedGP` exists), pure data that pickles without user code
   (ADR 0003). `run_record(problem, experiment, rng, method, settings)` builds the
   text record; call it before the method draws. An experiment is recorded by its
   docstring, else its name (`oracle_experiment` sets the docstring).

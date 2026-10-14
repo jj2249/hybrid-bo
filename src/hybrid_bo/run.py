@@ -5,7 +5,7 @@ import importlib.metadata
 import inspect
 import platform
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -16,15 +16,18 @@ from hybrid_bo.problem import Problem, _as_text
 
 @dataclass(frozen=True)
 class Run:
-    """One run of a method: the evaluated points and a record of how they were
-    produced.
+    """One run of a method: the evaluated points, the fitted surrogate models and a
+    record of how they were produced.
 
     Holds only arrays, numbers and strings, never the problem or any user callable,
     so it pickles cleanly and loads without the code that produced it (ADR 0003).
+    `surrogates` has one fitted surrogate model per iteration and is empty for the
+    baselines, so every saved run has the same fields.
     """
 
     history: History
     record: dict[str, str]
+    surrogates: list[object] = field(default_factory=list)  # FittedGP from #27
 
 
 @functools.cache

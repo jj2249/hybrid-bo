@@ -214,7 +214,7 @@ def evaluate(
   expected failure (Principle 6), so fsolve's convergence warnings are caught and
   nothing is printed; only `RootFindingError` reports that every start failed.
 
-### History and Run (#26: `Run` with `history` and `record`; `run.py`)
+### History and Run (#26: `Run` with `history`, `record` and `surrogates`; `run.py`)
 
 ```python
 @dataclass(frozen=True)
@@ -236,7 +236,7 @@ def incumbents(history) -> np.ndarray: ...  # np.minimum.accumulate(history.f)
 class Run:
     history: History
     record: dict[str, str]  # how the run was produced, as text
-    surrogates: list[FittedGP]  # one per iteration; added by #28
+    surrogates: list[FittedGP]  # one per iteration; empty for baselines (default)
     scenarios: Scenarios | None  # hybrid BO only; added by #29
 ```
 

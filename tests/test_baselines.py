@@ -64,6 +64,7 @@ def test_run_pickles_without_the_code_that_produced_it(illustrative_problem, met
     loaded = _DataOnlyUnpickler(io.BytesIO(pickle.dumps(run))).load()
 
     assert loaded.record == run.record
+    assert loaded.surrogates == []
     np.testing.assert_array_equal(loaded.history.u, run.history.u)
     np.testing.assert_array_equal(loaded.history.f, run.history.f)
     assert loaded.history.n_initial == run.history.n_initial
