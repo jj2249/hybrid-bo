@@ -466,7 +466,9 @@ updates `hybrid-bo-src`, `hybrid-bo-examples`, the README and this file where it
 affects them.
 
 The old code is moved to `hybrid_bo/legacy/` and the new modules are built at their
-final paths, so nothing temporary bridges old and new. The switch PR ports the
+final paths. New code never depends on old code (old code may call new helpers such
+as `lhs`), so no shims are needed and deleting `legacy/` touches nothing new. The
+switch PR ports the
 regression test and the illustrative example and must reproduce the baselines from the
 draw-order PR exactly.
 

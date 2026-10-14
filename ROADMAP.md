@@ -102,7 +102,7 @@ it (DESIGN.md: Known issues are not rebuilt), and that PR removes the entry.
   probably be `u_upper_bounds_starting_points`. The two coincide in the
   illustrative example, which hides it. *Goes away in PR 8* (start bounds live on
   each `Var`).
-- `formulation_acq` is validated strictly in `hybrid_bo.py` but with
+- `formulation_acq` is validated strictly in `legacy/routines/hybrid_bo.py` but with
   `startswith("lcb")` in `setup_acq_problem` (`legacy/routines/standard_bo.py`). *Goes away in PR 8 (`EI`/`LCB`).*
 - `Config.epsilon_ei_standard` is unused; `ei_gp` uses its own default. *Goes away
   in PR 9.*
