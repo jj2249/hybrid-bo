@@ -31,10 +31,9 @@ current code predates them; this is the mapping:
 
 - **Evaluation** (`Problem.evaluate_with_noisy_simulation`): the oracle simulation
   solves `h_known` and `h_unknown` together for `x` given `u`, using multistart
-  `fsolve`. If the noise is nonzero, noise is added to the measured states
-  (`Config.indices_x_measured`), and the root-finding problem solves `h_known` for
-  the other states. With zero noise the root-finding problem is skipped (DESIGN.md
-  PR 2 changes this).
+  `fsolve`. Noise with std `noise_std` is drawn and added to the measured states
+  (`Config.indices_x_measured`), and the root-finding problem then solves `h_known`
+  for the other states. Both always happen, also when `noise_std` is 0.
 - **Hybrid BO** (`routines/hybrid_bo.py`): `h_unknown` is never used in the
   acquisition problem. A GP maps `[u[indices_u_input_gp], x[indices_x_input_gp]]`
   to `x[indices_x_output_gp]` and is trained on the evaluated points. The
@@ -117,21 +116,23 @@ This describes the current code. PRs 3 to 9 in DESIGN.md move it to
 ## Behavior to know
 
 - **Randomness is per run.** The caller passes one generator per run
-  (`config.rng.spawn(n_runs_bo)`). A run uses only its own generator, in this
-  order (set in R0):
-  1. initial points (caller): `qmc.LatinHypercube(n_u, rng=rng).random(n_initial)`,
-     scaled to the `u` starting-point bounds;
-  2. noise for all `n_initial + n_iterations` points:
-     `rng.normal(0.0, std, size=(n_points, len(indices_x_measured)))`, drawn even
-     when `std` is 0;
-  3. hybrid BO: `z = rng.standard_normal((n_samples_gp, 1))`; LHS/uniform: the
+  (`config.rng.spawn(n_runs_bo)`). A run uses only its own generator, in
+  DESIGN.md's "Order of random draws" (set in PR 2):
+  1. initial points (caller): `lhs` over the `u` starting-point bounds;
+  2. hybrid BO: `z = rng.standard_normal((n_samples_gp, 1))`; LHS/uniform: the
      whole design; standard BO: nothing;
-  4. each evaluation: `fsolve` starting guesses, plus root-finding guesses when
-     the noise is nonzero; each iteration: GP-fit starts, then acquisition starts.
+  3. each evaluation: oracle `fsolve` guesses, then
+     `rng.normal(0.0, noise_std, size=(len(indices_x_measured), 1))` (even when
+     `noise_std` is 0), then root-finding guesses;
+  4. each iteration: GP-fit starts, then acquisition starts, then the evaluation.
 
-  The regression baselines depend on this order, so changing it, or adding a draw,
-  is a logic change. DESIGN.md's "Order of random draws" is the *new* order that
-  PR 2 introduces. `config.rng` itself is only for spawning and for plots.
+  **`lhs` doesn't consume the stream.** scipy's `LatinHypercube(rng=rng)` spawns
+  the next child of `rng`'s `SeedSequence`, so `lhs` calls (all `fsolve` guesses,
+  multistart starts, LHS designs) are ordered only among themselves, and stream
+  draws (`normal`, `uniform`, `standard_normal`) only among themselves. The
+  regression baselines depend on both orders, so adding, removing or reordering a
+  draw in either is a logic change. `config.rng` itself is only for spawning and
+  for plots.
 - Routines catch and print exceptions per run, so a failed run doesn't raise.
   Result arrays are NaN-initialized, so a crash shows up as NaN rows.
 - Failed multistart starts print tracebacks too. That's noise, not failure.
