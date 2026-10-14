@@ -81,7 +81,7 @@ its own regression baseline on the new API. Scope is in the issues and DESIGN.md
 - [x] Decide whether YAML is the right config format: no, examples are Python
       (DESIGN.md); YAML is deleted in #30
 - [ ] Skill: specify an example in markdown (equations, parameters, assumptions)
-- [ ] Port flash_unit (its custom evaluation becomes a custom experiment)
+- [ ] #42: port flash_unit (its custom evaluation becomes a custom experiment)
 - [ ] A short example in the style of DESIGN.md's target example, linked from the README
 
 ## Stage 6: publishing
