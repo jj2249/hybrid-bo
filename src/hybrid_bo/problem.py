@@ -38,21 +38,29 @@ class Var:
         upper: float = np.inf,
         start: tuple[float, float] | None = None,
     ) -> None:
-        if (
-            not isinstance(name, str)
-            or not name.isidentifier()
-            or keyword.iskeyword(name)
-            or name.startswith("_")
-        ):
+        # Name: g and f read the variable as v.<name>, so it must be a valid
+        # attribute name. Names starting with "_" would shadow _Variables internals.
+        is_valid_name = (
+            isinstance(name, str)
+            and name.isidentifier()
+            and not keyword.iskeyword(name)
+            and not name.startswith("_")
+        )
+        if not is_valid_name:
             msg = (
                 f"Var name {name!r} must be a Python identifier that doesn't start "
                 f"with '_' (it is used as v.{name})"
             )
             raise ValueError(msg)
+
+        # Bounds: may be infinite. The comparison is also False for NaN.
         lower, upper = float(lower), float(upper)
         if not lower <= upper:
             msg = f"Var {name!r}: lower ({lower}) must be <= upper ({upper})"
             raise ValueError(msg)
+
+        # Start bounds: default to the bounds, which is only possible when both are
+        # finite (points can't be drawn from an infinite box).
         if start is None:
             if not (np.isfinite(lower) and np.isfinite(upper)):
                 msg = (
@@ -72,6 +80,7 @@ class Var:
             )
             raise ValueError(msg)
 
+        # The dataclass is frozen, so fields are set through object.__setattr__
         object.__setattr__(self, "name", name)
         object.__setattr__(self, "lower", lower)
         object.__setattr__(self, "upper", upper)
@@ -87,8 +96,10 @@ class _Variables:
     """
 
     def __init__(self, symbols: dict[str, Any]) -> None:
+        # Bypasses __setattr__ below, which blocks every assignment
         object.__setattr__(self, "_symbols", symbols)
 
+    # Only called when normal lookup fails, i.e. for v.<variable name>
     def __getattr__(self, name: str) -> Any:
         symbols = object.__getattribute__(self, "_symbols")
         try:
@@ -123,15 +134,19 @@ def _trace(
     """
     symbols = {var.name: Symbolic.sym(var.name) for var in (*x, *y, *u)}
     result = expression(_Variables(symbols))
+
+    # Accept one expression or a list of them; stack into a column either way
     parts = result if isinstance(result, list | tuple) else [result]
     try:
         outputs = cas.vertcat(*parts)
-    except NotImplementedError:
+    except NotImplementedError:  # CasADi's error for arguments it can't stack
         msg = (
             f"{name} must return a CasADi expression or a list of scalar expressions "
             f"built from v; got {result!r}"
         )
         raise TypeError(msg) from None
+
+    # One column-vector input per block, in declaration order
     inputs = [cas.vertcat(*(symbols[var.name] for var in block)) for block in (x, y, u)]
     return cas.Function(name, inputs, [outputs], ["x", "y", "u"], [name])
 
@@ -194,6 +209,7 @@ class System:
         h_inputs: Sequence[Var],
         measured: Sequence[Var],
     ) -> None:
+        # The variables: every block is non-empty and every name is unique
         u, x, y = tuple(u), tuple(x), tuple(y)
         for block, label in ((u, "u"), (x, "x"), (y, "y")):
             if not block:
@@ -207,6 +223,7 @@ class System:
             )
             raise NotImplementedError(msg)
 
+        # The structure: what h depends on, and what the sensors read
         h_inputs, measured = tuple(h_inputs), tuple(measured)
         _check_drawn_from(h_inputs, (*u, *x), "h_inputs", "u or x")
         _check_drawn_from(measured, (*x, *y), "measured", "x or y")
@@ -217,6 +234,7 @@ class System:
             )
             raise ValueError(msg)
 
+        # The known equations: one per mechanistic state
         g_function = _trace("g", g, x, y, u)
         if g_function.size_out(0) != (len(x), 1):
             msg = (
@@ -225,6 +243,7 @@ class System:
             )
             raise ValueError(msg)
 
+        # Frozen dataclass: set fields through object.__setattr__
         object.__setattr__(self, "u", u)
         object.__setattr__(self, "x", x)
         object.__setattr__(self, "y", y)
@@ -261,5 +280,6 @@ class Problem:
             msg = f"f must be a scalar, got shape {f_function.size_out(0)}"
             raise ValueError(msg)
 
+        # Frozen dataclass: set fields through object.__setattr__
         object.__setattr__(self, "system", system)
         object.__setattr__(self, "f", f_function)
