@@ -237,7 +237,7 @@ class Run:
     history: History
     record: dict[str, str]  # how the run was produced, as text
     surrogates: list[FittedGP]  # one per iteration; empty for baselines (default)
-    scenarios: Scenarios | None  # hybrid BO only; added by #29
+    scenarios: Scenarios | None = None  # hybrid BO only (#29)
 ```
 
 The **record** is built by the library (`run_record`, before the method draws
@@ -362,7 +362,7 @@ gp = hb.GP(
   correct intercept (`lower - min * slope`), evaluated so that [0, 1] reproduces the
   legacy values bit for bit.
 
-### Acquisition (#28: `EI`, `LCB`, `standard_acquisition`; `acquisition.py`)
+### Acquisition (#28: `EI`, `LCB`, `standard_acquisition`; #29: `Scenarios`, `hybrid_acquisition`; `acquisition.py`)
 
 ```python
 @dataclass(frozen=True)
@@ -377,10 +377,10 @@ class LCB:
 @dataclass(frozen=True)
 class Scenarios:
     z: np.ndarray  # (S, P)
-    w: np.ndarray  # (S,), sums to 1
+    w: np.ndarray  # (S,), >= 0 and sums to 1, else ValueError
 
 
-def saa_scenarios(n: int, P: int, rng) -> Scenarios: ...  # z ~ N(0, I), w = 1/S
+def saa_scenarios(n: int, n_y: int, rng) -> Scenarios: ...  # z ~ N(0, I), w = 1/S
 
 
 def hybrid_acquisition(
@@ -412,11 +412,18 @@ Each returns the NLP and its start bounds `(lower, upper)`, for `lhs`.
 - `unknown_states_as_variables`: if True, each scenario's unknown states are variables
   of the acquisition problem tied to the GP by an equality constraint (paper, Problem 8),
   which helps IPOPT; if False, the GP prediction is substituted wherever they appear.
+- The hybrid acquisition problem's variables are `u`, then the `x_s`, then the `y_s` (if
+  variables), each state with one entry per scenario; the trial point is the first N
+  entries. Every variable is boxed by its own bounds and started within its own start
+  bounds, and the GP's inputs are the columns of `h_inputs`. This removes the two
+  `setup_acq_problem` Known issues (`u` start bounds, number of GP inputs). With one
+  mechanistic state, as in the illustrative example, the order matches legacy, so the
+  Latin hypercube starts and the baseline are the same.
 - Hybrid BO only needs "mean and std of `y` at given inputs" from the surrogate, through
   `predict`, so other surrogates or hyperparameter samples can be paired with scenarios
   later.
 
-### Methods and the optimization loop (#28: the loop and standard BO; `bo.py`)
+### Methods and the optimization loop (#28: the loop and standard BO; #29: hybrid BO; `bo.py`)
 
 ```python
 @dataclass(frozen=True)
@@ -473,6 +480,8 @@ sampling primitives.
 - `hybrid_bo` draws the scenarios from `rng`, then runs `optimization_loop` with a
   trial-point function that fits the GP on `(u, x)[h_inputs] -> y`, builds
   `hybrid_acquisition`, and solves it with `multistart`. The user never draws `z`.
+  With `unknown_states_as_variables=False` (the legacy illustrative setting) it
+  reproduces the legacy illustrative baseline.
 - `standard_bo` fits on `u -> f` (measured), with the incumbent the best measured `f`,
   and solves `standard_acquisition` by `multistart` from `lhs` starts over the `u` start
   bounds. With the defaults it reproduces the legacy illustrative baseline.
@@ -610,7 +619,8 @@ The tickets, in a workable order:
 - **#28 Standard BO**: `optimization_loop`, `EI`/`LCB`, `standard_bo`; its regression
   test on the new API. *Done*; it reproduces the legacy baseline.
 - **#29 Hybrid BO**: `Scenarios`, the hybrid acquisition problem, `hybrid_bo`; its
-  regression test on the new API. Blocked by #28.
+  regression test on the new API. *Done*; it reproduces the legacy baseline, and every
+  regression test now runs on the new API.
 - **#30 Switch**: the illustrative example as one script on the new API; delete
   `legacy/`, `Config` and YAML; README and both skills describe the new API.
   Blocked by #26, #28, #29.

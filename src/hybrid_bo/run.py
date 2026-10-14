@@ -10,6 +10,7 @@ from pathlib import Path
 
 import numpy as np
 
+from hybrid_bo.acquisition import Scenarios
 from hybrid_bo.gp import FittedGP
 from hybrid_bo.history import History
 from hybrid_bo.problem import Problem, _as_text
@@ -23,13 +24,15 @@ class Run:
     Holds only arrays, numbers and strings, never the problem or any user callable,
     so it pickles cleanly and loads without the code that produced it (ADR 0003).
     `surrogates` has one fitted surrogate model per iteration, the one behind that
-    iteration's trial point, and is empty for the baselines, so every saved run has
-    the same fields.
+    iteration's trial point, and is empty for the baselines; `scenarios` are hybrid
+    BO's, the same in every iteration, and None for the other methods. So every saved
+    run has the same fields.
     """
 
     history: History
     record: dict[str, str]
     surrogates: list[FittedGP] = field(default_factory=list)
+    scenarios: Scenarios | None = None
 
 
 @functools.cache

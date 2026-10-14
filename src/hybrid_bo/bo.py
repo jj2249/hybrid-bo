@@ -1,22 +1,30 @@
-"""Bayesian optimization: the optimization loop shared by the BO methods, and standard
-BO.
+"""Bayesian optimization: the optimization loop shared by the BO methods, standard BO
+and hybrid BO.
 
 A BO method is a settings dataclass plus a function that runs `optimization_loop` with
 its own trial-point function. The loop evaluates the initial points, then in each
 iteration asks the trial-point function for the next trial point and evaluates it.
 """
 
-from collections.abc import Callable
-from dataclasses import dataclass, field, fields
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field, fields, replace
 
 import numpy as np
 
-from hybrid_bo.acquisition import EI, LCB, _check_acquisition, standard_acquisition
+from hybrid_bo.acquisition import (
+    EI,
+    LCB,
+    _check_acquisition,
+    _h_inputs,
+    hybrid_acquisition,
+    saa_scenarios,
+    standard_acquisition,
+)
 from hybrid_bo.errors import HybridBOError
 from hybrid_bo.evaluation import Experiment, evaluate
 from hybrid_bo.gp import GP, FittedGP, _gp_record, default_gp, fit_gp
 from hybrid_bo.history import History, _concatenate, incumbents
-from hybrid_bo.problem import Problem
+from hybrid_bo.problem import Problem, Var
 from hybrid_bo.run import Run, run_record
 from hybrid_bo.sampling import lhs
 from hybrid_bo.solvers import Ipopt, multistart
@@ -87,6 +95,58 @@ class StandardBOSettings:
         _check_acquisition(self.acquisition)
 
 
+@dataclass(frozen=True)
+class HybridBOSettings:
+    """Settings of hybrid BO: the GP of the unknown states over the arguments of h
+    (None: `default_gp` over `h_inputs`), the acquisition function, the number of
+    scenarios, the number of multistart starts for the acquisition problem and for
+    fitting the GP, and the solver for both.
+
+    `unknown_states_as_variables` (default True) makes each scenario's unknown states
+    variables of the acquisition problem, tied to the GP by an equality constraint
+    (paper, Problem 8), which helps IPOPT. With False, the GP's prediction is
+    substituted for them, so the problem is smaller.
+
+    Raises `TypeError` unless `acquisition` is an `EI` or an `LCB`.
+    """
+
+    gp: GP | None = None
+    acquisition: EI | LCB = field(default_factory=EI)
+    n_scenarios: int = 25
+    n_starts: int = 10
+    n_starts_gp: int = 10
+    solver: Ipopt = field(default_factory=Ipopt)
+    unknown_states_as_variables: bool = True
+
+    def __post_init__(self) -> None:
+        _check_acquisition(self.acquisition)
+
+
+def _method_record(
+    problem: Problem,
+    experiment: Experiment,
+    rng: np.random.Generator,
+    method: str,
+    n_iterations: int,
+    settings: StandardBOSettings | HybridBOSettings,
+    gp: GP,
+    gp_inputs: Sequence[Var],
+) -> dict[str, str]:
+    """The record of a BO run: `run_record` with the settings except the GP, which is
+    recorded as text in its own entries (its repr would only name the kernel's
+    function), over the names of its inputs."""
+    settings_text = ", ".join(
+        [f"n_iterations={n_iterations}"]
+        + [
+            f"{f.name}={getattr(settings, f.name)!r}"
+            for f in fields(settings)
+            if f.name != "gp"
+        ]
+    )
+    record = run_record(problem, experiment, rng, method, settings_text)
+    return record | _gp_record(gp, [var.name for var in gp_inputs])
+
+
 def standard_bo(
     problem: Problem,
     experiment: Experiment,
@@ -105,20 +165,12 @@ def standard_bo(
     Raises what `evaluate` and `multistart` raise; a `HybridBOError` carries the
     partial run as `error.run`.
     """
-    # The GP and the record. The GP is recorded as text in its own entries, since its
-    # repr would only name the kernel's function
-    u_names = [var.name for var in problem.system.u]
-    gp = default_gp(len(u_names)) if settings.gp is None else settings.gp
-    settings_text = ", ".join(
-        [f"n_iterations={n_iterations}"]
-        + [
-            f"{f.name}={getattr(settings, f.name)!r}"
-            for f in fields(settings)
-            if f.name != "gp"
-        ]
+    # The GP and the record
+    u_vars = problem.system.u
+    gp = default_gp(len(u_vars)) if settings.gp is None else settings.gp
+    record = _method_record(
+        problem, experiment, rng, "standard_bo", n_iterations, settings, gp, u_vars
     )
-    record = run_record(problem, experiment, rng, "standard_bo", settings_text)
-    record |= _gp_record(gp, u_names)
 
     def trial_point(
         problem: Problem, history: History, rng: np.random.Generator
@@ -137,3 +189,72 @@ def standard_bo(
     return optimization_loop(
         problem, experiment, initial_points, n_iterations, trial_point, rng, record
     )
+
+
+def hybrid_bo(
+    problem: Problem,
+    experiment: Experiment,
+    initial_points: np.ndarray,
+    n_iterations: int,
+    settings: HybridBOSettings,
+    rng: np.random.Generator,
+) -> Run:
+    """Hybrid BO: a GP of the unknown states over the arguments of h, planned with
+    together with the known equations (paper, Problems 8 and 9).
+
+    Draws the scenarios (SAA: `settings.n_scenarios` standard normal draws, equal
+    weights), the same in every iteration. Then evaluates the initial points (n, N),
+    and in each iteration fits the GP to the measured and reconstructed states so far,
+    solves `hybrid_acquisition` by multistart from Latin hypercube starts over the
+    start bounds of its variables, and evaluates the decision variables of the
+    solution. The run holds the scenarios.
+
+    Raises what `evaluate` and `multistart` raise; a `HybridBOError` carries the
+    partial run, with the scenarios, as `error.run`.
+    """
+    # The GP and the record, before the scenarios are drawn
+    system = problem.system
+    gp = default_gp(len(system.h_inputs)) if settings.gp is None else settings.gp
+    record = _method_record(
+        problem,
+        experiment,
+        rng,
+        "hybrid_bo",
+        n_iterations,
+        settings,
+        gp,
+        system.h_inputs,
+    )
+    scenarios = saa_scenarios(settings.n_scenarios, system.n_y, rng)
+
+    def trial_point(
+        problem: Problem, history: History, rng: np.random.Generator
+    ) -> tuple[np.ndarray, FittedGP]:
+        """Fits the GP to the points so far and solves the acquisition problem."""
+        # One unknown state (P = 1), so the GP has one output
+        X = np.column_stack(_h_inputs(system, history.u, history.x))
+        fitted = fit_gp(
+            gp, X, history.y[:, 0], rng, settings.n_starts_gp, settings.solver
+        )
+        incumbent = float(incumbents(history)[-1])
+        nlp, start_bounds = hybrid_acquisition(
+            problem,
+            gp,
+            fitted,
+            scenarios,
+            incumbent,
+            settings.acquisition,
+            settings.unknown_states_as_variables,
+        )
+        starts = lhs(*start_bounds, settings.n_starts, rng)
+        return multistart(nlp, starts, settings.solver).w[: system.n_u], fitted
+
+    try:
+        run = optimization_loop(
+            problem, experiment, initial_points, n_iterations, trial_point, rng, record
+        )
+    except HybridBOError as error:
+        if error.run is not None:
+            error.run = replace(error.run, scenarios=scenarios)
+        raise
+    return replace(run, scenarios=scenarios)

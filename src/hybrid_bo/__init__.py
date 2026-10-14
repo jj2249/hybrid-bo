@@ -1,9 +1,18 @@
 from hybrid_bo import kernels
-from hybrid_bo.acquisition import EI, LCB, standard_acquisition
+from hybrid_bo.acquisition import (
+    EI,
+    LCB,
+    Scenarios,
+    hybrid_acquisition,
+    saa_scenarios,
+    standard_acquisition,
+)
 from hybrid_bo.baselines import latin_hypercube_sampling, uniform_sampling
 from hybrid_bo.bo import (
+    HybridBOSettings,
     StandardBOSettings,
     TrialPoint,
+    hybrid_bo,
     optimization_loop,
     standard_bo,
 )
