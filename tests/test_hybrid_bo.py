@@ -232,6 +232,16 @@ def test_acquisition_builder_rejects_anything_but_ei_or_lcb():
         hybrid_acquisition(problem_with(["u"]), gp, fitted, SCENARIOS, 0.0, "ei")  # ty: ignore[invalid-argument-type]
 
 
+def test_scenarios_need_one_column_per_unknown_state():
+    """The acquisition builder rejects scenario draws with more columns than unknown
+    states."""
+    gp, fitted = fitted_gp(1)
+    scenarios = Scenarios(np.zeros((3, 2)), np.full(3, 1 / 3))
+
+    with pytest.raises(ValueError, match="one column of z per unknown state"):
+        hybrid_acquisition(problem_with(["u"]), gp, fitted, scenarios, 0.0, EI())
+
+
 @pytest.mark.parametrize("acquisition", ["ei", LCB, None])
 def test_settings_reject_anything_but_ei_or_lcb(acquisition):
     """The settings accept only an EI or LCB instance, not a name or the class."""
@@ -335,6 +345,7 @@ def test_failed_evaluation_carries_the_partial_run_with_its_scenarios(
     calls = []
 
     def experiment(u, rng):
+        """y = sin(u) for the first two calls, then NaN."""
         calls.append(u)
         return np.sin(u) if len(calls) < 3 else np.array([np.nan])
 

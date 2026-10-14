@@ -199,8 +199,8 @@ def hybrid_bo(
     settings: HybridBOSettings,
     rng: np.random.Generator,
 ) -> Run:
-    """Hybrid BO: a GP of the unknown states over the arguments of h, planned with
-    together with the known equations (paper, Problems 8 and 9).
+    """Hybrid BO: a GP of the unknown states over the arguments of h, combined with
+    the known equations in the acquisition problem (paper, Problems 8 and 9).
 
     Draws the scenarios (SAA: `settings.n_scenarios` standard normal draws, equal
     weights), the same in every iteration. Then evaluates the initial points (n, N),

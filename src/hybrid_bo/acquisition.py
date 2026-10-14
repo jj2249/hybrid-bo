@@ -7,7 +7,6 @@ scenarios of the GP's prediction of the unknown states (`hybrid_acquisition`; pa
 Problems 8 and 9).
 """
 
-from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -15,7 +14,7 @@ import casadi as cas
 import numpy as np
 
 from hybrid_bo.gp import GP, FittedGP, predict
-from hybrid_bo.problem import Problem, Symbolic, System, Var
+from hybrid_bo.problem import Problem, Symbolic, System
 from hybrid_bo.sampling import _start_bounds
 from hybrid_bo.solvers import NLP
 
@@ -168,10 +167,18 @@ def hybrid_acquisition(
     ordered variable by variable, each with one entry per scenario. So the trial point
     is the first N entries of the solution. Each variable is boxed by its bounds and
     started within its start bounds. Raises `TypeError` unless `acquisition` is an
-    `EI` or an `LCB`.
+    `EI` or an `LCB`, and `ValueError` unless the scenarios have one column per
+    unknown state.
     """
+    # The checks, and the symbols for u and each scenario's mechanistic states
     _check_acquisition(acquisition)
     system = problem.system
+    if scenarios.z.shape[1] != system.n_y:
+        msg = (
+            f"The scenarios need one column of z per unknown state ({system.n_y}), "
+            f"got {scenarios.z.shape[1]}"
+        )
+        raise ValueError(msg)
     n = len(scenarios.w)
     u = Symbolic.sym("u", system.n_u)
     x = Symbolic.sym("x", n, system.n_x)  # row s: the mechanistic states of scenario s
@@ -205,9 +212,8 @@ def hybrid_acquisition(
     # The variables, with each state once per scenario, and their bounds
     states = [x, y] if unknown_states_as_variables else [x]
     w = cas.vertcat(u, *(cas.vec(block) for block in states))
-    variables: Sequence[Var] = (*system.u, *system.x)
-    if unknown_states_as_variables:
-        variables = (*variables, *system.y)
+    unknown = system.y if unknown_states_as_variables else ()
+    variables = (*system.u, *system.x, *unknown)
     copies = [1] * system.n_u + [n] * (len(variables) - system.n_u)
     start_lower, start_upper = _start_bounds(variables)
 
