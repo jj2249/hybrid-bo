@@ -68,12 +68,16 @@ remove the marker in the PR that fixes the bug.
   is complete. Never commit to or open PRs against `main`.
 - One PR per issue into `refactor/initial`. Branch from it using the name
   `<stage>-<topic>` (e.g. `s1-hooks`).
-- Agree scope in plan mode before editing.
+- Start a ticket with `/mattpocock-skills:implement #<n>`. Otherwise, agree scope
+  in plan mode before editing.
 - Before opening a PR, run `pixi run -e dev check` and `pixi run -e dev test`,
   then `/mattpocock-skills:code-review` since `refactor/initial`.
-- Use the PR template. Add the `ai-assisted` label to PRs with AI-written code.
-  Commits get a `Co-Authored-By` trailer.
-- Keep non-logic and logic changes in separate PRs.
+- Use the PR template; its Issue section says `Closes #<n>`, which is how
+  code-review finds the spec. Add the `ai-assisted` label to PRs with AI-written
+  code. Commits reference their issue (`#<n>`) and get a `Co-Authored-By` trailer.
+- Keep non-logic and logic changes in separate PRs. A *logic* PR changes the
+  results of existing code; adding new API that leaves existing behavior
+  unchanged is not logic.
 - Keep docs concise. Sphinx autoapi already covers the API, so don't duplicate it.
 - When a style question comes up, ask, then record the answer under Conventions.
 
@@ -90,7 +94,7 @@ remove the marker in the PR that fixes the bug.
 - American spelling everywhere, in code and prose (`optimization_loop`,
   "optimization loop").
 - New code lives at the top level of `hybrid_bo` and never imports
-  `hybrid_bo.legacy` (the old code, deleted in DESIGN.md PR 9). Legacy code may
+  `hybrid_bo.legacy` (the old code, deleted in #30). Legacy code may
   import new code (e.g. `lhs`).
 - Functions take what they use, not a `Config`. Randomness is an explicit `rng`.
 - Rows are points: a point is `(n,)`, a set is `(n_points, n)`, `f` is

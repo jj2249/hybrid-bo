@@ -58,20 +58,25 @@ earlier R1-R9.
       regenerate the baselines
 - [x] 3: move the old code to `hybrid_bo/legacy/`
 - [x] 4: `Var`, `System`, `Problem`
-- [ ] 5: `oracle_experiment`, root-finding, `evaluate`, `History`, error types (removes
-      the ruff `TRY002`/`BLE001` ignores once nothing raises bare `Exception`)
-- [ ] 6: `NLP`, `Ipopt`, `multistart`; no tracebacks for expected failures
-- [ ] 7: `Hyper`, kernel functions, `GP`, `fit_gp`, `predict`, scalers, `default_gp`
-- [ ] 8: `EI`/`LCB`, `Scenarios`, the two acquisition builders
-- [ ] 9: switch: `optimization_loop`, the four methods, `Run`; port the regression
-      test and the illustrative example; delete `legacy/`, `Config` and YAML
-- [ ] 10: `hb.plots`; CLI for the examples
-- [ ] *logic*: benchmark metric (oracle objective at the believed best point)
+
+After PR 4 the work is GitHub issues sliced by method; each method ticket reproduces
+its own regression baseline on the new API. Scope is in the issues and DESIGN.md
+"Restructure PRs".
+- [x] #24: workflow (PR template, CLAUDE.md, this list)
+- [ ] #25: evaluation (also removes the ruff `TRY002`/`BLE001` ignores). Blocked by #23
+- [ ] #26: Latin hypercube and uniform baselines. Blocked by #25
+- [ ] #27: solvers and GP
+- [ ] #28: standard BO. Blocked by #26, #27
+- [ ] #29: hybrid BO. Blocked by #28
+- [ ] #30: switch the illustrative example and delete the old code. Blocked by #26,
+      #28, #29
+- [ ] #31: plots and CLI. Blocked by #30
+- [ ] #32 *logic*: benchmark metric. Blocked by #30
 
 ## Stage 5: examples
 - [ ] Only require the minimum from users (defaults recorded in the run)
 - [x] Decide whether YAML is the right config format: no, examples are Python
-      (DESIGN.md); YAML is deleted in PR 9
+      (DESIGN.md); YAML is deleted in #30
 - [ ] Skill: specify an example in markdown (equations, parameters, assumptions)
 - [ ] Port flash_unit (its custom evaluation becomes a custom experiment)
 - [ ] A short example in the style of DESIGN.md's target example, linked from the README
@@ -90,32 +95,32 @@ it (DESIGN.md: Known issues are not rebuilt), and that PR removes the entry.
 - `MinMaxTransformer.fit` (`legacy/affine_transformers.py:135`): the intercept is
   `-min/(max-min) + min_t`, but it should be `min_t - min*slope`. It's only correct
   for target ranges of width 1; the routines use the default [0, 1]. Covered by an
-  xfail test. The fix leaves the regression baselines unchanged. *Goes away in PR 7
+  xfail test. The fix leaves the regression baselines unchanged. *Goes away in #27
   (`minmax`), which removes the xfail marker.*
 - `LinearKernel.k_variable` with ARD (`legacy/kernels.py:279-290`) uses `scale.value`
   instead of `scale.variable()`, so the ARD scale is never trained. Covered by
-  an xfail test. `LinearKernel` isn't used by the examples. *Goes away in PR 7*:
-  kernels are functions traced once, so the bug can't exist. PR 7 removes the xfail
+  an xfail test. `LinearKernel` isn't used by the examples. *Goes away in #27*:
+  kernels are functions traced once, so the bug can't exist. #27 removes the xfail
   marker.
 - `setup_acq_problem` in `legacy/routines/hybrid_bo.py`: when `use_output_gp_as_opt_var=False`, the upper
   starting-point bounds use `problem.u_upper_bounds_acquisition`; this should
   probably be `u_upper_bounds_starting_points`. The two coincide in the
-  illustrative example, which hides it. *Goes away in PR 8* (start bounds live on
+  illustrative example, which hides it. *Goes away in #29* (start bounds live on
   each `Var`).
 - `formulation_acq` is validated strictly in `legacy/routines/hybrid_bo.py` but with
-  `startswith("lcb")` in `setup_acq_problem` (`legacy/routines/standard_bo.py`). *Goes away in PR 8 (`EI`/`LCB`).*
+  `startswith("lcb")` in `setup_acq_problem` (`legacy/routines/standard_bo.py`). *Goes away in #28 (`EI`/`LCB`).*
 - `Config.epsilon_ei_standard` is unused; `ei_gp` uses its own default. *Goes away
-  in PR 9.*
+  in #30.*
 - `setup_acq_problem` in `legacy/routines/hybrid_bo.py` requires
   `len(indices_u_input_gp) + len(indices_x_input_gp) == problem.n_u`. This looks
   like an artifact of `main.py` building the GP with `problem.n_u` inputs; the
   real requirement is that the GP's `n_inputs` equals the number of GP inputs.
-  *Goes away in PR 8* (inputs come from `h_inputs`).
+  *Goes away in #29* (inputs come from `h_inputs`).
 - `Problem.single_evaluate_with_fixed_x_original` (`legacy/problem.py`): the Latin hypercube for the free states' starting points
   uses `x_fixed.size` dimensions instead of `len(indices_x_free)`. The two are
-  equal in the illustrative example. *Goes away in PR 5* (root-finding starts are
+  equal in the illustrative example. *Goes away in #25* (root-finding starts are
   drawn over the unmeasured variables).
-- `Config.indices_x_opt` is computed but never used. *Goes away in PR 9.*
+- `Config.indices_x_opt` is computed but never used. *Goes away in #30.*
 - `MultiStartOptimizer.create_lhs_samples` (`legacy/optimizers.py`) builds `msg`
   when `upper_bounds_starting_points is None` but never raises it. *Goes away in
-  PR 6.*
+  #27.*

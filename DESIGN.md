@@ -475,7 +475,7 @@ Not built now; the design leaves room for them.
 - **More than one unknown state (P > 1).** Shapes already allow it; the open modeling
   question is whether each unknown equation has its own arguments.
 - **Benchmark metric.** The oracle objective at the point the optimizer believes is
-  best, computed from the history. Its own logic PR, checked against the paper's figures.
+  best, computed from the history. Its own logic PR (#32), checked against the paper's figures.
 
 ## Restructure PRs
 
@@ -485,18 +485,21 @@ affects them.
 
 The old code is moved to `hybrid_bo/legacy/` and the new modules are built at their
 final paths. New code never depends on old code (old code may call new helpers such
-as `lhs`), so no shims are needed and deleting `legacy/` touches nothing new. The
-switch PR ports the
-regression test and the illustrative example and must reproduce the baselines from the
-draw-order PR exactly.
+as `lhs`), so no shims are needed and deleting `legacy/` touches nothing new.
+
+PRs 0-4 were planned layer by layer. After PR 4, the work is GitHub issues sliced
+by method: each method ticket ports its own regression test to the new API and
+reproduces its baseline from the draw-order PR exactly, so the new code is proven
+end to end one method at a time. Those tickets add API without changing existing
+behavior, so they are "new code" PRs, not *logic*.
 
 0. **Design** (docs): CONTEXT.md, ADRs, this file, ROADMAP.md, CLAUDE.md conventions.
 1. **R1 trimmed** (#17). *Done.* flash_unit excluded from ty (it targets the
    `pre-refactor` tag); `lhs(lower, upper, n, rng)`/`uniform(...)` in `sampling.py`
    (they stay array-based; PR 4 adds `initial_points` for `Var`s); `Problem.solve` and `use_jacobian` deleted;
    `examples/main.py` dispatches with `match`. Two hand-written LHS copies remain until
-   their PRs: the fixed-x root-finding guesses (PR 5) and
-   `MultiStartOptimizer.create_lhs_samples` (PR 6).
+   their tickets: the fixed-x root-finding guesses (#25) and
+   `MultiStartOptimizer.create_lhs_samples` (#27).
 2. **Draw order** (*logic*). *Done.* The old routines draw in the order above:
    noise per evaluation (`noise_std` instead of a pre-drawn array), root-finding
    always runs, `measurement_noise.pkl` dropped (it is `x - x_no_noise` on the
@@ -505,13 +508,26 @@ draw-order PR exactly.
    `hybrid_bo.legacy`; the top-level `hybrid_bo` exports only the new API. Legacy may
    import new code, never the reverse. Result pickles saved before this PR
    (`hybrid_bo.results.ResultsBO`) need the old path to unpickle.
-4. **Problem**: `Var`, `System`, `Problem`, `initial_points`. *Done.*
-5. **Evaluation**: `oracle_experiment`, root-finding, `evaluate`, `History`, error types.
-6. **Solvers**: `NLP`, `Ipopt`, `multistart`.
-7. **GP**: `Hyper`, kernel functions, `GP`, `fit_gp`, `predict`, scalers, `default_gp`;
-   port the kernel, GP and scaler tests.
-8. **Acquisition**: `EI`, `LCB`, `Scenarios`, the two builders.
-9. **Switch**: `optimization_loop`, the four methods, `Run` and its record; port the
-   regression test and the illustrative example; delete `legacy/`, `Config` and YAML.
-   If too big, the baselines (which only need PR 5) go first.
-10. **Plots and CLI**: `hb.plots`; a CLI for the examples.
+4. **Problem** (#23): `Var`, `System`, `Problem`, `initial_points`. *Done.*
+
+The tickets, in a workable order:
+
+- **#24 Workflow** (docs): PR template and CLAUDE.md fit the engineering skills;
+  this list. Blocked by nothing.
+- **#25 Evaluation**: experiments, `oracle_experiment`, root-finding, `evaluate`,
+  `History`, the `HybridBOError` family. Blocked by #23.
+- **#26 Baselines**: Latin hypercube and uniform as methods returning a `Run` and its
+  record; their regression tests on the new API. Blocked by #25.
+- **#27 Solvers and GP**: `NLP`, `Ipopt`, `multistart`; `Hyper`, kernel functions, `GP`,
+  `fit_gp`, `predict`, scalers, `default_gp`; port the kernel, GP and scaler tests.
+  Blocked by nothing.
+- **#28 Standard BO**: `optimization_loop`, `EI`/`LCB`, `standard_bo`; its regression
+  test on the new API. Blocked by #26, #27.
+- **#29 Hybrid BO**: `Scenarios`, the hybrid acquisition problem, `hybrid_bo`; its
+  regression test on the new API. Blocked by #28.
+- **#30 Switch**: the illustrative example as one script on the new API; delete
+  `legacy/`, `Config` and YAML; README and both skills describe the new API.
+  Blocked by #26, #28, #29.
+- **#31 Plots and CLI**: `hb.plots`; a CLI for the examples. Blocked by #30.
+- **#32 Benchmark metric** (*logic*): the oracle objective at the believed best
+  point. Blocked by #30.

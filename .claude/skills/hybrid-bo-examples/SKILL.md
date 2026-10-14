@@ -8,8 +8,8 @@ description: Use when writing, modifying or running an example under examples/. 
 `examples/illustrative_example/` is the reference. `examples/flash_unit/` is out
 of scope for the current refactor, so leave it alone. This describes the **current**
 contract. The target is DESIGN.md's "Target example": a single Python script with
-named variables, no `config.yaml` and no callbacks. PR 9 switches the illustrative
-example to it, and that PR rewrites this skill.
+named variables, no `config.yaml` and no callbacks. #30 switches the illustrative
+example to it and rewrites this skill.
 
 Use CONTEXT.md's terms when writing about examples. In the current contract, the
 unknown states `y` are entries of `x` selected by `indices_x_output_gp`, `h_known`
