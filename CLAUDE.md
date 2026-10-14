@@ -100,6 +100,12 @@ remove the marker in the PR that fixes the bug.
 - Annotate signatures and dataclass fields, not local variables. Type errors are
   fixed, not suppressed; if a suppression is unavoidable, use
   `# ty: ignore[rule]` (ty doesn't read `pyright:` comments).
+- Comments: every function and class gets a docstring saying what it does (and what
+  it raises, if anything); a short function needs nothing more. A longer function
+  is split into blocks by blank lines, each led by a one-line comment saying what
+  the block does or why (e.g. `# Start bounds: default to the bounds, ...`). Pull a
+  long condition into a named variable rather than explaining it. Don't comment
+  what a line obviously does. See `src/hybrid_bo/problem.py`.
 - Defaults may be derived from other arguments when the derivation is obvious and
   recorded in the run (start bounds from finite bounds, GP size from its inputs);
   otherwise arguments are explicit. Examples should be short to write.

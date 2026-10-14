@@ -1,0 +1,164 @@
+"""Var, System and Problem: building the CasADi functions and checking the inputs."""
+
+from collections.abc import Callable, Sequence
+from typing import Any
+
+import casadi as cas
+import illustrative_example as ex
+import numpy as np
+import pytest
+
+from hybrid_bo import Problem, System, Var, initial_points, lhs
+
+
+def illustrative() -> Problem:
+    """The illustrative example in the new style (DESIGN.md, target example)."""
+    u = Var("u", -2.0, 2.0)
+    x = Var("x", start=(-2.5, 1.0))
+    y = Var("y", start=(-2.0, 2.0))
+    system = System(
+        u=[u],
+        x=[x],
+        y=[y],
+        g=lambda v: [v.x + cas.exp(v.x) - v.y],
+        h_inputs=[u],
+        measured=[y],
+    )
+    return Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x - 4))
+
+
+def test_illustrative_matches_legacy(illustrative_config):
+    # Legacy stores y inside x: x_legacy = [x, y]
+    problem = illustrative()
+    legacy = ex.get_custom_problem(illustrative_config)
+    rng = np.random.default_rng(0)
+
+    for u, x, y in rng.uniform(-2.0, 2.0, size=(10, 3)):
+        x_legacy = np.array([x, y])
+        np.testing.assert_allclose(
+            problem.system.g(x, y, u).full(), legacy.h_known(u, x_legacy).full()
+        )
+        np.testing.assert_allclose(
+            problem.f(x, y, u).full(), legacy.f(u, x_legacy).full()
+        )
+
+
+def test_flash_unit_shaped_system():
+    # h takes a decision variable and a mechanistic state; the sensor reads a state
+    F, D, z1 = 1.0, 0.3, 0.5
+
+    def p1_sat(T):
+        return 10 ** (10.19590302 - 1730.6 / (-39.75 + T * 1000)) / 1e5
+
+    T, p = Var("T", 0.36315, 0.40315), Var("p", 0.8, 2.6)
+    x1, ln_gamma1 = Var("x1", 0.0, 1.0), Var("ln_gamma1", start=(-0.7, 0.7))
+
+    def g(v):
+        vapor_fraction = (F * z1 - (F - D) * v.x1) / D
+        return [v.p * vapor_fraction - p1_sat(v.T) * v.x1 * cas.exp(v.ln_gamma1)]
+
+    system = System(
+        u=[T, p], x=[x1], y=[ln_gamma1], g=g, h_inputs=[T, x1], measured=[x1]
+    )
+
+    T_, p_, x1_, ln_gamma1_ = 0.38, 1.2, 0.4, 0.1
+    vapor_fraction = (F * z1 - (F - D) * x1_) / D
+    expected = p_ * vapor_fraction - p1_sat(T_) * x1_ * np.exp(ln_gamma1_)
+    actual = system.g(x1_, ln_gamma1_, [T_, p_]).full().item()
+    assert actual == pytest.approx(expected, rel=1e-12)
+    assert (system.n_u, system.n_x, system.n_y) == (2, 1, 1)
+
+
+def test_var_start_defaults_to_finite_bounds():
+    assert Var("u", -2.0, 2.0).start == (-2.0, 2.0)
+    assert Var("x", start=(0.0, 1.0)).start == (0.0, 1.0)
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        ({"name": "2x"}, "identifier"),
+        ({"name": 3}, "identifier"),
+        ({"name": "lambda", "lower": 0.0, "upper": 1.0}, "identifier"),
+        ({"name": "_symbols", "lower": 0.0, "upper": 1.0}, "start with '_'"),
+        ({"name": "x", "lower": 1.0, "upper": 0.0}, "lower"),
+        ({"name": "x"}, "infinite bound"),
+        ({"name": "x", "lower": 0.0, "start": (0.0, np.inf)}, "finite"),
+        ({"name": "x", "lower": 0.0, "upper": 1.0, "start": (-1.0, 1.0)}, "inside"),
+        ({"name": "x", "lower": 0.0, "upper": 1.0, "start": (0.8, 0.2)}, "ordered"),
+    ],
+)
+def test_var_rejects(kwargs, match):
+    with pytest.raises(ValueError, match=match):
+        Var(**kwargs)
+
+
+U, X, Y, Z = (Var(n, 0.0, 1.0) for n in ["u", "x", "y", "z"])
+
+
+def system(
+    u: Sequence[Var] = (U,),
+    x: Sequence[Var] = (X,),
+    y: Sequence[Var] = (Y,),
+    g: Callable[[Any], Any] = lambda v: [v.x - v.y],
+    h_inputs: Sequence[Var] = (U,),
+    measured: Sequence[Var] = (Y,),
+) -> System:
+    """A valid one-of-each system; tests override one argument to break it."""
+    return System(u, x, y, g, h_inputs, measured)
+
+
+@pytest.mark.parametrize(
+    ("overrides", "match"),
+    [
+        ({"u": []}, "at least one variable in u"),
+        ({"x": []}, "at least one variable in x"),
+        ({"y": []}, "at least one variable in y"),
+        ({"x": [X, Var("x", 0.0, 1.0)]}, "u, x and y together must not repeat .*: x"),
+        ({"g": lambda v: [v.x, v.y]}, "one equation per mechanistic state"),
+        ({"h_inputs": [Y]}, "h_inputs contains 'y'"),
+        ({"h_inputs": [U, U]}, "h_inputs must not repeat a variable; repeated: u"),
+        ({"measured": [U]}, "measured contains 'u'"),
+        ({"measured": [Y, Y]}, "measured must not repeat a variable; repeated: y"),
+        ({"measured": [X, Y]}, "as many measured variables"),
+    ],
+)
+def test_system_rejects(overrides, match):
+    with pytest.raises(ValueError, match=match):
+        system(**overrides)
+
+
+def test_more_than_one_unknown_state_is_not_supported_yet():
+    with pytest.raises(NotImplementedError, match="one unknown state"):
+        system(y=[Y, Z], measured=[Y, Z])
+
+
+def test_unknown_name_in_a_callable():
+    with pytest.raises(
+        AttributeError, match="Unknown variable 'w'; available: x, y, u"
+    ):
+        system(g=lambda v: [v.w])
+
+
+@pytest.mark.parametrize(
+    "g", [lambda v: None, lambda v: [[v.x - v.y]], lambda v: "x - y"]
+)
+def test_callable_output_that_is_not_an_expression(g):
+    with pytest.raises(TypeError, match="g must return a CasADi expression"):
+        system(g=g)
+
+
+def test_problem_rejects_a_non_scalar_objective():
+    with pytest.raises(ValueError, match="f must be a scalar"):
+        Problem(system(), f=lambda v: [v.x, v.y])
+
+
+def test_initial_points_is_lhs_over_the_start_bounds():
+    variables = [Var("a", -2.0, 2.0), Var("b", start=(0.0, 5.0))]
+
+    points = initial_points(variables, 4, np.random.default_rng(0))
+
+    expected = lhs(
+        np.array([-2.0, 0.0]), np.array([2.0, 5.0]), 4, np.random.default_rng(0)
+    )
+    np.testing.assert_array_equal(points, expected)

@@ -1,5 +1,9 @@
+from collections.abc import Sequence
+
 import numpy as np
 import scipy
+
+from hybrid_bo.problem import Var
 
 
 def lhs(
@@ -22,3 +26,12 @@ def uniform(
     """
     samples = rng.uniform(size=(n, len(lower)))
     return lower + (upper - lower) * samples
+
+
+def initial_points(
+    variables: Sequence[Var], n: int, rng: np.random.Generator
+) -> np.ndarray:
+    """n points from a Latin hypercube over the variables' start bounds, shape (n, d)."""
+    lower = np.array([var.start[0] for var in variables])
+    upper = np.array([var.start[1] for var in variables])
+    return lhs(lower, upper, n, rng)
