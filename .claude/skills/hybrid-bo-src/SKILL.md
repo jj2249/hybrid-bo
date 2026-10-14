@@ -7,7 +7,7 @@ description: Use when working on src/hybrid_bo. Covers what the library computes
 
 The refactor goal and workflow are in CLAUDE.md, and open bugs are in ROADMAP.md
 under Known issues. This skill covers what the **current** code computes and the
-contracts between its parts. The target API is in DESIGN.md (stage 4, PRs 0 to 10);
+contracts between its parts. The target API is in DESIGN.md (stage 4: PRs 0 to 4, then issues #24 to #32);
 each restructure PR updates this skill as it replaces code.
 
 Use the terms in CONTEXT.md when writing about the code (PRs, tests, comments). The
@@ -57,9 +57,9 @@ current code predates them; this is the mapping:
 ## Module map
 
 **New code** lives at the top level of `hybrid_bo` and never imports
-`hybrid_bo.legacy`; the top-level `hybrid_bo` exports only the new API. PRs 4 to 8
-add modules here, and PR 9 switches the example and the regression test over and
-deletes `legacy/`.
+`hybrid_bo.legacy`; the top-level `hybrid_bo` exports only the new API. PR 4 and
+issues #25 to #29 add modules here (each method ticket ports its own regression
+test), and #30 switches the example over and deletes `legacy/`.
 
 - `problem.py`: `Var` (name, bounds, start bounds), `System` (`u`, `x`, `y`, `g`,
   `h_inputs`, `measured`) and `Problem` (`system`, `f`). `g` and `f` are user
@@ -71,7 +71,7 @@ deletes `legacy/`.
 - `sampling.py`: `lhs(lower, upper, n, rng)` and `uniform(...)` over a box, shape
   `(n, d)`; `initial_points(variables, n, rng)` is `lhs` over `Var` start bounds.
   Use them for any Latin hypercube or uniform draw; the two remaining hand-written
-  copies (fixed-x root-finding guesses, `create_lhs_samples`) go in PRs 5 and 6.
+  copies (fixed-x root-finding guesses, `create_lhs_samples`) go in #25 and #27.
 
 **The old code** is in `hybrid_bo/legacy/` (`from hybrid_bo.legacy import Config,
 GP, Problem`). It may import new code (`legacy/problem.py` uses `lhs`), never the
