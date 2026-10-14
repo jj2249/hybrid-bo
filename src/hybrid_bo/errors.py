@@ -20,6 +20,10 @@ class RootFindingError(HybridBOError):
     """No start of a root-finding solve gave a root within the bounds."""
 
 
+class NoSolutionError(HybridBOError):
+    """Every start of a multistart solve failed."""
+
+
 class ReconstructionWarning(UserWarning):
     """The root-finding problem found a different root from the oracle values.
 
