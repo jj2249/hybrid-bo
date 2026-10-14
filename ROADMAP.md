@@ -82,7 +82,9 @@ its own regression baseline on the new API. Scope is in the issues and DESIGN.md
 - [ ] A short example in the style of DESIGN.md's target example, linked from the README
 
 ## Stage 6: publishing
-- [ ] Merge `refactor/initial` into `main` (`main` stays frozen until then)
+- [ ] Merge `refactor/initial` into `main` (`main` stays frozen until then), then
+      make `main` the GitHub default branch again
+      (`gh repo edit --default-branch main`)
 - [ ] README: fix the install section (it mentions `[dependency-groups]`, which
       doesn't exist)
 - [ ] CI (lint, typecheck, tests)
