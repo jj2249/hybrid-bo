@@ -11,25 +11,9 @@ import pytest
 from hybrid_bo import Problem, System, Var, initial_points, lhs
 
 
-def illustrative() -> Problem:
-    """The illustrative example in the new style (DESIGN.md, target example)."""
-    u = Var("u", -2.0, 2.0)
-    x = Var("x", start=(-2.5, 1.0))
-    y = Var("y", start=(-2.0, 2.0))
-    system = System(
-        u=[u],
-        x=[x],
-        y=[y],
-        g=lambda v: [v.x + cas.exp(v.x) - v.y],
-        h_inputs=[u],
-        measured=[y],
-    )
-    return Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x - 4))
-
-
-def test_illustrative_matches_legacy(illustrative_config):
+def test_illustrative_matches_legacy(illustrative_problem, illustrative_config):
     # Legacy stores y inside x: x_legacy = [x, y]
-    problem = illustrative()
+    problem = illustrative_problem
     legacy = ex.get_custom_problem(illustrative_config)
     rng = np.random.default_rng(0)
 

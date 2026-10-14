@@ -79,7 +79,7 @@ problem = hb.Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x -
 
 # Test case: an oracle plays the real system
 experiment = hb.oracle_experiment(
-    problem, oracle=lambda v: [cas.sin(v.u)], noise_std=0.0
+    system, oracle=lambda v: [cas.sin(v.u)], noise_std=0.0
 )
 
 # Method: how we search
@@ -153,36 +153,53 @@ frozen dataclass, so membership checks use its equality; no CasADi `==` is invol
 `lhs(lower, upper, n, rng)` and `uniform(...)` stay the array primitives the library
 uses for starts; `initial_points` is the `Var` front end for examples.
 
-### Evaluation
+### Evaluation (#25, done; `evaluation.py`, `history.py`, `errors.py`)
 
 ```python
+@dataclass(frozen=True)
+class OracleMeasurement:  # what the oracle simulation returns
+    measured: np.ndarray  # (P,)
+    x: np.ndarray  # (M,) oracle values
+    y: np.ndarray  # (P,)
+
+
 Experiment = Callable[
-    [np.ndarray, np.random.Generator], np.ndarray
-]  # u (N,) -> measured
+    [np.ndarray, np.random.Generator], np.ndarray | OracleMeasurement
+]  # u (N,) -> measured (P,)
 
 
 def oracle_experiment(
-    problem,
-    oracle: Callable,
+    system,
+    oracle: Callable,  # like g: lambda v: [cas.sin(v.u)], y = oracle(x, u)
     noise_std: float = 0.0,
     n_starts: int = 100,
     tol: float = 1e-10,
 ) -> Experiment: ...
 
 
-def evaluate(problem, experiment, u: np.ndarray, rng) -> History: ...  # u (n, N)
+def evaluate(
+    problem, experiment, u: np.ndarray, rng, n_starts=100, tol=1e-10
+) -> History: ...  # u (n, N); the points are the History's initial points
 ```
 
 - An **experiment** returns the measured variables for one trial point. A real
-  application supplies only this.
+  application supplies only this, as a plain array.
 - The **oracle simulation** solves `g` with `y = oracle(x, u)` for every state
   (root-finding with CasADi Jacobians), reads the measured variables and adds
-  `rng.normal(0, noise_std)`. Its full states are the **oracle values**.
+  `rng.normal(0, noise_std)`. Its full states are the **oracle values**, returned in an
+  `OracleMeasurement`.
 - The library then always solves the **root-finding problem**: `g` for the unmeasured
-  states given `u` and the measured variables, then computes `f`. When oracle values
-  exist and the reconstruction disagrees with them, it warns (the measured variables do
-  not determine the states uniquely).
-- `fsolve` always uses the CasADi Jacobian (`use_jacobian` is removed).
+  states given `u` and the measured variables, from Latin hypercube starts over the
+  unmeasured variables' start bounds, then computes `f` (and `f` at the oracle values).
+- A root is accepted when its residual norm is below `tol` and it lies within the
+  bounds; if no start gives one, `RootFindingError`.
+- **Disagreement with the oracle.** With noise the reconstruction never equals the
+  oracle values, so it is checked against the root of the same root-finding problem
+  nearest the oracle values (one extra solve started there, which draws nothing). If they
+  differ, the measured variables do not determine the states uniquely, and `evaluate`
+  warns with `ReconstructionWarning`.
+- `fsolve` always uses the CasADi Jacobian (`use_jacobian` is removed). Its convergence
+  warnings are silenced, since a failed start is expected.
 
 ### History and Run
 
@@ -409,9 +426,11 @@ def uniform(problem, experiment, initial_points, n_points, rng) -> Run: ...
 
 ### Errors
 
-`HybridBOError` and subclasses (`RootFindingError`, `NoSolutionError`, ...). An error
-raised during a run carries the partial `Run` (`error.run`), so the caller can save it.
-The loop does not catch errors.
+`HybridBOError` and subclasses (`RootFindingError` from #25, `NoSolutionError`, ...). An
+error raised in `evaluate` carries the points evaluated before it (`error.history`); an
+error raised during a run will carry the partial `Run` (`error.run`, from #26), so the
+caller can save it. The loop does not catch errors. Warnings are `UserWarning`
+subclasses (`ReconstructionWarning`) so they can be filtered.
 
 ### Plots
 
@@ -499,7 +518,8 @@ behavior, so they are "new code" PRs, not *logic*.
    (they stay array-based; PR 4 adds `initial_points` for `Var`s); `Problem.solve` and `use_jacobian` deleted;
    `examples/main.py` dispatches with `match`. Two hand-written LHS copies remain until
    their tickets: the fixed-x root-finding guesses (#25) and
-   `MultiStartOptimizer.create_lhs_samples` (#27).
+   `MultiStartOptimizer.create_lhs_samples` (#27). The new evaluation uses `lhs`; the
+  legacy copy stays until `legacy/` is deleted.
 2. **Draw order** (*logic*). *Done.* The old routines draw in the order above:
    noise per evaluation (`noise_std` instead of a pre-drawn array), root-finding
    always runs, `measurement_noise.pkl` dropped (it is `x - x_no_noise` on the
@@ -515,7 +535,8 @@ The tickets, in a workable order:
 - **#24 Workflow** (docs): PR template and CLAUDE.md fit the engineering skills;
   this list. Blocked by nothing.
 - **#25 Evaluation**: experiments, `oracle_experiment`, root-finding, `evaluate`,
-  `History`, the `HybridBOError` family. Blocked by #23.
+  `History`, the `HybridBOError` family. *Done*; `tests/test_evaluation.py` checks it
+  against the legacy evaluation bit for bit.
 - **#26 Baselines**: Latin hypercube and uniform as methods returning a `Run` and its
   record; their regression tests on the new API. Blocked by #25.
 - **#27 Solvers and GP**: `NLP`, `Ipopt`, `multistart`; `Hyper`, kernel functions, `GP`,

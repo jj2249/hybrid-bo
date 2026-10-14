@@ -63,7 +63,8 @@ After PR 4 the work is GitHub issues sliced by method; each method ticket reprod
 its own regression baseline on the new API. Scope is in the issues and DESIGN.md
 "Restructure PRs".
 - [x] #24: workflow (PR template, CLAUDE.md, this list)
-- [ ] #25: evaluation (also removes the ruff `TRY002`/`BLE001` ignores). Blocked by #23
+- [x] #25: evaluation (the ruff `TRY002`/`BLE001` ignores now cover only `legacy/`
+      and `examples/`, until #30)
 - [ ] #26: Latin hypercube and uniform baselines. Blocked by #25
 - [ ] #27: solvers and GP
 - [ ] #28: standard BO. Blocked by #26, #27
@@ -116,10 +117,6 @@ it (DESIGN.md: Known issues are not rebuilt), and that PR removes the entry.
   like an artifact of `main.py` building the GP with `problem.n_u` inputs; the
   real requirement is that the GP's `n_inputs` equals the number of GP inputs.
   *Goes away in #29* (inputs come from `h_inputs`).
-- `Problem.single_evaluate_with_fixed_x_original` (`legacy/problem.py`): the Latin hypercube for the free states' starting points
-  uses `x_fixed.size` dimensions instead of `len(indices_x_free)`. The two are
-  equal in the illustrative example. *Goes away in #25* (root-finding starts are
-  drawn over the unmeasured variables).
 - `Config.indices_x_opt` is computed but never used. *Goes away in #30.*
 - `MultiStartOptimizer.create_lhs_samples` (`legacy/optimizers.py`) builds `msg`
   when `upper_bounds_starting_points is None` but never raises it. *Goes away in
