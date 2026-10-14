@@ -54,16 +54,16 @@ def test_flash_unit_shaped_system():
     x1, ln_gamma1 = Var("x1", 0.0, 1.0), Var("ln_gamma1", start=(-0.7, 0.7))
 
     def g(v):
-        y1 = (F * z1 - (F - D) * v.x1) / D
-        return [v.p * y1 - p1_sat(v.T) * v.x1 * cas.exp(v.ln_gamma1)]
+        vapor_fraction = (F * z1 - (F - D) * v.x1) / D
+        return [v.p * vapor_fraction - p1_sat(v.T) * v.x1 * cas.exp(v.ln_gamma1)]
 
     system = System(
         u=[T, p], x=[x1], y=[ln_gamma1], g=g, h_inputs=[T, x1], measured=[x1]
     )
 
     T_, p_, x1_, ln_gamma1_ = 0.38, 1.2, 0.4, 0.1
-    y1 = (F * z1 - (F - D) * x1_) / D
-    expected = p_ * y1 - p1_sat(T_) * x1_ * np.exp(ln_gamma1_)
+    vapor_fraction = (F * z1 - (F - D) * x1_) / D
+    expected = p_ * vapor_fraction - p1_sat(T_) * x1_ * np.exp(ln_gamma1_)
     actual = system.g(x1_, ln_gamma1_, [T_, p_]).full().item()
     assert actual == pytest.approx(expected, rel=1e-12)
     assert (system.n_u, system.n_x, system.n_y) == (2, 1, 1)
@@ -78,7 +78,9 @@ def test_var_start_defaults_to_finite_bounds():
     ("kwargs", "match"),
     [
         ({"name": "2x"}, "identifier"),
+        ({"name": 3}, "identifier"),
         ({"name": "lambda", "lower": 0.0, "upper": 1.0}, "identifier"),
+        ({"name": "_symbols", "lower": 0.0, "upper": 1.0}, "start with '_'"),
         ({"name": "x", "lower": 1.0, "upper": 0.0}, "lower"),
         ({"name": "x"}, "infinite bound"),
         ({"name": "x", "lower": 0.0, "start": (0.0, np.inf)}, "finite"),
@@ -110,11 +112,14 @@ def system(
     ("overrides", "match"),
     [
         ({"u": []}, "at least one variable in u"),
-        ({"x": [X, Var("x", 0.0, 1.0)]}, "unique"),
+        ({"x": []}, "at least one variable in x"),
+        ({"y": []}, "at least one variable in y"),
+        ({"x": [X, Var("x", 0.0, 1.0)]}, "u, x and y together must not repeat .*: x"),
         ({"g": lambda v: [v.x, v.y]}, "one equation per mechanistic state"),
         ({"h_inputs": [Y]}, "h_inputs contains 'y'"),
-        ({"h_inputs": [U, U]}, "twice"),
+        ({"h_inputs": [U, U]}, "h_inputs must not repeat a variable; repeated: u"),
         ({"measured": [U]}, "measured contains 'u'"),
+        ({"measured": [Y, Y]}, "measured must not repeat a variable; repeated: y"),
         ({"measured": [X, Y]}, "as many measured variables"),
     ],
 )
@@ -133,6 +138,14 @@ def test_unknown_name_in_a_callable():
         AttributeError, match="Unknown variable 'w'; available: x, y, u"
     ):
         system(g=lambda v: [v.w])
+
+
+@pytest.mark.parametrize(
+    "g", [lambda v: None, lambda v: [[v.x - v.y]], lambda v: "x - y"]
+)
+def test_callable_output_that_is_not_an_expression(g):
+    with pytest.raises(TypeError, match="g must return a CasADi expression"):
+        system(g=g)
 
 
 def test_problem_rejects_a_non_scalar_objective():

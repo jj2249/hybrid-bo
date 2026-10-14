@@ -38,8 +38,16 @@ class Var:
         upper: float = np.inf,
         start: tuple[float, float] | None = None,
     ) -> None:
-        if not name.isidentifier() or keyword.iskeyword(name):
-            msg = f"Var name {name!r} must be a Python identifier (it is used as v.{name})"
+        if (
+            not isinstance(name, str)
+            or not name.isidentifier()
+            or keyword.iskeyword(name)
+            or name.startswith("_")
+        ):
+            msg = (
+                f"Var name {name!r} must be a Python identifier that doesn't start "
+                f"with '_' (it is used as v.{name})"
+            )
             raise ValueError(msg)
         lower, upper = float(lower), float(upper)
         if not lower <= upper:
@@ -47,15 +55,21 @@ class Var:
             raise ValueError(msg)
         if start is None:
             if not (np.isfinite(lower) and np.isfinite(upper)):
-                msg = f"Var {name!r} has an infinite bound, so it needs start=(lower, upper)"
+                msg = (
+                    f"Var {name!r} has an infinite bound, so it needs start bounds: "
+                    f"start=(lower, upper)"
+                )
                 raise ValueError(msg)
             start = (lower, upper)
         start_lower, start_upper = float(start[0]), float(start[1])
         if not (np.isfinite(start_lower) and np.isfinite(start_upper)):
-            msg = f"Var {name!r}: start {start} must be finite"
+            msg = f"Var {name!r}: start bounds {start} must be finite"
             raise ValueError(msg)
         if not lower <= start_lower <= start_upper <= upper:
-            msg = f"Var {name!r}: start {start} must be ordered and inside [{lower}, {upper}]"
+            msg = (
+                f"Var {name!r}: start bounds {start} must be ordered and inside "
+                f"the bounds [{lower}, {upper}]"
+            )
             raise ValueError(msg)
 
         object.__setattr__(self, "name", name)
@@ -94,9 +108,23 @@ def _trace(
     symbols = {var.name: Symbolic.sym(var.name) for var in (*x, *y, *u)}
     result = expression(_Variables(symbols))
     parts = result if isinstance(result, list | tuple) else [result]
-    outputs = cas.vertcat(*parts)
+    try:
+        outputs = cas.vertcat(*parts)
+    except NotImplementedError:
+        msg = (
+            f"{name} must return a CasADi expression or a list of scalar expressions "
+            f"built from v; got {result!r}"
+        )
+        raise TypeError(msg) from None
     inputs = [cas.vertcat(*(symbols[var.name] for var in block)) for block in (x, y, u)]
     return cas.Function(name, inputs, [outputs], ["x", "y", "u"], [name])
+
+
+def _check_unique(names: Sequence[str], label: str) -> None:
+    repeated = sorted({name for name in names if names.count(name) > 1})
+    if repeated:
+        msg = f"{label} must not repeat a variable; repeated: {', '.join(repeated)}"
+        raise ValueError(msg)
 
 
 def _check_drawn_from(
@@ -106,9 +134,7 @@ def _check_drawn_from(
         if var not in allowed:
             msg = f"{label} contains {var.name!r}, which is not one of {where}"
             raise ValueError(msg)
-    if len(set(chosen)) != len(chosen):
-        msg = f"{label} contains a variable twice"
-        raise ValueError(msg)
+    _check_unique([var.name for var in chosen], label)
 
 
 @dataclass(frozen=True, init=False)
@@ -147,11 +173,7 @@ class System:
             if not block:
                 msg = f"The system needs at least one variable in {label}"
                 raise ValueError(msg)
-        names = [var.name for var in (*u, *x, *y)]
-        duplicates = sorted({name for name in names if names.count(name) > 1})
-        if duplicates:
-            msg = f"Variable names must be unique; repeated: {', '.join(duplicates)}"
-            raise ValueError(msg)
+        _check_unique([var.name for var in (*u, *x, *y)], "u, x and y together")
         if len(y) > 1:
             msg = (
                 f"Only one unknown state is supported for now (got {len(y)}: "
@@ -172,8 +194,8 @@ class System:
         g_function = _trace("g", g, x, y, u)
         if g_function.size_out(0) != (len(x), 1):
             msg = (
-                f"g must give one equation per mechanistic state ({len(x)}), "
-                f"got shape {g_function.size_out(0)}"
+                f"g must give one equation per mechanistic state ({len(x)}) as a "
+                f"column, got shape {g_function.size_out(0)}"
             )
             raise ValueError(msg)
 
