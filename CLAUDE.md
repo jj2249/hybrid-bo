@@ -1,11 +1,13 @@
 # hybrid-bo
 
-Bayesian optimisation for partially known systems using hybrid models
-([arXiv 2603.11199](https://arxiv.org/abs/2603.11199)). The system is
-`f(u, x)` subject to known equations `h_known(u, x) = 0` and one unknown equation
-`h_unknown`, which is learned by a GP. The acquisition problem is solved over
-GP samples using CasADi. Standard BO, Latin hypercube sampling and uniform
-sampling are included as baselines.
+Bayesian optimization for partially known systems using hybrid models
+([arXiv 2603.11199](https://arxiv.org/abs/2603.11199)). The objective is
+`f(x, y, u)` subject to known equations `0 = g(x, y, u)` and unknown equations
+`y = h(x, u)`, which a GP learns. The acquisition problem is solved over scenarios
+(sample-average approximation) using CasADi. Standard BO, Latin hypercube sampling
+and uniform sampling are included as baselines. The vocabulary is in
+[CONTEXT.md](CONTEXT.md); use its terms. (The code before the restructure still uses
+`h_known`/`h_unknown` and stores `y` inside `x`.)
 
 ## Goal of the refactor
 
@@ -18,8 +20,9 @@ The `flash_unit` example is out of scope for the refactor; leave it alone.
 
 The roadmap is in [ROADMAP.md](ROADMAP.md). Check it before starting work, and
 tick items off in the PR that completes them. The target API and the plan for
-each restructure PR (R0 to R9) are in [DESIGN.md](DESIGN.md). Read it before any
-restructure PR, and update it when a PR changes the design.
+each restructure PR are in [DESIGN.md](DESIGN.md), and the decisions behind it in
+[docs/adr/](docs/adr/). Read them before any restructure PR, and update DESIGN.md
+when a PR changes the design.
 
 ## Commands
 
@@ -43,7 +46,7 @@ not found" after a Python upgrade, re-run `pixi run -e quality setup`.
 
 `tests/test_regression.py` runs each routine on the illustrative example
 (seed 0, 2 iterations) and compares the results with `tests/data/regression/*.json`.
-Only update the baselines in a PR that is meant to change behaviour, and explain
+Only update the baselines in a PR that is meant to change behavior, and explain
 the JSON diff in that PR.
 The other test files check kernels, the GP, `Problem` and the transformers
 against numpy/scipy references. Known bugs are `xfail(strict=True)` tests:
@@ -52,11 +55,11 @@ remove the marker in the PR that fixes the bug.
 ## Skills
 
 - `hybrid-bo-src` (`.claude/skills/`): what the library computes, the module
-  map, data and shape conventions, surprising behaviour and the testing rules.
+  map, data and shape conventions, surprising behavior and the testing rules.
   Load it before working on `src/`.
 - `hybrid-bo-examples`: the files and exports an example needs, how to define
   the Problem, the config fields and common mistakes.
-- When a PR changes behaviour or contracts, update the relevant skill in the
+- When a PR changes behavior or contracts, update the relevant skill in the
   same PR.
 
 ## Workflow
@@ -80,8 +83,12 @@ remove the marker in the PR that fixes the bug.
 
 - Data in, data out: functions return new values and don't mutate their inputs.
   No set-then-call sequences (`set_problem` → `solve()`).
-- Frozen dataclasses for data and configuration. Use classes only where users
-  swap implementations (kernels, means, solvers, strategies).
+- Frozen dataclasses for data and settings; behavior lives in plain functions.
+  Methods are settings dataclasses plus functions, kernels are functions, and
+  there are no strategy or kernel classes. Add a protocol only once a second
+  implementation exists.
+- American spelling everywhere, in code and prose (`optimization_loop`,
+  "optimization loop").
 - Functions take what they use, not a `Config`. Randomness is an explicit `rng`.
 - Rows are points: a point is `(n,)`, a set is `(n_points, n)`, `f` is
   `(n_points,)`. Column vectors only in CasADi glue code.
@@ -90,6 +97,9 @@ remove the marker in the PR that fixes the bug.
 - Annotate signatures and dataclass fields, not local variables. Type errors are
   fixed, not suppressed; if a suppression is unavoidable, use
   `# ty: ignore[rule]` (ty doesn't read `pyright:` comments).
+- Defaults may be derived from other arguments when the derivation is obvious and
+  recorded in the run (start bounds from finite bounds, GP size from its inputs);
+  otherwise arguments are explicit. Examples should be short to write.
 
 ## Agent skills
 

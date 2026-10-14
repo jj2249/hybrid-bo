@@ -1,283 +1,295 @@
 # Design: target API
 
-This is where the restructure is heading. [ROADMAP.md](ROADMAP.md) lists the PRs (R0 to R9).
-Each PR may refine names or signatures. When one does, it updates this file in the same PR.
+This is where the restructure is heading. The vocabulary is in [CONTEXT.md](CONTEXT.md)
+and the decisions that are hard to reverse are in [docs/adr/](docs/adr/).
+[ROADMAP.md](ROADMAP.md) lists the PRs. Each PR may refine names or signatures; when one
+does, it updates this file in the same PR.
+
+All spelling is American, in code and in prose.
 
 ## Why
 
 The code is hard to change for three reasons:
 
-1. **Duplication.** The four routines in `routines/` are near-copies of one BO loop. For
-   example, `latin_hypercube_sampling.py` and `uniform_sampling.py` differ in 13 of about
-   385 lines.
-2. **Ungrouped data.** Related values travel as separate arrays: `u`, `x`, `x_no_noise`,
-   `f`, `f_no_noise`, `incumbents` and `incumbents_no_noise`, each in `_initial`, `_bo`
-   and `_complete` versions. `Problem` has 8 separate bound arrays.
-3. **Stateful objects, scikit-learn style.** You configure an object, call methods in the
-   right order, and read the results off its state:
-   - Training a GP is `fit` the transformers → `set_XY_train` → `create_training_problem`
-     → poke `gp.optimizer.lower_bounds_starting_points`/`X0` → `solve_training_problem`.
-   - Optimisers are `set_problem` → `X0` → `solve()`.
-   - One GP object is retrained in place across runs, so storing its state needs
-     `deepcopy`.
-   - `Problem` has 9 evaluation entry points.
-   - `Config` is passed everywhere, so a signature doesn't show what a function uses.
+1. **Duplication.** The four routines in `routines/` are near-copies of one loop.
+2. **Ungrouped, index-based data.** Related values travel as separate arrays (`u`, `x`,
+   `x_no_noise`, `f`, `incumbents`, ... in `_initial`, `_bo` and `_complete` versions),
+   and the structure of the problem lives in index lists in `config.yaml`
+   (`indices_x_output_gp: [1]` is the only thing that says `x[1]` is really `y`).
+3. **Stateful objects.** You configure an object, call methods in the right order and
+   read results off its state (`set_XY_train` → `create_training_problem` →
+   `solve_training_problem`; `set_problem` → `solve()`), and `Config` is passed
+   everywhere.
 
 ## Principles
 
-1. **Data in, data out.** No set-then-call sequences. Fitting and solving return new
-   values and never mutate their inputs.
-2. **Frozen dataclasses** for data and configuration. Classes exist only where users swap
-   implementations (kernels, means, solvers, strategies), and those classes are immutable.
-3. **Functions take what they use.** There is no `Config` in the library.
-4. **One way to do each thing.** One evaluation function. One kernel code path that works
-   for numeric and CasADi-symbolic values.
+1. **Data in, data out.** Functions return new values and never mutate their inputs.
+2. **Frozen dataclasses for data and settings; behavior in plain functions.** No strategy
+   classes and no kernel classes.
+3. **Functions take what they use.** There is no `Config`.
+4. **One way to do each thing.** One CasADi code path for symbolic and numeric use.
 5. **Explicit randomness.** Anything random takes an `rng: np.random.Generator`.
-6. **Errors raise** specific exceptions. The caller decides whether to carry on.
-   Expected failures (e.g. one multistart start not converging) are logged without
-   tracebacks.
-7. **Rows are points.** A point is 1-D, shape `(n,)`. A set of points is
-   `(n_points, n)`, and `f` over a set is `(n_points,)`. `(n, 1)` column vectors appear
-   only inside CasADi glue code.
+6. **Errors raise** specific exceptions. Expected failures (one multistart start not
+   converging) are logged without tracebacks.
+7. **Rows are points.** A point is `(n,)`, a set is `(n_points, n)`, `f` is `(n_points,)`.
+8. **Examples are short to write.** Defaults may be derived from other arguments when
+   the derivation is obvious and recorded in the run.
 
 ## Decisions
 
-- **Randomness (R0).** Before the restructure, one *logic* PR changes how randomness is
-  drawn and regenerates the baselines (see R0). From then on, every restructure PR keeps
-  the regression baselines unchanged, with no compatibility shims.
-- **Saving.** The library returns values. The example/CLI saves them (pickle or npz),
-  loops over runs and handles failures. The library has no `results_dir`, overwrite
-  checks or try/except per run.
-- **flash_unit.** Before R1, tag the current commit `pre-refactor` and say in
-  `examples/flash_unit/README.md` that the example targets that tag. Exclude it from ty
-  and tests. After the refactor it is ported, and its custom evaluation becomes a custom
-  simulator.
+- **Notation follows the paper** (arXiv 2603.11199, Problem 4): decision variables `u`,
+  mechanistic states `x`, unknown states `y`, known equations `0 = g(x, y, u)`, unknown
+  equations `y = h(x, u)`, scenario draws `z` (the paper's ξ).
+- **Problem, method and experiment are separate** ([ADR 0001](docs/adr/0001-problem-method-experiment-split.md)).
+  The problem is a system plus an objective; the method owns the surrogate; the oracle
+  exists only in test cases.
+- **Equations are callables traced by CasADi** ([ADR 0002](docs/adr/0002-equations-are-casadi-callables.md)).
+- **Runs are pure data** ([ADR 0003](docs/adr/0003-runs-are-pure-data.md)).
+- **SX and MX.** Library math uses only CasADi operations, so it works for both. The
+  symbol type is set in one place (default `SX`). `DM` appears only where a compiled
+  `cas.Function` is called, and is converted to numpy there.
+- **Known issues are not rebuilt.** Where the new design makes a Known issue impossible
+  and the regression baselines do not move, the new code simply does not reproduce it;
+  the PR says which Known issue it removes.
+- **Saving.** The library returns values. Examples save them (pickle or npz) and loop
+  over runs.
+
+## Target example
+
+```python
+import casadi as cas
+import numpy as np
+
+import hybrid_bo as hb
+
+# Problem: what we know about the physics, and what we want
+u = hb.Var("u", lower=-2.0, upper=2.0)  # start bounds default to the finite bounds
+x = hb.Var("x", start=(-2.5, 1.0))  # unbounded, so start bounds are required
+y = hb.Var("y", start=(-2.0, 2.0))
+
+system = hb.System(
+    u=[u],
+    x=[x],
+    y=[y],
+    g=lambda v: [v.x + cas.exp(v.x) - v.y],  # 0 = g(x, y, u)
+    h_inputs=[u],  # y = h(u)
+    measured=[y],
+)
+problem = hb.Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x - 4))
+
+# Test case: an oracle plays the real system
+experiment = hb.oracle_experiment(
+    problem, oracle=lambda v: [cas.sin(v.u)], noise_std=0.0
+)
+
+# Method: how we search
+settings = hb.HybridBOSettings(acquisition=hb.EI(), n_scenarios=25)  # default GP
+
+rng = np.random.default_rng(0)
+runs = []
+for run_rng in rng.spawn(10):
+    initial_points = hb.lhs(system.u, n=2, rng=run_rng)
+    runs.append(hb.hybrid_bo(problem, experiment, initial_points, 5, settings, run_rng))
+
+hb.plots.convergence(runs)
+```
 
 ## Target API
 
-All snippets are illustrative. `hb` is `import hybrid_bo as hb`.
+All snippets are illustrative.
 
-### Bounds and sampling (R1)
-
-```python
-@dataclass(frozen=True)
-class Bounds:
-    lower: np.ndarray  # (n,)
-    upper: np.ndarray  # (n,)
-    # __post_init__: convert to float arrays, check shapes match and lower <= upper
-
-
-# Each returns (n, d). lhs replaces the 5 LHS copies.
-def lhs(bounds: Bounds, n: int, rng) -> np.ndarray: ...
-def uniform(bounds: Bounds, n: int, rng) -> np.ndarray: ...
-
-
-# Concatenate, e.g. for the acquisition variables
-def stack(*bounds: Bounds) -> Bounds: ...
-```
-
-The 5 LHS copies are `problem.py` (×2), `optimizers.py`, `routines/latin_hypercube_sampling.py`
-and `examples/illustrative_example/user_definitions.py`. The new helper must draw exactly as
-they do (`scipy.stats.qmc.LatinHypercube(d, rng=rng).random(n)`, then scale).
-
-### Problem (R1)
+### Problem
 
 ```python
 @dataclass(frozen=True)
+class Var:
+    name: str
+    lower: float = -np.inf
+    upper: float = np.inf
+    start: tuple[float, float] | None = None  # defaults to (lower, upper) if finite
+
+
+@dataclass(frozen=True, init=False)
+class System:
+    u: list[Var]  # N decision variables
+    x: list[Var]  # M mechanistic states
+    y: list[Var]  # P unknown states (P = 1 for now; P > 1 raises)
+    g: cas.Function  # built from the callable: g(x, y, u) -> (M,)
+    h_inputs: list[Var]  # the arguments of h, from u and x
+    measured: list[Var]  # the states the sensors read, len(measured) == P
+
+    def __init__(self, u, x, y, g: Callable, h_inputs, measured): ...
+
+
+@dataclass(frozen=True, init=False)
 class Problem:
-    f: cas.Function  # f(u, x) -> (1, 1)
-    h_known: cas.Function  # h_known(u, x) -> (n_h_known, 1)
-    h_unknown: cas.Function  # the true system; only the simulator uses it
-    u_bounds: Bounds  # box for u in the acquisition problem
-    x_start_bounds: Bounds  # finite; starting points for x (fsolve, multistart)
-    # Optional at construction; __post_init__ fills them in, so they are always Bounds.
-    # x_bounds defaults to unbounded, u_start_bounds to u_bounds (which must then be finite).
-    x_bounds: Bounds | None = None
-    u_start_bounds: Bounds | None = None
+    system: System
+    f: cas.Function  # built from the callable: f(x, y, u) -> scalar
 
-    n_u: int  # property, from f
-    n_x: int  # property, from f
-    # __post_init__ also runs the checks in today's Problem.__init__
-    # (function arities and sizes, finite start bounds)
+    def __init__(self, system: System, f: Callable): ...
 ```
 
-`threshold_equality` moves to `Simulator.tol`. `Problem.solve` (the true optimum, with
-`h_unknown` known) is called nowhere, so it is deleted. If someone needs it later, it
-becomes a function built on `minimize`.
+Construction calls each callable once with CasADi symbols (`v.name` for every variable)
+and builds the `cas.Function`s in declaration order. It checks: unique names, finite
+start bounds, `len(g) == M`, `len(measured) == P`, `h_inputs` drawn from `u` and `x`.
+Variables are looked up by identity or name, never with `==`, because CasADi's `==` is
+symbolic.
 
-### Simulation (R2)
+### Evaluation
+
+```python
+Experiment = Callable[
+    [np.ndarray, np.random.Generator], np.ndarray
+]  # u (N,) -> measured
+
+
+def oracle_experiment(
+    problem,
+    oracle: Callable,
+    noise_std: float = 0.0,
+    n_starts: int = 100,
+    tol: float = 1e-10,
+) -> Experiment: ...
+
+
+def evaluate(problem, experiment, u: np.ndarray, rng) -> History: ...  # u (n, N)
+```
+
+- An **experiment** returns the measured variables for one trial point. A real
+  application supplies only this.
+- The **oracle simulation** solves `g` with `y = oracle(x, u)` for every state
+  (root-finding with CasADi Jacobians), reads the measured variables and adds
+  `rng.normal(0, noise_std)`. Its full states are the **oracle values**.
+- The library then always solves the **root-finding problem**: `g` for the unmeasured
+  states given `u` and the measured variables, then computes `f`. When oracle values
+  exist and the reconstruction disagrees with them, it warns (the measured variables do
+  not determine the states uniquely).
+- `fsolve` always uses the CasADi Jacobian (`use_jacobian` is removed).
+
+### History and Run
 
 ```python
 @dataclass(frozen=True)
-class Measurement:
-    indices: list[int]  # measured states
-    noise_std: float = 0.0
-
-
-@dataclass(frozen=True)
-class Evaluation:  # rows are points
-    u: np.ndarray  # (n, n_u)
-    x: np.ndarray  # (n, n_x)  as measured (noise applied, other states re-solved)
+class History:  # every evaluated point of one run, in order
+    u: np.ndarray  # (n, N)
+    x: np.ndarray  # (n, M)  measured and reconstructed
+    y: np.ndarray  # (n, P)
     f: np.ndarray  # (n,)
-    x_true: np.ndarray  # (n, n_x)  noise-free
-    f_true: np.ndarray  # (n,)
+    x_oracle: np.ndarray | None  # benchmark only; None without an oracle
+    y_oracle: np.ndarray | None
+    f_oracle: np.ndarray | None
+    n_initial: int
+
+
+def incumbents(history) -> np.ndarray: ...  # np.minimum.accumulate(history.f)
 
 
 @dataclass(frozen=True)
-class Simulator:
-    n_starts: int = 100  # fsolve restarts (was n_starts_max_evaluate_problem)
-    use_jacobian: bool = True
-    tol: float = 1e-10  # was Problem.threshold_equality
-
-    def __call__(self, problem, u, rng, measurement=None, noise=None) -> Evaluation:
-        """u: (n, n_u). noise: (n, len(measurement.indices)), drawn by the caller."""
+class Run:
+    history: History
+    surrogates: list[FittedGP]  # one per iteration; empty for baselines
+    scenarios: Scenarios | None  # hybrid BO only
+    record: dict[str, str]  # how the run was produced, as text
 ```
 
-This replaces `evaluate_with_simulation`, `evaluate_with_fixed_x` and
-`evaluate_with_noisy_simulation`, their `single_*` and `single_*_original` variants, and
-the `original` flag. A custom simulator is any callable with the same signature. That is
-how flash_unit's fallback logic will come back, with no subclassing. Solving `h_known`
-with some states fixed becomes a private helper. The draw order inside a call must stay
-the same as today: per point, LHS guesses for the full solve, then (if there is noise)
-LHS guesses for the fixed-x solve.
+The **record** is built by the library, not the example: variable names and bounds,
+`g`, `f` and the oracle as expression text, the method settings, the GP spec and kernel
+expression, the seed and run index, and the versions of `hybrid_bo` (with git commit),
+CasADi, NumPy and SciPy. A custom experiment can add a `description`.
 
-### Optimisation (R3)
+A column is found by name with `system.column("x1")`.
+
+### Solvers
 
 ```python
 @dataclass(frozen=True)
 class NLP:
-    f: cas.Function  # w -> (1, 1)
-    bounds: Bounds  # on w
-    h: cas.Function | None = None  # h(w) = 0
-    g: cas.Function | None = None  # g(w) <= 0
+    f: cas.Function  # w -> scalar
+    lower: np.ndarray
+    upper: np.ndarray
+    g: cas.Function | None = None  # g(w) = 0
 
 
 @dataclass(frozen=True)
-class Solution:
-    x: np.ndarray  # (n,)
-    f: float
-
-
-class Solver(Protocol):
-    def __call__(self, nlp: NLP, starts: np.ndarray) -> list[Solution | None]: ...
-
-
-@dataclass(frozen=True)
-class Ipopt:  # was CasadiOptimizer + MultiStartOptimizer
+class Ipopt:
     plugin_options: dict = field(default_factory=lambda: {"print_time": 0})
     solver_options: dict = field(default_factory=lambda: {"print_level": 0})
-    # builds one cas.Opti per call, then loops over the starts (same as today)
 
 
-@dataclass(frozen=True)
-class Scipy:  # was SciPyLocalOptimizer
-    method: str = "L-BFGS-B"
-    options: dict | None = None
-
-
-def minimize(nlp: NLP, starts: np.ndarray, solver: Solver) -> Solution:
+def multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
     """Best of the starts; raises NoSolutionError if every start fails."""
 ```
 
-The `set_problem`, `X0`, `set_x0`, `create_lhs_samples` and
-`lower_bounds_starting_points` attributes, and the `__getstate__` workarounds, all go.
-The caller draws starting points with `lhs(start_bounds, n, rng)`.
+There is no `Solver` protocol until a second solver exists. The caller draws the starts
+with `lhs(...)`.
 
-### Hyperparameters, kernels, means (R4)
+### GP
 
 ```python
 @dataclass(frozen=True)
-class Param:
-    value: Any  # np.ndarray, float, or a CasADi symbol during training
+class Hyper:
+    name: str
+    init: float
     bounds: tuple[float, float]
-    log: bool = True  # optimise in log space
-    trainable: bool = True
+    size: int = 1  # e.g. one lengthscale per input (ARD)
+    log: bool = True  # optimize in log space
 
 
 @dataclass(frozen=True)
-class Matern52:
-    lengthscale: Param = Param(1.0, (1e-3, 1e2))
-    ard: bool = True  # fit_gp expands a scalar lengthscale to one per input
-
-    def __call__(self, X1, X2):  # numeric or symbolic, (n1, d), (n2, d) -> (n1, n2)
-        ...
-
-
-@dataclass(frozen=True)
-class Scaled:  # was OutputScaleKernel
-    base: Kernel
-    scale: Param = Param(1.0, (0.1, 10.0))
-
-
-# Trainable Params, depth-first over dataclass fields
-def params(obj) -> list[Param]: ...
-
-
-# Same structure with new values (via dataclasses.replace)
-def with_values(obj, values: Sequence) -> obj: ...
-```
-
-Training builds the objective by calling the *same* `__call__` on
-`with_values(gp, symbols)`. That removes `k_variable`/`m_variable`, `Parameter.symbol`,
-`Parameterized`, `JoinedParameters` and the name prefixing that `GP`/`OutputScaleKernel`
-apply to other objects' parameters.
-
-- **Order matters.** The flattened order must match today's `JoinedParameters`
-  (`noise_std`, then the kernel's parameters depth-first, outer before inner, then the
-  mean's), so the multistart starting points stay the same.
-- **Kernels to port:** Matern12/32/52/Inf (keep the aliases), Linear, Constant, Zero.
-- **Means to port:** Zero, Constant.
-
-### GP and scaling (R5)
-
-```python
-@dataclass(frozen=True)
-class Scaler:  # y_scaled = slope * y + intercept, per column
-    slope: np.ndarray
-    intercept: np.ndarray
-
-    def apply(self, X): ...
-    def invert(self, X): ...
-
-
-# minmax keeps today's intercept (a Known issue, fixed in its own PR)
-def minmax(X) -> Scaler: ...
-def standard(Y) -> Scaler: ...
-
-
-@dataclass(frozen=True)
-class GP:  # the model spec
-    kernel: Kernel
-    mean: Mean = ZeroMean()
-    noise_std: Param = Param(1e-2, (1e-6, 1.0))
+class GP:
+    hyperparameters: list[Hyper]  # declaration order is the optimization order
+    kernel: Callable  # (h, X1, X2) -> (n1, n2)
+    mean: Callable = zero_mean  # (h, X) -> (n,)
     jitter: float = 1e-10
 
 
+def default_gp(n_inputs: int) -> GP: ...  # scaled Matern-5/2 with ARD and noise
+
+
 @dataclass(frozen=True)
-class FittedGP:
-    gp: GP  # with fitted values
-    X: np.ndarray  # training inputs (scaled)
-    Y: np.ndarray  # training outputs (scaled)
+class Scaler:  # scaled = slope * value + intercept, per column
+    slope: np.ndarray
+    intercept: np.ndarray
+
+
+@dataclass(frozen=True)
+class FittedGP:  # data only (ADR 0003)
+    hyperparameters: dict[str, np.ndarray]
+    X: np.ndarray  # training inputs, scaled
+    Y: np.ndarray  # training outputs, scaled
     x_scaler: Scaler
     y_scaler: Scaler
 
-    # (mean (n,), cov (n, n)) in original units; X may be numeric or symbolic
-    def predict(self, X) -> tuple: ...
-
 
 def fit_gp(gp, X, Y, rng, n_starts=10, solver=Ipopt()) -> FittedGP: ...
+def predict(
+    gp, fitted, X
+) -> tuple: ...  # (mean, std) in original units; X numeric or symbolic
 ```
 
-`fit_gp` fits the scalers, builds the negative log marginal likelihood NLP over the
-trainable `Param`s (in log space where `log=True`), draws starts with
-`lhs(transformed param bounds, n_starts, rng)` and calls `minimize`. If every start fails,
-it keeps the initial values and logs a warning, as today.
+Kernels are plain functions (`matern12/32/52`, `squared_exponential`, `linear`,
+`constant`) combined with arithmetic:
 
-**Numerics.** Today the hybrid acquisition samples in scaled space and then inverts. In
-original units that is the same affine map, but rounding may differ. If a baseline moves
-beyond tolerance, compute the samples in scaled space as before.
+```python
+gp = hb.GP(
+    hyperparameters=[
+        hb.Hyper("scale", 1.0, bounds=(0.1, 10.0)),
+        hb.Hyper("lengthscale", 1.0, bounds=(1e-3, 1e2), size=2),
+        hb.Hyper("noise_std", 1e-2, bounds=(1e-6, 1.0)),
+    ],
+    kernel=lambda h, X1, X2: h.scale**2 * hb.kernels.matern52(X1, X2, h.lengthscale),
+)
+```
 
-### Acquisition (R6)
+`fit_gp` fits the scalers, calls `kernel` and `mean` once with CasADi symbols for the
+hyperparameters, builds the negative log marginal likelihood, draws starts with `lhs`
+over the (log-transformed) hyperparameter bounds and calls `multistart`. If every start
+fails it keeps the initial values and logs a warning. This removes `Parameterized`,
+`JoinedParameters`, `k_variable`/`m_variable` and the name prefixing, and with them the
+`LinearKernel` ARD Known issue. `minmax` uses the correct intercept
+(`min_t - min * slope`).
+
+### Acquisition
 
 ```python
 @dataclass(frozen=True)
@@ -290,222 +302,175 @@ class LCB:
 
 
 @dataclass(frozen=True)
-class GPStructure:  # which variables the hybrid GP maps
-    u_inputs: list[int]
-    x_inputs: list[int]
-    x_outputs: list[int]  # one output for now (single-output GP)
+class Scenarios:
+    z: np.ndarray  # (S, P)
+    w: np.ndarray  # (S,), sums to 1
 
 
-@dataclass(frozen=True)
-class Acquisition:
-    nlp: NLP
-    start_bounds: Bounds
-    decode: Callable  # w -> u (n_u,)
+def saa_scenarios(n: int, P: int, rng) -> Scenarios: ...  # z ~ N(0, I), w = 1/S
 
 
 def hybrid_acquisition(
-    problem, model: FittedGP, structure, incumbent, z, kind, outputs_as_vars=False
-) -> Acquisition: ...
-def standard_acquisition(problem, model: FittedGP, incumbent, kind) -> Acquisition: ...
-```
-
-`hybrid_acquisition` replaces `routines/hybrid_bo.py:setup_acq_problem`. The four
-repeated bound concatenations become `stack(...)` over per-block `Bounds`. Keep the Known
-issue at `hybrid_bo.py:769` (`u_upper_bounds_acquisition` used as a start bound) until its
-fix PR. The new structure makes it a one-word fix. `formulation_acq` strings become
-`EI()`/`LCB()`, and both routines validate them the same way.
-
-### The loop (R7)
-
-```python
-@dataclass(frozen=True)
-class History:  # one run, every evaluated point in order
-    u: np.ndarray  # (n, n_u)
-    x: np.ndarray  # (n, n_x) measured
-    f: np.ndarray  # (n,)
-    x_true: np.ndarray
-    f_true: np.ndarray
-    n_initial: int
-    incumbents: np.ndarray  # property: np.minimum.accumulate(f)
-    incumbents_true: np.ndarray
-
-    def append(self, evaluation: Evaluation) -> "History": ...  # returns a new History
-    def best(self) -> tuple[np.ndarray, float]: ...
-
-
-@dataclass(frozen=True)
-class Proposal:
-    u: np.ndarray  # (n_u,)
-    model: FittedGP | None = None
-
-
-class Strategy(Protocol):
-    # Per-run state, e.g. z or an LHS design
-    def init(self, problem, n_iterations, rng) -> Any: ...
-    def propose(self, problem, history, state, rng) -> Proposal: ...
-
-
-@dataclass(frozen=True)
-class Run:
-    history: History
-    models: list[FittedGP]  # the model behind each proposal (empty for sampling)
-
-
-def run_bo(
     problem,
-    strategy,
-    u_initial,
-    n_iterations,
-    rng,
-    simulator=Simulator(),
-    measurement=None,
-    callback=None,
-) -> Run:
-    """Draw noise for all points, state = strategy.init(...), evaluate u_initial, then
-    repeat: proposal = strategy.propose(...); evaluate; history = history.append(...);
-    callback(history, proposal.model)."""
+    gp,
+    fitted,
+    scenarios,
+    incumbent,
+    acquisition,
+    unknown_states_as_variables=True,
+) -> tuple[NLP, np.ndarray]: ...
+def standard_acquisition(
+    problem, gp, fitted, incumbent, acquisition
+) -> tuple[NLP, np.ndarray]: ...
 ```
 
-Strategies are frozen dataclasses:
-- `HybridBO(gp, structure, acquisition=EI(), n_samples=25, n_starts=10, n_starts_gp=10, solver=Ipopt(), outputs_as_vars=False)`.
-  Its `init` draws `z` (n_samples). `propose` fits the GP on `(history.u, history.x)`,
-  builds `hybrid_acquisition`, calls `minimize` from `lhs(acq.start_bounds, n_starts, rng)`
-  and decodes the result.
-- `StandardBO(gp, acquisition=EI(), n_starts=10, n_starts_gp=10, solver=Ipopt())`.
-  Fits on `(history.u, history.f)`.
-- `LatinHypercube()` / `Uniform()`. `init` draws the whole design, and `propose` returns
-  the next row.
+Each returns the NLP and its start bounds.
 
-This replaces the four routines, `ResultsBO`, `ResultsGP` and `get_sampling_based_data`.
-Plotting is a `callback`, which the example supplies. A plot that needs randomness takes
-its own `rng`, not the run's.
+- **Standard BO** computes EI and LCB analytically from the GP mean and std.
+- **Hybrid BO** computes them as weighted sample averages over the scenarios (SAA-EI,
+  SAA-LCB; paper, Problems 8 and 9). Each scenario has its own `x_s` and `y_s`, with `g`
+  as constraints. SAA-LCB uses the weighted variance; `w = 1/S` reproduces today's
+  `sample_variance` (`ddof=0`).
+- `unknown_states_as_variables`: if True, each scenario's unknown states are variables
+  of the acquisition problem tied to the GP by an equality constraint (paper, Problem 8),
+  which helps IPOPT; if False, the GP prediction is substituted wherever they appear.
+- Hybrid BO only needs "mean and std of `y` at given inputs" from the surrogate, through
+  `predict`, so other surrogates or hyperparameter samples can be paired with scenarios
+  later.
 
-**Order of random draws for one run**, set in R0 and fixed from then on. Every draw
-comes from the run's own generator, `config.rng.spawn(n_runs)[i]`:
-0. the caller draws the initial points: `qmc.LatinHypercube(n_u, rng=rng).random(n_initial)`,
-   scaled to the u start bounds;
-1. noise for all `n_initial + n_iterations` points:
-   `rng.normal(0.0, noise_std, size=(n_points, len(measured)))`;
-2. `strategy.init`:
-   - hybrid: `z = rng.standard_normal((n_samples, 1))`;
-   - standard BO: no draw;
-   - LHS: `qmc.LatinHypercube(n_u, rng=rng).random(n_iterations)`, scaled;
-   - uniform: `rng.uniform(size=(n_iterations, n_u))`, scaled;
-3. evaluate the initial points;
-4. per iteration, `propose` (GP fit starts, then acquisition starts), then evaluate.
-
-The new code must make exactly these calls, in this order (e.g. `lhs()` is
-`LatinHypercube(...).random(n)` scaled, not some other sampler). Otherwise the
-baselines move.
-
-Today the GP is also retrained after the last evaluation. That extra fit comes last, so
-dropping it doesn't change the history.
-
-### What the example does (R7, R8)
+### Methods and the optimization loop
 
 ```python
-rng = np.random.default_rng(seed)
-runs = []
-for run_rng in rng.spawn(n_runs):
-    u0 = hb.lhs(problem.u_start_bounds, n_initial, run_rng)
-    try:
-        runs.append(
-            hb.run_bo(problem, strategy, u0, n_iterations, run_rng, measurement=...)
-        )
-    except hb.HybridBOError as e:
-        log.error("run failed: %s", e)
-save(runs, results_dir)  # the example's choice of format
+@dataclass(frozen=True)
+class HybridBOSettings:
+    gp: GP | None = None  # None: default_gp(len(h_inputs))
+    acquisition: EI | LCB = EI()
+    n_scenarios: int = 25
+    n_starts: int = 10  # acquisition multistart
+    n_starts_gp: int = 10
+    solver: Ipopt = Ipopt()
+    unknown_states_as_variables: bool = True
+
+
+@dataclass(frozen=True)
+class StandardBOSettings:
+    gp: GP | None = None  # None: default_gp(N)
+    acquisition: EI | LCB = EI()
+    n_starts: int = 10
+    n_starts_gp: int = 10
+    solver: Ipopt = Ipopt()
+
+
+TrialPoint = Callable[
+    [Problem, History, np.random.Generator], tuple[np.ndarray, FittedGP]
+]
+
+
+def optimization_loop(
+    problem, experiment, initial_points, n_iterations, trial_point: TrialPoint, rng
+) -> tuple[History, list[FittedGP]]: ...
+
+
+def hybrid_bo(
+    problem, experiment, initial_points, n_iterations, settings, rng
+) -> Run: ...
+def standard_bo(
+    problem, experiment, initial_points, n_iterations, settings, rng
+) -> Run: ...
+def latin_hypercube(problem, experiment, initial_points, n_points, rng) -> Run: ...
+def uniform(problem, experiment, initial_points, n_points, rng) -> Run: ...
 ```
 
-### Config mapping (R8)
+- `hybrid_bo` draws the scenarios from `rng`, then runs `optimization_loop` with a
+  trial-point function that fits the GP on `(u, x)[h_inputs] -> y`, builds
+  `hybrid_acquisition`, and solves it with `multistart`. The user never draws `z`.
+- `standard_bo` fits on `u -> f`.
+- The baselines are not sequential: they draw their whole design and `evaluate` it after
+  the initial points.
+- `optimization_loop` is public, for new methods.
 
-| `Config` field | Goes to |
-|---|---|
-| `n_u`, `n_x` | dropped (read from `problem.f`) |
-| `indices_u_input_gp`, `indices_x_input_gp`, `indices_x_output_gp` | `GPStructure` |
-| `indices_x_no_gp`, `indices_x_opt` | dropped (derived inside `hybrid_acquisition`; `indices_x_opt` is unused) |
-| `use_output_gp_as_opt_var` | `HybridBO.outputs_as_vars` |
-| `n_starts_training_gp` | `HybridBO.n_starts_gp` / `StandardBO.n_starts_gp` |
-| `n_starts_acq_optimization` | `HybridBO.n_starts` / `StandardBO.n_starts` |
-| `n_samples_gp` | `HybridBO.n_samples` |
-| `formulation_acq`, `factor_lcb_std` | `EI()` / `LCB(std_factor)` |
-| `epsilon_ei_standard` | dropped (unused; `ei` keeps its own default) |
-| `indices_x_measured`, `std_measurement_noise` | `Measurement` |
-| `n_starts_max_evaluate_problem`, `use_jacobian_evaluate_problem` | `Simulator` |
-| `n_iterations_bo` | `run_bo(n_iterations=...)` |
-| `seed`, `n_runs_bo`, `create_plots`, `save_bo_results`, `save_extended_results` | the example |
-| `rng` | the example (`np.random.default_rng(seed)`, `.spawn(n_runs)`) |
+### Errors
 
-Whether the example keeps YAML is decided in Stage 5 (examples).
+`HybridBOError` and subclasses (`RootFindingError`, `NoSolutionError`, ...). An error
+raised during a run carries the partial `Run` (`error.run`), so the caller can save it.
+The loop does not catch errors.
 
-### Target example (end of Stage 5)
+### Plots
 
-```python
-import casadi as cas
-import numpy as np
-import hybrid_bo as hb
+`hb.plots` (matplotlib optional): convergence of incumbents across runs, the surrogate
+with its uncertainty band for one-dimensional `u`, and the scenarios at an iteration.
+All are functions of a finished `Run` and the specs from the example.
 
-u, x = cas.SX.sym("u"), cas.SX.sym("x", 2)
-problem = hb.Problem(
-    f=cas.Function("f", [u, x], [(6 * x[0] - 2) ** 2 * cas.sin(12 * x[0] - 4)]),
-    h_known=cas.Function("h_known", [u, x], [x[0] + cas.exp(x[0]) - x[1]]),
-    h_unknown=cas.Function("h_unknown", [u, x], [cas.sin(u) - x[1]]),
-    u_bounds=hb.Bounds([-2.0], [2.0]),
-    x_start_bounds=hb.Bounds([-2.5, -2.0], [1.0, 2.0]),
-)
-strategy = hb.HybridBO(
-    gp=hb.GP(hb.kernels.Scaled(hb.kernels.Matern52())),
-    structure=hb.GPStructure(u_inputs=[0], x_inputs=[], x_outputs=[1]),
-)
-rng = np.random.default_rng(0)
-run = hb.run_bo(
-    problem, strategy, hb.lhs(problem.u_bounds, 2, rng), n_iterations=5, rng=rng
-)
-print(run.history.best())
-```
+## Order of random draws
+
+Every draw in a run comes from that run's generator (the example spawns one per run),
+in this order:
+
+1. initial points: `lhs` over the `u` start bounds (drawn by the caller);
+2. method setup: hybrid BO draws the scenarios (`rng.standard_normal((S, P))`); the
+   baselines draw their whole design; standard BO draws nothing;
+3. each evaluation, initial points first: the experiment (oracle simulation: full-solve
+   starts, then noise), then the root-finding starts;
+4. each iteration: GP-fit starts, then acquisition starts, then the evaluation of the
+   trial point as in 3.
+
+Root-finding starts are drawn even without noise, because the reconstruction always
+runs. Each consumer draws only what it uses, when it uses it.
+
+## Removed
+
+| What | Why | Where to find it |
+|---|---|---|
+| `array_operations/` numpy branches and their `@overload` stubs | one CasADi path (SX or MX); numeric use goes through `cas.Function` | tag `pre-refactor` |
+| `SciPyLocalOptimizer` | never used; only offered as a commented-out alternative | tag `pre-refactor` |
+| `use_jacobian` (fsolve without the CasADi Jacobian) | every equation is CasADi-traceable ([ADR 0002](docs/adr/0002-equations-are-casadi-callables.md)) | tag `pre-refactor` |
+| `Problem.solve` (true optimum with `h` known) | called nowhere; would be a function on `multistart` | tag `pre-refactor` |
+| `Config` and `config.yaml` | functions take what they use; problems are Python | tag `pre-refactor` |
+| Kernel and mean classes, `Parameterized`, `JoinedParameters` | hyperparameters are named specs; kernels are functions | tag `pre-refactor` |
+| Per-iteration plot callbacks | plots are functions of a finished run ([ADR 0003](docs/adr/0003-runs-are-pure-data.md)) | tag `pre-refactor` |
+| Strategy classes (planned, never built) | methods are settings plus functions | earlier DESIGN.md in git history |
+
+## Future directions
+
+Not built now; the design leaves room for them.
+
+- **Bayesian hyperparameters.** MAP: an optional `prior` on `Hyper`, added to the
+  negative log likelihood. Sampling: a `log_posterior(gp, X, Y)` seam returning a
+  `cas.Function` with its gradient over the log-space hyperparameters, usable by slice
+  sampling or NUTS (pymc through a custom op, or a standalone sampler). Each scenario
+  then pairs a hyperparameter sample with its `z`. Suggested order: MAP, slice sampling,
+  NUTS if the dimension grows.
+- **Alternatives to SAA.** Sigma points or cubature produce a different `Scenarios`
+  (deterministic `z`, specific `w`); the acquisition builders already take weights.
+- **More than one unknown state (P > 1).** Shapes already allow it; the open modeling
+  question is whether each unknown equation has its own arguments.
+- **Benchmark metric.** The oracle objective at the point the optimizer believes is
+  best, computed from the history. Its own logic PR, checked against the paper's figures.
 
 ## Restructure PRs
 
-Every PR keeps `tests/data/regression/` unchanged unless it is marked *logic*. The
-regression test is ported to each new API but keeps the JSON keys: the `ResultsBO`-style
-field names are mapped from the new objects inside the test (`u_initial = history.u[:n_initial]`
-and so on). Changes to how expressions are built can shift results by about 1e-12,
-which is within `rtol=1e-6`. If a baseline fails, find out why. Never regenerate the
-baselines in a non-logic PR.
+Every PR keeps `tests/data/regression/` unchanged unless it is marked *logic*. Each PR
+updates `hybrid-bo-src`, `hybrid-bo-examples`, the README and this file where its change
+affects them.
 
-Each PR also updates `hybrid-bo-src` (module map, contracts), `hybrid-bo-examples` if
-the example API changes, the README if usage changes, and this file if the design moves.
+The old code is moved to `hybrid_bo/legacy/` and the new modules are built at their
+final paths, so nothing temporary bridges old and new. The switch PR ports the
+regression test and the illustrative example and must reproduce the baselines from the
+draw-order PR exactly.
 
-- **R0 (logic): per-run randomness. Done.**
-  - Each run gets its own generator, and the draws follow the order above.
-  - The routines take `rngs` after `u_initial_complete`.
-    `get_u_initial(problem, rng)` returns one run's points.
-  - LHS/uniform no longer train a GP or take one. Their plots show only the true function
-    and the sampled points. A GP can come back in the plot callback once `fit_gp` exists
-    (R5).
-  - Noise has one column per measured state (fixes that Known issue).
-  - Plot functions still use `config.rng`, which no longer affects the runs.
-- **R1: `Bounds`, `lhs`/`uniform`/`stack`, `Problem` as a frozen dataclass.**
-  - First: tag `pre-refactor` and exclude flash_unit.
-  - Update the illustrative example, `user_definitions.get_u_initial` and `test_problem.py`.
-- **R2: `Simulator`, `Measurement`, `Evaluation`.** Delete the 9 evaluation methods.
-- **R3: `NLP`, `Solution`, `Ipopt`, `Scipy`, `minimize`.**
-  - Routines and `GP` stop setting optimiser attributes.
-  - Expected failures stop printing tracebacks (`optimizers.py:295`).
-- **R4: `Param`, functional kernels and means, `params`/`with_values`.**
-  - Port `test_kernels.py`.
-  - The single code path fixes the `LinearKernel` ARD Known issue, so remove that
-    xfail marker and say so in the PR. Examples don't use `LinearKernel`, so the
-    baselines don't change.
-- **R5: `Scaler`, `GP`, `FittedGP`, `fit_gp`.**
-  - Delete `affine_transformers.py`, the `GP` methods and `parameterization.py`.
-  - Port `test_gp.py` and `test_transformers.py`.
-- **R6: `EI`, `LCB`, `GPStructure`, `Acquisition`, the two acquisition builders.**
-- **R7: `History`, `Proposal`, `Run`, `run_bo`, the four strategies.**
-  - Delete `routines/` and `results.py`.
-  - The example saves the results and supplies plot callbacks.
-- **R8: remove `Config` from the library.** The example builds objects from its config.
-- **R9: drop the `@overload` stubs** (169 of them) and decide whether `array_operations/`
-  stays.
-- **Then (logic):** exception types (`HybridBOError` and subclasses), then the Known
-  issues in ROADMAP.md, one PR each.
+0. **Design** (docs): CONTEXT.md, ADRs, this file, ROADMAP.md, CLAUDE.md conventions.
+1. **R1 trimmed** (#17): exclude flash_unit; `lhs`/`uniform` on arrays; delete
+   `Problem.solve`; remove `use_jacobian`; tidy `examples/main.py`.
+2. **Draw order** (*logic*): the old routines draw in the order above and always
+   reconstruct after the experiment; regenerate the baselines and check the plots.
+3. **Legacy**: move the old code to `hybrid_bo/legacy/`.
+4. **Problem**: `Var`, `System`, `Problem`.
+5. **Evaluation**: `oracle_experiment`, root-finding, `evaluate`, `History`, error types.
+6. **Solvers**: `NLP`, `Ipopt`, `multistart`.
+7. **GP**: `Hyper`, kernel functions, `GP`, `fit_gp`, `predict`, scalers, `default_gp`;
+   port the kernel, GP and scaler tests.
+8. **Acquisition**: `EI`, `LCB`, `Scenarios`, the two builders.
+9. **Switch**: `optimization_loop`, the four methods, `Run` and its record; port the
+   regression test and the illustrative example; delete `legacy/`, `Config` and YAML.
+   If too big, the baselines (which only need PR 5) go first.
+10. **Plots and CLI**: `hb.plots`; a CLI for the examples.
