@@ -214,7 +214,7 @@ def evaluate(
   expected failure (Principle 6), so fsolve's convergence warnings are caught and
   nothing is printed; only `RootFindingError` reports that every start failed.
 
-### History and Run
+### History and Run (#26: `Run` with `history`, `record` and `surrogates`; `run.py`)
 
 ```python
 @dataclass(frozen=True)
@@ -235,15 +235,19 @@ def incumbents(history) -> np.ndarray: ...  # np.minimum.accumulate(history.f)
 @dataclass(frozen=True)
 class Run:
     history: History
-    surrogates: list[FittedGP]  # one per iteration; empty for baselines
-    scenarios: Scenarios | None  # hybrid BO only
     record: dict[str, str]  # how the run was produced, as text
+    surrogates: list[FittedGP]  # one per iteration; empty for baselines (default)
+    scenarios: Scenarios | None  # hybrid BO only; added by #29
 ```
 
-The **record** is built by the library, not the example: variable names and bounds,
-`g`, `f` and the oracle as expression text, the method settings, the GP spec and kernel
-expression, the seed and run index, and the versions of `hybrid_bo` (with git commit),
-CasADi, NumPy and SciPy. A custom experiment can add a `description`.
+The **record** is built by the library (`run_record`, before the method draws
+anything), not the example: the variables with their bounds, `h_inputs`, `measured`,
+`g` and `f` as expression text, the experiment, the method and its settings, the GP
+spec and kernel expression (from #28), the seed, spawn key and generator state, and the
+versions of `hybrid_bo` (with `git describe`), Python, CasADi, NumPy and SciPy. The
+experiment is recorded by its docstring, else its name; the oracle simulation's
+docstring is the oracle as text with its noise and solver settings, so a custom
+experiment adds a description by writing a docstring.
 
 A column is found by name with `system.column("x1")`.
 
@@ -425,9 +429,14 @@ def hybrid_bo(
 def standard_bo(
     problem, experiment, initial_points, n_iterations, settings, rng
 ) -> Run: ...
-def latin_hypercube(problem, experiment, initial_points, n_points, rng) -> Run: ...
-def uniform(problem, experiment, initial_points, n_points, rng) -> Run: ...
+def latin_hypercube_sampling(
+    problem, experiment, initial_points, n_points, rng
+) -> Run: ...  # done in #26, baselines.py
+def uniform_sampling(problem, experiment, initial_points, n_points, rng) -> Run: ...
 ```
+
+The baselines are named `*_sampling` because `hb.uniform` and `hb.lhs` are the
+sampling primitives.
 
 - `hybrid_bo` draws the scenarios from `rng`, then runs `optimization_loop` with a
   trial-point function that fits the GP on `(u, x)[h_inputs] -> y`, builds
@@ -441,7 +450,7 @@ def uniform(problem, experiment, initial_points, n_points, rng) -> Run: ...
 
 `HybridBOError` and subclasses (`RootFindingError` from #25, `NoSolutionError`, ...). An
 error raised in `evaluate` carries the points evaluated before it (`error.history`); an
-error raised during a run will carry the partial `Run` (`error.run`, from #26), so the
+error raised during a run carries the partial `Run` (`error.run`, from #26), so the
 caller can save it. The loop does not catch errors. Warnings are `UserWarning`
 subclasses (`ReconstructionWarning`) so they can be filtered.
 
@@ -551,7 +560,8 @@ The tickets, in a workable order:
   `History`, the `HybridBOError` family. *Done*; `tests/test_evaluation.py` checks it
   against the legacy evaluation bit for bit.
 - **#26 Baselines**: Latin hypercube and uniform as methods returning a `Run` and its
-  record; their regression tests on the new API. Blocked by #25.
+  record; their regression tests on the new API. *Done*; the regression test maps the
+  `Run` to the legacy `ResultsBO` keys until #30.
 - **#27 Solvers and GP**: `NLP`, `Ipopt`, `multistart`; `Hyper`, kernel functions, `GP`,
   `fit_gp`, `predict`, scalers, `default_gp`; port the kernel, GP and scaler tests.
   Blocked by nothing.

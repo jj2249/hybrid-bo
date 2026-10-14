@@ -81,11 +81,22 @@ test), and #30 switches the example over and deletes `legacy/`.
   fsolve goes through `_find_root` (CasADi Jacobian, accepts residual `< tol` within
   the bounds, silences fsolve's warnings). With an oracle, one extra solve from the
   oracle values (no draws) checks the reconstruction is on the same root, else
-  `ReconstructionWarning`.
+  `ReconstructionWarning`. `_start_bounds` (in `sampling.py`) and `_as_text` (in
+  `problem.py`, an equation as text in the variable names) are shared helpers.
 - `history.py`: `History` (`u`, `x`, `y`, `f`, oracle values or `None`, `n_initial`)
   and `incumbents`.
+- `run.py`: `Run` (`history`, `record`, `surrogates`: empty for the baselines;
+  typed `list[object]` until `FittedGP` exists), pure data that pickles without user code
+  (ADR 0003). `run_record(problem, experiment, rng, method, settings)` builds the
+  text record; call it before the method draws. An experiment is recorded by its
+  docstring, else its name (`oracle_experiment` sets the docstring).
+- `baselines.py`: `latin_hypercube_sampling` and `uniform_sampling` draw the whole
+  design over the `u` start bounds, then `evaluate` initial points plus design in
+  one call (same draw order as legacy). The regression test maps their `Run` to the
+  legacy `ResultsBO` keys.
 - `errors.py`: `HybridBOError` (with `.history`, the points evaluated before the
-  error), `RootFindingError`, `ReconstructionWarning`. New code raises these, never
+  error, and `.run`, the partial run when raised in a method), `RootFindingError`,
+  `ReconstructionWarning`. New code raises these, never
   bare `Exception` (ruff `TRY002`/`BLE001` apply outside `legacy/` and `examples/`).
 
 **The old code** is in `hybrid_bo/legacy/` (`from hybrid_bo.legacy import Config,
@@ -183,7 +194,7 @@ reverse. Paths below are relative to `legacy/`.
   `tests/data/regression/`. A logic PR regenerates them with
   `--update-baselines` and explains the diff.
 - Unit tests (`test_kernels.py`, `test_gp.py`, `test_problem.py`,
-  `test_sampling.py`, `test_system.py`, `test_evaluation.py`, `test_transformers.py`) compare against numpy/scipy references. Add one when
+  `test_sampling.py`, `test_system.py`, `test_evaluation.py`, `test_baselines.py`, `test_transformers.py`) compare against numpy/scipy references. Add one when
   changing math.
 - A known bug gets a `pytest.mark.xfail(strict=True)` test and a ROADMAP
   Known issues entry. The PR that fixes it removes the marker.

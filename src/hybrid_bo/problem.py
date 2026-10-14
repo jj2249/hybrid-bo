@@ -151,6 +151,17 @@ def _trace(
     return cas.Function(name, inputs, [outputs], ["x", "y", "u"], [name])
 
 
+def _as_text(
+    function: cas.Function, x: Sequence[Var], y: Sequence[Var], u: Sequence[Var]
+) -> str:
+    """The expression of a function built by `_trace`, as text in the variable names
+    (e.g. `((x+exp(x))-y)`)."""
+    symbols = [
+        cas.vertcat(*(Symbolic.sym(var.name) for var in block)) for block in (x, y, u)
+    ]
+    return str(function(*symbols))
+
+
 def _check_unique(names: Sequence[str], label: str) -> None:
     """Raises `ValueError` naming every name that appears more than once.
 

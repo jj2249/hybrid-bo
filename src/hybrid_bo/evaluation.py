@@ -41,8 +41,8 @@ import scipy
 
 from hybrid_bo.errors import HybridBOError, ReconstructionWarning, RootFindingError
 from hybrid_bo.history import History
-from hybrid_bo.problem import Problem, Symbolic, System, Var, _trace
-from hybrid_bo.sampling import lhs
+from hybrid_bo.problem import Problem, Symbolic, System, Var, _as_text, _trace
+from hybrid_bo.sampling import _start_bounds, lhs
 
 
 @dataclass(frozen=True)
@@ -70,14 +70,6 @@ def _states(system: System) -> tuple[Var, ...]:
 def _unmeasured(system: System) -> list[Var]:
     """The states the root-finding problem solves for, in state order."""
     return [var for var in _states(system) if var not in system.measured]
-
-
-def _start_bounds(variables: Sequence[Var]) -> tuple[np.ndarray, np.ndarray]:
-    """The lower and upper start bounds of the variables, each of shape (d,)."""
-    return (
-        np.array([var.start[0] for var in variables]),
-        np.array([var.start[1] for var in variables]),
-    )
 
 
 def _find_root(
@@ -166,6 +158,12 @@ def oracle_experiment(
             y=root[system.n_x :],
         )
 
+    # The run's record describes an experiment by its docstring
+    oracle_text = _as_text(oracle_function, system.x, system.y, system.u)
+    experiment.__doc__ = (
+        f"oracle simulation: y = {oracle_text}, noise_std={noise_std}, "
+        f"n_starts={n_starts}, tol={tol}"
+    )
     return experiment
 
 

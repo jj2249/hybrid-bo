@@ -4,6 +4,9 @@ These lock in the *current* behavior, including the suspected bound bug in
 `setup_acq_problem` in `legacy/routines/hybrid_bo.py` (see ROADMAP Known issues). If a PR
 intentionally changes behavior, regenerate with
 `pixi run -e dev test --update-baselines` and review the JSON diff.
+
+The baselines run on the new API; their `Run` is mapped to the legacy `ResultsBO`
+keys, so all four routines share one baseline format until #30.
 """
 
 import json
@@ -11,20 +14,80 @@ import pickle
 from dataclasses import fields
 from pathlib import Path
 
+import casadi as cas
 import illustrative_example as ex
 import numpy as np
 import pytest
 
-from hybrid_bo.legacy.results import ResultsBO
-from hybrid_bo.legacy.routines import (
-    do_hybrid_bo,
-    do_latin_hypercube_sampling,
-    do_standard_bo,
-    do_uniform_sampling,
+from hybrid_bo import (
+    Run,
+    incumbents,
+    initial_points,
+    latin_hypercube_sampling,
+    oracle_experiment,
+    uniform_sampling,
 )
+from hybrid_bo.legacy.results import ResultsBO
+from hybrid_bo.legacy.routines import do_hybrid_bo, do_standard_bo
 
 BASELINE_DIR = Path(__file__).parent / "data" / "regression"
 RTOL, ATOL = 1e-6, 1e-8
+NEW_API = {
+    "latin_hypercube_sampling": latin_hypercube_sampling,
+    "uniform_sampling": uniform_sampling,
+}
+
+
+def as_legacy_results(run: Run) -> dict[str, np.ndarray]:
+    """The run under the `ResultsBO` keys: legacy stores y inside x, f as a column,
+    and splits every array into the initial points and the rest."""
+    history = run.history
+    assert history.x_oracle is not None and history.y_oracle is not None
+    assert history.f_oracle is not None
+    columns = {
+        "u": history.u,
+        "x": np.column_stack([history.x, history.y]),
+        "f": history.f[:, np.newaxis],
+        "incumbents": incumbents(history)[:, np.newaxis],
+        "x_no_noise": np.column_stack([history.x_oracle, history.y_oracle]),
+        "f_no_noise": history.f_oracle[:, np.newaxis],
+        "incumbents_no_noise": np.minimum.accumulate(history.f_oracle)[:, np.newaxis],
+    }
+    n = history.n_initial
+    return {
+        f"{name}_{part}": value[:n] if part == "initial" else value[n:]
+        for part in ("initial", "bo")
+        for name, value in columns.items()
+    }
+
+
+def run_new_api(routine, config, problem):
+    """Runs a baseline on the new API, as the legacy routine would, and returns its
+    results under the `ResultsBO` keys."""
+    # As in examples/main.py: one generator per run, initial points drawn from it
+    rng = np.random.default_rng(config.seed).spawn(1)[0]
+    u = initial_points(problem.system.u, 2, rng)
+    experiment = oracle_experiment(
+        problem.system,
+        oracle=lambda v: [cas.sin(v.u)],
+        noise_std=config.std_measurement_noise,
+    )
+    run = NEW_API[routine](problem, experiment, u, config.n_iterations_bo, rng)
+    return as_legacy_results(run)
+
+
+def run_legacy(routine, config, results_dir):
+    """Runs a legacy routine and returns the first run's `ResultsBO` fields."""
+    run_routine(routine, config, results_dir)
+
+    # Routines catch and print exceptions, so a crash shows up as missing results
+    # or as NaN rows (result arrays are NaN-initialized and saved regardless)
+    results_path = results_dir / "results_bo.pkl"
+    assert results_path.exists(), "routine did not save results (check stderr)"
+    with results_path.open("rb") as f:
+        results = pickle.load(f)
+    assert len(results) == config.n_runs_bo
+    return {fld.name: getattr(results[0], fld.name) for fld in fields(ResultsBO)}
 
 
 def run_routine(routine, config, results_dir):
@@ -57,30 +120,24 @@ def run_routine(routine, config, results_dir):
                 results_dir,
                 None,
             )
-        case "latin_hypercube_sampling":
-            do_latin_hypercube_sampling(
-                problem, config, u_initial, rngs, results_dir, None
-            )
-        case "uniform_sampling":
-            do_uniform_sampling(problem, config, u_initial, rngs, results_dir, None)
 
 
 @pytest.mark.parametrize(
     "routine",
     ["hybrid_bo", "standard_bo", "latin_hypercube_sampling", "uniform_sampling"],
 )
-def test_illustrative_example(routine, illustrative_config, tmp_path, update_baselines):
+def test_illustrative_example(
+    routine,
+    illustrative_config,
+    illustrative_problem,
+    tmp_path,
+    update_baselines,
+):
     config = illustrative_config
-    run_routine(routine, config, tmp_path)
-
-    # Routines catch and print exceptions, so a crash shows up as missing results
-    # or as NaN rows (result arrays are NaN-initialised and saved regardless)
-    results_path = tmp_path / "results_bo.pkl"
-    assert results_path.exists(), "routine did not save results (check stderr)"
-    with results_path.open("rb") as f:
-        results = pickle.load(f)
-    assert len(results) == config.n_runs_bo
-    actual = {fld.name: getattr(results[0], fld.name) for fld in fields(ResultsBO)}
+    if routine in NEW_API:
+        actual = run_new_api(routine, config, illustrative_problem)
+    else:
+        actual = run_legacy(routine, config, tmp_path)
     for name, value in actual.items():
         assert not np.isnan(value).any(), f"{name} has NaNs: routine failed mid-run"
 
