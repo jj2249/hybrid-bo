@@ -332,11 +332,11 @@ Kernels are plain functions (`matern12/32/52`, `squared_exponential`, `linear`,
 
 ```python
 gp = hb.GP(
-    hyperparameters=[
+    hyperparameters=(
         hb.Hyper("noise_std", 1e-2, bounds=(1e-6, 1.0)),
         hb.Hyper("outputscale", 1.0, bounds=(0.1, 10.0)),
         hb.Hyper("lengthscale", 1.0, bounds=(1e-3, 1e2), size=2),
-    ],
+    ),
     kernel=lambda h, X1, X2: h.outputscale * hb.kernels.matern52(X1, X2, h.lengthscale),
 )
 ```
@@ -351,8 +351,9 @@ gp = hb.GP(
   `kernel` and `mean` once with CasADi symbols for the hyperparameters, builds the
   negative log marginal likelihood, draws starts with `lhs` over the (log-transformed)
   hyperparameter bounds and calls `multistart`. If every start fails it keeps the
-  initial values and logs a warning. With the same data, generator and starts it
-  matches the legacy GP bit for bit (`tests/test_gp.py`).
+  initial values and logs a warning. With the same data and generator its
+  hyperparameters match the legacy GP bit for bit, and its predictions to rounding
+  (`tests/test_gp.py`).
 - `predict` traces the posterior once as a `cas.Function` of X; a numpy X gives arrays
   `(n,)`, a symbolic X (SX or MX) gives `(n, 1)` columns. The std is the square root of
   the posterior variance, so callers need no covariance.

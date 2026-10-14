@@ -108,8 +108,8 @@ test), and #30 switches the example over and deletes `legacy/`.
   `minmax`/`standard`/`scale`/`unscale`, `FittedGP` (data only), `fit_gp`, `predict`
   (numpy X -> arrays `(n,)`, symbolic X -> `(n, 1)` columns) and `log_likelihood`. The
   hyperparameter named `noise_std`, if declared, is the noise; without it only
-  `jitter` is added. Numeric data enter CasADi as `Symbolic` constants. `fit_gp`
-  matches the legacy GP bit for bit with the same data and generator; keep the
+  `jitter` is added. Numeric data enter CasADi as `Symbolic` constants. `fit_gp`'s
+  hyperparameters match the legacy GP bit for bit with the same data and generator; keep the
   `minmax` operation order, which reproduces legacy for [0, 1].
 - `errors.py`: `HybridBOError` (with `.history`, the points evaluated before the
   error, and `.run`, the partial run when raised in a method), `RootFindingError`,

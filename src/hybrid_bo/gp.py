@@ -245,6 +245,7 @@ def fit_gp(
     init = np.repeat([hyper.init for hyper in hypers], sizes)
 
     def to_search_space(values: np.ndarray) -> np.ndarray:
+        """Hyperparameter entries as search-space entries: logarithms for log ones."""
         return np.where(is_log, np.log(np.where(is_log, values, 1.0)), values)
 
     # The negative log marginal likelihood over the search space
