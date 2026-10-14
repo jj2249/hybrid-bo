@@ -198,8 +198,9 @@ def evaluate(
   nearest the oracle values (one extra solve started there, which draws nothing). If they
   differ, the measured variables do not determine the states uniquely, and `evaluate`
   warns with `ReconstructionWarning`.
-- `fsolve` always uses the CasADi Jacobian (`use_jacobian` is removed). Its convergence
-  warnings are silenced, since a failed start is expected.
+- `fsolve` always uses the CasADi Jacobian (`use_jacobian` is removed). A failed start is an
+  expected failure (Principle 6), so fsolve's convergence warnings are caught and
+  nothing is printed; only `RootFindingError` reports that every start failed.
 
 ### History and Run
 

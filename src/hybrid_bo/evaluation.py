@@ -27,19 +27,24 @@ class OracleMeasurement:
     """What the oracle simulation returns for one trial point: the measured variables
     and the oracle values of the states."""
 
-    measured: np.ndarray  # (P,)
+    measured: np.ndarray  # (P,), in the order of system.measured
     x: np.ndarray  # (M,)
     y: np.ndarray  # (P,)
 
 
-# Runs the system at u (N,) and returns the measured variables (P,), or an
-# OracleMeasurement in test cases
+# Runs the system at u (N,) and returns the measured variables (P,) in the order of
+# `system.measured`, or an OracleMeasurement in test cases
 Experiment = Callable[[np.ndarray, np.random.Generator], np.ndarray | OracleMeasurement]
 
 
 def _states(system: System) -> tuple[Var, ...]:
     """The states in the order used for arrays of states: x, then y."""
     return (*system.x, *system.y)
+
+
+def _unmeasured(system: System) -> list[Var]:
+    """The states the root-finding problem solves for, in state order."""
+    return [var for var in _states(system) if var not in system.measured]
 
 
 def _start_bounds(variables: Sequence[Var]) -> tuple[np.ndarray, np.ndarray]:
@@ -62,11 +67,13 @@ def _find_root(
 
     Raises `RootFindingError` if no start gives such a root.
     """
+    # Numeric residual and Jacobian, and the box a root must lie in
     residual = cas.Function("residual", [w], [residuals])
     jacobian = cas.Function("jacobian", [w], [cas.jacobian(residuals, w)])
     lower = np.array([var.lower for var in variables])
     upper = np.array([var.upper for var in variables])
 
+    # The first start that converges to a root within the bounds wins
     for start in starts:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)
@@ -103,6 +110,7 @@ def oracle_experiment(
     Raises `ValueError` if the oracle doesn't give one value per unknown state. The
     experiment raises `RootFindingError` if no start gives a root.
     """
+    # The oracle: one value per unknown state, like g traced over (x, y, u)
     oracle_function = _trace("oracle", oracle, system.x, system.y, system.u)
     if oracle_function.size_out(0) != (system.n_y, 1):
         msg = (
@@ -110,8 +118,10 @@ def oracle_experiment(
             f"column, got shape {oracle_function.size_out(0)}"
         )
         raise ValueError(msg)
+
+    # Where each measured variable sits in an array of states
     states = _states(system)
-    is_measured = np.array([var in system.measured for var in states])
+    measured_columns = [states.index(var) for var in system.measured]
 
     def experiment(u: np.ndarray, rng: np.random.Generator) -> OracleMeasurement:
         # Oracle values: g and the oracle together, for every state
@@ -124,7 +134,7 @@ def oracle_experiment(
         # The sensors read the measured variables, with noise
         noise = rng.normal(0.0, noise_std, size=system.n_y)
         return OracleMeasurement(
-            measured=root[is_measured] + noise,
+            measured=root[measured_columns] + noise,
             x=root[: system.n_x],
             y=root[system.n_x :],
         )
@@ -145,16 +155,15 @@ def _reconstruct(
     Returns every state, shape (M + P,). Raises `RootFindingError` if no start gives a
     root.
     """
-    states = _states(system)
-    unmeasured = [var for var in states if var not in system.measured]
-
     # Every state as an expression: the measured ones are numbers, the rest symbols
+    states, unmeasured = _states(system), _unmeasured(system)
     w = Symbolic.sym("w", len(unmeasured))
     values = dict(zip(system.measured, measured, strict=True))
     symbols = dict(zip(unmeasured, cas.vertsplit(w), strict=True))
     column = cas.vertcat(*((values | symbols)[var] for var in states))
     residuals = system.g(column[: system.n_x], column[system.n_x :], u)
 
+    # Solve, then put the states back together in state order
     root = _find_root(w, residuals, unmeasured, starts, tol)
     values |= dict(zip(unmeasured, root, strict=True))
     return np.array([values[var] for var in states])
@@ -170,14 +179,17 @@ def _evaluate_point(
 ) -> tuple[np.ndarray, np.ndarray | None]:
     """Runs the experiment at u (N,) and reconstructs the states.
 
-    Returns the states (M + P,) and the oracle states (None without an oracle). Warns
+    Returns the states (M + P,) and their oracle values (None without an oracle). Warns
     with `ReconstructionWarning` when the reconstruction is a different root from the
     one the oracle values lie on.
     """
     # The experiment: the measured variables, and the oracle values in test cases
     result = experiment(u, rng)
-    oracle = result if isinstance(result, OracleMeasurement) else None
-    measured = np.asarray(result if oracle is None else oracle.measured, dtype=float)
+    oracle_measurement = result if isinstance(result, OracleMeasurement) else None
+    measured = np.asarray(
+        result if oracle_measurement is None else oracle_measurement.measured,
+        dtype=float,
+    )
     if measured.shape != (system.n_y,):
         msg = (
             f"The experiment must return the {system.n_y} measured variables with "
@@ -186,20 +198,19 @@ def _evaluate_point(
         raise ValueError(msg)
 
     # The root-finding problem, from starts over the unmeasured variables
-    states = _states(system)
-    unmeasured = [var for var in states if var not in system.measured]
+    states, unmeasured = _states(system), _unmeasured(system)
     starts = lhs(*_start_bounds(unmeasured), n_starts, rng)
     reconstruction = _reconstruct(system, u, measured, starts, tol)
-    if oracle is None:
+    if oracle_measurement is None:
         return reconstruction, None
 
     # Agreement: solving the same root-finding problem from the oracle values must
     # give the same root (noise moves both along the branch the oracle lies on)
-    oracle_states = np.concatenate([oracle.x, oracle.y])
+    oracle_values = np.concatenate([oracle_measurement.x, oracle_measurement.y])
     is_unmeasured = np.array([var in unmeasured for var in states])
     try:
         nearest = _reconstruct(
-            system, u, measured, oracle_states[is_unmeasured][np.newaxis], tol
+            system, u, measured, oracle_values[is_unmeasured][np.newaxis], tol
         )
         agrees = np.allclose(nearest, reconstruction, rtol=1e-6, atol=1e-6)
     except RootFindingError:
@@ -208,18 +219,18 @@ def _evaluate_point(
         names = ", ".join(var.name for var in states)
         msg = (
             f"At u = {u}, the root-finding problem gave ({names}) = {reconstruction}, "
-            f"which is not the root the oracle values {oracle_states} lie on; the "
+            f"which is not the root the oracle values {oracle_values} lie on; the "
             f"measured variables don't determine the states uniquely"
         )
         warnings.warn(msg, ReconstructionWarning, stacklevel=3)
-    return reconstruction, oracle_states
+    return reconstruction, oracle_values
 
 
 def _history(
     problem: Problem,
     u: np.ndarray,
     states: list[np.ndarray],
-    oracle_states: list[np.ndarray | None],
+    oracle_values: list[np.ndarray | None],
 ) -> History:
     """The History of the points u (n, N) with their states, all initial points.
 
@@ -234,9 +245,10 @@ def _history(
         f = np.array([problem.f(*point).full().item() for point in zip(x, y, u)])
         return x, y, f
 
+    # Measured and reconstructed values, then the oracle values if every point has them
     x, y, f = split(states)
-    oracle_rows = [row for row in oracle_states if row is not None]
-    has_oracle = len(oracle_rows) == len(oracle_states)
+    oracle_rows = [row for row in oracle_values if row is not None]
+    has_oracle = len(oracle_rows) == len(oracle_values)
     x_oracle, y_oracle, f_oracle = split(oracle_rows) if has_oracle else (None,) * 3
     return History(u, x, y, f, x_oracle, y_oracle, f_oracle, n_initial=len(u))
 
@@ -261,15 +273,15 @@ def evaluate(
     the points evaluated before it as `error.history`.
     """
     states: list[np.ndarray] = []
-    oracle_states: list[np.ndarray | None] = []
+    oracle_values: list[np.ndarray | None] = []
     for u_point in u:
         try:
             point, oracle_point = _evaluate_point(
                 problem.system, experiment, u_point, rng, n_starts, tol
             )
         except HybridBOError as error:
-            error.history = _history(problem, u[: len(states)], states, oracle_states)
+            error.history = _history(problem, u[: len(states)], states, oracle_values)
             raise
         states.append(point)
-        oracle_states.append(oracle_point)
-    return _history(problem, u, states, oracle_states)
+        oracle_values.append(oracle_point)
+    return _history(problem, u, states, oracle_values)
