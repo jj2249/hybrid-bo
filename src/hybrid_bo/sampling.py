@@ -28,10 +28,16 @@ def uniform(
     return lower + (upper - lower) * samples
 
 
+def _start_bounds(variables: Sequence[Var]) -> tuple[np.ndarray, np.ndarray]:
+    """The lower and upper start bounds of the variables, each of shape (d,)."""
+    return (
+        np.array([var.start[0] for var in variables]),
+        np.array([var.start[1] for var in variables]),
+    )
+
+
 def initial_points(
     variables: Sequence[Var], n: int, rng: np.random.Generator
 ) -> np.ndarray:
     """n points from a Latin hypercube over the variables' start bounds, shape (n, d)."""
-    lower = np.array([var.start[0] for var in variables])
-    upper = np.array([var.start[1] for var in variables])
-    return lhs(lower, upper, n, rng)
+    return lhs(*_start_bounds(variables), n, rng)

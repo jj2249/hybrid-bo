@@ -1,16 +1,19 @@
 """The library's exceptions and warnings."""
 
 from hybrid_bo.history import History
+from hybrid_bo.run import Run
 
 
 class HybridBOError(Exception):
     """Base of the library's errors.
 
     `history` holds the points evaluated before the error, when it was raised while
-    evaluating; the caller can save them.
+    evaluating; `run` holds the partial run, when it was raised during a method. The
+    caller can save either.
     """
 
     history: History | None = None
+    run: Run | None = None
 
 
 class RootFindingError(HybridBOError):

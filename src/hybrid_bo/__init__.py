@@ -1,3 +1,4 @@
+from hybrid_bo.baselines import latin_hypercube_sampling, uniform_sampling
 from hybrid_bo.errors import HybridBOError, ReconstructionWarning, RootFindingError
 from hybrid_bo.evaluation import (
     Experiment,
@@ -7,4 +8,5 @@ from hybrid_bo.evaluation import (
 )
 from hybrid_bo.history import History, incumbents
 from hybrid_bo.problem import Problem, System, Var
+from hybrid_bo.run import Run
 from hybrid_bo.sampling import initial_points, lhs, uniform
