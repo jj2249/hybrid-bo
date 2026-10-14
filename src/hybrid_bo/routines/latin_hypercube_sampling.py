@@ -4,12 +4,12 @@ from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
-import scipy
 
 from hybrid_bo.config import Config
 from hybrid_bo.problem import Problem
 from hybrid_bo.results import ResultsBO
 from hybrid_bo.routines.utils import draw_measurement_noise
+from hybrid_bo.sampling import lhs
 
 
 def do_latin_hypercube_sampling(
@@ -46,11 +46,12 @@ def do_latin_hypercube_sampling(
         measurement_noise_complete.append(measurement_noise)
 
         # Additional points of u for the BO loop by latin hypercube sampling
-        sampler = scipy.stats.qmc.LatinHypercube(problem.n_u, rng=rng)
-        u_additional = problem.u_lower_bounds_starting_points.T + (
-            problem.u_upper_bounds_starting_points.T
-            - problem.u_lower_bounds_starting_points.T
-        ) * sampler.random(config.n_iterations_bo)
+        u_additional = lhs(
+            problem.u_lower_bounds_starting_points.ravel(),
+            problem.u_upper_bounds_starting_points.ravel(),
+            config.n_iterations_bo,
+            rng,
+        )
 
         u = np.full((n_points, config.n_u), np.nan)
         x = np.full((n_points, config.n_x), np.nan)
@@ -84,7 +85,6 @@ def do_latin_hypercube_sampling(
                     measurement_noise_initial,
                     config.indices_x_measured,
                     config.n_starts_max_evaluate_problem,
-                    config.use_jacobian_evaluate_problem,
                     rng,
                     False,
                 )
@@ -141,7 +141,6 @@ def do_latin_hypercube_sampling(
                         measurement_noise[[n_points_initial + i_iteration_bo], :].T,
                         config.indices_x_measured,
                         config.n_starts_max_evaluate_problem,
-                        config.use_jacobian_evaluate_problem,
                         rng,
                     )
                 )

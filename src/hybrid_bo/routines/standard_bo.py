@@ -92,7 +92,6 @@ def do_standard_bo(
                     measurement_noise_initial,
                     config.indices_x_measured,
                     config.n_starts_max_evaluate_problem,
-                    config.use_jacobian_evaluate_problem,
                     rng,
                     False,
                 )
@@ -231,7 +230,6 @@ def do_standard_bo(
                         measurement_noise[[n_points_initial + i_iteration_bo], :].T,
                         config.indices_x_measured,
                         config.n_starts_max_evaluate_problem,
-                        config.use_jacobian_evaluate_problem,
                         rng,
                     )
                 )

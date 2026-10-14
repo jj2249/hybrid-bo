@@ -29,7 +29,7 @@ is the known equations `g`, and `h_unknown` is the oracle.
 | Function | Returns |
 |---|---|
 | `get_custom_problem(config)` | `Problem` |
-| `get_u_initial(problem, rng)` | one run's initial points `(n_initial, n_u)`, drawn only from `rng` |
+| `get_u_initial(problem, rng)` | one run's initial points `(n_initial, n_u)`, drawn only from `rng` (use `hybrid_bo.lhs` over the `u` starting-point bounds) |
 | `get_gp_hybrid_bo(n_inputs)` / `get_gp_standard_bo(n_inputs)` | `GP` |
 | `get_optimizer_hybrid_bo()` / `get_optimizer_standard_bo()` | `Optimizer` (e.g. `MultiStartOptimizer(CasadiOptimizer("ipopt", ...))`) |
 | `create_plots_{hybrid_bo,standard_bo,latin_hypercube_sampling,uniform_sampling}` | plot callbacks; the sampling ones take `(problem, config, f, u, x, n_points_initial, i_iteration)` (no GP) |
@@ -39,10 +39,8 @@ is the known equations `g`, and `h_unknown` is the oracle.
 to the routine as `rngs`. Plot callbacks may use `config.rng`; it doesn't affect
 the runs.
 
-`examples/main.py` currently looks up all four `create_plots_*` even when
-`create_plots: False`, so an example without them crashes there. Copy the
-illustrative plot modules, or call the routines directly as
-`tests/test_regression.py` does.
+`examples/main.py` looks up `create_plots_<routine>` only when `create_plots` is
+on, so an example without plot modules runs with `create_plots: False`.
 
 ## Defining the problem
 
@@ -82,8 +80,8 @@ Problem(f, h_known, h_unknown, *u_acq, *x_acq, *u_sp, *x_sp)
     acquisition problem (default in the new design: `unknown_states_as_variables`).
   - `std_measurement_noise`
   - `n_starts_training_gp`
-  - `use_jacobian_evaluate_problem` and `n_starts_max_evaluate_problem` control
-    `fsolve`.
+  - `n_starts_max_evaluate_problem`: the number of `fsolve` starts (which always
+    use the CasADi Jacobian).
 - **BO:**
   - `n_runs_bo` (independent runs) and `n_iterations_bo` (per run).
   - `create_plots`, `save_bo_results` and `save_extended_results`.

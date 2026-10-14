@@ -9,6 +9,7 @@ from hybrid_bo.config import Config
 from hybrid_bo.problem import Problem
 from hybrid_bo.results import ResultsBO
 from hybrid_bo.routines.utils import draw_measurement_noise
+from hybrid_bo.sampling import uniform
 
 
 def do_uniform_sampling(
@@ -45,10 +46,12 @@ def do_uniform_sampling(
         measurement_noise_complete.append(measurement_noise)
 
         # Additional points of u for the BO loop by uniform sampling
-        u_additional = problem.u_lower_bounds_starting_points.T + (
-            problem.u_upper_bounds_starting_points.T
-            - problem.u_lower_bounds_starting_points.T
-        ) * rng.uniform(size=(config.n_iterations_bo, problem.n_u))
+        u_additional = uniform(
+            problem.u_lower_bounds_starting_points.ravel(),
+            problem.u_upper_bounds_starting_points.ravel(),
+            config.n_iterations_bo,
+            rng,
+        )
 
         u = np.full((n_points, config.n_u), np.nan)
         x = np.full((n_points, config.n_x), np.nan)
@@ -82,7 +85,6 @@ def do_uniform_sampling(
                     measurement_noise_initial,
                     config.indices_x_measured,
                     config.n_starts_max_evaluate_problem,
-                    config.use_jacobian_evaluate_problem,
                     rng,
                     False,
                 )
@@ -139,7 +141,6 @@ def do_uniform_sampling(
                         measurement_noise[[n_points_initial + i_iteration_bo], :].T,
                         config.indices_x_measured,
                         config.n_starts_max_evaluate_problem,
-                        config.use_jacobian_evaluate_problem,
                         rng,
                     )
                 )

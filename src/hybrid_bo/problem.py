@@ -3,7 +3,7 @@ import numpy as np
 import scipy
 import scipy.optimize
 
-from hybrid_bo.optimizers import MultiStartOptimizer, OptimizationResult, Optimizer
+from hybrid_bo.sampling import lhs
 from hybrid_bo.type_aliases import SymbolicType
 
 
@@ -185,7 +185,6 @@ class Problem:
         self,
         u: np.ndarray,
         n_starts_max: int = 100,
-        use_jacobian: bool = True,
         rng: np.random.Generator | None = None,
         original: bool = False,
     ) -> tuple[np.ndarray, np.ndarray]:
@@ -206,7 +205,6 @@ class Problem:
                 ) = self.single_evaluate_with_simulation_original(
                     u[[i_point], :].T,
                     n_starts_max,
-                    use_jacobian,
                     rng,
                 )
             else:
@@ -216,7 +214,6 @@ class Problem:
                 ) = self.single_evaluate_with_simulation(
                     u[[i_point], :].T,
                     n_starts_max,
-                    use_jacobian,
                     rng,
                 )
 
@@ -231,7 +228,6 @@ class Problem:
         x_fixed: np.ndarray,
         indices_x_fixed: list[int],
         n_starts_max: int = 100,
-        use_jacobian: bool = True,
         rng: np.random.Generator | None = None,
         original: bool = False,
     ) -> tuple[np.ndarray, np.ndarray]:
@@ -267,7 +263,6 @@ class Problem:
                     x_fixed[[i_point], :].T,
                     indices_x_fixed,
                     n_starts_max,
-                    use_jacobian,
                     rng,
                 )
             else:
@@ -279,7 +274,6 @@ class Problem:
                     x_fixed[[i_point], :].T,
                     indices_x_fixed,
                     n_starts_max,
-                    use_jacobian,
                     rng,
                 )
 
@@ -294,7 +288,6 @@ class Problem:
         measurement_noise: np.ndarray,
         indices_x_measured: list[int],
         n_starts_max: int = 100,
-        use_jacobian: bool = True,
         rng: np.random.Generator | None = None,
         original: bool = False,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -326,7 +319,6 @@ class Problem:
                         measurement_noise[[i_point], :].T,
                         indices_x_measured,
                         n_starts_max,
-                        use_jacobian,
                         rng,
                     )
                 )
@@ -337,7 +329,6 @@ class Problem:
                         measurement_noise[[i_point], :].T,
                         indices_x_measured,
                         n_starts_max,
-                        use_jacobian,
                         rng,
                     )
                 )
@@ -353,7 +344,6 @@ class Problem:
         self,
         u: np.ndarray,
         n_starts_max: int = 100,
-        use_jacobian: bool = True,
         rng: np.random.Generator | None = None,
     ) -> tuple[float, np.ndarray]:
         """Returns f and x from u using h_known and h_unknown. No measurement noise is considered."""
@@ -371,19 +361,11 @@ class Problem:
         if rng is None:
             rng = np.random.default_rng()
 
-        sampler = scipy.stats.qmc.LatinHypercube(
-            self.n_x,
-            rng=rng,
-        )
-
-        samples = sampler.random(n_starts_max)
-        X_0 = (
-            self.x_lower_bounds_starting_points.T
-            + (
-                self.x_upper_bounds_starting_points
-                - self.x_lower_bounds_starting_points
-            ).T
-            * samples
+        X_0 = lhs(
+            self.x_lower_bounds_starting_points.ravel(),
+            self.x_upper_bounds_starting_points.ravel(),
+            n_starts_max,
+            rng,
         )
 
         # %% Setup equations to be solved
@@ -411,20 +393,11 @@ class Problem:
         i_start = 0
         ready_to_return = False
         while i_start < n_starts_max:
-            if use_jacobian:
-                roots = scipy.optimize.fsolve(
-                    h_np,
-                    X_0[i_start, :],
-                    fprime=h_np_jacobian,
-                )[
-                    :,
-                    np.newaxis,
-                ]
-            else:
-                roots = scipy.optimize.fsolve(h_np, X_0[i_start, :])[
-                    :,
-                    np.newaxis,
-                ]
+            roots = scipy.optimize.fsolve(
+                h_np,
+                X_0[i_start, :],
+                fprime=h_np_jacobian,
+            )[:, np.newaxis]
 
             if (
                 (np.linalg.norm(h_np(roots.ravel())) < self.threshold_equality)
@@ -446,13 +419,11 @@ class Problem:
         self,
         u: np.ndarray,
         n_starts_max: int = 100,
-        use_jacobian: bool = True,
         rng: np.random.Generator | None = None,
     ) -> tuple[float, np.ndarray]:
         return self.single_evaluate_with_simulation_original(
             u,
             n_starts_max,
-            use_jacobian,
             rng,
         )
 
@@ -462,7 +433,6 @@ class Problem:
         x_fixed: np.ndarray,
         indices_x_fixed: list[int],
         n_starts_max: int = 100,
-        use_jacobian: bool = True,
         rng: np.random.Generator | None = None,
     ) -> tuple[float, np.ndarray]:
         """Returns f and x from u and fixed parts of x using h_known. The fixed part of x is either measured or an output from a GP."""
@@ -535,17 +505,11 @@ class Problem:
         i_start = 0
         ready_to_return = False
         while i_start < n_starts_max:
-            if use_jacobian:
-                roots = scipy.optimize.fsolve(
-                    h_np,
-                    X_free_0[i_start, :],
-                    fprime=h_np_jacobian,
-                )[:, np.newaxis]
-            else:
-                roots = scipy.optimize.fsolve(h_np, X_free_0[i_start, :])[
-                    :,
-                    np.newaxis,
-                ]
+            roots = scipy.optimize.fsolve(
+                h_np,
+                X_free_0[i_start, :],
+                fprime=h_np_jacobian,
+            )[:, np.newaxis]
 
             if (
                 (np.linalg.norm(h_np(roots.ravel())) < self.threshold_equality)
@@ -573,7 +537,6 @@ class Problem:
         x_fixed: np.ndarray,
         indices_x_fixed: list[int],
         n_starts_max: int = 100,
-        use_jacobian: bool = True,
         rng: np.random.Generator | None = None,
     ) -> tuple[float, np.ndarray]:
         return self.single_evaluate_with_fixed_x_original(
@@ -581,7 +544,6 @@ class Problem:
             x_fixed,
             indices_x_fixed,
             n_starts_max,
-            use_jacobian,
             rng,
         )
 
@@ -591,7 +553,6 @@ class Problem:
         measurement_noise: np.ndarray,
         indices_x_measured: list[int],
         n_starts_max: int = 100,
-        use_jacobian: bool = True,
         rng: np.random.Generator | None = None,
     ) -> tuple[float, np.ndarray, float, np.ndarray]:
         """Returns f and x (with and without consideration of measurement noise) from u using h_known and h_unknown."""
@@ -607,7 +568,6 @@ class Problem:
         f_no_noise, x_no_noise = self.single_evaluate_with_simulation(
             u,
             n_starts_max,
-            use_jacobian,
             rng,
         )
 
@@ -619,7 +579,6 @@ class Problem:
                 x_measured,
                 indices_x_measured,
                 n_starts_max,
-                use_jacobian,
                 rng,
             )
 
@@ -635,7 +594,6 @@ class Problem:
         measurement_noise: np.ndarray,
         indices_x_measured: list[int],
         n_starts_max: int = 100,
-        use_jacobian: bool = True,
         rng: np.random.Generator | None = None,
     ) -> tuple[float, np.ndarray, float, np.ndarray]:
         return self.single_evaluate_with_noisy_simulation_original(
@@ -643,66 +601,5 @@ class Problem:
             measurement_noise,
             indices_x_measured,
             n_starts_max,
-            use_jacobian,
             rng,
         )
-
-    def solve(
-        self,
-        optimizer: Optimizer,
-        n_starting_points: int = 10,
-        rng: np.random.Generator | None = None,
-    ) -> OptimizationResult:
-        # Parameters n_starting_points and rng are only important if type(optimizer) == MultiStartOptimizer
-
-        u = SymbolicType.sym("u", self.n_u, 1)
-        x = SymbolicType.sym("x", self.n_x, 1)
-        w = cas.vertcat(u, x)
-
-        n_variables = self.n_u + self.n_x
-
-        h_expression = cas.vertcat(
-            self.h_known(u, x),
-            self.h_unknown(u, x),
-        )
-        h = cas.Function("h", [w], [h_expression])
-
-        lower_bounds = np.vstack(
-            (self.u_lower_bounds_acquisition, self.x_lower_bounds_acquisition),
-        )
-        upper_bounds = np.vstack(
-            (self.u_upper_bounds_acquisition, self.x_upper_bounds_acquisition),
-        )
-
-        f_expression = self.f(u, x)
-        f = cas.Function("f", [w], [f_expression])
-
-        optimizer.set_problem(n_variables, f, None, h, lower_bounds, upper_bounds)
-
-        if isinstance(optimizer, MultiStartOptimizer):
-            optimizer.lower_bounds_starting_points = np.vstack(
-                (
-                    self.u_lower_bounds_starting_points,
-                    self.x_lower_bounds_starting_points,
-                ),
-            )
-            optimizer.upper_bounds_starting_points = np.vstack(
-                (
-                    self.u_upper_bounds_starting_points,
-                    self.x_upper_bounds_starting_points,
-                ),
-            )
-
-            starting_points = optimizer.create_lhs_samples(
-                n_starting_points,
-                rng,
-            )
-            optimizer.X0 = starting_points
-
-        solution = optimizer.solve()
-
-        if solution is None:
-            msg = "solution is None"
-            raise Exception(msg)
-
-        return solution

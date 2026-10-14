@@ -11,3 +11,4 @@ from hybrid_bo import (
 from hybrid_bo.config import Config
 from hybrid_bo.gp import GP
 from hybrid_bo.problem import Problem
+from hybrid_bo.sampling import lhs, uniform

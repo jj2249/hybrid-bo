@@ -65,7 +65,12 @@ This describes the current code. PRs 3 to 9 in DESIGN.md move it to
   The sampling routines take no GP and no optimizer. They return `None` and pickle
   results into `results_dir`. Most of the loop is duplicated across the four files.
 - `problem.py`: `Problem` holds `f`, `h_known`, `h_unknown` (CasADi
-  functions) and the bounds, and evaluates the system.
+  functions) and the bounds, and evaluates the system. `fsolve` always uses the
+  CasADi Jacobian.
+- `sampling.py`: `lhs(lower, upper, n, rng)` and `uniform(...)` over a box, shape
+  `(n, d)`. Use them for any Latin hypercube or uniform draw; the two remaining
+  hand-written copies (fixed-x root-finding guesses, `create_lhs_samples`) go in
+  PRs 5 and 6.
 - `gp.py`, `kernels.py`, `means.py`: an exact GP (Cholesky), kernels and means.
 - `parameterization.py`: `Parameter` (symbol, value, bounds, transform) and
   `Parameterized`, the base of GP, Kernel and Mean.
@@ -148,7 +153,7 @@ This describes the current code. PRs 3 to 9 in DESIGN.md move it to
   `tests/data/regression/`. A logic PR regenerates them with
   `--update-baselines` and explains the diff.
 - Unit tests (`test_kernels.py`, `test_gp.py`, `test_problem.py`,
-  `test_transformers.py`) compare against numpy/scipy references. Add one when
+  `test_sampling.py`, `test_transformers.py`) compare against numpy/scipy references. Add one when
   changing math.
 - A known bug gets a `pytest.mark.xfail(strict=True)` test and a ROADMAP
   Known issues entry. The PR that fixes it removes the marker.

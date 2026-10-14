@@ -290,7 +290,6 @@ def get_evaluation_data(
     f, x = problem.evaluate_with_simulation(
         u,
         config.n_starts_max_evaluate_problem,
-        config.use_jacobian_evaluate_problem,
         config.rng,
         original,
     )
@@ -353,7 +352,6 @@ def get_f_samples(
             output_gp_samples[:, [i_sample]],
             config.indices_x_output_gp,
             config.n_starts_max_evaluate_problem,
-            config.use_jacobian_evaluate_problem,
             config.rng,
             original,
         )

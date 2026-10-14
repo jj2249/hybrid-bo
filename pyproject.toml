@@ -98,5 +98,5 @@ python-version = "3.12"
 extra-paths = ["examples"]
 
 [tool.ty.src]
-# Type-check the application source.
-exclude = [".pixi"]
+# Type-check the application source. flash_unit targets the `pre-refactor` tag.
+exclude = [".pixi", "examples/flash_unit"]
