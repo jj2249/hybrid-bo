@@ -62,6 +62,8 @@ def as_legacy_results(run: Run) -> dict[str, np.ndarray]:
 
 
 def run_new_api(routine, config, problem):
+    """Runs a baseline on the new API, as the legacy routine would, and returns its
+    results under the `ResultsBO` keys."""
     # As in examples/main.py: one generator per run, initial points drawn from it
     rng = np.random.default_rng(config.seed).spawn(1)[0]
     u = initial_points(problem.system.u, 2, rng)
@@ -75,10 +77,11 @@ def run_new_api(routine, config, problem):
 
 
 def run_legacy(routine, config, results_dir):
+    """Runs a legacy routine and returns the first run's `ResultsBO` fields."""
     run_routine(routine, config, results_dir)
 
     # Routines catch and print exceptions, so a crash shows up as missing results
-    # or as NaN rows (result arrays are NaN-initialised and saved regardless)
+    # or as NaN rows (result arrays are NaN-initialized and saved regardless)
     results_path = results_dir / "results_bo.pkl"
     assert results_path.exists(), "routine did not save results (check stderr)"
     with results_path.open("rb") as f:

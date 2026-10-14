@@ -22,6 +22,7 @@ METHODS = [latin_hypercube_sampling, uniform_sampling]
 
 
 def illustrative_run(problem, method, rng=None) -> Run:
+    """A run of `method` on the illustrative example: 2 initial points, then 3."""
     rng = np.random.default_rng(0) if rng is None else rng
     experiment = oracle_experiment(problem.system, oracle=lambda v: [cas.sin(v.u)])
     u = initial_points(problem.system.u, 2, rng)
