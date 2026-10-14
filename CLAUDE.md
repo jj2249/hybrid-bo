@@ -65,7 +65,9 @@ remove the marker in the PR that fixes the bug.
 ## Workflow
 
 - `refactor/initial` is the working branch. `main` stays frozen until the roadmap
-  is complete. Never commit to or open PRs against `main`.
+  is complete. Never commit to or open PRs against `main`. Until then
+  `refactor/initial` is also the GitHub default branch, because closing keywords
+  (`Closes #<n>`) only close issues on merges into the default branch.
 - One PR per issue into `refactor/initial`. Branch from it using the name
   `<stage>-<topic>` (e.g. `s1-hooks`).
 - Start a ticket with `/mattpocock-skills:implement #<n>`. Otherwise, agree scope
