@@ -1,49 +1,64 @@
 ---
 name: hybrid-bo-src
-description: Use when working on src/hybrid_bo. Covers what the library computes (hybrid BO and baselines), the module map, data and shape conventions, behaviour that surprises people, and the testing rules.
+description: Use when working on src/hybrid_bo. Covers what the library computes (hybrid BO, standard BO and the baselines), the module map, data and shape conventions, behavior that surprises people, and the testing rules.
 ---
 
 # Working on src/hybrid_bo
 
 The refactor goal and workflow are in CLAUDE.md, and open bugs are in ROADMAP.md
-under Known issues. This skill covers what the code computes and the contracts
-between its parts.
+under Known issues. This skill covers what the **current** code computes and the
+contracts between its parts. The target API is in DESIGN.md (stage 4, PRs 0 to 10);
+each restructure PR updates this skill as it replaces code.
 
-## The method ([arXiv 2603.11199](https://arxiv.org/abs/2603.11199))
+Use the terms in CONTEXT.md when writing about the code (PRs, tests, comments). The
+current code predates them; this is the mapping:
 
-A system with decision variables `u` (n_u) and states `x` (n_x):
+| Current code | CONTEXT.md term |
+|---|---|
+| `x[indices_x_output_gp]` | unknown states `y` |
+| the other entries of `x` | mechanistic states `x` |
+| `h_known` | known equations `g` |
+| `h_unknown` | the oracle (in residual form `h_unknown(u, x) = 0`) |
+| `indices_u_input_gp`, `indices_x_input_gp` | the arguments of the unknown equations |
+| GP samples, `gaussian_standard_samples`, `n_samples_gp` | scenarios, scenario draws `z`, number of scenarios |
+| `*_no_noise`, "true" values | oracle values |
+| `evaluate_with_fixed_x` | root-finding problem |
+| routine | method |
+
+## What the code computes ([arXiv 2603.11199](https://arxiv.org/abs/2603.11199))
 
     min_u f(u, x)   s.t.   h_known(u, x) = 0,   h_unknown(u, x) = 0
 
-- **Simulation ("the experiment")**: `Problem` solves `h_known` and `h_unknown`
-  together for `x` given `u`, using multistart `fsolve`. In this role
-  `h_unknown` is the true system. Optional noise is added to the measured states
-  (`Config.indices_x_measured`), and the other states are re-solved from
-  `h_known`.
+- **Evaluation** (`Problem.evaluate_with_noisy_simulation`): the oracle simulation
+  solves `h_known` and `h_unknown` together for `x` given `u`, using multistart
+  `fsolve`. If the noise is nonzero, noise is added to the measured states
+  (`Config.indices_x_measured`), and the root-finding problem solves `h_known` for
+  the other states. With zero noise the root-finding problem is skipped (DESIGN.md
+  PR 2 changes this).
 - **Hybrid BO** (`routines/hybrid_bo.py`): `h_unknown` is never used in the
   acquisition problem. A GP maps `[u[indices_u_input_gp], x[indices_x_input_gp]]`
   to `x[indices_x_output_gp]` and is trained on the evaluated points. The
   acquisition problem is a sample-average approximation:
-  - `n_samples_gp` GP samples `mean + std * z_i`. The standard normals `z_i` are
+  - `n_samples_gp` scenarios `mean + std * z_i`. The scenario draws `z_i` are
     drawn once per run and reused in every iteration.
-  - Each sample has its own copy of the non-u states, and `h_known(u, x_i) = 0`
-    holds for every sample.
-  - With `use_output_gp_as_opt_var` the GP outputs are decision variables with
-    the constraint `x_out_i = GP sample i`. Otherwise the sample is substituted
-    directly.
-  - Objective: EI is `mean_i(min(f_i - incumbent, 0))`. LCB is
-    `mean(f_i) - factor_lcb_std * std(f_i)`.
-  - Solved with a multistart optimiser. The next point is the `u` part of the
+  - Each scenario has its own copy of the states that are not decision variables,
+    and `h_known(u, x_i) = 0` holds for every scenario.
+  - With `use_output_gp_as_opt_var` the unknown states are variables of the
+    acquisition problem with the constraint `x_out_i = scenario i`. Otherwise the
+    GP prediction is substituted directly.
+  - Acquisition function: SAA-EI is `mean_i(min(f_i - incumbent, 0))`. SAA-LCB is
+    `mean(f_i) - factor_lcb_std * std(f_i)` (`ddof=0`).
+  - Solved with a multistart optimizer. The trial point is the `u` part of the
     solution.
-- **Standard BO** (`routines/standard_bo.py`): a GP directly on `f(u)`, with
-  analytic EI or LCB over `u` only. It's the baseline.
-- **Latin hypercube / uniform sampling**: non-adaptive baselines. They draw the
+- **Standard BO** (`routines/standard_bo.py`): a GP directly on `u -> f`, with
+  analytic EI or LCB over `u` only.
+- **Latin hypercube / uniform sampling**: the non-adaptive baselines. They draw the
   whole design at the start of a run and train no GP.
 
 ## Module map
 
-This describes the current code. The restructure (DESIGN.md, PRs R0 to R9)
-replaces it piece by piece, and each restructure PR updates this section.
+This describes the current code. PRs 3 to 9 in DESIGN.md move it to
+`hybrid_bo/legacy/`, build the new modules beside it and then delete it.
 
 - `routines/`: the four entry points, with the signature
   `(problem, config, [gp], u_initial, rngs, [optimizer], results_dir, create_plots)`.
@@ -54,8 +69,8 @@ replaces it piece by piece, and each restructure PR updates this section.
 - `gp.py`, `kernels.py`, `means.py`: an exact GP (Cholesky), kernels and means.
 - `parameterization.py`: `Parameter` (symbol, value, bounds, transform) and
   `Parameterized`, the base of GP, Kernel and Mean.
-- `optimizers.py`: CasADi/IPOPT, SciPy and multistart optimisers, which return
-  `OptimizationResult`.
+- `optimizers.py`: CasADi/IPOPT, SciPy and multistart optimizers, which return
+  `OptimizationResult`. The SciPy optimizer is unused and will be removed.
 - `affine_transformers.py`: input and output scaling for the GP (`MinMax` for
   inputs, `Standard` for outputs).
 - `array_operations/`: a dispatch layer, so the same code runs on numpy arrays
@@ -67,7 +82,7 @@ replaces it piece by piece, and each restructure PR updates this section.
 ## Conventions and contracts
 
 - **Shapes are mixed.** Single points passed to `Problem` methods and the
-  optimisers are column vectors `(n, 1)`. Data sets are row-major
+  optimizers are column vectors `(n, 1)`. Data sets are row-major
   `(n_points, n)`. Expect `.T` calls.
 - **Bounds.** `Problem` has 8 `(n, 1)` arrays: {u, x} x {acquisition, starting
   points} x {lower, upper}.
@@ -80,7 +95,7 @@ replaces it piece by piece, and each restructure PR updates this section.
   override the plain method (e.g. to add a fallback). Routines call the plain
   one; `original=True` is for plots.
 - **Parameters.** `Parameter.value` is the raw value with shape (rows, cols).
-  `transform_mode` ("identity"/"log") only applies in the optimiser during
+  `transform_mode` ("identity"/"log") only applies in the optimizer during
   training.
 - **Kernels.** `kernel.k(X1, X2)` uses current values and returns numpy for
   numpy inputs. `k_variable` is the symbolic version used to build the training
@@ -94,35 +109,46 @@ replaces it piece by piece, and each restructure PR updates this section.
   (e.g. `RBFKernel`) are used at runtime. Keep them as plain assignments, never
   `type X = ...`.
 
-## Behaviour to know
+## Behavior to know
 
 - **Randomness is per run.** The caller passes one generator per run
-  (`config.rng.spawn(n_runs_bo)`). A run uses only its own generator, in a fixed
-  order: initial points (caller), noise, `z` or the sampling design, then the loop
-  (DESIGN.md has the exact calls). The baselines depend on this order, so changing
-  it, or adding a draw, is a logic change. `config.rng` itself is only for spawning
-  and for plots.
+  (`config.rng.spawn(n_runs_bo)`). A run uses only its own generator, in this
+  order (set in R0):
+  1. initial points (caller): `qmc.LatinHypercube(n_u, rng=rng).random(n_initial)`,
+     scaled to the `u` starting-point bounds;
+  2. noise for all `n_initial + n_iterations` points:
+     `rng.normal(0.0, std, size=(n_points, len(indices_x_measured)))`, drawn even
+     when `std` is 0;
+  3. hybrid BO: `z = rng.standard_normal((n_samples_gp, 1))`; LHS/uniform: the
+     whole design; standard BO: nothing;
+  4. each evaluation: `fsolve` starting guesses, plus root-finding guesses when
+     the noise is nonzero; each iteration: GP-fit starts, then acquisition starts.
 
+  The regression baselines depend on this order, so changing it, or adding a draw,
+  is a logic change. DESIGN.md's "Order of random draws" is the *new* order that
+  PR 2 introduces. `config.rng` itself is only for spawning and for plots.
 - Routines catch and print exceptions per run, so a failed run doesn't raise.
-  Result arrays are NaN-initialised, so a crash shows up as NaN rows.
+  Result arrays are NaN-initialized, so a crash shows up as NaN rows.
 - Failed multistart starts print tracebacks too. That's noise, not failure.
 - Files in `results_dir` are never overwritten (it warns and skips).
 - `results_bo.pkl` is a `list[ResultsBO]`, one per run.
   - `*_initial` fields hold the initial points and `*_bo` fields the BO
     iterations.
-  - `x`/`f` are the measured values and `*_no_noise` the true values.
-  - `incumbents*` is the running minimum of `f`.
+  - `x`/`f` are the measured values and `*_no_noise` the oracle values.
+  - `incumbents` is the running minimum of measured `f`. `incumbents_no_noise`
+    is the running minimum of the oracle `f`, which is not the oracle value at the
+    measured incumbent (see the benchmark metric in DESIGN.md).
 - `results_gp.pkl` and the other pickles need `save_extended_results`.
 
 ## Testing rules
 
 - `pixi run -e dev test` runs in about 2s. Run it for every change.
-- `tests/test_regression.py` locks in the current behaviour of every routine
+- `tests/test_regression.py` locks in the current behavior of every routine
   on the illustrative example. A non-logic PR must not touch
   `tests/data/regression/`. A logic PR regenerates them with
   `--update-baselines` and explains the diff.
 - Unit tests (`test_kernels.py`, `test_gp.py`, `test_problem.py`,
   `test_transformers.py`) compare against numpy/scipy references. Add one when
-  changing maths.
+  changing math.
 - A known bug gets a `pytest.mark.xfail(strict=True)` test and a ROADMAP
   Known issues entry. The PR that fixes it removes the marker.
