@@ -211,7 +211,6 @@ def get_evaluation_data(
     f, x = problem.evaluate_with_simulation(
         u,
         config.n_starts_max_evaluate_problem,
-        config.use_jacobian_evaluate_problem,
         config.rng,
         original,
     )

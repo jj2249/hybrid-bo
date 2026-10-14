@@ -459,8 +459,12 @@ regression test and the illustrative example and must reproduce the baselines fr
 draw-order PR exactly.
 
 0. **Design** (docs): CONTEXT.md, ADRs, this file, ROADMAP.md, CLAUDE.md conventions.
-1. **R1 trimmed** (#17): exclude flash_unit; `lhs`/`uniform` on arrays; delete
-   `Problem.solve`; remove `use_jacobian`; tidy `examples/main.py`.
+1. **R1 trimmed** (#17). *Done.* flash_unit excluded from ty (it targets the
+   `pre-refactor` tag); `lhs(lower, upper, n, rng)`/`uniform(...)` in `sampling.py`
+   (PR 4 changes them to take `Var`s); `Problem.solve` and `use_jacobian` deleted;
+   `examples/main.py` dispatches with `match`. Two hand-written LHS copies remain until
+   their PRs: the fixed-x root-finding guesses (PR 5) and
+   `MultiStartOptimizer.create_lhs_samples` (PR 6).
 2. **Draw order** (*logic*): the old routines draw in the order above and always
    reconstruct after the experiment; regenerate the baselines and check the plots.
 3. **Legacy**: move the old code to `hybrid_bo/legacy/`.

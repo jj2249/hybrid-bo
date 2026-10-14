@@ -1,7 +1,6 @@
 import numpy as np
-from scipy.stats import qmc
 
-from hybrid_bo import GP, Problem
+from hybrid_bo import GP, Problem, lhs
 from hybrid_bo.kernels import (
     Matern52Kernel,
     OutputScaleKernel,
@@ -17,12 +16,12 @@ from hybrid_bo.optimizers import (
 def get_u_initial(problem: Problem, rng: np.random.Generator) -> np.ndarray:
     """Initial points for one run, drawn from that run's generator."""
     n_initial_points = 2
-    sampler = qmc.LatinHypercube(problem.n_u, rng=rng)
-
-    return problem.u_lower_bounds_starting_points.T + (
-        problem.u_upper_bounds_starting_points.T
-        - problem.u_lower_bounds_starting_points.T
-    ) * sampler.random(n_initial_points)
+    return lhs(
+        problem.u_lower_bounds_starting_points.ravel(),
+        problem.u_upper_bounds_starting_points.ravel(),
+        n_initial_points,
+        rng,
+    )
 
 
 def get_gp_hybrid_bo(n_inputs: int) -> GP:

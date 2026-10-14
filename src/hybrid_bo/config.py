@@ -35,9 +35,6 @@ class Config:
     # Standard deviation of the measurement noise
     std_measurement_noise: float = 0.0
 
-    # Configure if scipy.optimize.fsolve() uses a Jacobian as a parameter when evaluating the problem
-    use_jacobian_evaluate_problem: bool = True
-
     # Maximum number of executing scipy.optimize.fsolve() when evaluating the problem
     n_starts_max_evaluate_problem: int = 100
 

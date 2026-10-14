@@ -51,8 +51,8 @@ design was revised after R0 (CONTEXT.md, docs/adr/); the PRs below replace the
 earlier R1-R9.
 - [x] R0 *logic*: per-run randomness; LHS/uniform stop training GPs; noise has one
       column per measured state; regenerate the baselines
-- [ ] 0: design review: CONTEXT.md, ADRs 0001-0003, DESIGN.md rewritten, this list
-- [ ] 1: R1 trimmed (#17): exclude flash_unit; `lhs`/`uniform` on arrays; delete
+- [x] 0: design review: CONTEXT.md, ADRs 0001-0003, DESIGN.md rewritten, this list
+- [x] 1: R1 trimmed (#17): exclude flash_unit; `lhs`/`uniform` on arrays; delete
       `Problem.solve`; remove `use_jacobian`; tidy `examples/main.py`
 - [ ] 2 *logic*: draw order from DESIGN.md; always reconstruct after the experiment;
       regenerate the baselines
@@ -97,25 +97,25 @@ it (DESIGN.md: Known issues are not rebuilt), and that PR removes the entry.
   an xfail test. `LinearKernel` isn't used by the examples. *Goes away in PR 7*:
   kernels are functions traced once, so the bug can't exist. PR 7 removes the xfail
   marker.
-- `routines/hybrid_bo.py:769`: when `use_output_gp_as_opt_var=False`, the upper
+- `setup_acq_problem` in `routines/hybrid_bo.py`: when `use_output_gp_as_opt_var=False`, the upper
   starting-point bounds use `problem.u_upper_bounds_acquisition`; this should
   probably be `u_upper_bounds_starting_points`. The two coincide in the
   illustrative example, which hides it. *Goes away in PR 8* (start bounds live on
   each `Var`).
 - `formulation_acq` is validated strictly in `hybrid_bo.py` but with
-  `startswith("lcb")` in `standard_bo.py:443`. *Goes away in PR 8 (`EI`/`LCB`).*
+  `startswith("lcb")` in `setup_acq_problem` (`standard_bo.py`). *Goes away in PR 8 (`EI`/`LCB`).*
 - `Config.epsilon_ei_standard` is unused; `ei_gp` uses its own default. *Goes away
   in PR 9.*
-- `hybrid_bo.py:491` requires
+- `setup_acq_problem` in `routines/hybrid_bo.py` requires
   `len(indices_u_input_gp) + len(indices_x_input_gp) == problem.n_u`. This looks
   like an artifact of `main.py` building the GP with `problem.n_u` inputs; the
   real requirement is that the GP's `n_inputs` equals the number of GP inputs.
   *Goes away in PR 8* (inputs come from `h_inputs`).
-- `problem.py:514`: the Latin hypercube for the free states' starting points
+- `Problem.single_evaluate_with_fixed_x_original`: the Latin hypercube for the free states' starting points
   uses `x_fixed.size` dimensions instead of `len(indices_x_free)`. The two are
   equal in the illustrative example. *Goes away in PR 5* (root-finding starts are
   drawn over the unmeasured variables).
 - `Config.indices_x_opt` is computed but never used. *Goes away in PR 9.*
-- `MultiStartOptimizer.create_lhs_samples` (`optimizers.py:161`) builds `msg`
+- `MultiStartOptimizer.create_lhs_samples` builds `msg`
   when `upper_bounds_starting_points is None` but never raises it. *Goes away in
   PR 6.*

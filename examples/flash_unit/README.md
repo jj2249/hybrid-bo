@@ -1,5 +1,9 @@
 # Flash unit
 
+> **Not updated for the refactor.** This example targets the library as it was at the
+> `pre-refactor` tag (`git checkout pre-refactor`). It is excluded from type checking
+> and tests, and will be ported once the restructure is done (ROADMAP stage 5).
+
 * For higher resolution plots, set the parameter `n_eval_points` in `config.yaml` to larger values.
   Yet, this increases the execution time
 * When creating data for method comparison,
