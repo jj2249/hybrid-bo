@@ -149,7 +149,7 @@ def test_fit_maximizes_the_likelihood():
 
     fitted = fit_gp(gp, X, Y, np.random.default_rng(1))
 
-    # Every grid point, on the same scaled training data
+    # The likelihood at every grid point, on the same scaled training data
     grid = [
         log_likelihood(
             gp,
@@ -176,10 +176,11 @@ def test_fit_draws_one_lhs_and_nothing_from_the_stream(data):
 
     fit_gp(default_gp(X.shape[1]), X, Y, rng)
 
-    untouched = np.random.default_rng(1)
-    assert rng.bit_generator.state == untouched.bit_generator.state
-    untouched.spawn(1)
-    assert rng.spawn(1)[0].random() == untouched.spawn(1)[0].random()
+    # The stream is where a fresh generator's is, and the next child is the second
+    reference = np.random.default_rng(1)
+    assert rng.bit_generator.state == reference.bit_generator.state
+    reference.spawn(1)
+    assert rng.spawn(1)[0].random() == reference.spawn(1)[0].random()
 
 
 def test_failed_fit_keeps_initial_values(caplog):

@@ -352,8 +352,8 @@ gp = hb.GP(
   negative log marginal likelihood, draws starts with `lhs` over the (log-transformed)
   hyperparameter bounds and calls `multistart`. If every start fails it keeps the
   initial values and logs a warning. With the same data and generator its
-  hyperparameters match the legacy GP bit for bit, and its predictions to rounding
-  (`tests/test_gp.py`).
+  hyperparameters matched the legacy GP bit for bit, and its predictions to rounding
+  (checked until #30; the regression baselines still pin the fit).
 - `predict` traces the posterior once as a `cas.Function` of X; a numpy X gives arrays
   `(n,)`, a symbolic X (SX or MX) gives `(n, 1)` columns. The std is the square root of
   the posterior variance, so callers need no covariance.
@@ -598,9 +598,9 @@ behavior, so they are "new code" PRs, not *logic*.
    noise per evaluation (`noise_std` instead of a pre-drawn array), root-finding
    always runs, `measurement_noise.pkl` dropped (it is `x - x_no_noise` on the
    measured states). Baselines regenerated.
-3. **Legacy**. *Done.* The old code is in `hybrid_bo/legacy/`, imported as
-   `hybrid_bo.legacy`; the top-level `hybrid_bo` exports only the new API. Legacy may
-   import new code, never the reverse. Result pickles saved before this PR
+3. **Legacy**. *Done.* The old code moved to `hybrid_bo/legacy/` (deleted in #30),
+   imported as `hybrid_bo.legacy`; the top-level `hybrid_bo` exported only the new
+   API. Legacy could import new code, never the reverse. Result pickles saved before this PR
    (`hybrid_bo.results.ResultsBO`) need the old path to unpickle.
 4. **Problem** (#23): `Var`, `System`, `Problem`, `initial_points`. *Done.*
 
@@ -616,7 +616,7 @@ The tickets, in a workable order:
   `Run` to the `ResultsBO` keys the baselines were recorded with.
 - **#27 Solvers and GP**: `NLP`, `Ipopt`, `multistart`; `Hyper`, kernel functions, `GP`,
   `fit_gp`, `predict`, scalers, `default_gp`; port the kernel, GP and scaler tests.
-  *Done*; `tests/test_gp.py` checks the fit against the legacy GP.
+  *Done*; `tests/test_gp.py` checked the fit against the legacy GP until #30.
 - **#28 Standard BO**: `optimization_loop`, `EI`/`LCB`, `standard_bo`; its regression
   test on the new API. *Done*; it reproduces the legacy baseline.
 - **#29 Hybrid BO**: `Scenarios`, the hybrid acquisition problem, `hybrid_bo`; its

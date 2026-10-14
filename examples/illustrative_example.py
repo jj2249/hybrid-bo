@@ -57,6 +57,7 @@ n_iterations = 5
 
 
 if __name__ == "__main__":
+    # A new results folder per invocation, so earlier runs are never overwritten
     results_dir = (
         Path(__file__).parent
         / "results"

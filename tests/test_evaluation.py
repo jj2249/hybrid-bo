@@ -59,6 +59,7 @@ def closed_form(u: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
 def test_noise_free_evaluation_matches_the_closed_form(illustrative_problem):
     """Without noise, the oracle values and the reconstruction both solve the
     illustrative example exactly."""
+    # Trial points across the bounds of u
     u = np.array([-2.0, -0.5, 0.0, 1.0, 2.0])
     experiment = illustrative_experiment(illustrative_problem, noise_std=0.0)
 
@@ -66,6 +67,7 @@ def test_noise_free_evaluation_matches_the_closed_form(illustrative_problem):
         illustrative_problem, experiment, u[:, np.newaxis], np.random.default_rng(0)
     )
 
+    # Measured, reconstructed and oracle values all match the closed form
     x, y, f = closed_form(u)
     assert history.x_oracle is not None and history.y_oracle is not None
     assert history.f_oracle is not None

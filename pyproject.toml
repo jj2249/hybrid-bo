@@ -93,12 +93,12 @@ quote-style = "double"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Examples are imported as top-level packages, as in examples/main.py
+# Examples are imported as top-level modules, as in examples/main.py
 pythonpath = ["examples"]
 
 [tool.ty.environment]
 python-version = "3.12"
-# Mirrors pytest `pythonpath`: examples are imported as top-level packages
+# Mirrors pytest `pythonpath`: examples are imported as top-level modules
 extra-paths = ["examples"]
 
 [tool.ty.src]

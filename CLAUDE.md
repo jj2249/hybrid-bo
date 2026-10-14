@@ -30,7 +30,7 @@ Environments are managed with pixi. `dev` includes everything.
 ```bash
 pixi install -e dev
 pixi run -e dev check        # lint (with --fix) + format + typecheck
-pixi run -e dev test         # pytest (~2s)
+pixi run -e dev test         # pytest (~6s)
 pixi run -e dev test --update-baselines   # regenerate regression results
 pixi run -e dev coverage     # tests + per-file line coverage of src/hybrid_bo
 pixi run -e dev lint | format | typecheck
