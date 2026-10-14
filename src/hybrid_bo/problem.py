@@ -79,7 +79,12 @@ class Var:
 
 
 class _Variables:
-    """Read-only access to one symbol per variable by name: `v.T`, `v.x1`."""
+    """The `v` passed to the user's `g` and `f`: one CasADi symbol per variable.
+
+    `v.T` returns the symbol for the variable named "T". An unknown name raises an
+    `AttributeError` that lists the available names, and assigning to `v` is blocked.
+    The symbols live in `_symbols`, which is why `Var` names can't start with `_`.
+    """
 
     def __init__(self, symbols: dict[str, Any]) -> None:
         object.__setattr__(self, "_symbols", symbols)
@@ -104,7 +109,18 @@ def _trace(
     y: Sequence[Var],
     u: Sequence[Var],
 ) -> cas.Function:
-    """Calls `expression` with fresh symbols and returns it as `name(x, y, u)`."""
+    """Turns a user callable (`g` or `f`) into a `cas.Function` named `name`.
+
+    1. Creates one symbol per variable in x, y and u.
+    2. Calls `expression(v)` once with those symbols.
+    3. Stacks the result (one expression, or a list of them) into a column.
+    4. Returns `name(x, y, u) -> column`, with x, y, u as column vectors in
+       declaration order (the paper's argument order).
+
+    Raises `TypeError` if the callable returns anything that isn't CasADi
+    expressions, e.g. `None` or a nested list. Checking the output's size is left
+    to the caller, which knows what size it expects.
+    """
     symbols = {var.name: Symbolic.sym(var.name) for var in (*x, *y, *u)}
     result = expression(_Variables(symbols))
     parts = result if isinstance(result, list | tuple) else [result]
@@ -121,6 +137,10 @@ def _trace(
 
 
 def _check_unique(names: Sequence[str], label: str) -> None:
+    """Raises `ValueError` naming every name that appears more than once.
+
+    `label` says which collection was checked, for the message.
+    """
     repeated = sorted({name for name in names if names.count(name) > 1})
     if repeated:
         msg = f"{label} must not repeat a variable; repeated: {', '.join(repeated)}"
@@ -130,6 +150,12 @@ def _check_unique(names: Sequence[str], label: str) -> None:
 def _check_drawn_from(
     chosen: Sequence[Var], allowed: Sequence[Var], label: str, where: str
 ) -> None:
+    """Checks that `chosen` (e.g. `h_inputs`) only uses variables from `allowed`.
+
+    Raises `ValueError` if a variable isn't in `allowed` or appears twice. `label`
+    names the argument and `where` describes `allowed` (e.g. "u or x"), for the
+    message.
+    """
     for var in chosen:
         if var not in allowed:
             msg = f"{label} contains {var.name!r}, which is not one of {where}"
