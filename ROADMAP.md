@@ -67,7 +67,8 @@ its own regression baseline on the new API. Scope is in the issues and DESIGN.md
 - [x] #25: evaluation (the ruff `TRY002`/`BLE001` ignores now cover only `legacy/`
       and `examples/`, until #30)
 - [x] #26: Latin hypercube and uniform baselines
-- [ ] #27: solvers and GP
+- [x] #27: solvers and GP (removes the `minmax` intercept, `LinearKernel` ARD and
+      `create_lhs_samples` Known issues)
 - [ ] #28: standard BO. Blocked by #26, #27
 - [ ] #29: hybrid BO. Blocked by #28
 - [ ] #30: switch the illustrative example and delete the old code. Blocked by #26,
@@ -96,16 +97,6 @@ its own regression baseline on the new API. Scope is in the issues and DESIGN.md
 ## Known issues (fix only once a test covers them)
 Each entry says where it gets fixed. "Goes away" means the new code does not reproduce
 it (DESIGN.md: Known issues are not rebuilt), and that PR removes the entry.
-- `MinMaxTransformer.fit` (`legacy/affine_transformers.py:135`): the intercept is
-  `-min/(max-min) + min_t`, but it should be `min_t - min*slope`. It's only correct
-  for target ranges of width 1; the routines use the default [0, 1]. Covered by an
-  xfail test. The fix leaves the regression baselines unchanged. *Goes away in #27
-  (`minmax`), which removes the xfail marker.*
-- `LinearKernel.k_variable` with ARD (`legacy/kernels.py:279-290`) uses `scale.value`
-  instead of `scale.variable()`, so the ARD scale is never trained. Covered by
-  an xfail test. `LinearKernel` isn't used by the examples. *Goes away in #27*:
-  kernels are functions traced once, so the bug can't exist. #27 removes the xfail
-  marker.
 - `setup_acq_problem` in `legacy/routines/hybrid_bo.py`: when `use_output_gp_as_opt_var=False`, the upper
   starting-point bounds use `problem.u_upper_bounds_acquisition`; this should
   probably be `u_upper_bounds_starting_points`. The two coincide in the
@@ -121,6 +112,3 @@ it (DESIGN.md: Known issues are not rebuilt), and that PR removes the entry.
   real requirement is that the GP's `n_inputs` equals the number of GP inputs.
   *Goes away in #29* (inputs come from `h_inputs`).
 - `Config.indices_x_opt` is computed but never used. *Goes away in #30.*
-- `MultiStartOptimizer.create_lhs_samples` (`legacy/optimizers.py`) builds `msg`
-  when `upper_bounds_starting_points is None` but never raises it. *Goes away in
-  #27.*

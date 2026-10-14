@@ -48,7 +48,7 @@ not found" after a Python upgrade, re-run `pixi run -e quality setup`.
 (seed 0, 2 iterations) and compares the results with `tests/data/regression/*.json`.
 Only update the baselines in a PR that is meant to change behavior, and explain
 the JSON diff in that PR.
-The other test files check kernels, the GP, `Problem` and the transformers
+The other test files check kernels, the GP, `Problem` and the scalers
 against numpy/scipy references. Known bugs are `xfail(strict=True)` tests:
 remove the marker in the PR that fixes the bug.
 

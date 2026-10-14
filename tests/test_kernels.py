@@ -5,18 +5,9 @@ import numpy as np
 import pytest
 from scipy.spatial.distance import cdist
 
-from hybrid_bo.legacy.kernels import (
-    ConstantKernel,
-    LinearKernel,
-    Matern12Kernel,
-    Matern32Kernel,
-    Matern52Kernel,
-    MaternInfKernel,
-    OutputScaleKernel,
-)
-from hybrid_bo.legacy.parameterization import Parameter
+from hybrid_bo import kernels
 
-TOL = {"rtol": 1e-8, "atol": 1e-10}
+RTOL, ATOL = 1e-8, 1e-10
 
 rng = np.random.default_rng(0)
 X1 = rng.normal(size=(5, 2))
@@ -24,38 +15,43 @@ X2 = rng.normal(size=(4, 2))
 LENGTHSCALE = np.array([[0.7], [1.3]])
 
 
-def scaled_distance(X1, X2):
-    return cdist(X1 / LENGTHSCALE.T, X2 / LENGTHSCALE.T)
+def evaluate(kernel, *args):
+    """The kernel at the numeric points X1, X2 with numeric arguments, as numpy."""
+    return cas.evalf(kernel(cas.DM(X1), cas.DM(X2), *args)).full()
+
+
+def scaled_distance(lengthscale):
+    return cdist(X1 / lengthscale.T, X2 / lengthscale.T)
 
 
 @pytest.mark.parametrize(
-    ("kernel_cls", "reference"),
+    ("kernel", "reference"),
     [
-        (Matern12Kernel, lambda r: np.exp(-r)),
-        (Matern32Kernel, lambda r: (1 + np.sqrt(3) * r) * np.exp(-np.sqrt(3) * r)),
+        (kernels.matern12, lambda r: np.exp(-r)),
+        (kernels.matern32, lambda r: (1 + np.sqrt(3) * r) * np.exp(-np.sqrt(3) * r)),
         (
-            Matern52Kernel,
+            kernels.matern52,
             lambda r: (1 + np.sqrt(5) * r + 5 / 3 * r**2) * np.exp(-np.sqrt(5) * r),
         ),
-        (MaternInfKernel, lambda r: np.exp(-0.5 * r**2)),
+        (kernels.squared_exponential, lambda r: np.exp(-0.5 * r**2)),
     ],
 )
-def test_matern(kernel_cls, reference):
-    kernel = kernel_cls(2, lengthscale=Parameter(n_rows=2, value=LENGTHSCALE))
+@pytest.mark.parametrize(
+    "lengthscale", [LENGTHSCALE, np.array([[0.8]])], ids=["ARD", "shared"]
+)
+def test_stationary(kernel, reference, lengthscale):
     np.testing.assert_allclose(
-        kernel.k(X1, X2), reference(scaled_distance(X1, X2)), **TOL
+        evaluate(kernel, cas.DM(lengthscale)),
+        reference(scaled_distance(lengthscale)),
+        rtol=RTOL,
+        atol=ATOL,
     )
 
 
-def test_outputscale_multiplies_base_kernel():
-    base = Matern52Kernel(2, lengthscale=Parameter(n_rows=2, value=LENGTHSCALE))
-    kernel = OutputScaleKernel(base, outputscale=Parameter(value=2.5))
-    np.testing.assert_allclose(kernel.k(X1, X2), 2.5 * base.k(X1, X2), **TOL)
-
-
 def test_constant():
-    kernel = ConstantKernel(2, constant=Parameter(value=0.3))
-    np.testing.assert_allclose(kernel.k(X1, X2), np.full((5, 4), 0.3), **TOL)
+    np.testing.assert_allclose(
+        evaluate(kernels.constant), np.ones((5, 4)), rtol=RTOL, atol=ATOL
+    )
 
 
 @pytest.mark.parametrize(
@@ -67,14 +63,12 @@ def test_constant():
     ids=["shared", "ARD"],
 )
 def test_linear(scale, expected):
-    kernel = LinearKernel(2, scale=Parameter(n_rows=scale.shape[0], value=scale))
-    np.testing.assert_allclose(kernel.k(X1, X2), expected, **TOL)
+    np.testing.assert_allclose(
+        evaluate(kernels.linear, cas.DM(scale)), expected, rtol=RTOL, atol=ATOL
+    )
 
 
-@pytest.mark.xfail(
-    strict=True, reason="ARD k_variable uses scale.value, not the symbol"
-)
 def test_linear_ard_scale_is_trainable():
-    kernel = LinearKernel(2, ARD=True)
+    scale = cas.SX.sym("scale", 2)
     X = cas.SX.sym("X", 3, 2)
-    assert cas.depends_on(kernel.k_variable(X, X), kernel.scale.symbol)
+    assert cas.depends_on(kernels.linear(X, X, scale), scale)

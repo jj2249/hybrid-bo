@@ -251,13 +251,13 @@ experiment adds a description by writing a docstring.
 
 A column is found by name with `system.column("x1")`.
 
-### Solvers
+### Solvers (#27, done; `solvers.py`)
 
 ```python
 @dataclass(frozen=True)
 class NLP:
     f: cas.Function  # w -> scalar
-    lower: np.ndarray
+    lower: np.ndarray  # (n,), may be infinite
     upper: np.ndarray
     g: cas.Function | None = None  # g(w) = 0
 
@@ -268,14 +268,22 @@ class Ipopt:
     solver_options: dict = field(default_factory=lambda: {"print_level": 0})
 
 
+@dataclass(frozen=True)
+class Solution:
+    w: np.ndarray  # (n,)
+    f: float
+
+
 def multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
     """Best of the starts; raises NoSolutionError if every start fails."""
 ```
 
 There is no `Solver` protocol until a second solver exists. The caller draws the starts
-with `lhs(...)`.
+with `lhs(...)`. `multistart` builds the problem with `cas.Opti`, bounds as
+constraints, as the legacy optimizer did, so IPOPT takes the same steps. A failed start
+is logged at debug level without a traceback.
 
-### GP
+### GP (#27, done; `gp.py`, `kernels.py`)
 
 ```python
 @dataclass(frozen=True)
@@ -289,13 +297,13 @@ class Hyper:
 
 @dataclass(frozen=True)
 class GP:
-    hyperparameters: list[Hyper]  # declaration order is the optimization order
+    hyperparameters: tuple[Hyper, ...]  # declaration order is the optimization order
     kernel: Callable  # (h, X1, X2) -> (n1, n2)
-    mean: Callable = zero_mean  # (h, X) -> (n,)
+    mean: Callable = zero_mean  # (h, X) -> (n, 1)
     jitter: float = 1e-10
 
 
-def default_gp(n_inputs: int) -> GP: ...  # scaled Matern-5/2 with ARD and noise
+def default_gp(n_inputs: int) -> GP: ...  # noise-free outputscale * Matern-5/2, ARD
 
 
 @dataclass(frozen=True)
@@ -306,7 +314,7 @@ class Scaler:  # scaled = slope * value + intercept, per column
 
 @dataclass(frozen=True)
 class FittedGP:  # data only (ADR 0003)
-    hyperparameters: dict[str, np.ndarray]
+    hyperparameters: dict[str, np.ndarray]  # each (size,)
     X: np.ndarray  # training inputs, scaled
     Y: np.ndarray  # training outputs, scaled
     x_scaler: Scaler
@@ -314,32 +322,44 @@ class FittedGP:  # data only (ADR 0003)
 
 
 def fit_gp(gp, X, Y, rng, n_starts=10, solver=Ipopt()) -> FittedGP: ...
-def predict(
-    gp, fitted, X
-) -> tuple: ...  # (mean, std) in original units; X numeric or symbolic
+def predict(gp, fitted, X) -> tuple: ...  # (mean, std) in original units
+def log_likelihood(gp, fitted) -> float: ...  # on the scaled training data
 ```
 
 Kernels are plain functions (`matern12/32/52`, `squared_exponential`, `linear`,
-`constant`) combined with arithmetic:
+`constant`) combined with arithmetic. The kernel and mean read the hyperparameters as
+`h.<name>`, a `(size, 1)` CasADi column:
 
 ```python
 gp = hb.GP(
     hyperparameters=[
-        hb.Hyper("scale", 1.0, bounds=(0.1, 10.0)),
-        hb.Hyper("lengthscale", 1.0, bounds=(1e-3, 1e2), size=2),
         hb.Hyper("noise_std", 1e-2, bounds=(1e-6, 1.0)),
+        hb.Hyper("outputscale", 1.0, bounds=(0.1, 10.0)),
+        hb.Hyper("lengthscale", 1.0, bounds=(1e-3, 1e2), size=2),
     ],
-    kernel=lambda h, X1, X2: h.scale**2 * hb.kernels.matern52(X1, X2, h.lengthscale),
+    kernel=lambda h, X1, X2: h.outputscale * hb.kernels.matern52(X1, X2, h.lengthscale),
 )
 ```
 
-`fit_gp` fits the scalers, calls `kernel` and `mean` once with CasADi symbols for the
-hyperparameters, builds the negative log marginal likelihood, draws starts with `lhs`
-over the (log-transformed) hyperparameter bounds and calls `multistart`. If every start
-fails it keeps the initial values and logs a warning. This removes `Parameterized`,
-`JoinedParameters`, `k_variable`/`m_variable` and the name prefixing, and with them the
-`LinearKernel` ARD Known issue. `minmax` uses the correct intercept
-(`min_t - min * slope`).
+- **Noise.** The hyperparameter named `noise_std`, if declared, is the observation
+  noise: `K = k(X, X) + (noise_std**2 + jitter) I`. Without it the GP interpolates.
+  `default_gp` is noise-free, because the illustrative example (legacy
+  `noise_std.fix(0.0)`) is; add `noise_std` for noisy data.
+- **Output scale** multiplies the kernel unsquared, as legacy `OutputScaleKernel` did,
+  so `default_gp` fits the same hyperparameters as the legacy GP.
+- `fit_gp` fits the scalers (`minmax` onto [0, 1] for X, `standard` for Y), calls
+  `kernel` and `mean` once with CasADi symbols for the hyperparameters, builds the
+  negative log marginal likelihood, draws starts with `lhs` over the (log-transformed)
+  hyperparameter bounds and calls `multistart`. If every start fails it keeps the
+  initial values and logs a warning. With the same data, generator and starts it
+  matches the legacy GP bit for bit (`tests/test_gp.py`).
+- `predict` traces the posterior once as a `cas.Function` of X; a numpy X gives arrays
+  `(n,)`, a symbolic X (SX or MX) gives `(n, 1)` columns. The std is the square root of
+  the posterior variance, so callers need no covariance.
+- This removes `Parameterized`, `JoinedParameters`, `k_variable`/`m_variable` and the
+  name prefixing, and with them the `LinearKernel` ARD Known issue. `minmax` uses the
+  correct intercept (`lower - min * slope`), evaluated so that [0, 1] reproduces the
+  legacy values bit for bit.
 
 ### Acquisition
 
@@ -564,7 +584,7 @@ The tickets, in a workable order:
   `Run` to the legacy `ResultsBO` keys until #30.
 - **#27 Solvers and GP**: `NLP`, `Ipopt`, `multistart`; `Hyper`, kernel functions, `GP`,
   `fit_gp`, `predict`, scalers, `default_gp`; port the kernel, GP and scaler tests.
-  Blocked by nothing.
+  *Done*; `tests/test_gp.py` checks the fit against the legacy GP.
 - **#28 Standard BO**: `optimization_loop`, `EI`/`LCB`, `standard_bo`; its regression
   test on the new API. Blocked by #26, #27.
 - **#29 Hybrid BO**: `Scenarios`, the hybrid acquisition problem, `hybrid_bo`; its

@@ -94,9 +94,26 @@ test), and #30 switches the example over and deletes `legacy/`.
   design over the `u` start bounds, then `evaluate` initial points plus design in
   one call (same draw order as legacy). The regression test maps their `Run` to the
   legacy `ResultsBO` keys.
+- `solvers.py`: `NLP` (`f`, bounds `(n,)`, optional `g(w) = 0`), `Ipopt` settings and
+  `multistart(nlp, starts, solver) -> Solution` (`w`, `f`), the best start. It uses
+  `cas.Opti` with bounds as constraints, like legacy, so IPOPT takes the same steps;
+  failed starts are logged at debug level, `NoSolutionError` if all fail. The caller
+  draws the starts with `lhs`.
+- `kernels.py`: kernels as plain functions of CasADi matrices (`matern12/32/52`,
+  `squared_exponential`, `linear`, `constant`); a lengthscale or scale is a scalar or
+  a `(d, 1)` column (ARD).
+- `gp.py`: `Hyper` (named, `size`, `log`), `GP` spec (hyperparameters in optimization
+  order, `kernel(h, X1, X2)`, `mean(h, X)`, `jitter`), `default_gp(n)` (noise-free
+  `outputscale`, unsquared as in legacy, times Matern-5/2 with ARD), `Scaler` with
+  `minmax`/`standard`/`scale`/`unscale`, `FittedGP` (data only), `fit_gp`, `predict`
+  (numpy X -> arrays `(n,)`, symbolic X -> `(n, 1)` columns) and `log_likelihood`. The
+  hyperparameter named `noise_std`, if declared, is the noise; without it only
+  `jitter` is added. Numeric data enter CasADi as `Symbolic` constants. `fit_gp`
+  matches the legacy GP bit for bit with the same data and generator; keep the
+  `minmax` operation order, which reproduces legacy for [0, 1].
 - `errors.py`: `HybridBOError` (with `.history`, the points evaluated before the
   error, and `.run`, the partial run when raised in a method), `RootFindingError`,
-  `ReconstructionWarning`. New code raises these, never
+  `NoSolutionError`, `ReconstructionWarning`. New code raises these, never
   bare `Exception` (ruff `TRY002`/`BLE001` apply outside `legacy/` and `examples/`).
 
 **The old code** is in `hybrid_bo/legacy/` (`from hybrid_bo.legacy import Config,
@@ -194,7 +211,8 @@ reverse. Paths below are relative to `legacy/`.
   `tests/data/regression/`. A logic PR regenerates them with
   `--update-baselines` and explains the diff.
 - Unit tests (`test_kernels.py`, `test_gp.py`, `test_problem.py`,
-  `test_sampling.py`, `test_system.py`, `test_evaluation.py`, `test_baselines.py`, `test_transformers.py`) compare against numpy/scipy references. Add one when
-  changing math.
+  `test_sampling.py`, `test_system.py`, `test_evaluation.py`, `test_baselines.py`,
+  `test_scalers.py`, `test_solvers.py`) compare against numpy/scipy references or the
+  legacy code. Add one when changing math.
 - A known bug gets a `pytest.mark.xfail(strict=True)` test and a ROADMAP
   Known issues entry. The PR that fixes it removes the marker.
