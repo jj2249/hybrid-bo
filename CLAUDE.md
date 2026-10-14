@@ -74,9 +74,11 @@ remove the marker in the PR that fixes the bug.
   in plan mode before editing.
 - Before opening a PR, run `pixi run -e dev check` and `pixi run -e dev test`,
   then `/mattpocock-skills:code-review` since `refactor/initial`.
-- Use the PR template; its Issue section says `Closes #<n>`, which is how
-  code-review finds the spec. Add the `ai-assisted` label to PRs with AI-written
-  code. Commits reference their issue (`#<n>`) and get a `Co-Authored-By` trailer.
+- Write the PR body with the `pr` skill (`mattpocock-skills:pr`; if it isn't
+  installed, follow `.github/pull_request_template.md`, which has its sections). End
+  it with `Closes #<n>`, which is how code-review finds the spec. Add the
+  `ai-assisted` label to PRs with AI-written code. Commits reference their issue
+  (`#<n>`) and get a `Co-Authored-By` trailer.
 - Keep non-logic and logic changes in separate PRs. A *logic* PR changes the
   results of existing code; adding new API that leaves existing behavior
   unchanged is not logic.
