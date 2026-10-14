@@ -59,8 +59,8 @@ remove the marker in the PR that fixes the bug.
   Load it before working on `src/`.
 - `hybrid-bo-examples`: the files and exports an example needs, how to define
   the Problem, the config fields and common mistakes.
-- When a PR changes behavior or contracts, update the relevant skill in the
-  same PR.
+- Both skills describe the *current* code; DESIGN.md describes the target. When a
+  PR changes behavior or contracts, update the relevant skill in the same PR.
 
 ## Workflow
 

@@ -5,8 +5,8 @@
 <!-- e.g. Stage 1: Ruff passes -->
 
 ## Logic change?
-- [ ] No: behaviour is identical (refactor, docs, tooling)
-- [ ] Yes: describe how behaviour changes and how it was tested
+- [ ] No: behavior is identical (refactor, docs, tooling)
+- [ ] Yes: describe how behavior changes and how it was tested
 
 ## How verified
 - [ ] `pixi run -e dev check`

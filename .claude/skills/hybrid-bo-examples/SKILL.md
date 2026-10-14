@@ -6,9 +6,14 @@ description: Use when writing, modifying or running an example under examples/. 
 # Writing and running examples
 
 `examples/illustrative_example/` is the reference. `examples/flash_unit/` is out
-of scope for the current refactor, so leave it alone. This describes the current
-contract. The restructure (ROADMAP stage 4, DESIGN.md) and stage 5 will simplify
-it, and this skill should be updated alongside.
+of scope for the current refactor, so leave it alone. This describes the **current**
+contract. The target is DESIGN.md's "Target example": a single Python script with
+named variables, no `config.yaml` and no callbacks. PR 9 switches the illustrative
+example to it, and that PR rewrites this skill.
+
+Use CONTEXT.md's terms when writing about examples. In the current contract, the
+unknown states `y` are entries of `x` selected by `indices_x_output_gp`, `h_known`
+is the known equations `g`, and `h_unknown` is the oracle.
 
 ## Layout
 
@@ -50,7 +55,7 @@ x = SymbolicType.sym("x", config.n_x, 1)
 f = cas.Function("f", [u, x], [...])
 # Known residuals
 h_known = cas.Function("h_known", [u, x], [...])
-# True residuals, only used in the simulation
+# Oracle residuals, only used in the oracle simulation
 h_unknown = cas.Function("h_unknown", [u, x], [...])
 # Bounds: each of u_acq, x_acq, u_sp, x_sp is a (lower, upper) pair
 Problem(f, h_known, h_unknown, *u_acq, *x_acq, *u_sp, *x_sp)
@@ -71,9 +76,10 @@ Problem(f, h_known, h_unknown, *u_acq, *x_acq, *u_sp, *x_sp)
 - **Problem:**
   - `n_u` and `n_x` must match the `Problem`.
   - `indices_u_input_gp` and `indices_x_input_gp` select the GP inputs.
-  - `indices_x_output_gp` selects the states the GP predicts.
-  - `indices_x_measured` selects the states that get measurement noise.
-  - `use_output_gp_as_opt_var` makes the GP outputs explicit decision variables.
+  - `indices_x_output_gp` selects the unknown states, which the GP predicts.
+  - `indices_x_measured` selects the measured variables, which get the noise.
+  - `use_output_gp_as_opt_var` makes the unknown states variables of the
+    acquisition problem (default in the new design: `unknown_states_as_variables`).
   - `std_measurement_noise`
   - `n_starts_training_gp`
   - `use_jacobian_evaluate_problem` and `n_starts_max_evaluate_problem` control
@@ -84,7 +90,7 @@ Problem(f, h_known, h_unknown, *u_acq, *x_acq, *u_sp, *x_sp)
 - **Acquisition:**
   - `formulation_acq` is `"ei"` or `"lcb"`.
   - `n_starts_acq_optimization`
-  - `n_samples_gp` (hybrid only)
+  - `n_samples_gp`: the number of scenarios (hybrid only)
   - `factor_lcb_std`
   - `epsilon_ei_standard` is currently unused.
 - **General:** `seed` (`null` means not reproducible).
@@ -93,9 +99,11 @@ Problem(f, h_known, h_unknown, *u_acq, *x_acq, *u_sp, *x_sp)
 
 - **GP inputs must total `n_u`.** Hybrid BO requires
   `len(indices_u_input_gp) + len(indices_x_input_gp) == n_u`, because `main.py`
-  builds the GP with `problem.n_u` inputs.
-- **Measured states:** `len(indices_x_measured)` must equal the number of
-  `h_unknown` equations. Noise is drawn per measured state.
+  builds the GP with `problem.n_u` inputs (a Known issue; the new design takes the
+  GP inputs from `h_inputs`).
+- **Measured variables:** `len(indices_x_measured)` must equal the number of
+  `h_unknown` equations (the number of unknown states), so the root-finding
+  problem is square. Noise is drawn per measured variable.
 - **Noise:** with `std_measurement_noise > 0`, remove `gp.noise_std.fix(0.0)` in
   `get_gp_*` so the GP can learn the noise.
 - **Index lists** are lists, even with a single entry (`[0]`, not `0`), and an
