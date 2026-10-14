@@ -49,29 +49,42 @@ if __name__ == "__main__":
             do_hybrid_bo(
                 problem,
                 config,
-                pkg.get_gp_hybrid_bo(problem.n_u),
-                initial_points,
-                rngs,
-                pkg.get_optimizer_hybrid_bo(),
-                results_dir,
-                plots,
+                gp=pkg.get_gp_hybrid_bo(problem.n_u),
+                u_initial_complete=initial_points,
+                rngs=rngs,
+                optimizer=pkg.get_optimizer_hybrid_bo(),
+                results_dir=results_dir,
+                create_plots=plots,
             )
         case "standard_bo":
             do_standard_bo(
                 problem,
                 config,
-                pkg.get_gp_standard_bo(problem.n_u),
-                initial_points,
-                rngs,
-                pkg.get_optimizer_standard_bo(),
-                results_dir,
-                plots,
+                gp=pkg.get_gp_standard_bo(problem.n_u),
+                u_initial_complete=initial_points,
+                rngs=rngs,
+                optimizer=pkg.get_optimizer_standard_bo(),
+                results_dir=results_dir,
+                create_plots=plots,
             )
         case "latin_hypercube_sampling":
             do_latin_hypercube_sampling(
-                problem, config, initial_points, rngs, results_dir, plots
+                problem,
+                config,
+                u_initial_complete=initial_points,
+                rngs=rngs,
+                results_dir=results_dir,
+                create_plots=plots,
             )
         case "uniform_sampling":
             do_uniform_sampling(
-                problem, config, initial_points, rngs, results_dir, plots
+                problem,
+                config,
+                u_initial_complete=initial_points,
+                rngs=rngs,
+                results_dir=results_dir,
+                create_plots=plots,
             )
+        case _:
+            msg = f"Unknown routine {routine!r}"
+            raise ValueError(msg)
