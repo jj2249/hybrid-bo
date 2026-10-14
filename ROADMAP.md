@@ -70,7 +70,7 @@ its own regression baseline on the new API. Scope is in the issues and DESIGN.md
 - [x] #27: solvers and GP (removes the `minmax` intercept, `LinearKernel` ARD and
       `create_lhs_samples` Known issues)
 - [x] #28: standard BO
-- [ ] #29: hybrid BO. Blocked by #28
+- [x] #29: hybrid BO (removes the two `setup_acq_problem` Known issues)
 - [ ] #30: switch the illustrative example and delete the old code. Blocked by #26,
       #28, #29
 - [ ] #31: plots and CLI. Blocked by #30
@@ -97,16 +97,6 @@ its own regression baseline on the new API. Scope is in the issues and DESIGN.md
 ## Known issues (fix only once a test covers them)
 Each entry says where it gets fixed. "Goes away" means the new code does not reproduce
 it (DESIGN.md: Known issues are not rebuilt), and that PR removes the entry.
-- `setup_acq_problem` in `legacy/routines/hybrid_bo.py`: when `use_output_gp_as_opt_var=False`, the upper
-  starting-point bounds use `problem.u_upper_bounds_acquisition`; this should
-  probably be `u_upper_bounds_starting_points`. The two coincide in the
-  illustrative example, which hides it. *Goes away in #29* (start bounds live on
-  each `Var`).
 - `Config.epsilon_ei_standard` is unused; `ei_gp` uses its own default. *Goes away
   in #30.*
-- `setup_acq_problem` in `legacy/routines/hybrid_bo.py` requires
-  `len(indices_u_input_gp) + len(indices_x_input_gp) == problem.n_u`. This looks
-  like an artifact of `main.py` building the GP with `problem.n_u` inputs; the
-  real requirement is that the GP's `n_inputs` equals the number of GP inputs.
-  *Goes away in #29* (inputs come from `h_inputs`).
 - `Config.indices_x_opt` is computed but never used. *Goes away in #30.*

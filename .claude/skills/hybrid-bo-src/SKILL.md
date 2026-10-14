@@ -34,21 +34,21 @@ current code predates them; this is the mapping:
   `fsolve`. Noise with std `noise_std` is drawn and added to the measured states
   (`Config.indices_x_measured`), and the root-finding problem then solves `h_known`
   for the other states. Both always happen, also when `noise_std` is 0.
-- **Hybrid BO** (`legacy/routines/hybrid_bo.py`): `h_unknown` is never used in the
-  acquisition problem. A GP maps `[u[indices_u_input_gp], x[indices_x_input_gp]]`
-  to `x[indices_x_output_gp]` and is trained on the evaluated points. The
-  acquisition problem is a sample-average approximation:
-  - `n_samples_gp` scenarios `mean + std * z_i`. The scenario draws `z_i` are
+- **Hybrid BO** (`bo.py`/`acquisition.py`; legacy `legacy/routines/hybrid_bo.py`
+  until #30): the unknown equations are never used in the acquisition problem. A GP
+  maps the `h_inputs` columns of `(u, x)` to `y` and is trained on the evaluated
+  points. The acquisition problem is a sample-average approximation:
+  - `n_scenarios` scenarios `mean + std * z_s`. The scenario draws `z_s` are
     drawn once per run and reused in every iteration.
-  - Each scenario has its own copy of the states that are not decision variables,
-    and `h_known(u, x_i) = 0` holds for every scenario.
-  - With `use_output_gp_as_opt_var` the unknown states are variables of the
-    acquisition problem with the constraint `x_out_i = scenario i`. Otherwise the
-    GP prediction is substituted directly.
-  - Acquisition function: SAA-EI is `mean_i(min(f_i - incumbent, 0))`. SAA-LCB is
-    `mean(f_i) - factor_lcb_std * std(f_i)` (`ddof=0`).
-  - Solved with a multistart optimizer. The trial point is the `u` part of the
-    solution.
+  - Each scenario has its own copy `x_s` of the mechanistic states, and
+    `g(x_s, y_s, u) = 0` holds for every scenario.
+  - With `unknown_states_as_variables` (default True; legacy
+    `use_output_gp_as_opt_var`) the `y_s` are variables with the constraint
+    `y_s = scenario s`. Otherwise the GP prediction is substituted directly.
+  - Acquisition function: SAA-EI is `sum_s w_s min(f_s - incumbent, 0)`, minimized.
+    SAA-LCB is the weighted mean of `f_s` minus `std_factor` times the weighted std
+    (`w = 1/S` gives legacy's `ddof=0`).
+  - Solved with `multistart`. The trial point is the `u` part of the solution.
 - **Standard BO** (`bo.py`; legacy `legacy/routines/standard_bo.py` until #30): a GP
   directly on `u -> f`, with analytic EI or LCB over `u` only.
 - **Latin hypercube / uniform sampling**: the non-adaptive baselines. They draw the
@@ -67,7 +67,8 @@ test), and #30 switches the example over and deletes `legacy/`.
   `cas.Function`s with column-vector inputs in the paper's order `(x, y, u)`. All
   input checks live in the constructors and raise `ValueError` (`NotImplementedError`
   for `P > 1`). `Symbolic` (default `cas.SX`) is the one place the symbol type is
-  chosen.
+  chosen. `_h_inputs(system, u, x)` gives the `h_inputs` columns of numeric or
+  symbolic `u`, `x` (hybrid BO's GP training data and acquisition problem).
 - `sampling.py`: `lhs(lower, upper, n, rng)` and `uniform(...)` over a box, shape
   `(n, d)`; `initial_points(variables, n, rng)` is `lhs` over `Var` start bounds.
   Use them for any Latin hypercube or uniform draw; the hand-written copies in
@@ -86,7 +87,8 @@ test), and #30 switches the example over and deletes `legacy/`.
 - `history.py`: `History` (`u`, `x`, `y`, `f`, oracle values or `None`, `n_initial`)
   and `incumbents`; `_concatenate` appends one history to another.
 - `run.py`: `Run` (`history`, `record`, `surrogates`: one `FittedGP` per iteration,
-  the one behind its trial point; empty for the baselines), pure data that pickles
+  the one behind its trial point, empty for the baselines; `scenarios`, hybrid BO
+  only, else None), pure data that pickles
   without user code (ADR 0003). `run_record(problem, experiment, rng, method, settings)` builds the
   text record; call it before the method draws. An experiment is recorded by its
   docstring, else its name (`oracle_experiment` sets the docstring).
@@ -115,13 +117,20 @@ test), and #30 switches the example over and deletes `legacy/`.
 - `acquisition.py`: `EI`, `LCB(std_factor)` and `standard_acquisition` (analytic EI
   or LCB over `u`; returns the `NLP` and the `u` start bounds). `_check_acquisition`
   is the one check of an acquisition function; every method's settings and builder
-  call it (`TypeError` unless an `EI` or `LCB` instance).
+  call it (`TypeError` unless an `EI` or `LCB` instance). `Scenarios` (`z (S, P)`,
+  `w (S,)`, checked), `saa_scenarios(n, n_y, rng)` and `hybrid_acquisition` (variables
+  `u`, then `vec` of the `(S, M)` x copies, then of the `(S, P)` y copies if variables;
+  bounds and start bounds from each `Var`, repeated per scenario; `g` per scenario,
+  followed by its GP tie).
 - `bo.py`: `optimization_loop(problem, experiment, initial_points, n_iterations,
   trial_point, rng, record) -> Run` (evaluate initial points, then per iteration
   `trial_point(problem, history, rng) -> (u, surrogate)` and evaluate u; a
   `HybridBOError` gets the partial run as `error.run`), `StandardBOSettings` and
   `standard_bo` (fit `u -> f`, `standard_acquisition`, `multistart` from `lhs` over
-  the `u` start bounds). The regression test runs standard BO on it.
+  the `u` start bounds), `HybridBOSettings` and `hybrid_bo` (record, then
+  `saa_scenarios`, then the loop; fit `h_inputs -> y`, `hybrid_acquisition`; adds the
+  scenarios to the run and to `error.run`). `_method_record` builds both methods'
+  records. Every regression test runs on the new API.
 - `errors.py`: `HybridBOError` (with `.history`, the points evaluated before the
   error, and `.run`, the partial run when raised in a method), `RootFindingError`,
   `NoSolutionError`, `ReconstructionWarning`. New code raises these, never
@@ -218,14 +227,16 @@ reverse. Paths below are relative to `legacy/`.
 
 ## Testing rules
 
-- `pixi run -e dev test` runs in about 2s. Run it for every change.
-- `tests/test_regression.py` locks in the current behavior of every routine
-  on the illustrative example. A non-logic PR must not touch
+- `pixi run -e dev test` runs in about 6s. Run it for every change.
+- `tests/test_regression.py` locks in the current behavior of every method on the
+  illustrative example, run on the new API and mapped to the legacy `ResultsBO`
+  keys. A non-logic PR must not touch
   `tests/data/regression/`. A logic PR regenerates them with
   `--update-baselines` and explains the diff.
 - Unit tests (`test_kernels.py`, `test_gp.py`, `test_problem.py`,
   `test_sampling.py`, `test_system.py`, `test_evaluation.py`, `test_baselines.py`,
-  `test_scalers.py`, `test_solvers.py`, `test_standard_bo.py`) compare against numpy/scipy references or the
+  `test_scalers.py`, `test_solvers.py`, `test_standard_bo.py`, `test_hybrid_bo.py`)
+  compare against numpy/scipy references or the
   legacy code. Add one when changing math.
 - Tests follow the comment rules in CLAUDE.md Conventions (docstrings, commented
   blocks, a note on the first use of each pytest feature); `test_standard_bo.py` is
