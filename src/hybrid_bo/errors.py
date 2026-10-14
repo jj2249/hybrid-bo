@@ -1,7 +1,11 @@
 """The library's exceptions and warnings."""
 
-from hybrid_bo.history import History
-from hybrid_bo.run import Run
+from typing import TYPE_CHECKING
+
+# Annotations only: run.py imports gp.py, which imports this module
+if TYPE_CHECKING:
+    from hybrid_bo.history import History
+    from hybrid_bo.run import Run
 
 
 class HybridBOError(Exception):
@@ -12,8 +16,8 @@ class HybridBOError(Exception):
     caller can save either.
     """
 
-    history: History | None = None
-    run: Run | None = None
+    history: "History | None" = None
+    run: "Run | None" = None
 
 
 class RootFindingError(HybridBOError):

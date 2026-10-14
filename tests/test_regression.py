@@ -5,10 +5,11 @@ These lock in the *current* behavior, including the suspected bound bug in
 intentionally changes behavior, regenerate with
 `pixi run -e dev test --update-baselines` and review the JSON diff.
 
-The baselines run on the new API; their `Run` is mapped to the legacy `ResultsBO`
-keys, so all four routines share one baseline format until #30.
+Standard BO and the baselines run on the new API; their `Run` is mapped to the
+legacy `ResultsBO` keys, so all four routines share one baseline format until #30.
 """
 
+import functools
 import json
 import pickle
 from dataclasses import fields
@@ -21,20 +22,25 @@ import pytest
 
 from hybrid_bo import (
     Run,
+    StandardBOSettings,
     incumbents,
     initial_points,
     latin_hypercube_sampling,
     oracle_experiment,
+    standard_bo,
     uniform_sampling,
 )
 from hybrid_bo.legacy.results import ResultsBO
-from hybrid_bo.legacy.routines import do_hybrid_bo, do_standard_bo
+from hybrid_bo.legacy.routines import do_hybrid_bo
 
 BASELINE_DIR = Path(__file__).parent / "data" / "regression"
 RTOL, ATOL = 1e-6, 1e-8
 NEW_API = {
     "latin_hypercube_sampling": latin_hypercube_sampling,
     "uniform_sampling": uniform_sampling,
+    # The legacy settings of the illustrative example are the defaults: EI, 10 starts
+    # for the acquisition problem and the GP fit, and the default GP
+    "standard_bo": functools.partial(standard_bo, settings=StandardBOSettings()),
 }
 
 
@@ -62,7 +68,7 @@ def as_legacy_results(run: Run) -> dict[str, np.ndarray]:
 
 
 def run_new_api(routine, config, problem):
-    """Runs a baseline on the new API, as the legacy routine would, and returns its
+    """Runs a method on the new API, as the legacy routine would, and returns its
     results under the `ResultsBO` keys."""
     # As in examples/main.py: one generator per run, initial points drawn from it
     rng = np.random.default_rng(config.seed).spawn(1)[0]
@@ -72,7 +78,7 @@ def run_new_api(routine, config, problem):
         oracle=lambda v: [cas.sin(v.u)],
         noise_std=config.std_measurement_noise,
     )
-    run = NEW_API[routine](problem, experiment, u, config.n_iterations_bo, rng)
+    run = NEW_API[routine](problem, experiment, u, config.n_iterations_bo, rng=rng)
     return as_legacy_results(run)
 
 
@@ -105,18 +111,6 @@ def run_routine(routine, config, results_dir):
                 u_initial,
                 rngs,
                 ex.get_optimizer_hybrid_bo(),
-                results_dir,
-                None,
-            )
-        case "standard_bo":
-            gp = ex.get_gp_standard_bo(problem.n_u)
-            do_standard_bo(
-                problem,
-                config,
-                gp,
-                u_initial,
-                rngs,
-                ex.get_optimizer_standard_bo(),
                 results_dir,
                 None,
             )

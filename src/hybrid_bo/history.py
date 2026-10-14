@@ -25,6 +25,28 @@ class History:
     n_initial: int
 
 
+def _concatenate(history: History, later: History) -> History:
+    """`history` followed by the points of `later`, with the initial points of
+    `history`. The oracle values are kept only when both have them."""
+
+    def join(first: np.ndarray | None, second: np.ndarray | None) -> np.ndarray | None:
+        """The rows of both, or None if either is None."""
+        if first is None or second is None:
+            return None
+        return np.concatenate([first, second])
+
+    return History(
+        u=np.concatenate([history.u, later.u]),
+        x=np.concatenate([history.x, later.x]),
+        y=np.concatenate([history.y, later.y]),
+        f=np.concatenate([history.f, later.f]),
+        x_oracle=join(history.x_oracle, later.x_oracle),
+        y_oracle=join(history.y_oracle, later.y_oracle),
+        f_oracle=join(history.f_oracle, later.f_oracle),
+        n_initial=history.n_initial,
+    )
+
+
 def incumbents(history: History) -> np.ndarray:
     """The best measured objective value after each evaluation, shape (n,)."""
     return np.minimum.accumulate(history.f)

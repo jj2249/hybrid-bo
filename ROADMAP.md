@@ -69,7 +69,7 @@ its own regression baseline on the new API. Scope is in the issues and DESIGN.md
 - [x] #26: Latin hypercube and uniform baselines
 - [x] #27: solvers and GP (removes the `minmax` intercept, `LinearKernel` ARD and
       `create_lhs_samples` Known issues)
-- [ ] #28: standard BO. Blocked by #26, #27
+- [x] #28: standard BO
 - [ ] #29: hybrid BO. Blocked by #28
 - [ ] #30: switch the illustrative example and delete the old code. Blocked by #26,
       #28, #29
@@ -102,8 +102,6 @@ it (DESIGN.md: Known issues are not rebuilt), and that PR removes the entry.
   probably be `u_upper_bounds_starting_points`. The two coincide in the
   illustrative example, which hides it. *Goes away in #29* (start bounds live on
   each `Var`).
-- `formulation_acq` is validated strictly in `legacy/routines/hybrid_bo.py` but with
-  `startswith("lcb")` in `setup_acq_problem` (`legacy/routines/standard_bo.py`). *Goes away in #28 (`EI`/`LCB`).*
 - `Config.epsilon_ei_standard` is unused; `ei_gp` uses its own default. *Goes away
   in #30.*
 - `setup_acq_problem` in `legacy/routines/hybrid_bo.py` requires
