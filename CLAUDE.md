@@ -114,6 +114,11 @@ remove the marker in the PR that fixes the bug.
   the block does or why (e.g. `# Start bounds: default to the bounds, ...`). Pull a
   long condition into a named variable rather than explaining it. Don't comment
   what a line obviously does. See `src/hybrid_bo/problem.py`.
+- Tests follow the same comment rules, so they read without pytest experience: each
+  test gets a docstring saying what behavior it checks, and a longer test is split
+  into commented blocks (setup, act, check). The first use in a file of a pytest
+  feature (fixture, `parametrize`, `raises`, `xfail`) gets a short comment saying
+  what it does.
 - Defaults may be derived from other arguments when the derivation is obvious and
   recorded in the run (start bounds from finite bounds, GP size from its inputs);
   otherwise arguments are explicit. Examples should be short to write.

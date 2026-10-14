@@ -49,8 +49,8 @@ current code predates them; this is the mapping:
     `mean(f_i) - factor_lcb_std * std(f_i)` (`ddof=0`).
   - Solved with a multistart optimizer. The trial point is the `u` part of the
     solution.
-- **Standard BO** (`legacy/routines/standard_bo.py`): a GP directly on `u -> f`, with
-  analytic EI or LCB over `u` only.
+- **Standard BO** (`bo.py`; legacy `legacy/routines/standard_bo.py` until #30): a GP
+  directly on `u -> f`, with analytic EI or LCB over `u` only.
 - **Latin hypercube / uniform sampling**: the non-adaptive baselines. They draw the
   whole design at the start of a run and train no GP.
 
@@ -84,10 +84,10 @@ test), and #30 switches the example over and deletes `legacy/`.
   `ReconstructionWarning`. `_start_bounds` (in `sampling.py`) and `_as_text` (in
   `problem.py`, an equation as text in the variable names) are shared helpers.
 - `history.py`: `History` (`u`, `x`, `y`, `f`, oracle values or `None`, `n_initial`)
-  and `incumbents`.
-- `run.py`: `Run` (`history`, `record`, `surrogates`: empty for the baselines;
-  typed `list[object]` until `FittedGP` exists), pure data that pickles without user code
-  (ADR 0003). `run_record(problem, experiment, rng, method, settings)` builds the
+  and `incumbents`; `_concatenate` appends one history to another.
+- `run.py`: `Run` (`history`, `record`, `surrogates`: one `FittedGP` per iteration,
+  the one behind its trial point; empty for the baselines), pure data that pickles
+  without user code (ADR 0003). `run_record(problem, experiment, rng, method, settings)` builds the
   text record; call it before the method draws. An experiment is recorded by its
   docstring, else its name (`oracle_experiment` sets the docstring).
 - `baselines.py`: `latin_hypercube_sampling` and `uniform_sampling` draw the whole
@@ -110,11 +110,24 @@ test), and #30 switches the example over and deletes `legacy/`.
   hyperparameter named `noise_std`, if declared, is the noise; without it only
   `jitter` is added. Numeric data enter CasADi as `Symbolic` constants. `fit_gp`'s
   hyperparameters match the legacy GP bit for bit with the same data and generator; keep the
-  `minmax` operation order, which reproduces legacy for [0, 1].
+  `minmax` operation order, which reproduces legacy for [0, 1]. `_gp_record` gives
+  the GP as text for a run's record (hyperparameters, kernel and mean expressions).
+- `acquisition.py`: `EI`, `LCB(std_factor)` and `standard_acquisition` (analytic EI
+  or LCB over `u`; returns the `NLP` and the `u` start bounds). `_check_acquisition`
+  is the one check of an acquisition function; every method's settings and builder
+  call it (`TypeError` unless an `EI` or `LCB` instance).
+- `bo.py`: `optimization_loop(problem, experiment, initial_points, n_iterations,
+  trial_point, rng, record) -> Run` (evaluate initial points, then per iteration
+  `trial_point(problem, history, rng) -> (u, surrogate)` and evaluate u; a
+  `HybridBOError` gets the partial run as `error.run`), `StandardBOSettings` and
+  `standard_bo` (fit `u -> f`, `standard_acquisition`, `multistart` from `lhs` over
+  the `u` start bounds). The regression test runs standard BO on it.
 - `errors.py`: `HybridBOError` (with `.history`, the points evaluated before the
   error, and `.run`, the partial run when raised in a method), `RootFindingError`,
   `NoSolutionError`, `ReconstructionWarning`. New code raises these, never
   bare `Exception` (ruff `TRY002`/`BLE001` apply outside `legacy/` and `examples/`).
+  It imports `History` and `Run` only for type checking, since `run.py` imports
+  `gp.py`, which imports `errors.py`.
 
 **The old code** is in `hybrid_bo/legacy/` (`from hybrid_bo.legacy import Config,
 GP, Problem`). It may import new code (`legacy/problem.py` uses `lhs`), never the
@@ -212,7 +225,10 @@ reverse. Paths below are relative to `legacy/`.
   `--update-baselines` and explains the diff.
 - Unit tests (`test_kernels.py`, `test_gp.py`, `test_problem.py`,
   `test_sampling.py`, `test_system.py`, `test_evaluation.py`, `test_baselines.py`,
-  `test_scalers.py`, `test_solvers.py`) compare against numpy/scipy references or the
+  `test_scalers.py`, `test_solvers.py`, `test_standard_bo.py`) compare against numpy/scipy references or the
   legacy code. Add one when changing math.
+- Tests follow the comment rules in CLAUDE.md Conventions (docstrings, commented
+  blocks, a note on the first use of each pytest feature); `test_standard_bo.py` is
+  the example.
 - A known bug gets a `pytest.mark.xfail(strict=True)` test and a ROADMAP
   Known issues entry. The PR that fixes it removes the marker.

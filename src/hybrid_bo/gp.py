@@ -176,6 +176,25 @@ def _namespace(values: dict[str, Any]) -> SimpleNamespace:
     return SimpleNamespace(**{name: Symbolic(value) for name, value in values.items()})
 
 
+def _gp_record(gp: GP, input_names: Sequence[str]) -> dict[str, str]:
+    """The GP spec as text, for a run's record: its hyperparameters and jitter, and
+    its kernel and mean as expressions in the hyperparameters and the inputs (a
+    primed input belongs to the kernel's second point)."""
+    h = _namespace(
+        {
+            hyper.name: Symbolic.sym(hyper.name, hyper.size)
+            for hyper in gp.hyperparameters
+        }
+    )
+    X1 = cas.horzcat(*(Symbolic.sym(name) for name in input_names))
+    X2 = cas.horzcat(*(Symbolic.sym(f"{name}'") for name in input_names))
+    return {
+        "gp": f"hyperparameters={gp.hyperparameters!r}, jitter={gp.jitter}",
+        "kernel": str(gp.kernel(h, X1, X2)),
+        "mean": str(gp.mean(h, X1)),
+    }
+
+
 def _split(hypers: Sequence[Hyper], values: Any) -> dict[str, Any]:
     """The entries of `values`, one per hyperparameter entry in declaration order,
     grouped by hyperparameter name."""

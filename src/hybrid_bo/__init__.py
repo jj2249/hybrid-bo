@@ -1,5 +1,12 @@
 from hybrid_bo import kernels
+from hybrid_bo.acquisition import EI, LCB, standard_acquisition
 from hybrid_bo.baselines import latin_hypercube_sampling, uniform_sampling
+from hybrid_bo.bo import (
+    StandardBOSettings,
+    TrialPoint,
+    optimization_loop,
+    standard_bo,
+)
 from hybrid_bo.errors import (
     HybridBOError,
     NoSolutionError,

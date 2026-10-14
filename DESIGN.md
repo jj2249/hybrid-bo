@@ -362,7 +362,7 @@ gp = hb.GP(
   correct intercept (`lower - min * slope`), evaluated so that [0, 1] reproduces the
   legacy values bit for bit.
 
-### Acquisition
+### Acquisition (#28: `EI`, `LCB`, `standard_acquisition`; `acquisition.py`)
 
 ```python
 @dataclass(frozen=True)
@@ -371,7 +371,7 @@ class EI: ...
 
 @dataclass(frozen=True)
 class LCB:
-    std_factor: float = 1.0
+    std_factor: float = 1.0  # finite and >= 0, else ValueError
 
 
 @dataclass(frozen=True)
@@ -391,15 +391,20 @@ def hybrid_acquisition(
     incumbent,
     acquisition,
     unknown_states_as_variables=True,
-) -> tuple[NLP, np.ndarray]: ...
+) -> tuple[NLP, tuple[np.ndarray, np.ndarray]]: ...
 def standard_acquisition(
     problem, gp, fitted, incumbent, acquisition
-) -> tuple[NLP, np.ndarray]: ...
+) -> tuple[NLP, tuple[np.ndarray, np.ndarray]]: ...
 ```
 
-Each returns the NLP and its start bounds.
+Each returns the NLP and its start bounds `(lower, upper)`, for `lhs`.
 
-- **Standard BO** computes EI and LCB analytically from the GP mean and std.
+- **Validation.** Every method checks its acquisition function the same way (one
+  helper, called by the settings and by the builders): anything but an `EI` or `LCB`
+  instance raises `TypeError`. This removes the `formulation_acq` Known issue.
+- **Standard BO** computes EI and LCB analytically from the GP mean and std (EI adds
+  1e-10 to the std in `gamma`, as legacy `ei_gp` did) and minimizes -EI or LCB over `u`
+  within its bounds.
 - **Hybrid BO** computes them as weighted sample averages over the scenarios (SAA-EI,
   SAA-LCB; paper, Problems 8 and 9). Each scenario has its own `x_s` and `y_s`, with `g`
   as constraints. SAA-LCB uses the weighted variance; `w = 1/S` reproduces today's
@@ -411,7 +416,7 @@ Each returns the NLP and its start bounds.
   `predict`, so other surrogates or hyperparameter samples can be paired with scenarios
   later.
 
-### Methods and the optimization loop
+### Methods and the optimization loop (#28: the loop and standard BO; `bo.py`)
 
 ```python
 @dataclass(frozen=True)
@@ -440,8 +445,14 @@ TrialPoint = Callable[
 
 
 def optimization_loop(
-    problem, experiment, initial_points, n_iterations, trial_point: TrialPoint, rng
-) -> tuple[History, list[FittedGP]]: ...
+    problem,
+    experiment,
+    initial_points,
+    n_iterations,
+    trial_point: TrialPoint,
+    rng,
+    record,  # from run_record, before the method draws
+) -> Run: ...
 
 
 def hybrid_bo(
@@ -462,7 +473,17 @@ sampling primitives.
 - `hybrid_bo` draws the scenarios from `rng`, then runs `optimization_loop` with a
   trial-point function that fits the GP on `(u, x)[h_inputs] -> y`, builds
   `hybrid_acquisition`, and solves it with `multistart`. The user never draws `z`.
-- `standard_bo` fits on `u -> f`.
+- `standard_bo` fits on `u -> f` (measured), with the incumbent the best measured `f`,
+  and solves `standard_acquisition` by `multistart` from `lhs` starts over the `u` start
+  bounds. With the defaults it reproduces the legacy illustrative baseline.
+- `optimization_loop` takes the record and returns the `Run`, so a `HybridBOError` in
+  the loop (an evaluation, or the trial-point function) carries the partial run as
+  `error.run` for every method: the points evaluated so far (also `error.history`) and
+  one surrogate per evaluated trial point (a failed evaluation drops its surrogate). A method that adds fields to its `Run` (hybrid BO's scenarios)
+  adds them to the returned run and to `error.run`.
+- The record holds the settings without the GP, plus `gp` (hyperparameters, jitter),
+  `kernel` and `mean` as expression text of the GP the run uses (the resolved
+  default), since a GP's repr only names its kernel function.
 - The baselines are not sequential: they draw their whole design and `evaluate` it after
   the initial points.
 - `optimization_loop` is public, for new methods.
@@ -587,7 +608,7 @@ The tickets, in a workable order:
   `fit_gp`, `predict`, scalers, `default_gp`; port the kernel, GP and scaler tests.
   *Done*; `tests/test_gp.py` checks the fit against the legacy GP.
 - **#28 Standard BO**: `optimization_loop`, `EI`/`LCB`, `standard_bo`; its regression
-  test on the new API. Blocked by #26, #27.
+  test on the new API. *Done*; it reproduces the legacy baseline.
 - **#29 Hybrid BO**: `Scenarios`, the hybrid acquisition problem, `hybrid_bo`; its
   regression test on the new API. Blocked by #28.
 - **#30 Switch**: the illustrative example as one script on the new API; delete
