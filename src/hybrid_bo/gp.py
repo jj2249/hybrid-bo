@@ -132,7 +132,8 @@ def minmax(values: np.ndarray, lower: float = 0.0, upper: float = 1.0) -> Scaler
     is_constant = low == high
     span = np.where(is_constant, 1.0, high - low)
 
-    # Evaluated in this order so that [0, 1] gives the legacy values bit for bit
+    # Evaluated in this order so that [0, 1] gives the pre-refactor values bit for
+    # bit, which the regression baselines depend on
     slope = np.where(is_constant, 1.0, (upper - lower) / span)
     intercept = np.where(is_constant, lower - low, lower - low * (upper - lower) / span)
     return Scaler(slope, intercept)

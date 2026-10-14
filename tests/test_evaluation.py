@@ -1,9 +1,9 @@
 """Evaluation: experiments, the oracle simulation, the root-finding problem, History."""
 
 import casadi as cas
-import illustrative_example as ex
 import numpy as np
 import pytest
+from scipy.special import lambertw
 
 import hybrid_bo
 from hybrid_bo import (
@@ -16,7 +16,6 @@ from hybrid_bo import (
     Var,
     evaluate,
     incumbents,
-    initial_points,
     oracle_experiment,
 )
 
@@ -46,33 +45,40 @@ def two_branch_problem() -> Problem:
     return Problem(system, f=lambda v: v.x + v.u)
 
 
+def closed_form(u: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """The illustrative example solved by hand, for u (n,): y = sin(u), and
+    x + exp(x) = y gives x = y - W(exp(y)) (Lambert W)."""
+    y = np.sin(u)
+    x = y - lambertw(np.exp(y)).real
+    return x, y, (6 * x - 2) ** 2 * np.sin(12 * x - 4)
+
+
+# `filterwarnings("error")` turns warnings into failures, so the test also checks
+# that the reconstruction agrees with the oracle
 @pytest.mark.filterwarnings("error")
-@pytest.mark.parametrize("noise_std", [0.0, 0.1])
-def test_initial_points_match_legacy(
-    illustrative_problem, illustrative_config, noise_std
-):
-    # Legacy stores y inside x: x_legacy = [x, y]
-    legacy = ex.get_custom_problem(illustrative_config)
-    legacy_rng = np.random.default_rng(0)
-    u_legacy = ex.get_u_initial(legacy, legacy_rng)
-    f, x, f_oracle, x_oracle = legacy.evaluate_with_noisy_simulation(
-        u_legacy, noise_std, illustrative_config.indices_x_measured, rng=legacy_rng
+def test_noise_free_evaluation_matches_the_closed_form(illustrative_problem):
+    """Without noise, the oracle values and the reconstruction both solve the
+    illustrative example exactly."""
+    u = np.array([-2.0, -0.5, 0.0, 1.0, 2.0])
+    experiment = illustrative_experiment(illustrative_problem, noise_std=0.0)
+
+    history = evaluate(
+        illustrative_problem, experiment, u[:, np.newaxis], np.random.default_rng(0)
     )
 
-    rng = np.random.default_rng(0)
-    u = initial_points(illustrative_problem.system.u, 2, rng)
-    experiment = illustrative_experiment(illustrative_problem, noise_std)
-    history = evaluate(illustrative_problem, experiment, u, rng)
-
-    np.testing.assert_array_equal(history.u, u_legacy)
-    np.testing.assert_array_equal(np.column_stack([history.x, history.y]), x)
-    np.testing.assert_array_equal(history.f, f.ravel())
+    x, y, f = closed_form(u)
     assert history.x_oracle is not None and history.y_oracle is not None
-    np.testing.assert_array_equal(
-        np.column_stack([history.x_oracle, history.y_oracle]), x_oracle
-    )
-    np.testing.assert_array_equal(history.f_oracle, f_oracle.ravel())
-    assert history.n_initial == 2
+    assert history.f_oracle is not None
+    for actual, expected in [
+        (history.x, x),
+        (history.y, y),
+        (history.x_oracle, x),
+        (history.y_oracle, y),
+    ]:
+        np.testing.assert_allclose(actual.ravel(), expected, rtol=1e-8, atol=1e-10)
+    np.testing.assert_allclose(history.f, f, rtol=1e-8, atol=1e-10)
+    np.testing.assert_allclose(history.f_oracle, f, rtol=1e-8, atol=1e-10)
+    assert history.n_initial == len(u)
 
 
 def test_noise_is_the_first_stream_draw(illustrative_problem):

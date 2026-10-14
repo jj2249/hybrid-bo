@@ -4,26 +4,22 @@ from collections.abc import Callable, Sequence
 from typing import Any
 
 import casadi as cas
-import illustrative_example as ex
 import numpy as np
 import pytest
 
 from hybrid_bo import Problem, System, Var, initial_points, lhs
 
 
-def test_illustrative_matches_legacy(illustrative_problem, illustrative_config):
-    # Legacy stores y inside x: x_legacy = [x, y]
+def test_illustrative_equations_take_x_y_u(illustrative_problem):
+    """The traced g and f of the illustrative example take their inputs in the order
+    (x, y, u) and compute the example's equations."""
     problem = illustrative_problem
-    legacy = ex.get_custom_problem(illustrative_config)
     rng = np.random.default_rng(0)
 
     for u, x, y in rng.uniform(-2.0, 2.0, size=(10, 3)):
-        x_legacy = np.array([x, y])
+        np.testing.assert_allclose(problem.system.g(x, y, u).full(), x + np.exp(x) - y)
         np.testing.assert_allclose(
-            problem.system.g(x, y, u).full(), legacy.h_known(u, x_legacy).full()
-        )
-        np.testing.assert_allclose(
-            problem.f(x, y, u).full(), legacy.f(u, x_legacy).full()
+            problem.f(x, y, u).full(), (6 * x - 2) ** 2 * np.sin(12 * x - 4)
         )
 
 

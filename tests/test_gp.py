@@ -1,5 +1,7 @@
-"""GP prediction and log marginal likelihood vs numpy/scipy references, and fitting
-vs the legacy GP."""
+"""GP prediction and log marginal likelihood vs numpy/scipy references, and what a fit
+finds and draws."""
+
+from dataclasses import replace
 
 import casadi as cas
 import numpy as np
@@ -18,11 +20,6 @@ from hybrid_bo import (
     predict,
 )
 from hybrid_bo.gp import Scaler
-from hybrid_bo.legacy import GP as LegacyGP
-from hybrid_bo.legacy.affine_transformers import MinMaxTransformer, StandardTransformer
-from hybrid_bo.legacy.kernels import Matern52Kernel, OutputScaleKernel
-from hybrid_bo.legacy.means import ZeroMean
-from hybrid_bo.legacy.optimizers import CasadiOptimizer, MultiStartOptimizer
 
 RTOL, ATOL = 1e-8, 1e-10
 NOISE_STD = 0.1
@@ -135,7 +132,8 @@ def test_hyper_checks():
         GP((NOISE, NOISE), lambda h, X1, X2: kernels.constant(X1, X2))
 
 
-# Fitting vs the legacy GP: same data, same generator, so the same starts
+# Fitting: the regression baselines pin the fitted hyperparameters of the
+# illustrative example; these check what a fit is and what it draws
 
 FIT_DATA = {
     "1d": (np.linspace(-2.0, 2.0, 4)[:, None], np.sin(np.linspace(-2.0, 2.0, 4))),
@@ -143,68 +141,45 @@ FIT_DATA = {
 }
 
 
-def fit_legacy(X, Y, learn_noise, rng):
-    """The legacy GP of the illustrative example, fitted as its routines do."""
-    d = X.shape[1]
-    base_kernel = Matern52Kernel(d)
-    kernel = OutputScaleKernel(base_kernel)
-    optimizer = MultiStartOptimizer(
-        CasadiOptimizer("ipopt", "nonlinear", {"print_time": 0}, {"print_level": 0})
-    )
-    gp = LegacyGP(d, kernel, ZeroMean(d), optimizer=optimizer)
-    if not learn_noise:
-        gp.noise_std.fix(0.0)
-    x_transformer, y_transformer = MinMaxTransformer(), StandardTransformer()
-    gp.set_XY_train(
-        x_transformer.fit_transform(X), y_transformer.fit_transform(Y[:, None])
-    )
-    gp.create_training_problem()
-    optimizer.lower_bounds_starting_points = optimizer.lower_bounds
-    optimizer.upper_bounds_starting_points = optimizer.upper_bounds
-    optimizer.X0 = optimizer.create_lhs_samples(10, rng)
-    gp.solve_training_problem()
+def test_fit_maximizes_the_likelihood():
+    """The fitted hyperparameters are at least as likely as any point of a log-spaced
+    grid over the bounds of the default GP."""
+    X, Y = FIT_DATA["1d"]
+    gp = default_gp(1)
 
-    hyperparameters = {
-        "outputscale": kernel.outputscale.value.ravel(),
-        "lengthscale": base_kernel.lengthscale.value.ravel(),
-    }
-    if learn_noise:
-        hyperparameters["noise_std"] = gp.noise_std.value.ravel()
-    mean, cov = gp.predict(x_transformer.transform(X_test[:, : X.shape[1]]))
-    prediction = (
-        y_transformer.inverse_transform(mean).ravel(),
-        np.sqrt(np.diag(cov)) / y_transformer.slope.item(),
-    )
-    return hyperparameters, prediction
+    fitted = fit_gp(gp, X, Y, np.random.default_rng(1))
 
-
-@pytest.mark.parametrize("learn_noise", [False, True], ids=["noise_free", "noise"])
-@pytest.mark.parametrize("data", FIT_DATA, ids=list(FIT_DATA))
-def test_fit_matches_legacy(data, learn_noise):
-    X, Y = FIT_DATA[data]
-    gp = default_gp(X.shape[1])
-    if learn_noise:  # legacy order: noise first, then the kernel's
-        gp = GP((NOISE, *gp.hyperparameters), gp.kernel)
-    rng, rng_legacy = np.random.default_rng(1), np.random.default_rng(1)
-
-    fitted = fit_gp(gp, X, Y, rng)
-    hyperparameters, (mean_legacy, std_legacy) = fit_legacy(
-        X, Y, learn_noise, rng_legacy
-    )
-
-    assert fitted.hyperparameters.keys() == hyperparameters.keys()
-    for name, value in hyperparameters.items():
-        np.testing.assert_allclose(
-            fitted.hyperparameters[name], value, rtol=1e-6, err_msg=name
+    # Every grid point, on the same scaled training data
+    grid = [
+        log_likelihood(
+            gp,
+            replace(
+                fitted,
+                hyperparameters={
+                    "outputscale": np.array([outputscale]),
+                    "lengthscale": np.array([lengthscale]),
+                },
+            ),
         )
-    mean, std = predict(gp, fitted, X_test[:, : X.shape[1]])
-    np.testing.assert_allclose(mean, mean_legacy, rtol=1e-6, atol=1e-8)
-    np.testing.assert_allclose(std, std_legacy, rtol=1e-6, atol=1e-8)
+        for outputscale in np.geomspace(0.1, 10.0, 15)
+        for lengthscale in np.geomspace(1e-3, 1e2, 15)
+    ]
+    assert log_likelihood(gp, fitted) >= max(grid) - 1e-8
 
-    # Same draws in the same order: the streams are in the same state, and the next
-    # child (what the next lhs call gets) is the same
-    assert rng.bit_generator.state == rng_legacy.bit_generator.state
-    assert rng.spawn(1)[0].random() == rng_legacy.spawn(1)[0].random()
+
+@pytest.mark.parametrize("data", FIT_DATA, ids=list(FIT_DATA))
+def test_fit_draws_one_lhs_and_nothing_from_the_stream(data):
+    """A fit's only draw is its Latin hypercube of starts, which takes the next
+    spawned child and leaves the stream untouched (DESIGN.md, order of draws)."""
+    X, Y = FIT_DATA[data]
+    rng = np.random.default_rng(1)
+
+    fit_gp(default_gp(X.shape[1]), X, Y, rng)
+
+    untouched = np.random.default_rng(1)
+    assert rng.bit_generator.state == untouched.bit_generator.state
+    untouched.spawn(1)
+    assert rng.spawn(1)[0].random() == untouched.spawn(1)[0].random()
 
 
 def test_failed_fit_keeps_initial_values(caplog):
