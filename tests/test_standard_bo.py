@@ -232,13 +232,15 @@ def test_failed_evaluation_carries_the_partial_run(illustrative_problem):
             np.random.default_rng(0),
         )
 
-    # The partial run: the initial points, and no surrogate (its trial point failed)
+    # The partial run: the initial points, and no surrogate (the surrogate behind the
+    # failed trial point is dropped with it); the error's history is the run's
     run = info.value.run
     assert isinstance(run, Run)
     assert run.history.u.shape == (2, 1)
     assert run.history.n_initial == 2
     assert run.surrogates == []
     assert run.record["method"] == "standard_bo"
+    assert info.value.history is run.history
 
 
 # The optimization loop, with test trial-point functions in place of a method
@@ -304,6 +306,7 @@ def test_failed_trial_point_carries_the_partial_run(illustrative_problem):
     assert run.history.u.shape == (3, 1)
     assert run.history.n_initial == 2
     assert run.surrogates == ["surrogate"]
+    assert info.value.history is run.history
 
 
 def test_failed_initial_point_carries_the_points_before_it(illustrative_problem):

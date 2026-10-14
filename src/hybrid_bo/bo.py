@@ -45,7 +45,9 @@ def optimization_loop(
     `run_record`, built before the method draws anything.
 
     Raises what `evaluate` and `trial_point` raise; a `HybridBOError` carries the
-    partial run, every point evaluated before it, as `error.run`.
+    partial run as `error.run`, and its history (every point evaluated before the
+    error) as `error.history`. If evaluating a trial point fails, the surrogate behind
+    it is dropped with it, so the run keeps one surrogate per evaluated trial point.
     """
     history: History | None = None
     surrogates: list[FittedGP] = []
@@ -60,6 +62,7 @@ def optimization_loop(
         # Before the loop, the initial points evaluated so far are the partial run
         partial = error.history if history is None else history
         if partial is not None:
+            error.history = partial
             error.run = Run(partial, record, surrogates)
         raise
     return Run(history, record, surrogates)

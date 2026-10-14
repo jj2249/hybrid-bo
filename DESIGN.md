@@ -478,8 +478,8 @@ sampling primitives.
   bounds. With the defaults it reproduces the legacy illustrative baseline.
 - `optimization_loop` takes the record and returns the `Run`, so a `HybridBOError` in
   the loop (an evaluation, or the trial-point function) carries the partial run as
-  `error.run` for every method: the points evaluated so far and one surrogate per
-  completed iteration. A method that adds fields to its `Run` (hybrid BO's scenarios)
+  `error.run` for every method: the points evaluated so far (also `error.history`) and
+  one surrogate per evaluated trial point (a failed evaluation drops its surrogate). A method that adds fields to its `Run` (hybrid BO's scenarios)
   adds them to the returned run and to `error.run`.
 - The record holds the settings without the GP, plus `gp` (hyperparameters, jitter),
   `kernel` and `mean` as expression text of the GP the run uses (the resolved

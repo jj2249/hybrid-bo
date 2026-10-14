@@ -17,7 +17,7 @@ from hybrid_bo.sampling import _start_bounds
 from hybrid_bo.solvers import NLP
 
 # Added to the standard deviation in EI, so a zero std doesn't divide by zero
-_EPSILON = 1e-10
+_EI_STD_EPSILON = 1e-10
 
 
 @dataclass(frozen=True)
@@ -57,7 +57,7 @@ def _expected_improvement(mean: Any, std: Any, incumbent: float) -> Any:
     """Expected improvement below the incumbent of a normal with this mean and std,
     for CasADi expressions."""
     improvement = incumbent - mean
-    gamma = improvement / (std + _EPSILON)
+    gamma = improvement / (std + _EI_STD_EPSILON)
     cdf = 0.5 * (1 + cas.erf(gamma / np.sqrt(2)))
     pdf = cas.exp(-0.5 * gamma**2) / np.sqrt(2 * np.pi)
     return improvement * cdf + std * pdf
