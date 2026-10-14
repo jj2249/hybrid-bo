@@ -24,7 +24,6 @@ autoapi_options = [
     "undoc-members",
     "private-members",
     "show-inheritance",
-    "imported-members",
 ]
 
 autodoc_typehints = "description"
