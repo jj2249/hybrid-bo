@@ -182,14 +182,14 @@ def hybrid_acquisition(
     y = Symbolic.sym("y", n, system.n_y) if unknown_states_as_variables else predicted
 
     # Each scenario: its known equations, its tie to the GP, and its objective
-    constraints, f = [], []
+    constraints, f_parts = [], []
     for s in range(n):
         x_s, y_s = x[s, :].T, y[s, :].T
         constraints.append(system.g(x_s, y_s, u))
         if unknown_states_as_variables:
             constraints.append(y_s - predicted[s, :].T)
-        f.append(problem.f(x_s, y_s, u))
-    f = cas.vertcat(*f)
+        f_parts.append(problem.f(x_s, y_s, u))
+    f = cas.vertcat(*f_parts)
 
     # The acquisition function, a weighted average over the scenarios
     weights = Symbolic(scenarios.w)
