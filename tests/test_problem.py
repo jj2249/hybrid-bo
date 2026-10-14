@@ -14,7 +14,7 @@ from hybrid_bo import lhs
 U = np.array([[-2.0], [-0.5], [0.0], [1.0], [2.0]])
 
 
-def closed_form(u):
+def closed_form(u: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     x1 = np.sin(u)
     x0 = x1 - lambertw(np.exp(x1)).real
     return np.hstack([x0, x1]), (6 * x0 - 2) ** 2 * np.sin(12 * x0 - 4)
@@ -64,8 +64,14 @@ def test_noise_is_the_first_stream_draw(illustrative_config):
 def test_lhs_spawns_instead_of_consuming_the_stream():
     # Pins the scipy behaviour the draw order relies on (DESIGN.md)
     rng = np.random.default_rng(0)
-    first = lhs(np.zeros(1), np.ones(1), 3, rng)
+    lhs(np.zeros(1), np.ones(1), 3, rng)
     second = lhs(np.zeros(1), np.ones(1), 3, rng)
 
-    assert not np.array_equal(first, second)  # each call takes the next child
-    assert rng.random() == np.random.default_rng(0).random()  # stream untouched
+    # Each call takes the next SeedSequence child, sharing the counter with spawn
+    after_one_spawn = np.random.default_rng(0)
+    after_one_spawn.spawn(1)
+    np.testing.assert_array_equal(
+        second, lhs(np.zeros(1), np.ones(1), 3, after_one_spawn)
+    )
+    # ... and leaves the stream untouched
+    assert rng.random() == np.random.default_rng(0).random()

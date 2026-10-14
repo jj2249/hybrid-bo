@@ -423,7 +423,8 @@ child of `rng`'s `SeedSequence` (as `rng.spawn` does). So every `lhs` call (init
 points, fsolve and root-finding starts, multistart starts, LHS designs) is ordered only
 against other `lhs` calls and `spawn`s, and the stream draws (`normal`, `uniform`,
 `standard_normal`: noise, scenarios, the uniform design) only against each other. The
-order above holds within each sequence. New code must keep using
+order above holds within each sequence; the order *between* the two sequences (e.g.
+noise before or after the oracle's fsolve starts) has no effect on any value. New code must keep using
 `LatinHypercube(..., rng=rng)` for `lhs`, and must not add a `spawn` or an `lhs` call
 in the middle of a run, or the baselines move. `tests/test_problem.py` pins this
 scipy behavior.
