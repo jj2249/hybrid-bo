@@ -65,7 +65,7 @@ its own regression baseline on the new API. Scope is in the issues and DESIGN.md
 - [x] #24: workflow (PR template, CLAUDE.md, this list)
 - [x] #25: evaluation (the ruff `TRY002`/`BLE001` ignores now cover only `legacy/`
       and `examples/`, until #30)
-- [ ] #26: Latin hypercube and uniform baselines. Blocked by #25
+- [x] #26: Latin hypercube and uniform baselines
 - [ ] #27: solvers and GP
 - [ ] #28: standard BO. Blocked by #26, #27
 - [ ] #29: hybrid BO. Blocked by #28
