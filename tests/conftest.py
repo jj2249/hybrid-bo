@@ -1,8 +1,10 @@
 from pathlib import Path
 
+import casadi as cas
 import pytest
 import yaml
 
+from hybrid_bo import Problem, System, Var
 from hybrid_bo.legacy import Config
 
 EXAMPLES_DIR = Path(__file__).parents[1] / "examples"
@@ -35,3 +37,20 @@ def illustrative_config():
     with (EXAMPLES_DIR / "illustrative_example" / "config.yaml").open() as f:
         cfg = yaml.safe_load(f)
     return Config(**(cfg | TEST_SETTINGS))
+
+
+@pytest.fixture
+def illustrative_problem() -> Problem:
+    """The illustrative example in the new style (DESIGN.md, target example)."""
+    u = Var("u", -2.0, 2.0)
+    x = Var("x", start=(-2.5, 1.0))
+    y = Var("y", start=(-2.0, 2.0))
+    system = System(
+        u=[u],
+        x=[x],
+        y=[y],
+        g=lambda v: [v.x + cas.exp(v.x) - v.y],
+        h_inputs=[u],
+        measured=[y],
+    )
+    return Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x - 4))

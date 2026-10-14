@@ -76,12 +76,15 @@ line-length = 88
 extend-exclude = [".pixi"]
 
 [tool.ruff.lint]
-# TRY002/BLE001: replacing bare `Exception`s and blanket excepts is a logic change (ROADMAP stage 5)
-ignore = ["E501", "TRY002", "BLE001"]
+ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
 # Re-exports define the public API
 "__init__.py" = ["F401"]
+# The old code raises bare `Exception`s and catches broadly; new code raises the
+# `HybridBOError` family. Both paths go in #30.
+"src/hybrid_bo/legacy/**" = ["TRY002", "BLE001"]
+"examples/**" = ["TRY002", "BLE001"]
 
 [tool.ruff.format]
 # Use double quotes and standard Ruff formatting.

@@ -72,7 +72,8 @@ _Avoid_: cost, target
 
 **Oracle**:
 A known stand-in for the unknown equations, used only in test cases to play the part of
-the real system. Real applications have no oracle.
+the real system. Real applications have no oracle. An in silico simulation of a plant
+is not an oracle: to the library it is a real system, run by a custom experiment.
 _Avoid_: ground truth, true system
 
 **Oracle values**:
