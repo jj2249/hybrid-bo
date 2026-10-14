@@ -60,22 +60,18 @@ earlier R1-R9.
 - [x] 4: `Var`, `System`, `Problem`
 
 After PR 4 the work is GitHub issues sliced by method; each method ticket reproduces
-its own regression baseline on the new API (DESIGN.md "Restructure PRs").
-- [x] #24: PR template and CLAUDE.md workflow fit the engineering skills; this list
-- [ ] #25: evaluation: experiments, root-finding, `evaluate`, `History`, error types
-      (removes the ruff `TRY002`/`BLE001` ignores once nothing raises bare
-      `Exception`). Blocked by #23
-- [ ] #26: Latin hypercube and uniform baselines end to end, `Run`. Blocked by #25
-- [ ] #27: solvers and GP: `multistart` with no tracebacks for expected failures,
-      `Hyper`, kernel functions, `fit_gp`, `predict`, scalers. Blocked by nothing
-- [ ] #28: standard BO end to end, `optimization_loop`, `EI`/`LCB`. Blocked by #26,
-      #27
-- [ ] #29: hybrid BO end to end, `Scenarios`. Blocked by #28
-- [ ] #30: switch the illustrative example; delete `legacy/`, `Config` and YAML.
-      Blocked by #26, #28, #29
-- [ ] #31: `hb.plots`; CLI for the examples. Blocked by #30
-- [ ] #32 *logic*: benchmark metric (oracle objective at the believed best point).
-      Blocked by #30
+its own regression baseline on the new API. Scope is in the issues and DESIGN.md
+"Restructure PRs".
+- [x] #24: workflow (PR template, CLAUDE.md, this list)
+- [ ] #25: evaluation (also removes the ruff `TRY002`/`BLE001` ignores). Blocked by #23
+- [ ] #26: Latin hypercube and uniform baselines. Blocked by #25
+- [ ] #27: solvers and GP
+- [ ] #28: standard BO. Blocked by #26, #27
+- [ ] #29: hybrid BO. Blocked by #28
+- [ ] #30: switch the illustrative example and delete the old code. Blocked by #26,
+      #28, #29
+- [ ] #31: plots and CLI. Blocked by #30
+- [ ] #32 *logic*: benchmark metric. Blocked by #30
 
 ## Stage 5: examples
 - [ ] Only require the minimum from users (defaults recorded in the run)

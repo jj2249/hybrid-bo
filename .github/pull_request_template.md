@@ -15,7 +15,8 @@ Closes #
 - [ ] `pixi run -e dev test`
 - [ ] `/mattpocock-skills:code-review` since `refactor/initial`: <!-- findings and what was done about them -->
 - [ ] Ran an example:
-<!-- Bug fixes: Root cause: <the confirmed hypothesis> -->
+
+Root cause (bug fixes only; delete otherwise): <!-- the confirmed hypothesis -->
 
 ## AI assistance
 - [ ] This PR contains AI-generated code (add the `ai-assisted` label)

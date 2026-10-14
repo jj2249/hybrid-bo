@@ -7,7 +7,7 @@ description: Use when working on src/hybrid_bo. Covers what the library computes
 
 The refactor goal and workflow are in CLAUDE.md, and open bugs are in ROADMAP.md
 under Known issues. This skill covers what the **current** code computes and the
-contracts between its parts. The target API is in DESIGN.md (stage 4: PRs 0 to 4, then issues #24 to #32);
+contracts between its parts. The target API is in DESIGN.md (stage 4: PRs 0 to 4, then issues #25 to #32);
 each restructure PR updates this skill as it replaces code.
 
 Use the terms in CONTEXT.md when writing about the code (PRs, tests, comments). The

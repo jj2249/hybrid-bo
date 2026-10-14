@@ -518,7 +518,7 @@ The tickets, in a workable order:
   `History`, the `HybridBOError` family. Blocked by #23.
 - **#26 Baselines**: Latin hypercube and uniform as methods returning a `Run` and its
   record; their regression tests on the new API. Blocked by #25.
-- **#27 GP**: `NLP`, `Ipopt`, `multistart`; `Hyper`, kernel functions, `GP`,
+- **#27 Solvers and GP**: `NLP`, `Ipopt`, `multistart`; `Hyper`, kernel functions, `GP`,
   `fit_gp`, `predict`, scalers, `default_gp`; port the kernel, GP and scaler tests.
   Blocked by nothing.
 - **#28 Standard BO**: `optimization_loop`, `EI`/`LCB`, `standard_bo`; its regression

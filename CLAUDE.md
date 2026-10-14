@@ -76,8 +76,8 @@ remove the marker in the PR that fixes the bug.
   code-review finds the spec. Add the `ai-assisted` label to PRs with AI-written
   code. Commits reference their issue (`#<n>`) and get a `Co-Authored-By` trailer.
 - Keep non-logic and logic changes in separate PRs. A *logic* PR changes the
-  results of existing code (the regression baselines move); adding new API that
-  leaves existing behavior unchanged is not logic.
+  results of existing code; adding new API that leaves existing behavior
+  unchanged is not logic.
 - Keep docs concise. Sphinx autoapi already covers the API, so don't duplicate it.
 - When a style question comes up, ask, then record the answer under Conventions.
 
