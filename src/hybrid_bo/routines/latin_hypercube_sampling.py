@@ -8,7 +8,6 @@ import numpy as np
 from hybrid_bo.config import Config
 from hybrid_bo.problem import Problem
 from hybrid_bo.results import ResultsBO
-from hybrid_bo.routines.utils import draw_measurement_noise
 from hybrid_bo.sampling import lhs
 
 
@@ -30,20 +29,18 @@ def do_latin_hypercube_sampling(
         raise Exception(msg)
 
     results_bo_complete = []
-    measurement_noise_complete = []
 
     # %% Iterate over multiple BO runs
 
     for i_run_bo in range(config.n_runs_bo):
         # %% Data for current run
 
-        # Each run draws only from its own generator: noise, then the design, then the loop
+        # Each run draws only from its own generator: the design, then each evaluation
+        # (noise and fsolve guesses)
         rng = rngs[i_run_bo]
 
         # Initial points AND BO iteration points
         n_points = u_initial_complete[i_run_bo].shape[0] + config.n_iterations_bo
-        measurement_noise = draw_measurement_noise(config, n_points, rng)
-        measurement_noise_complete.append(measurement_noise)
 
         # Additional points of u for the BO loop by latin hypercube sampling
         u_additional = lhs(
@@ -63,7 +60,6 @@ def do_latin_hypercube_sampling(
 
         # Initial points
         n_points_initial = u_initial_complete[i_run_bo].shape[0]
-        measurement_noise_initial = measurement_noise[:n_points_initial, :]
         u_initial = u_initial_complete[i_run_bo]
 
         x_initial = np.full((n_points, config.n_x), np.nan)
@@ -82,7 +78,7 @@ def do_latin_hypercube_sampling(
             f_initial, x_initial, f_no_noise_initial, x_no_noise_initial = (
                 problem.evaluate_with_noisy_simulation(
                     u_initial,
-                    measurement_noise_initial,
+                    config.std_measurement_noise,
                     config.indices_x_measured,
                     config.n_starts_max_evaluate_problem,
                     rng,
@@ -138,7 +134,7 @@ def do_latin_hypercube_sampling(
                 f_next, x_next, f_no_noise_next, x_no_noise_next = (
                     problem.single_evaluate_with_noisy_simulation(
                         u_next,
-                        measurement_noise[[n_points_initial + i_iteration_bo], :].T,
+                        config.std_measurement_noise,
                         config.indices_x_measured,
                         config.n_starts_max_evaluate_problem,
                         rng,
@@ -219,15 +215,3 @@ def do_latin_hypercube_sampling(
         else:
             with path.open("wb") as file:
                 pickle.dump(results_bo_complete, file, protocol=pickle.HIGHEST_PROTOCOL)
-
-    if config.save_extended_results:
-        path = results_dir / "measurement_noise.pkl"
-        if path.exists():
-            print(f"WARNING: File {path} exists. Will not overwrite.")
-        else:
-            with path.open("wb") as file:
-                pickle.dump(
-                    measurement_noise_complete,
-                    file,
-                    protocol=pickle.HIGHEST_PROTOCOL,
-                )

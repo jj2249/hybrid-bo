@@ -417,6 +417,18 @@ in this order:
 Root-finding starts are drawn even without noise, because the reconstruction always
 runs. Each consumer draws only what it uses, when it uses it.
 
+**A generator has two independent sequences.** scipy's
+`qmc.LatinHypercube(d, rng=rng)` does not consume `rng`'s stream: it spawns the next
+child of `rng`'s `SeedSequence` (as `rng.spawn` does). So every `lhs` call (initial
+points, fsolve and root-finding starts, multistart starts, LHS designs) is ordered only
+against other `lhs` calls and `spawn`s, and the stream draws (`normal`, `uniform`,
+`standard_normal`: noise, scenarios, the uniform design) only against each other. The
+order above holds within each sequence; the order *between* the two sequences (e.g.
+noise before or after the oracle's fsolve starts) has no effect on any value. New code must keep using
+`LatinHypercube(..., rng=rng)` for `lhs`, and must not add a `spawn` or an `lhs` call
+in the middle of a run, or the baselines move. `tests/test_problem.py` pins this
+scipy behavior.
+
 ## Removed
 
 | What | Why | Where to find it |
@@ -465,8 +477,10 @@ draw-order PR exactly.
    `examples/main.py` dispatches with `match`. Two hand-written LHS copies remain until
    their PRs: the fixed-x root-finding guesses (PR 5) and
    `MultiStartOptimizer.create_lhs_samples` (PR 6).
-2. **Draw order** (*logic*): the old routines draw in the order above and always
-   reconstruct after the experiment; regenerate the baselines and check the plots.
+2. **Draw order** (*logic*). *Done.* The old routines draw in the order above:
+   noise per evaluation (`noise_std` instead of a pre-drawn array), root-finding
+   always runs, `measurement_noise.pkl` dropped (it is `x - x_no_noise` on the
+   measured states). Baselines regenerated.
 3. **Legacy**: move the old code to `hybrid_bo/legacy/`.
 4. **Problem**: `Var`, `System`, `Problem`.
 5. **Evaluation**: `oracle_experiment`, root-finding, `evaluate`, `History`, error types.

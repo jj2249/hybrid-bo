@@ -285,24 +285,20 @@ class Problem:
     def evaluate_with_noisy_simulation(
         self,
         u: np.ndarray,
-        measurement_noise: np.ndarray,
+        noise_std: float,
         indices_x_measured: list[int],
         n_starts_max: int = 100,
         rng: np.random.Generator | None = None,
         original: bool = False,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Evaluates each row of u in turn; see single_evaluate_with_noisy_simulation_original."""
 
         if u.shape[1] != self.n_u:
             msg = "u.shape[1] != self.n_u"
             raise Exception(msg)
 
-        if measurement_noise.shape[1] != len(indices_x_measured):
-            msg = "measurement_noise.shape[1] != len(indices_x_measured)"
-            raise Exception(msg)
-
-        if u.shape[0] != measurement_noise.shape[0]:
-            msg = "u.shape[0] != measurement_noise.shape[0]"
-            raise Exception(msg)
+        if rng is None:
+            rng = np.random.default_rng()
 
         n_points = u.shape[0]
 
@@ -316,7 +312,7 @@ class Problem:
                 (f_current, x_current, f_no_noise_current, x_no_noise_current) = (
                     self.single_evaluate_with_noisy_simulation_original(
                         u[[i_point], :].T,
-                        measurement_noise[[i_point], :].T,
+                        noise_std,
                         indices_x_measured,
                         n_starts_max,
                         rng,
@@ -326,7 +322,7 @@ class Problem:
                 (f_current, x_current, f_no_noise_current, x_no_noise_current) = (
                     self.single_evaluate_with_noisy_simulation(
                         u[[i_point], :].T,
-                        measurement_noise[[i_point], :].T,
+                        noise_std,
                         indices_x_measured,
                         n_starts_max,
                         rng,
@@ -550,20 +546,26 @@ class Problem:
     def single_evaluate_with_noisy_simulation_original(
         self,
         u: np.ndarray,
-        measurement_noise: np.ndarray,
+        noise_std: float,
         indices_x_measured: list[int],
         n_starts_max: int = 100,
         rng: np.random.Generator | None = None,
     ) -> tuple[float, np.ndarray, float, np.ndarray]:
-        """Returns f and x (with and without consideration of measurement noise) from u using h_known and h_unknown."""
+        """Returns f and x (measured, then oracle values) from u.
+
+        Draws from rng in this order (DESIGN.md, "Order of random draws"):
+        1. the oracle simulation solves h_known and h_unknown (fsolve guesses);
+        2. noise on the measured states, even when noise_std is 0;
+        3. the root-finding problem solves h_known for the other states given the
+           measured ones (fsolve guesses). It always runs, also without noise.
+        """
 
         if u.shape != (self.n_u, 1):
             msg = "u.shape != (self.n_u, 1)"
             raise Exception(msg)
 
-        if measurement_noise.shape != (len(indices_x_measured), 1):
-            msg = "measurement_noise.shape != (len(indices_x_measured), 1)"
-            raise Exception(msg)
+        if rng is None:
+            rng = np.random.default_rng()
 
         f_no_noise, x_no_noise = self.single_evaluate_with_simulation(
             u,
@@ -571,34 +573,30 @@ class Problem:
             rng,
         )
 
-        if (measurement_noise != 0.0).any():
-            x_measured = x_no_noise[indices_x_measured] + measurement_noise
+        noise = rng.normal(0.0, noise_std, size=(len(indices_x_measured), 1))
+        x_measured = x_no_noise[indices_x_measured] + noise
 
-            f, x = self.single_evaluate_with_fixed_x(
-                u,
-                x_measured,
-                indices_x_measured,
-                n_starts_max,
-                rng,
-            )
-
-        else:
-            f = f_no_noise
-            x = x_no_noise
+        f, x = self.single_evaluate_with_fixed_x(
+            u,
+            x_measured,
+            indices_x_measured,
+            n_starts_max,
+            rng,
+        )
 
         return f, x, f_no_noise, x_no_noise
 
     def single_evaluate_with_noisy_simulation(
         self,
         u: np.ndarray,
-        measurement_noise: np.ndarray,
+        noise_std: float,
         indices_x_measured: list[int],
         n_starts_max: int = 100,
         rng: np.random.Generator | None = None,
     ) -> tuple[float, np.ndarray, float, np.ndarray]:
         return self.single_evaluate_with_noisy_simulation_original(
             u,
-            measurement_noise,
+            noise_std,
             indices_x_measured,
             n_starts_max,
             rng,

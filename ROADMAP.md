@@ -54,7 +54,7 @@ earlier R1-R9.
 - [x] 0: design review: CONTEXT.md, ADRs 0001-0003, DESIGN.md rewritten, this list
 - [x] 1: R1 trimmed (#17): exclude flash_unit; `lhs`/`uniform` on arrays; delete
       `Problem.solve`; remove `use_jacobian`; tidy `examples/main.py`
-- [ ] 2 *logic*: draw order from DESIGN.md; always reconstruct after the experiment;
+- [x] 2 *logic*: draw order from DESIGN.md; always reconstruct after the experiment;
       regenerate the baselines
 - [ ] 3: move the old code to `hybrid_bo/legacy/`
 - [ ] 4: `Var`, `System`, `Problem`

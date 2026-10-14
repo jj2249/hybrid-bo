@@ -4,21 +4,7 @@ import casadi as cas
 import numpy as np
 import scipy
 
-from hybrid_bo.config import Config
 from hybrid_bo.type_aliases import CasadiType
-
-
-def draw_measurement_noise(
-    config: Config,
-    n_points: int,
-    rng: np.random.Generator,
-) -> np.ndarray:
-    """Measurement noise for one run: one row per point, one column per measured state."""
-    return rng.normal(
-        0.0,
-        config.std_measurement_noise,
-        size=(n_points, len(config.indices_x_measured)),
-    )
 
 
 @overload
