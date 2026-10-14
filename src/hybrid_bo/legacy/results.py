@@ -2,8 +2,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from hybrid_bo.affine_transformers import AffineTransformer
-from hybrid_bo.gp import GP
+from hybrid_bo.legacy.affine_transformers import AffineTransformer
+from hybrid_bo.legacy.gp import GP
 
 
 @dataclass

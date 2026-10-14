@@ -1,6 +1,6 @@
 import numpy as np
 
-from hybrid_bo import Config, Problem
+from hybrid_bo.legacy import Config, Problem
 
 from .plot_functions_latin_hypercube_sampling import (
     create_plots as latin_hypercube_sampling_create_plots,

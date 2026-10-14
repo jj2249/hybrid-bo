@@ -1,12 +1,13 @@
 import numpy as np
 
-from hybrid_bo import GP, Problem, lhs
-from hybrid_bo.kernels import (
+from hybrid_bo import lhs
+from hybrid_bo.legacy import GP, Problem
+from hybrid_bo.legacy.kernels import (
     Matern52Kernel,
     OutputScaleKernel,
 )
-from hybrid_bo.means import ZeroMean
-from hybrid_bo.optimizers import (
+from hybrid_bo.legacy.means import ZeroMean
+from hybrid_bo.legacy.optimizers import (
     CasadiOptimizer,
     MultiStartOptimizer,
     Optimizer,

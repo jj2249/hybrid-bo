@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from hybrid_bo import Config
+from hybrid_bo.legacy import Config
 
 EXAMPLES_DIR = Path(__file__).parents[1] / "examples"
 

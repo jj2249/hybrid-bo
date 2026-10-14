@@ -7,18 +7,21 @@ from pathlib import Path
 import casadi as cas
 import numpy as np
 
-from hybrid_bo.affine_transformers import (
+from hybrid_bo.legacy.affine_transformers import (
     AffineTransformer,
     MinMaxTransformer,
     StandardTransformer,
 )
-from hybrid_bo.array_operations.statistics_functions import sample_mean, sample_variance
-from hybrid_bo.config import Config
-from hybrid_bo.gp import GP
-from hybrid_bo.optimizers import MultiStartOptimizer, Optimizer
-from hybrid_bo.problem import Problem
-from hybrid_bo.results import ResultsBO, ResultsGP
-from hybrid_bo.type_aliases import SymbolicType
+from hybrid_bo.legacy.array_operations.statistics_functions import (
+    sample_mean,
+    sample_variance,
+)
+from hybrid_bo.legacy.config import Config
+from hybrid_bo.legacy.gp import GP
+from hybrid_bo.legacy.optimizers import MultiStartOptimizer, Optimizer
+from hybrid_bo.legacy.problem import Problem
+from hybrid_bo.legacy.results import ResultsBO, ResultsGP
+from hybrid_bo.legacy.type_aliases import SymbolicType
 
 
 def do_hybrid_bo(

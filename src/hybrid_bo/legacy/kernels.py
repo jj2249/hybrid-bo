@@ -4,11 +4,11 @@ from typing import overload, override
 import casadi as cas
 import numpy as np
 
-from hybrid_bo.array_operations.distance_functions import squared_distance
-from hybrid_bo.array_operations.nonlinear_functions import exp, sqrt
-from hybrid_bo.array_operations.shape_functions import tile
-from hybrid_bo.parameterization import Parameter, Parameterized
-from hybrid_bo.type_aliases import CasadiType
+from hybrid_bo.legacy.array_operations.distance_functions import squared_distance
+from hybrid_bo.legacy.array_operations.nonlinear_functions import exp, sqrt
+from hybrid_bo.legacy.array_operations.shape_functions import tile
+from hybrid_bo.legacy.parameterization import Parameter, Parameterized
+from hybrid_bo.legacy.type_aliases import CasadiType
 
 
 class Kernel(Parameterized, ABC):

@@ -466,7 +466,9 @@ updates `hybrid-bo-src`, `hybrid-bo-examples`, the README and this file where it
 affects them.
 
 The old code is moved to `hybrid_bo/legacy/` and the new modules are built at their
-final paths, so nothing temporary bridges old and new. The switch PR ports the
+final paths. New code never depends on old code (old code may call new helpers such
+as `lhs`), so no shims are needed and deleting `legacy/` touches nothing new. The
+switch PR ports the
 regression test and the illustrative example and must reproduce the baselines from the
 draw-order PR exactly.
 
@@ -481,7 +483,10 @@ draw-order PR exactly.
    noise per evaluation (`noise_std` instead of a pre-drawn array), root-finding
    always runs, `measurement_noise.pkl` dropped (it is `x - x_no_noise` on the
    measured states). Baselines regenerated.
-3. **Legacy**: move the old code to `hybrid_bo/legacy/`.
+3. **Legacy**. *Done.* The old code is in `hybrid_bo/legacy/`, imported as
+   `hybrid_bo.legacy`; the top-level `hybrid_bo` exports only the new API. Legacy may
+   import new code, never the reverse. Result pickles saved before this PR
+   (`hybrid_bo.results.ResultsBO`) need the old path to unpickle.
 4. **Problem**: `Var`, `System`, `Problem`.
 5. **Evaluation**: `oracle_experiment`, root-finding, `evaluate`, `History`, error types.
 6. **Solvers**: `NLP`, `Ipopt`, `multistart`.

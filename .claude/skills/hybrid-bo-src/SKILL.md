@@ -34,7 +34,7 @@ current code predates them; this is the mapping:
   `fsolve`. Noise with std `noise_std` is drawn and added to the measured states
   (`Config.indices_x_measured`), and the root-finding problem then solves `h_known`
   for the other states. Both always happen, also when `noise_std` is 0.
-- **Hybrid BO** (`routines/hybrid_bo.py`): `h_unknown` is never used in the
+- **Hybrid BO** (`legacy/routines/hybrid_bo.py`): `h_unknown` is never used in the
   acquisition problem. A GP maps `[u[indices_u_input_gp], x[indices_x_input_gp]]`
   to `x[indices_x_output_gp]` and is trained on the evaluated points. The
   acquisition problem is a sample-average approximation:
@@ -49,15 +49,26 @@ current code predates them; this is the mapping:
     `mean(f_i) - factor_lcb_std * std(f_i)` (`ddof=0`).
   - Solved with a multistart optimizer. The trial point is the `u` part of the
     solution.
-- **Standard BO** (`routines/standard_bo.py`): a GP directly on `u -> f`, with
+- **Standard BO** (`legacy/routines/standard_bo.py`): a GP directly on `u -> f`, with
   analytic EI or LCB over `u` only.
 - **Latin hypercube / uniform sampling**: the non-adaptive baselines. They draw the
   whole design at the start of a run and train no GP.
 
 ## Module map
 
-This describes the current code. PRs 3 to 9 in DESIGN.md move it to
-`hybrid_bo/legacy/`, build the new modules beside it and then delete it.
+**New code** lives at the top level of `hybrid_bo` and never imports
+`hybrid_bo.legacy`; the top-level `hybrid_bo` exports only the new API. PRs 4 to 8
+add modules here, and PR 9 switches the example and the regression test over and
+deletes `legacy/`.
+
+- `sampling.py`: `lhs(lower, upper, n, rng)` and `uniform(...)` over a box, shape
+  `(n, d)`. Use them for any Latin hypercube or uniform draw; the two remaining
+  hand-written copies (fixed-x root-finding guesses, `create_lhs_samples`) go in
+  PRs 5 and 6.
+
+**The old code** is in `hybrid_bo/legacy/` (`from hybrid_bo.legacy import Config,
+GP, Problem`). It may import new code (`legacy/problem.py` uses `lhs`), never the
+reverse. Paths below are relative to `legacy/`.
 
 - `routines/`: the four entry points, with the signature
   `(problem, config, [gp], u_initial, rngs, [optimizer], results_dir, create_plots)`.
@@ -66,10 +77,6 @@ This describes the current code. PRs 3 to 9 in DESIGN.md move it to
 - `problem.py`: `Problem` holds `f`, `h_known`, `h_unknown` (CasADi
   functions) and the bounds, and evaluates the system. `fsolve` always uses the
   CasADi Jacobian.
-- `sampling.py`: `lhs(lower, upper, n, rng)` and `uniform(...)` over a box, shape
-  `(n, d)`. Use them for any Latin hypercube or uniform draw; the two remaining
-  hand-written copies (fixed-x root-finding guesses, `create_lhs_samples`) go in
-  PRs 5 and 6.
 - `gp.py`, `kernels.py`, `means.py`: an exact GP (Cholesky), kernels and means.
 - `parameterization.py`: `Parameter` (symbol, value, bounds, transform) and
   `Parameterized`, the base of GP, Kernel and Mean.

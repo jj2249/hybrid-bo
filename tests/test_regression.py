@@ -1,7 +1,7 @@
 """Regression tests: each routine on the illustrative example vs stored results.
 
 These lock in the *current* behavior, including the suspected bound bug in
-`setup_acq_problem` in `routines/hybrid_bo.py` (see ROADMAP Known issues). If a PR
+`setup_acq_problem` in `legacy/routines/hybrid_bo.py` (see ROADMAP Known issues). If a PR
 intentionally changes behavior, regenerate with
 `pixi run -e dev test --update-baselines` and review the JSON diff.
 """
@@ -15,8 +15,8 @@ import illustrative_example as ex
 import numpy as np
 import pytest
 
-from hybrid_bo.results import ResultsBO
-from hybrid_bo.routines import (
+from hybrid_bo.legacy.results import ResultsBO
+from hybrid_bo.legacy.routines import (
     do_hybrid_bo,
     do_latin_hypercube_sampling,
     do_standard_bo,

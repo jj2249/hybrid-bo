@@ -8,7 +8,7 @@ import casadi as cas
 import numpy as np
 import scipy
 
-from hybrid_bo.type_aliases import SymbolicType
+from hybrid_bo.legacy.type_aliases import SymbolicType
 
 
 @dataclass

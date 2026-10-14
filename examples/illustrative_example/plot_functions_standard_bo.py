@@ -2,9 +2,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes
 
-from hybrid_bo import GP, Config, Problem
-from hybrid_bo.affine_transformers import AffineTransformer
-from hybrid_bo.routines.utils import ei_gp
+from hybrid_bo.legacy import GP, Config, Problem
+from hybrid_bo.legacy.affine_transformers import AffineTransformer
+from hybrid_bo.legacy.routines.utils import ei_gp
 
 # plt.rcParams["text.usetex"] = True
 

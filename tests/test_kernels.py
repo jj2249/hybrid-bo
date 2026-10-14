@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 from scipy.spatial.distance import cdist
 
-from hybrid_bo.kernels import (
+from hybrid_bo.legacy.kernels import (
     ConstantKernel,
     LinearKernel,
     Matern12Kernel,
@@ -14,7 +14,7 @@ from hybrid_bo.kernels import (
     MaternInfKernel,
     OutputScaleKernel,
 )
-from hybrid_bo.parameterization import Parameter
+from hybrid_bo.legacy.parameterization import Parameter
 
 TOL = {"rtol": 1e-8, "atol": 1e-10}
 

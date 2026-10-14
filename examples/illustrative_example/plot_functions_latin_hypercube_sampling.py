@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes
 
-from hybrid_bo import Config, Problem
+from hybrid_bo.legacy import Config, Problem
 
 # plt.rcParams["text.usetex"] = True
 

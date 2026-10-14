@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from hybrid_bo.affine_transformers import MinMaxTransformer, StandardTransformer
+from hybrid_bo.legacy.affine_transformers import MinMaxTransformer, StandardTransformer
 
 X = np.random.default_rng(0).normal(3.0, 2.0, size=(10, 2))
 

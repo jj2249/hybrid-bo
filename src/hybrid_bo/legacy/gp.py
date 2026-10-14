@@ -3,18 +3,18 @@ from typing import overload
 import casadi as cas
 import numpy as np
 
-from hybrid_bo.array_operations.arithmetic_functions import sum
-from hybrid_bo.array_operations.linear_algebra import cholesky, solve
-from hybrid_bo.array_operations.nonlinear_functions import log
-from hybrid_bo.array_operations.shape_functions import diag
-from hybrid_bo.kernels import Kernel
-from hybrid_bo.means import Mean
-from hybrid_bo.optimizers import (
+from hybrid_bo.legacy.array_operations.arithmetic_functions import sum
+from hybrid_bo.legacy.array_operations.linear_algebra import cholesky, solve
+from hybrid_bo.legacy.array_operations.nonlinear_functions import log
+from hybrid_bo.legacy.array_operations.shape_functions import diag
+from hybrid_bo.legacy.kernels import Kernel
+from hybrid_bo.legacy.means import Mean
+from hybrid_bo.legacy.optimizers import (
     CasadiOptimizer,
     MultiStartOptimizer,
     Optimizer,
 )
-from hybrid_bo.parameterization import (
+from hybrid_bo.legacy.parameterization import (
     JoinedParameters,
     Parameter,
     Parameterized,
@@ -22,7 +22,7 @@ from hybrid_bo.parameterization import (
     set_values,
     transform,
 )
-from hybrid_bo.type_aliases import CasadiType, SymbolicType
+from hybrid_bo.legacy.type_aliases import CasadiType, SymbolicType
 
 
 class GP(Parameterized):

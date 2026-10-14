@@ -56,7 +56,7 @@ earlier R1-R9.
       `Problem.solve`; remove `use_jacobian`; tidy `examples/main.py`
 - [x] 2 *logic*: draw order from DESIGN.md; always reconstruct after the experiment;
       regenerate the baselines
-- [ ] 3: move the old code to `hybrid_bo/legacy/`
+- [x] 3: move the old code to `hybrid_bo/legacy/`
 - [ ] 4: `Var`, `System`, `Problem`
 - [ ] 5: `oracle_experiment`, root-finding, `evaluate`, `History`, error types (removes
       the ruff `TRY002`/`BLE001` ignores once nothing raises bare `Exception`)
@@ -87,35 +87,35 @@ earlier R1-R9.
 ## Known issues (fix only once a test covers them)
 Each entry says where it gets fixed. "Goes away" means the new code does not reproduce
 it (DESIGN.md: Known issues are not rebuilt), and that PR removes the entry.
-- `MinMaxTransformer.fit` (`affine_transformers.py:135`): the intercept is
+- `MinMaxTransformer.fit` (`legacy/affine_transformers.py:135`): the intercept is
   `-min/(max-min) + min_t`, but it should be `min_t - min*slope`. It's only correct
   for target ranges of width 1; the routines use the default [0, 1]. Covered by an
   xfail test. The fix leaves the regression baselines unchanged. *Goes away in PR 7
   (`minmax`), which removes the xfail marker.*
-- `LinearKernel.k_variable` with ARD (`kernels.py:279-290`) uses `scale.value`
+- `LinearKernel.k_variable` with ARD (`legacy/kernels.py:279-290`) uses `scale.value`
   instead of `scale.variable()`, so the ARD scale is never trained. Covered by
   an xfail test. `LinearKernel` isn't used by the examples. *Goes away in PR 7*:
   kernels are functions traced once, so the bug can't exist. PR 7 removes the xfail
   marker.
-- `setup_acq_problem` in `routines/hybrid_bo.py`: when `use_output_gp_as_opt_var=False`, the upper
+- `setup_acq_problem` in `legacy/routines/hybrid_bo.py`: when `use_output_gp_as_opt_var=False`, the upper
   starting-point bounds use `problem.u_upper_bounds_acquisition`; this should
   probably be `u_upper_bounds_starting_points`. The two coincide in the
   illustrative example, which hides it. *Goes away in PR 8* (start bounds live on
   each `Var`).
-- `formulation_acq` is validated strictly in `hybrid_bo.py` but with
-  `startswith("lcb")` in `setup_acq_problem` (`standard_bo.py`). *Goes away in PR 8 (`EI`/`LCB`).*
+- `formulation_acq` is validated strictly in `legacy/routines/hybrid_bo.py` but with
+  `startswith("lcb")` in `setup_acq_problem` (`legacy/routines/standard_bo.py`). *Goes away in PR 8 (`EI`/`LCB`).*
 - `Config.epsilon_ei_standard` is unused; `ei_gp` uses its own default. *Goes away
   in PR 9.*
-- `setup_acq_problem` in `routines/hybrid_bo.py` requires
+- `setup_acq_problem` in `legacy/routines/hybrid_bo.py` requires
   `len(indices_u_input_gp) + len(indices_x_input_gp) == problem.n_u`. This looks
   like an artifact of `main.py` building the GP with `problem.n_u` inputs; the
   real requirement is that the GP's `n_inputs` equals the number of GP inputs.
   *Goes away in PR 8* (inputs come from `h_inputs`).
-- `Problem.single_evaluate_with_fixed_x_original`: the Latin hypercube for the free states' starting points
+- `Problem.single_evaluate_with_fixed_x_original` (`legacy/problem.py`): the Latin hypercube for the free states' starting points
   uses `x_fixed.size` dimensions instead of `len(indices_x_free)`. The two are
   equal in the illustrative example. *Goes away in PR 5* (root-finding starts are
   drawn over the unmeasured variables).
 - `Config.indices_x_opt` is computed but never used. *Goes away in PR 9.*
-- `MultiStartOptimizer.create_lhs_samples` builds `msg`
+- `MultiStartOptimizer.create_lhs_samples` (`legacy/optimizers.py`) builds `msg`
   when `upper_bounds_starting_points is None` but never raises it. *Goes away in
   PR 6.*

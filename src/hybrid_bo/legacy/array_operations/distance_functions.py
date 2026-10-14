@@ -3,11 +3,11 @@ from typing import overload
 import casadi as cas
 import numpy as np
 
-from hybrid_bo.array_operations.arithmetic_functions import sum
-from hybrid_bo.array_operations.comparison_functions import fmax
-from hybrid_bo.array_operations.nonlinear_functions import sqrt
-from hybrid_bo.array_operations.shape_functions import tile
-from hybrid_bo.type_aliases import CasadiType
+from hybrid_bo.legacy.array_operations.arithmetic_functions import sum
+from hybrid_bo.legacy.array_operations.comparison_functions import fmax
+from hybrid_bo.legacy.array_operations.nonlinear_functions import sqrt
+from hybrid_bo.legacy.array_operations.shape_functions import tile
+from hybrid_bo.legacy.type_aliases import CasadiType
 
 
 @overload
