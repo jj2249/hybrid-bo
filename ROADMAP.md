@@ -65,14 +65,14 @@ its own regression baseline on the new API. Scope is in the issues and DESIGN.md
 - [x] #24: workflow (PR template, CLAUDE.md, this list)
 - [x] #39: PR bodies in the `pr` skill format (template, CLAUDE.md)
 - [x] #25: evaluation (the ruff `TRY002`/`BLE001` ignores now cover only `legacy/`
-      and `examples/`, until #30)
+      and `examples/`; since #30 only `examples/flash_unit/`)
 - [x] #26: Latin hypercube and uniform baselines
 - [x] #27: solvers and GP (removes the `minmax` intercept, `LinearKernel` ARD and
       `create_lhs_samples` Known issues)
 - [x] #28: standard BO
 - [x] #29: hybrid BO (removes the two `setup_acq_problem` Known issues)
-- [ ] #30: switch the illustrative example and delete the old code. Blocked by #26,
-      #28, #29
+- [x] #30: switch the illustrative example and delete the old code (removes the
+      `epsilon_ei_standard` and `indices_x_opt` Known issues)
 - [ ] #31: plots and CLI. Blocked by #30
 - [ ] #32 *logic*: benchmark metric. Blocked by #30
 
@@ -97,6 +97,4 @@ its own regression baseline on the new API. Scope is in the issues and DESIGN.md
 ## Known issues (fix only once a test covers them)
 Each entry says where it gets fixed. "Goes away" means the new code does not reproduce
 it (DESIGN.md: Known issues are not rebuilt), and that PR removes the entry.
-- `Config.epsilon_ei_standard` is unused; `ei_gp` uses its own default. *Goes away
-  in #30.*
-- `Config.indices_x_opt` is computed but never used. *Goes away in #30.*
+- None open.

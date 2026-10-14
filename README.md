@@ -58,44 +58,69 @@ Pixi handles different dependency groups by creating different environments.
 
 ## Usage
 
-To perform Bayesian optimization for partially known systems using hybrid models, you have to call the function
-`do_hybrid_bo()` in [`./src/hybrid_bo/legacy/routines/hybrid_bo.py`](./src/hybrid_bo/legacy/routines/hybrid_bo.py).
+The problem is equation (4) of the [publication](https://arxiv.org/abs/2603.11199):
+minimize `f(x, y, u)` over the decision variables `u`, subject to the known equations
+`0 = g(x, y, u)` and the unknown equations `y = h(x, u)`, which a GP learns from
+measurements. Describe it in Python, then run a method:
 
-To be able to compare the performance with other approaches, we also provide
+```python
+import casadi as cas
+import numpy as np
 
-* Standard Bayesian optimization (function `do_standard_bo()` in [`./src/hybrid_bo/legacy/routines/standard_bo.py`](./src/hybrid_bo/legacy/routines/standard_bo.py))
-* Latin hypercube sampling (function `do_latin_hypercube_sampling()` in [`./src/hybrid_bo/legacy/routines/latin_hypercube_sampling.py`](./src/hybrid_bo/legacy/routines/latin_hypercube_sampling.py))
-* Uniform sampling (function `do_uniform_sampling()` in [`./src/hybrid_bo/legacy/routines/uniform_sampling.py`](./src/hybrid_bo/legacy/routines/uniform_sampling.py))
+import hybrid_bo as hb
 
-For the function `do_hybrid_bo()`, you need to provide
+# Problem: the variables, the known equations and the objective
+u = hb.Var("u", lower=-2.0, upper=2.0)
+x = hb.Var("x", start=(-2.5, 1.0))  # unbounded, so start bounds are required
+y = hb.Var("y", start=(-2.0, 2.0))
+system = hb.System(
+    u=[u],
+    x=[x],
+    y=[y],
+    g=lambda v: [v.x + cas.exp(v.x) - v.y],  # 0 = g(x, y, u)
+    h_inputs=[u],  # y = h(u)
+    measured=[y],
+)
+problem = hb.Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x - 4))
 
-* A `Problem` (see [`./src/hybrid_bo/legacy/problem.py`](./src/hybrid_bo/legacy/problem.py)) as in equation (4) in the [publication](https://arxiv.org/abs/2603.11199)
-* A `Config` (see [`./src/hybrid_bo/legacy/config.py`](./src/hybrid_bo/legacy/config.py))
-* A `GP` (Gaussian process, see [`./src/hybrid_bo/legacy/gp.py`](./src/hybrid_bo/legacy/gp.py))
-* An `Optimizer` (see [`./src/hybrid_bo/legacy/optimizers.py`](./src/hybrid_bo/legacy/optimizers.py))
-* Initial points and a random number generator for each run (e.g. `config.rng.spawn(config.n_runs_bo)`; see [`./examples/main.py`](./examples/main.py))
+# Experiment: here an oracle plays the real system
+experiment = hb.oracle_experiment(system, oracle=lambda v: [cas.sin(v.u)])
 
-A `GP` needs
+# Method
+rng = np.random.default_rng(0)
+initial_points = hb.initial_points(system.u, n=2, rng=rng)
+run = hb.hybrid_bo(problem, experiment, initial_points, 5, hb.HybridBOSettings(), rng)
+print(run.history.f)
+```
 
-* A `Kernel` (see [`./src/hybrid_bo/legacy/kernels.py`](./src/hybrid_bo/legacy/kernels.py))
-* A `Mean` (see [`./src/hybrid_bo/legacy/means.py`](./src/hybrid_bo/legacy/means.py))
-* A standard deviation `Parameter` (see [`./src/hybrid_bo/legacy/parameterization.py`](./src/hybrid_bo/legacy/parameterization.py))
-* An `Optimizer` (see [`./src/hybrid_bo/legacy/optimizers.py`](./src/hybrid_bo/legacy/optimizers.py))
-
-All hyperparameters of a `GP` are objects of `Parameter` (see [`./src/hybrid_bo/legacy/parameterization.py`](./src/hybrid_bo/legacy/parameterization.py)).
+- **Methods**: `hybrid_bo` and, to compare with, `standard_bo`, `latin_hypercube_sampling`
+  and `uniform_sampling`. Each returns a `Run`: the evaluated points (`run.history`),
+  the fitted GPs and a record of how the run was produced. A `Run` is plain data, so it
+  pickles and loads without your code.
+- **Experiments**: a real application passes a function `(u, rng) -> measured` that
+  returns the measured variables at `u`. `oracle_experiment` simulates one from known
+  unknown equations, for test cases.
+- **Settings**: `HybridBOSettings` and `StandardBOSettings` choose the acquisition
+  function (`EI()` or `LCB(std_factor)`), the GP (`default_gp` unless given; see `GP`,
+  `Hyper` and `hybrid_bo.kernels`), the number of scenarios and the solver starts.
+- **Errors** are `HybridBOError` subclasses; one raised during a method carries the
+  partial run as `error.run`.
 
 **Important**: Currently, only one unknown equation is supported. For more information, see the [publication](https://arxiv.org/abs/2603.11199).
 
 ## Examples
 
-Currently, we have implemented two examples
+[`./examples/illustrative_example.py`](./examples/illustrative_example.py) runs every
+method on the illustrative example of the [publication](https://arxiv.org/abs/2603.11199)
+and saves the runs to `examples/results/`:
 
-* [`./examples/illustrative_example/`](./examples/illustrative_example/)
-* [`./examples/flash_unit/`](./examples/flash_unit/)
+```bash
+pixi run -e dev python examples/illustrative_example.py
+```
 
-The examples are described in detail in the [publication](https://arxiv.org/abs/2603.11199).  
-You can run the examples with [`./examples/main.py`](./examples/main.py).  
-Before running the examples, make sure you have installed the dependency group `examples`, see [`./pyproject.toml`](./pyproject.toml).
+[`./examples/main.py`](./examples/main.py) runs the example named at its top.
+[`./examples/flash_unit/`](./examples/flash_unit/) still targets the old API (tag
+`pre-refactor`) until it is ported.
 
 ## API documentation
 

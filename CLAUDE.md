@@ -6,8 +6,7 @@ Bayesian optimization for partially known systems using hybrid models
 `y = h(x, u)`, which a GP learns. The acquisition problem is solved over scenarios
 (sample-average approximation) using CasADi. Standard BO, Latin hypercube sampling
 and uniform sampling are included as baselines. The vocabulary is in
-[CONTEXT.md](CONTEXT.md); use its terms. (The code before the restructure still uses
-`h_known`/`h_unknown` and stores `y` inside `x`.)
+[CONTEXT.md](CONTEXT.md); use its terms.
 
 ## Goal of the refactor
 
@@ -38,13 +37,13 @@ pixi run -e dev lint | format | typecheck
 pixi run -e dev docs         # sphinx API docs -> docs/_build/html
 pixi run -e dev setup        # install pre-commit hooks
 pixi run -e quality pre-commit run --hook-stage manual ty   # ty hook is manual for now
-pixi run -e dev python examples/main.py   # example and routine are hardcoded at the top of main.py
+pixi run -e dev python examples/illustrative_example.py   # every method; runs saved to examples/results/
 ```
 
 The git hook hardcodes the pixi Python path. If commits fail with "`pre-commit`
 not found" after a Python upgrade, re-run `pixi run -e quality setup`.
 
-`tests/test_regression.py` runs each routine on the illustrative example
+`tests/test_regression.py` runs each method of the illustrative example
 (seed 0, 2 iterations) and compares the results with `tests/data/regression/*.json`.
 Only update the baselines in a PR that is meant to change behavior, and explain
 the JSON diff in that PR.
@@ -57,8 +56,8 @@ remove the marker in the PR that fixes the bug.
 - `hybrid-bo-src` (`.claude/skills/`): what the library computes, the module
   map, data and shape conventions, surprising behavior and the testing rules.
   Load it before working on `src/`.
-- `hybrid-bo-examples`: the files and exports an example needs, how to define
-  the Problem, the config fields and common mistakes.
+- `hybrid-bo-examples`: the layout of an example script, how to define the
+  Problem and the experiment, method settings, saving runs and common mistakes.
 - Both skills describe the *current* code; DESIGN.md describes the target. When a
   PR changes behavior or contracts, update the relevant skill in the same PR.
 
@@ -97,10 +96,8 @@ remove the marker in the PR that fixes the bug.
   implementation exists.
 - American spelling everywhere, in code and prose (`optimization_loop`,
   "optimization loop").
-- New code lives at the top level of `hybrid_bo` and never imports
-  `hybrid_bo.legacy` (the old code, deleted in #30). Legacy code may
-  import new code (e.g. `lhs`).
-- Functions take what they use, not a `Config`. Randomness is an explicit `rng`.
+- Library code lives at the top level of `hybrid_bo`.
+- Functions take what they use. Randomness is an explicit `rng`.
 - Rows are points: a point is `(n,)`, a set is `(n_points, n)`, `f` is
   `(n_points,)`. Column vectors only in CasADi glue code.
 - The library returns results; examples save them.

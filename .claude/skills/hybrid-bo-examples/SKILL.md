@@ -1,120 +1,85 @@
 ---
 name: hybrid-bo-examples
-description: Use when writing, modifying or running an example under examples/. Covers the files and exports an example needs, how to define the Problem with CasADi, the config.yaml fields, and common mistakes.
+description: Use when writing, modifying or running an example under examples/. Covers the layout of an example script, how to define the Problem and the experiment, the method settings, saving runs, and common mistakes.
 ---
 
 # Writing and running examples
 
-`examples/illustrative_example/` is the reference. `examples/flash_unit/` is out
-of scope for the current refactor, so leave it alone. This describes the **current**
-contract. The target is DESIGN.md's "Target example": a single Python script with
-named variables, no `config.yaml` and no callbacks. #30 switches the illustrative
-example to it and rewrites this skill.
+`examples/illustrative_example.py` is the reference: one Python script, in the style of
+DESIGN.md's "Target example". `examples/flash_unit/` still targets the `pre-refactor`
+tag and is out of scope until its port (#42), so leave it alone. Use CONTEXT.md's terms
+(decision variables `u`, mechanistic states `x`, unknown states `y`, known equations
+`g`, oracle, scenarios).
 
-Use CONTEXT.md's terms when writing about examples. In the current contract, the
-unknown states `y` are entries of `x` selected by `indices_x_output_gp`, `h_known`
-is the known equations `g`, and `h_unknown` is the oracle.
+## Layout of an example script
 
-## Layout
+An example is one module under `examples/`, importable as a top-level module (pytest
+and ty put `examples/` on the path). At module level it defines, in this order:
 
-    examples/<name>/
-      __init__.py          re-exports the functions below
-      config.yaml          -> Config(**yaml)
-      custom_problem.py    get_custom_problem
-      user_definitions.py  get_u_initial, get_gp_*, get_optimizer_*
-      plot_functions_*.py  create_plots for each routine (only if plotting)
+1. **Problem**: `Var`s, `System`, `Problem` (below).
+2. **Experiment**: `oracle_experiment(system, oracle, noise_std)` for a test case, or a
+   custom `(u (N,), rng) -> measured (P,)` function.
+3. **Methods**: `methods`, a dict from method name to a callable
+   `(problem, experiment, initial_points, n, rng) -> Run`. Bind settings with
+   `functools.partial(hb.hybrid_bo, settings=hb.HybridBOSettings(...))`; the baselines
+   need no settings (`n` is their number of design points).
+4. **Runs**: `seed` (`None` draws a fresh one, recorded in every run), `n_runs`,
+   `n_initial`, `n_iterations`.
 
-## Required exports
+Under `if __name__ == "__main__":` it runs every method `n_runs` times and pickles
+each method's `list[Run]` to `examples/results/<example>/<UTC time>/<method>.pkl`
+(git-ignored). The library returns runs; the script saves them. Importing the module
+runs nothing, so `tests/test_regression.py` reuses its `problem`, `experiment` and
+`methods`, and `tests/conftest.py`'s `illustrative_problem` fixture is its `problem`.
+Changing the illustrative example's problem, experiment or settings therefore moves
+the regression baselines: that is a *logic* change.
 
-| Function | Returns |
-|---|---|
-| `get_custom_problem(config)` | `Problem` |
-| `get_u_initial(problem, rng)` | one run's initial points `(n_initial, n_u)`, drawn only from `rng` (use `hybrid_bo.lhs` over the `u` starting-point bounds) |
-| `get_gp_hybrid_bo(n_inputs)` / `get_gp_standard_bo(n_inputs)` | `GP` |
-| `get_optimizer_hybrid_bo()` / `get_optimizer_standard_bo()` | `Optimizer` (e.g. `MultiStartOptimizer(CasadiOptimizer("ipopt", ...))`) |
-| `create_plots_{hybrid_bo,standard_bo,latin_hypercube_sampling,uniform_sampling}` | plot callbacks; the sampling ones take `(problem, config, f, u, x, n_points_initial, i_iteration)` (no GP) |
+**Randomness.** One generator per run, spawned from one seed that every method shares,
+so run `i` of each method starts from the same initial points:
+`np.random.default_rng(entropy).spawn(n_runs)`, then
+`hb.initial_points(system.u, n_initial, rng)` and the method, both from that run's
+`rng`. Draw nothing else from it.
 
-`main.py` spawns one generator per run (`config.rng.spawn(n_runs_bo)`), calls
-`get_u_initial` once per run with that run's generator, and passes the generators
-to the routine as `rngs`. Plot callbacks may use `config.rng`; it doesn't affect
-the runs.
-
-`examples/main.py` looks up `create_plots_<routine>` only when `create_plots` is
-on, so an example without plot modules runs with `create_plots: False`.
+**Failures.** A `HybridBOError` raised during a method carries the partial run as
+`error.run`; save it with the others.
 
 ## Defining the problem
 
-See `illustrative_example/custom_problem.py`:
-
 ```python
-u = SymbolicType.sym("u", config.n_u, 1)
-x = SymbolicType.sym("x", config.n_x, 1)
-# Objective, scalar (1, 1)
-f = cas.Function("f", [u, x], [...])
-# Known residuals
-h_known = cas.Function("h_known", [u, x], [...])
-# Oracle residuals, only used in the oracle simulation
-h_unknown = cas.Function("h_unknown", [u, x], [...])
-# Bounds: each of u_acq, x_acq, u_sp, x_sp is a (lower, upper) pair
-Problem(f, h_known, h_unknown, *u_acq, *x_acq, *u_sp, *x_sp)
+u = hb.Var("u", lower=-2.0, upper=2.0)  # start bounds default to finite bounds
+x = hb.Var("x", start=(-2.5, 1.0))  # unbounded: start bounds required
+y = hb.Var("y", start=(-2.0, 2.0))
+system = hb.System(
+    u=[u],
+    x=[x],
+    y=[y],
+    g=lambda v: [v.x + cas.exp(v.x) - v.y],  # 0 = g(x, y, u), one entry per x
+    h_inputs=[u],  # arguments of y = h(.), from u and x
+    measured=[y],  # what the sensors read, from x and y
+)
+problem = hb.Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x - 4))
 ```
 
-- Each function takes exactly `[u, x]`, as column vectors, and has one output.
-  `n_u` and `n_x` are read from `f`.
-- `h_known` and `h_unknown` together must have `n_x` equations, so the system is
-  square for `fsolve`.
-- All bounds are `(n, 1)` arrays.
-  - Acquisition bounds (`*_acq`) may be `±inf` for `x`.
-  - Starting-point bounds (`*_sp`) must be finite. They are the ranges for
-    initial guesses and initial points.
-- Use `hybrid_bo.legacy.type_aliases.SymbolicType` for symbols. Everything an
-  example needs from the old library comes from `hybrid_bo.legacy` (`Config`, `GP`,
-  `Problem`, `kernels`, `optimizers`, ...); only new API such as `lhs` comes from
-  `hybrid_bo`.
-
-## config.yaml
-
-- **Problem:**
-  - `n_u` and `n_x` must match the `Problem`.
-  - `indices_u_input_gp` and `indices_x_input_gp` select the GP inputs.
-  - `indices_x_output_gp` selects the unknown states, which the GP predicts.
-  - `indices_x_measured` selects the measured variables, which get the noise.
-  - `use_output_gp_as_opt_var` makes the unknown states variables of the
-    acquisition problem (default in the new design: `unknown_states_as_variables`).
-  - `std_measurement_noise`
-  - `n_starts_training_gp`
-  - `n_starts_max_evaluate_problem`: the number of `fsolve` starts (which always
-    use the CasADi Jacobian).
-- **BO:**
-  - `n_runs_bo` (independent runs) and `n_iterations_bo` (per run).
-  - `create_plots`, `save_bo_results` and `save_extended_results`.
-- **Acquisition:**
-  - `formulation_acq` is `"ei"` or `"lcb"`.
-  - `n_starts_acq_optimization`
-  - `n_samples_gp`: the number of scenarios (hybrid only)
-  - `factor_lcb_std`
-  - `epsilon_ei_standard` is currently unused.
-- **General:** `seed` (`null` means not reproducible).
+- `g`, `f` and the oracle are callables over a namespace `v` of CasADi symbols, one per
+  variable name; use `cas` functions (`cas.exp`, `cas.sin`), not numpy.
+- Bounds are the boxes of the acquisition problem and may be infinite. Start bounds
+  must be finite: they are the ranges of initial points, solver starts and
+  root-finding starts.
+- The oracle returns one expression per unknown state: `oracle=lambda v: [cas.sin(v.u)]`.
 
 ## Common mistakes
 
-- **GP inputs must total `n_u`.** Hybrid BO requires
-  `len(indices_u_input_gp) + len(indices_x_input_gp) == n_u`, because `main.py`
-  builds the GP with `problem.n_u` inputs (a Known issue; the new design takes the
-  GP inputs from `h_inputs`).
-- **Measured variables:** `len(indices_x_measured)` must equal the number of
-  `h_unknown` equations (the number of unknown states), so the root-finding
-  problem is square. Noise is drawn per measured variable.
-- **Noise:** with `std_measurement_noise > 0`, remove `gp.noise_std.fix(0.0)` in
-  `get_gp_*` so the GP can learn the noise.
-- **Index lists** are lists, even with a single entry (`[0]`, not `0`), and an
-  empty selection is `[]`.
+- **Measured variables**: exactly one per unknown state (`len(measured) == P`), so the
+  root-finding problem is square. Only `P == 1` is supported.
+- **Noise**: with `noise_std > 0`, give the GP a `noise_std` hyperparameter
+  (`hb.Hyper("noise_std", ...)` in a custom `hb.GP`); `default_gp` is noise-free.
+- **Ambiguous reconstruction**: a `ReconstructionWarning` means the measured variables
+  don't pin the states to the oracle's root. Narrow the unmeasured start bounds to the
+  right branch, or measure other variables.
 
 ## Running
 
-Edit `example` and `routine` at the top of `examples/main.py`, then:
+    pixi run -e dev python examples/illustrative_example.py
 
-    pixi run -e dev python examples/main.py
-
-Results go to `examples/<name>/<routine>/` and are git-ignored. Existing files
-are never overwritten, so delete the folder to re-run.
+`examples/main.py` runs the example named at its top the same way (a CLI comes in #31).
+There are no plots until `hb.plots` (#31); a `Run` holds everything they need.
