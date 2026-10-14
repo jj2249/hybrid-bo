@@ -67,7 +67,7 @@ remove the marker in the PR that fixes the bug.
   `<stage>-<topic>` (e.g. `s1-hooks`).
 - Agree scope in plan mode before editing.
 - Before opening a PR, run `pixi run -e dev check` and `pixi run -e dev test`,
-  then `/code-review`.
+  then `/mattpocock-skills:code-review` since `refactor/initial`.
 - Use the PR template. Add the `ai-assisted` label to PRs with AI-written code.
   Commits get a `Co-Authored-By` trailer.
 - Keep non-logic and logic changes in separate PRs.
