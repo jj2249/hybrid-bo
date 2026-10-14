@@ -14,7 +14,7 @@ import casadi as cas
 import numpy as np
 
 from hybrid_bo.gp import GP, FittedGP, predict
-from hybrid_bo.problem import Problem, Symbolic, System
+from hybrid_bo.problem import Problem, Symbolic, _h_inputs
 from hybrid_bo.sampling import _start_bounds
 from hybrid_bo.solvers import NLP
 
@@ -129,15 +129,6 @@ def saa_scenarios(n: int, n_y: int, rng: np.random.Generator) -> Scenarios:
     """n scenarios for the sample-average approximation: standard normal scenario
     draws z (n, n_y) and equal weights 1/n."""
     return Scenarios(rng.standard_normal((n, n_y)), np.full(n, 1 / n))
-
-
-def _h_inputs(system: System, u: Any, x: Any) -> list[Any]:
-    """The arguments of h at each row of u (n, N) and x (n, M), numeric or CasADi, as
-    a list of columns in the order of `system.h_inputs`."""
-    columns = {var: u[:, i] for i, var in enumerate(system.u)} | {
-        var: x[:, j] for j, var in enumerate(system.x)
-    }
-    return [columns[var] for var in system.h_inputs]
 
 
 def hybrid_acquisition(

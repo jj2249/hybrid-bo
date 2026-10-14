@@ -67,7 +67,8 @@ test), and #30 switches the example over and deletes `legacy/`.
   `cas.Function`s with column-vector inputs in the paper's order `(x, y, u)`. All
   input checks live in the constructors and raise `ValueError` (`NotImplementedError`
   for `P > 1`). `Symbolic` (default `cas.SX`) is the one place the symbol type is
-  chosen.
+  chosen. `_h_inputs(system, u, x)` gives the `h_inputs` columns of numeric or
+  symbolic `u`, `x` (hybrid BO's GP training data and acquisition problem).
 - `sampling.py`: `lhs(lower, upper, n, rng)` and `uniform(...)` over a box, shape
   `(n, d)`; `initial_points(variables, n, rng)` is `lhs` over `Var` start bounds.
   Use them for any Latin hypercube or uniform draw; the hand-written copies in
@@ -120,8 +121,7 @@ test), and #30 switches the example over and deletes `legacy/`.
   `w (S,)`, checked), `saa_scenarios(n, n_y, rng)` and `hybrid_acquisition` (variables
   `u`, then `vec` of the `(S, M)` x copies, then of the `(S, P)` y copies if variables;
   bounds and start bounds from each `Var`, repeated per scenario; `g` per scenario,
-  followed by its GP tie). `_h_inputs(system, u, x)` gives the `h_inputs` columns of
-  numeric or symbolic `u`, `x`, for training and for the acquisition problem.
+  followed by its GP tie).
 - `bo.py`: `optimization_loop(problem, experiment, initial_points, n_iterations,
   trial_point, rng, record) -> Run` (evaluate initial points, then per iteration
   `trial_point(problem, history, rng) -> (u, surrogate)` and evaluate u; a

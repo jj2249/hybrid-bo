@@ -15,7 +15,6 @@ from hybrid_bo.acquisition import (
     EI,
     LCB,
     _check_acquisition,
-    _h_inputs,
     hybrid_acquisition,
     saa_scenarios,
     standard_acquisition,
@@ -24,7 +23,7 @@ from hybrid_bo.errors import HybridBOError
 from hybrid_bo.evaluation import Experiment, evaluate
 from hybrid_bo.gp import GP, FittedGP, _gp_record, default_gp, fit_gp
 from hybrid_bo.history import History, _concatenate, incumbents
-from hybrid_bo.problem import Problem, Var
+from hybrid_bo.problem import Problem, Var, _h_inputs
 from hybrid_bo.run import Run, run_record
 from hybrid_bo.sampling import lhs
 from hybrid_bo.solvers import Ipopt, multistart

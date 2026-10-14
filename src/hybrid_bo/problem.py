@@ -275,6 +275,15 @@ class System:
         return len(self.y)
 
 
+def _h_inputs(system: System, u: Any, x: Any) -> list[Any]:
+    """The arguments of h at each row of u (n, N) and x (n, M), numeric or CasADi, as
+    a list of columns in the order of `system.h_inputs`."""
+    columns = {var: u[:, i] for i, var in enumerate(system.u)} | {
+        var: x[:, j] for j, var in enumerate(system.x)
+    }
+    return [columns[var] for var in system.h_inputs]
+
+
 @dataclass(frozen=True, init=False)
 class Problem:
     """A system plus the objective to minimize.
