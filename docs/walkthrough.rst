@@ -121,7 +121,8 @@ Running it and reading a run
 A *method* is how a problem is solved. The example compares hybrid BO with standard
 BO and two baselines that sample without a model, Latin hypercube and uniform
 sampling. Each method is a function with the same arguments, so the example keeps
-them in a dictionary, with their settings bound by ``functools.partial``.
+them in a dictionary, with their settings bound by ``functools.partial``. The settings
+of the BO methods are also kept on their own, for the plots.
 
 .. literalinclude:: ../examples/illustrative_example.py
    :language: python
@@ -130,15 +131,16 @@ them in a dictionary, with their settings bound by ``functools.partial``.
 
 Every run gets its own random generator, which draws everything the run needs: the
 initial points, the scenarios, the multistart starts and any noise. The example
-spawns one generator per run from one seed, the same seed for every method, so run
-``i`` of each method starts from the same initial points. A method that fails raises
-a :py:class:`~hybrid_bo.errors.HybridBOError` carrying the partial run, which the
-example saves too.
+The examples' CLI, ``examples/main.py``, spawns one generator per run from one
+seed, the same seed for every method, so run ``i`` of each method starts from the
+same initial points. A method that fails raises a
+:py:class:`~hybrid_bo.errors.HybridBOError` carrying the partial run, which the CLI
+saves too.
 
-.. literalinclude:: ../examples/illustrative_example.py
+.. literalinclude:: ../examples/main.py
    :language: python
    :start-at: # One seed for every method
-   :end-before: with (results_dir
+   :end-before: # One pickle per method
    :dedent:
 
 A method returns a :py:class:`~hybrid_bo.run.Run`, which is plain data, so it pickles
@@ -158,5 +160,6 @@ and loads without the code that produced it.
   variables and equations, the experiment, the method and its settings, the seed and
   the package and code versions.
 
-``pixi run -e dev python examples/illustrative_example.py`` runs every method and
-saves the runs to ``examples/results/``.
+``pixi run -e dev python examples/main.py run illustrative_example`` runs every
+method and saves the runs to ``examples/results/``; the CLI's ``plot`` command draws
+them (see ``examples/main.py``).
