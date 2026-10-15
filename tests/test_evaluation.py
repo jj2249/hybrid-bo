@@ -93,7 +93,7 @@ def test_noise_free_evaluation_matches_the_closed_form(illustrative_problem):
 def test_noise_is_the_first_stream_draw(illustrative_problem):
     """The measurement noise is the first draw from the evaluation's generator."""
     # The root-finding starts come from lhs, which spawns instead of consuming the
-    # stream, so the noise is the evaluation's first stream draw
+    # stream
     experiment = illustrative_experiment(illustrative_problem, noise_std=0.1)
 
     history = evaluate(

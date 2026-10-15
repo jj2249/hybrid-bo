@@ -51,7 +51,7 @@ def model(request):
         "outputscale": np.array([1.7]),
         "lengthscale": np.array([0.6, 0.9]),
     }
-    # The default GP with a fixed noise hyperparameter
+    # The default GP (noise-free) plus a noise hyperparameter
     spec = default_gp(2)
     gp = GP(
         (NOISE, *spec.hyperparameters),
@@ -70,7 +70,6 @@ def model(request):
         def prior_mean(n):
             return np.full(n, 0.4)
 
-    # Identity scalers, so the GP works in the units of the reference
     identity = Scaler(np.ones(2), np.zeros(2))
     fitted = FittedGP(
         hyperparameters,
@@ -140,9 +139,7 @@ def test_log_likelihood(model):
 
 
 def test_hyper_checks():
-    """Hyper rejects bounds that aren't positive when it is fitted in log space, an
-    initial value outside its bounds and a name that isn't an identifier; GP rejects
-    repeated names."""
+    """Hyper and GP reject invalid arguments."""
     # `pytest.raises` fails the test unless the block raises that exception, with a
     # message matching `match`
     with pytest.raises(ValueError, match="positive"):
@@ -210,12 +207,13 @@ def test_failed_fit_keeps_initial_values(caplog):
     """A fit whose solver fails keeps the initial hyperparameters and logs that it
     did.
 
-    `caplog` is a pytest fixture that captures log records during the test;
-    `pytest.approx` compares numbers with a tolerance.
+    `caplog` is a pytest fixture that captures log records during the test.
     """
     X, Y = FIT_DATA["1d"]
     no_iterations = Ipopt(solver_options={"print_level": 0, "max_iter": 0})
     fitted = fit_gp(default_gp(1), X, Y, np.random.default_rng(0), solver=no_iterations)
+
+    # `pytest.approx` compares numbers with a tolerance
     assert fitted.hyperparameters == pytest.approx(
         {"outputscale": np.array([1.0]), "lengthscale": np.array([1.0])}
     )

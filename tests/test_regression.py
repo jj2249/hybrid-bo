@@ -63,6 +63,8 @@ def test_illustrative_example(method, update_baselines):
     """The method reproduces its stored results on the illustrative example."""
     actual = run_method(method)
 
+    # With --update-baselines, store the results instead of comparing. `pytest.skip`
+    # ends the test and reports it as skipped
     baseline_path = BASELINE_DIR / f"illustrative_{method}.json"
     if update_baselines:
         BASELINE_DIR.mkdir(parents=True, exist_ok=True)
@@ -70,6 +72,7 @@ def test_illustrative_example(method, update_baselines):
         baseline_path.write_text(json.dumps(data, indent=1) + "\n")
         pytest.skip(f"updated {baseline_path.name}")
 
+    # Every array matches its stored value
     expected = json.loads(baseline_path.read_text())
     assert actual.keys() == expected.keys()
     for name, value in actual.items():

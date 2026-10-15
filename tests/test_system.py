@@ -131,8 +131,8 @@ def test_more_than_one_unknown_state_is_not_supported_yet():
 
 
 def test_unknown_name_in_a_callable():
-    """Using a name that isn't a variable in g raises, listing the variables there
-    are."""
+    """Using a name that isn't a variable in g raises, listing the available
+    ones."""
     with pytest.raises(
         AttributeError, match="Unknown variable 'w'; available: x, y, u"
     ):
