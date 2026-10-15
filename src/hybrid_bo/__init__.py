@@ -1,4 +1,4 @@
-from hybrid_bo import kernels
+from hybrid_bo import kernels, plots
 from hybrid_bo.acquisition import (
     EI,
     LCB,

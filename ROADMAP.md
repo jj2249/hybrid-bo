@@ -73,7 +73,7 @@ its own regression baseline on the new API. Scope is in the issues and DESIGN.md
 - [x] #29: hybrid BO (removes the two `setup_acq_problem` Known issues)
 - [x] #30: switch the illustrative example and delete the old code (removes the
       `epsilon_ei_standard` and `indices_x_opt` Known issues)
-- [ ] #31: plots and CLI. Blocked by #30
+- [x] #31: plots and CLI
 - [x] #32 *logic*: benchmark metric
 - [x] #41: the tests that survive #30 follow the test comment rules
 - [x] #47: a walkthrough of the illustrative example in the Sphinx docs (figures
@@ -95,7 +95,8 @@ its own regression baseline on the new API. Scope is in the issues and DESIGN.md
       doesn't exist)
 - [ ] CI (lint, typecheck, tests)
 - [ ] Tidy pixi environments (`examples` and `dev` are currently identical)
-- [ ] Packaging and PyPI
+- [ ] Packaging and PyPI (with a `plots` extra for matplotlib, which `hb.plots`
+      imports on first use)
 
 ## Known issues (fix only once a test covers them)
 Each entry says where it gets fixed. "Goes away" means the new code does not reproduce
