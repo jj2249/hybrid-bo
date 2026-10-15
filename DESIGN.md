@@ -602,7 +602,7 @@ it. Polars and matplotlib are optional (imported on first use; the
   through) over a thin `examples/main.py`, which imports the example, overrides its
   `settings` (`StudySettings`) with the flags and calls `hb.study` and `hb.save`, or
   `hb.load` and `hb.plots`. Results go to
-  `examples/results/<name>/<study id>/{study.json, runs/, figures/}`; the study id is
+  `results/<name>/<study id>/{study.json, runs/, figures/}`; the study id is
   `--name` or the UTC time to the second, with `-2`, `-3`, ... on a collision, and
   `plot` takes the largest id by default. `plot` writes only under `figures/`:
   convergence, regret and every iteration of every run

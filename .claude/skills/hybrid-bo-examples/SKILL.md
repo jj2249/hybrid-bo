@@ -32,7 +32,7 @@ and ty put `examples/` on the path). At module level it defines, in this order:
 
 The module has no `__main__` block: the CLI (`examples/main.py`) runs it as
 `hb.study(methods, problem, experiment, settings, name=..., optimum=..., oracle=...)`
-and saves the study with `hb.save` to `examples/results/<example>/<study id>/`
+and saves the study with `hb.save` to `results/<example>/<study id>/`
 (`study.json`, `runs/<method>/run-000.json`; git-ignored). The library never writes
 files on its own; saving is an explicit call. `--help` lists every module in
 `examples/` that defines `methods`. Importing the module runs nothing, so

@@ -24,7 +24,8 @@ docs/_templates/
 *.pkl
 
 
-# Example results (written by the example scripts)
+# Studies saved by `pixi run example` (in examples/results/ before #51)
+/results/
 examples/results/
 
 # Personal Claude Code settings (shared skills in .claude/skills are committed)

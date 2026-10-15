@@ -168,7 +168,7 @@ them.
   the package and code versions.
 
 ``pixi run example illustrative_example`` runs every method and saves the study to
-``examples/results/illustrative_example/``; ``pixi run plot illustrative_example``
+``results/illustrative_example/``; ``pixi run plot illustrative_example``
 draws the newest one (see ``examples/main.py``).
 
 Plotting a study

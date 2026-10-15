@@ -7,7 +7,8 @@
 An example is a module in this folder that defines `problem`, `experiment`,
 `methods` (label -> method), its default study `settings` and, for a test case, the
 `oracle` (the study computes the oracle optimum from it) or the known `optimum`.
-`run` saves a study with `hb.save` to `<results root>/<example>/<study id>/`, where
+`run` saves a study with `hb.save` to `<results root>/<example>/<study id>/` (the
+results root defaults to `results/` at the repo root), where
 the study id is `--name` or the UTC time, with `-2`, `-3`, ... appended if taken.
 `plot` loads a study (default: the newest, the largest id) with `hb.load` and saves
 its figures to its `figures/` folder.
@@ -27,7 +28,7 @@ import matplotlib.pyplot as plt
 import hybrid_bo as hb
 
 EXAMPLES_DIR = Path(__file__).parent
-RESULTS_ROOT = EXAMPLES_DIR / "results"
+RESULTS_ROOT = EXAMPLES_DIR.parent / "results"
 
 
 def examples() -> dict[str, ModuleType]:
