@@ -8,11 +8,12 @@ over evaluations, not iterations, since the initial points are not free.
 """
 
 import re
+from types import ModuleType
 from typing import TYPE_CHECKING
 
 import numpy as np
 
-from hybrid_bo.history import History, incumbents, oracle_incumbents
+from hybrid_bo.history import incumbents, oracle_incumbents
 from hybrid_bo.run import Run
 from hybrid_bo.studies import Study
 
@@ -20,7 +21,7 @@ if TYPE_CHECKING:
     import polars as pl
 
 
-def _polars():
+def _polars() -> ModuleType:
     """The `polars` module. Raises `ImportError`, naming the extra, when it isn't
     installed."""
     try:
@@ -43,14 +44,20 @@ def _run_evaluations(
 ) -> "pl.DataFrame":
     """The rows of `evaluations` for one run."""
     pl = _polars()
-    history: History = run.history
+    history = run.history
     n = len(history.f)
     n_iterations = n - history.n_initial
-    has_oracle = history.f_oracle is not None
 
     def floats(values: np.ndarray | list[float | None] | None) -> "pl.Series":
         """A Float64 column, all null when `values` is None."""
         return pl.Series([None] * n if values is None else values, dtype=pl.Float64)
+
+    def per_iteration(values: list) -> list:
+        """`values`, one per iteration, as a column: null for the initial points and
+        for iterations past the end of `values`."""
+        return (
+            [None] * history.n_initial + values + [None] * (n_iterations - len(values))
+        )
 
     # Where the row is: the method, the run, and its evaluation and iteration
     columns = {
@@ -58,7 +65,7 @@ def _run_evaluations(
         "run": pl.Series([run.index] * n, dtype=pl.Int64),
         "evaluation": pl.Series(range(1, n + 1), dtype=pl.Int64),
         "iteration": pl.Series(
-            [None] * history.n_initial + list(range(1, n_iterations + 1)),
+            per_iteration(list(range(1, n_iterations + 1))),
             dtype=pl.Int64,
         ),
     }
@@ -78,15 +85,15 @@ def _run_evaluations(
     columns["f_oracle"] = floats(history.f_oracle)
 
     # The incumbents, the regret and the acquisition value behind each trial point
-    oracle_incumbent = oracle_incumbents(history) if has_oracle else None
+    oracle_incumbent = None
+    if history.f_oracle is not None:
+        oracle_incumbent = oracle_incumbents(history)
     has_regret = oracle_incumbent is not None and optimum is not None
     columns["incumbent"] = floats(incumbents(history))
     columns["oracle_incumbent"] = floats(oracle_incumbent)
     columns["regret"] = floats(oracle_incumbent - optimum if has_regret else None)
     values = [solution.value for solution in run.acquisitions[:n_iterations]]
-    columns["acquisition"] = floats(
-        [None] * history.n_initial + values + [None] * (n_iterations - len(values))
-    )
+    columns["acquisition"] = floats(per_iteration(values))
     return pl.DataFrame(columns)
 
 
@@ -119,18 +126,22 @@ def summary(study: Study) -> "pl.DataFrame":
     """One row per method, in the study's order, with columns:
 
     - `method`, `runs` (the runs in the study) and `failed` (the runs of the
-      settings that didn't finish: those that stopped short and those that left
-      nothing to keep);
+      settings that didn't finish: those that stopped short, which are among
+      `runs`, and those that left nothing to keep, which are not);
     - `<value>_median` and `<value>_iqr` (interquartile range, with numpy's default
-      linear quantiles) over runs of the final `incumbent`, `oracle_incumbent` and
-      `regret`, as in `evaluations` (null where those are null).
+      linear quantiles) over the study's runs, short ones included, of the final
+      `incumbent`, `oracle_incumbent` and `regret`, as in `evaluations` (null
+      where those are null).
 
-    Raises `ImportError` without Polars.
+    A method none of whose runs left anything has no row. Raises `ImportError` without Polars.
     """
     pl = _polars()
     settings = study.settings
-    n_evaluations = settings.n_initial + settings.n_iterations
+
+    # The last evaluation of each run; a run that finished has every evaluation
     finals = evaluations(study).group_by("method", "run", maintain_order=True).last()
+    n_evaluations = settings.n_initial + settings.n_iterations
+    finished = (pl.col("evaluation") == n_evaluations).sum().cast(pl.Int64)
 
     def spread(name: str) -> list["pl.Expr"]:
         """The median and interquartile range of a column."""
@@ -138,12 +149,10 @@ def summary(study: Study) -> "pl.DataFrame":
         iqr = column.quantile(0.75, "linear") - column.quantile(0.25, "linear")
         return [column.median().alias(f"{name}_median"), iqr.alias(f"{name}_iqr")]
 
+    # Per method: failed counts against the settings, so runs that left nothing count
     return finals.group_by("method", maintain_order=True).agg(
         pl.len().cast(pl.Int64).alias("runs"),
-        (
-            settings.n_runs
-            - (pl.col("evaluation") == n_evaluations).sum().cast(pl.Int64)
-        ).alias("failed"),
+        (settings.n_runs - finished).alias("failed"),
         *spread("incumbent"),
         *spread("oracle_incumbent"),
         *spread("regret"),
