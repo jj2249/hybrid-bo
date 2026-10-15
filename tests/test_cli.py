@@ -119,6 +119,7 @@ def test_a_relative_results_root_is_relative_to_where_pixi_started(
     `monkeypatch` is a pytest fixture that sets environment variables for this test
     only.
     """
+    # Pixi started in the temporary folder
     monkeypatch.setenv("INIT_CWD", str(tmp_path))
 
     run_cli(
@@ -126,6 +127,7 @@ def test_a_relative_results_root_is_relative_to_where_pixi_started(
         + ["--name", "here", "--results-root", "out"]
     )
 
+    # Saved under the temporary folder, not examples/
     assert (tmp_path / "out" / "illustrative_example" / "here" / "study.json").exists()
 
 

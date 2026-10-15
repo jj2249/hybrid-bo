@@ -49,8 +49,8 @@ and ty put `examples/` on the path). At module level it defines, in this order:
    the methods never do. `true_curves=True` makes the iteration figures evaluate the
    experiment over the grid, so set it only for a cheap experiment (an oracle).
 
-Every name the module defines is used in that call: nothing is read from the module
-by name. `cli.main` runs `hb.study(methods, problem, experiment, study_settings,
+Everything the command line uses is passed in that call (directly, or inside
+`problem` and `experiment`): nothing is read from the module by name. `cli.main` runs `hb.study(methods, problem, experiment, study_settings,
 name=..., optimum=...)` and saves the study with `hb.save` to
 `results/<example>/<study id>/` (`study.json`, `runs/<method>/run-000.json`;
 git-ignored). The library never writes files on its own; saving is an explicit call.

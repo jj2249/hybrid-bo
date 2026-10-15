@@ -40,7 +40,7 @@ def main(
     problem: hb.Problem,
     experiment: hb.Experiment,
     methods: Mapping[str, Method],
-    settings: hb.StudySettings,
+    study_settings: hb.StudySettings,
     *,
     optimum: float | None = None,
     true_curves: bool = False,
@@ -49,16 +49,17 @@ def main(
     """Runs the example's methods as a study and saves it, or plots a saved study,
     as the command line (`argv`, default `sys.argv`) says.
 
-    `name` names the study and its folder. `settings` are the defaults the flags
-    override. `optimum` is the stated oracle optimum of a test case, which regret is
-    measured from. `true_curves` draws the experiment's values over the grid in the
-    iteration figures, which only a cheap experiment (an oracle) can afford.
+    `name` names the study and its folder. `study_settings` are the defaults the
+    flags override. `optimum` is the stated oracle optimum of a test case, which
+    regret is measured from. `true_curves` draws the experiment's values over the
+    grid in the iteration figures, which only a cheap experiment (an oracle) can
+    afford.
     """
-    # The command: `plot [STUDY]`, else a run
+    # The command: `plot [STUDY]`, else a run with every argument
     args = list(sys.argv[1:] if argv is None else argv)
-    command = "plot" if args[:1] == ["plot"] else "run"
-    parser = _parser(name, methods)
-    parsed = parser[command].parse_args(args[1:] if command == "plot" else args)
+    command, rest = ("plot", args[1:]) if args[:1] == ["plot"] else ("run", args)
+    parsers = _parsers(name, methods)
+    parsed = parsers[command].parse_args(rest)
     example_dir = _from_init_cwd(parsed.results_root) / name
 
     # Run: the example's settings, overridden by the flags given
@@ -69,7 +70,7 @@ def main(
             "n_iterations": parsed.n_iterations,
         }
         settings = replace(
-            settings,
+            study_settings,
             **{key: value for key, value in given.items() if value is not None},
         )
         chosen = {label: methods[label] for label in parsed.methods or methods}
@@ -90,9 +91,9 @@ def main(
         elif saved:
             study_dir = max(saved, key=lambda path: path.stat().st_mtime).parent
         else:
-            parser["plot"].error(f"{example_dir} holds no study")
+            parsers["plot"].error(f"{example_dir} holds no study")
         if not (study_dir / "study.json").exists():
-            parser["plot"].error(f"{study_dir} holds no study")
+            parsers["plot"].error(f"{study_dir} holds no study")
 
     # Plot, also straight after a run with --plot
     if command == "plot" or parsed.plot:
@@ -100,17 +101,17 @@ def main(
             plot(name, problem, experiment if true_curves else None, study_dir)
 
 
-def _parser(
+def _parsers(
     name: str, methods: Mapping[str, Method]
 ) -> dict[str, argparse.ArgumentParser]:
-    """The parsers of the two commands: running (the default) and `plot`."""
+    """The parsers of the two commands, by name: `run` (the default) and `plot`."""
     # Running, `pixi run example <name>`
-    run = argparse.ArgumentParser(
+    run_parser = argparse.ArgumentParser(
         prog=f"pixi run example {name}",
         description=f"Run the methods of {name} as a study and save it.",
         epilog=f"To plot a saved study instead: pixi run plot {name} [STUDY]",
     )
-    run.add_argument(
+    run_parser.add_argument(
         "--method",
         action="append",
         dest="methods",
@@ -118,21 +119,21 @@ def _parser(
         metavar="METHOD",
         help=f"a method to run (repeatable): {', '.join(methods)}; default every one",
     )
-    run.add_argument("--n-runs", type=int, help="default: the example's")
-    run.add_argument("--seed", type=int, help="default: the example's")
-    run.add_argument("--n-iterations", type=int, help="default: the example's")
-    run.add_argument("--name", help="the study id; default: the UTC time")
-    run.add_argument("--plot", action="store_true", help="plot after running")
-    run.add_argument("--results-root", type=Path, default=RESULTS_ROOT)
+    run_parser.add_argument("--n-runs", type=int, help="default: the example's")
+    run_parser.add_argument("--seed", type=int, help="default: the example's")
+    run_parser.add_argument("--n-iterations", type=int, help="default: the example's")
+    run_parser.add_argument("--name", help="the study id; default: the UTC time")
+    run_parser.add_argument("--plot", action="store_true", help="plot after running")
+    run_parser.add_argument("--results-root", type=Path, default=RESULTS_ROOT)
 
     # Plotting, `pixi run plot <name>`
-    plot = argparse.ArgumentParser(
+    plot_parser = argparse.ArgumentParser(
         prog=f"pixi run plot {name}",
         description=f"Plot a saved study of {name} into its figures/ folder.",
     )
-    plot.add_argument("study", nargs="?", help="the study id; default: newest")
-    plot.add_argument("--results-root", type=Path, default=RESULTS_ROOT)
-    return {"run": run, "plot": plot}
+    plot_parser.add_argument("study", nargs="?", help="the study id; default: newest")
+    plot_parser.add_argument("--results-root", type=Path, default=RESULTS_ROOT)
+    return {"run": run_parser, "plot": plot_parser}
 
 
 def _from_init_cwd(path: Path) -> Path:
