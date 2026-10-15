@@ -39,6 +39,9 @@ def matern52(X1, X2):
     return 1.7 * (1 + np.sqrt(5) * r + 5 / 3 * r**2) * np.exp(-np.sqrt(5) * r)
 
 
+# A fixture is a function marked `@pytest.fixture`: a test with an argument of the
+# same name gets its return value. With `params`, each test that uses it runs once per
+# entry, which the fixture reads from `request.param`
 @pytest.fixture(params=["zero_mean", "constant_mean"])
 def model(request):
     """A GP with known hyperparameters and identity scalers, so predictions are in
@@ -48,11 +51,13 @@ def model(request):
         "outputscale": np.array([1.7]),
         "lengthscale": np.array([0.6, 0.9]),
     }
+    # The default GP with a fixed noise hyperparameter
     spec = default_gp(2)
     gp = GP(
         (NOISE, *spec.hyperparameters),
         spec.kernel,
     )
+    # The constant-mean variant adds an offset hyperparameter
     prior_mean = np.zeros
     if request.param == "constant_mean":
         gp = GP(
@@ -65,6 +70,7 @@ def model(request):
         def prior_mean(n):
             return np.full(n, 0.4)
 
+    # Identity scalers, so the GP works in the units of the reference
     identity = Scaler(np.ones(2), np.zeros(2))
     fitted = FittedGP(
         hyperparameters,
@@ -77,6 +83,8 @@ def model(request):
 
 
 def test_predict(model):
+    """The posterior mean and std match the closed-form GP posterior in numpy."""
+    # Reference: the posterior from the kernel matrices
     gp, fitted, prior_mean = model
     K = matern52(X_train, X_train) + (NOISE_STD**2 + JITTER) * np.eye(len(X_train))
     K_star = matern52(X_train, X_test)
@@ -84,14 +92,18 @@ def test_predict(model):
     mean_ref = prior_mean(len(X_test)) + K_star.T @ np.linalg.solve(K, residual)
     cov_ref = matern52(X_test, X_test) - K_star.T @ np.linalg.solve(K, K_star)
 
+    # Prediction: one mean and std per row of X_test
     mean, std = predict(gp, fitted, X_test)
     assert mean.shape == std.shape == (len(X_test),)
     np.testing.assert_allclose(mean, mean_ref, rtol=RTOL, atol=ATOL)
     np.testing.assert_allclose(std, np.sqrt(np.diag(cov_ref)), rtol=RTOL, atol=ATOL)
 
 
+# `parametrize` runs the test once per entry of the list, each as its own test case
 @pytest.mark.parametrize("symbol_type", [cas.SX, cas.MX])
 def test_predict_symbolic_matches_numeric(model, symbol_type):
+    """Predicting at CasADi symbols (SX or MX) gives the same values as predicting at
+    the numbers."""
     gp, fitted, _ = model
     X = symbol_type.sym("X", *X_test.shape)
     function = cas.Function("predict", [X], list(predict(gp, fitted, X)))
@@ -102,12 +114,16 @@ def test_predict_symbolic_matches_numeric(model, symbol_type):
 
 
 def test_predict_undoes_the_scalers(model):
+    """With non-identity scalers, predict scales its inputs and unscales its outputs:
+    the mean and std are in the original units."""
+    # The same GP with scalers, and the test points in original units
     gp, fitted, _ = model
     x_scaler = Scaler(np.array([2.0, 0.5]), np.array([0.1, -0.3]))
     y_scaler = Scaler(np.array([4.0]), np.array([1.0]))
     scaled = FittedGP(fitted.hyperparameters, fitted.X, fitted.Y, x_scaler, y_scaler)
     X_original = (X_test - x_scaler.intercept) / x_scaler.slope
 
+    # The same prediction as the unscaled GP, unscaled
     mean, std = predict(gp, scaled, X_original)
     expected_mean, expected_std = predict(gp, fitted, X_test)
     np.testing.assert_allclose(mean, (expected_mean - 1.0) / 4.0, rtol=RTOL, atol=ATOL)
@@ -115,6 +131,8 @@ def test_predict_undoes_the_scalers(model):
 
 
 def test_log_likelihood(model):
+    """The log marginal likelihood is scipy's multivariate normal log density of the
+    training data."""
     gp, fitted, prior_mean = model
     K = matern52(X_train, X_train) + (NOISE_STD**2 + JITTER) * np.eye(len(X_train))
     ref = multivariate_normal(prior_mean(len(X_train)), K).logpdf(Y_train)
@@ -122,6 +140,11 @@ def test_log_likelihood(model):
 
 
 def test_hyper_checks():
+    """Hyper rejects bounds that aren't positive when it is fitted in log space, an
+    initial value outside its bounds and a name that isn't an identifier; GP rejects
+    repeated names."""
+    # `pytest.raises` fails the test unless the block raises that exception, with a
+    # message matching `match`
     with pytest.raises(ValueError, match="positive"):
         Hyper("offset", 0.0, (-1.0, 1.0))
     with pytest.raises(ValueError, match="inside"):
@@ -184,6 +207,12 @@ def test_fit_draws_one_lhs_and_nothing_from_the_stream(data):
 
 
 def test_failed_fit_keeps_initial_values(caplog):
+    """A fit whose solver fails keeps the initial hyperparameters and logs that it
+    did.
+
+    `caplog` is a pytest fixture that captures log records during the test;
+    `pytest.approx` compares numbers with a tolerance.
+    """
     X, Y = FIT_DATA["1d"]
     no_iterations = Ipopt(solver_options={"print_level": 0, "max_iter": 0})
     fitted = fit_gp(default_gp(1), X, Y, np.random.default_rng(0), solver=no_iterations)
