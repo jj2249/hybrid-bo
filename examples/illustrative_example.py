@@ -39,7 +39,8 @@ def oracle(v):
 experiment = hb.oracle_experiment(system, oracle, noise_std=0.0)
 
 # The oracle optimum, which regret is measured from, at u = -0.45. Found once with
-# hb.oracle_optimum(problem, oracle, np.random.default_rng(0), n_starts=200)
+# hb.oracle_optimum(problem, oracle, np.random.default_rng(0), n_starts=200), and
+# checked: hybrid BO runs reach it, and none evaluates a point below it
 optimum = -50.4608044704652
 
 # Methods: each takes (problem, experiment, initial_points, n, rng), where n is the

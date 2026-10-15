@@ -162,8 +162,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   matplotlib and Polars are imported inside the functions.
 - `errors.py`: `HybridBOError` (with `.history`, the points evaluated before the
   error, and `.run`, the partial run when raised in a method), `RootFindingError`,
-  `NoSolutionError`, `ReconstructionWarning`, `OracleOptimumWarning`. The library raises these, never bare
-  `Exception` (ruff `TRY002`/`BLE001` apply everywhere but `examples/flash_unit/`).
+  `NoSolutionError`, `ReconstructionWarning`, `OracleOptimumWarning`. The library
+  raises these, never bare `Exception` (ruff `TRY002`/`BLE001` apply everywhere but
+  `examples/flash_unit/`).
   It imports `History` and `Run` only for type checking, since `run.py` imports
   `gp.py`, which imports `errors.py`.
 

@@ -141,7 +141,8 @@ def study(
 
 def _check_optimum(runs: list[Run], optimum: float) -> None:
     """Warns with `OracleOptimumWarning` if a run evaluated a point whose oracle
-    objective is below `optimum`, by more than a relative 1e-6 (solver tolerance)."""
+    objective is below `optimum`, beyond the solvers' tolerance."""
+    # The oracle objectives of every evaluated point; none without an oracle
     oracle_values = [
         run.history.f_oracle
         for run in runs
@@ -149,8 +150,12 @@ def _check_optimum(runs: list[Run], optimum: float) -> None:
     ]
     if not oracle_values:
         return
+
+    # Below the optimum by more than a relative 1e-6
     lowest = float(np.min(np.concatenate(oracle_values)))
-    if lowest < optimum - 1e-6 * max(1.0, abs(optimum)):
+    tolerance = 1e-6 * max(1.0, abs(optimum))
+    beats_optimum = lowest < optimum - tolerance
+    if beats_optimum:
         msg = (
             f"An evaluated point has oracle objective {lowest!r}, below the stated "
             f"oracle optimum {optimum!r}, so the regret is wrong"
