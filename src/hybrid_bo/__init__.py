@@ -5,13 +5,19 @@ at the results. Everything else is reachable through its module (`hb.gp.fit_gp`,
 `hb.solvers.multistart`).
 """
 
+# Every submodule, so type checkers see `hb.gp.fit_gp` after `import hybrid_bo as hb`
 from hybrid_bo import (
     acquisition,
+    baselines,
     bo,
+    errors,
     evaluation,
     gp,
+    history,
     kernels,
     plots,
+    problem,
+    run,
     sampling,
     solvers,
 )

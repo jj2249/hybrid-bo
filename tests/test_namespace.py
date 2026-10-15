@@ -35,8 +35,8 @@ USER_FACING = {
 
 
 def test_top_level_holds_only_user_facing_names():
-    """Apart from submodules, `hb.*` is exactly the user-facing set; internals such
-    as `fit_gp` stay in their modules."""
+    """Apart from submodules (`hb.plots` among them), `hb.*` is exactly the
+    user-facing set; internals such as `fit_gp` stay in their modules."""
     names = {
         name
         for name, value in vars(hb).items()

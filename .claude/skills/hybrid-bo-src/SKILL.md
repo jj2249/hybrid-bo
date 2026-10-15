@@ -42,9 +42,7 @@ code uses CONTEXT.md's terms; use them in PRs, tests and comments too.
 ## Module map
 
 Every module lives at the top level of `hybrid_bo`. `hybrid_bo/__init__.py`
-re-exports only what a typical script uses (`Var`, `System`, `Problem`, `Experiment`,
-`oracle_experiment`, `initial_points`, the methods and their settings, `EI`, `LCB`,
-`Run`, `History`, `incumbents`, `oracle_incumbents`, the errors, `plots`);
+re-exports only what a typical script uses (DESIGN.md, "A slim top level");
 `tests/test_namespace.py` pins that set. Everything else, tests included, is imported
 from its module (`from hybrid_bo.gp import fit_gp`).
 

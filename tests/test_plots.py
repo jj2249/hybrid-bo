@@ -16,6 +16,7 @@ import scipy
 from hybrid_bo import (
     EI,
     LCB,
+    History,
     HybridBOSettings,
     Problem,
     Run,
@@ -30,7 +31,6 @@ from hybrid_bo import (
 )
 from hybrid_bo.acquisition import hybrid_acquisition, standard_acquisition
 from hybrid_bo.gp import default_gp, predict
-from hybrid_bo.history import History
 
 GRID = np.linspace(-2.0, 2.0, 101)  # the illustrative example's u start bounds
 
