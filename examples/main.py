@@ -83,8 +83,14 @@ def plot(example: ModuleType, study_dir: Path) -> None:
     """Saves the figures of the study in `study_dir` to its `figures/` folder:
     `convergence.png`, `regret.png` (when the study has an oracle optimum) and
     `<method>/run-000/iteration-00.png` for every iteration of every run. A figure
-    that can't be drawn is skipped with a message."""
+    that can't be drawn is skipped with a message.
+
+    Raises `ValueError` if the study was run on another example.
+    """
     study = hb.load(study_dir)
+    if study.name != example.__name__:
+        msg = f"{study_dir} holds a study of {study.name}, not {example.__name__}"
+        raise ValueError(msg)
     figures_dir = study_dir / "figures"
     figures_dir.mkdir(exist_ok=True)
 
@@ -165,10 +171,12 @@ def main(argv: Sequence[str] | None = None) -> None:
     plot_parser.add_argument("study", nargs="?", help="the study id; default: newest")
     plot_parser.add_argument("--results-root", type=Path, default=RESULTS_ROOT)
 
-    # Run: the example's settings, overridden by the flags given
+    # The example and its results folder
     args = parser.parse_args(argv)
     example = found[args.example]
     example_dir = args.results_root / args.example
+
+    # Run: the example's settings, overridden by the flags given
     if args.command == "run":
         methods = args.methods or list(example.methods)
         unknown = sorted(set(methods) - set(example.methods))
@@ -194,6 +202,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             parser.error(f"{example_dir} holds no study {study_id or ''}")
         study_dir = example_dir / study_id
 
+    # Plot, also straight after a run with --plot
     if args.command == "plot" or args.plot:
         with plt.style.context(hb.plots.STYLE):
             plot(example, study_dir)
