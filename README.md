@@ -125,10 +125,12 @@ pixi run -e dev python examples/main.py plot examples/results/illustrative_examp
 `run` takes `--method` (repeatable; default every method), `--n-runs`, `--seed` and
 `--n-iterations`, defaulting to the example's values. `plot` saves `convergence.png`
 (the incumbents of every method's runs) and one figure per method of `--run`'s
-`--iteration` (default: run 0, the last iteration) next to the runs; `--show` opens
-them. In your own scripts, `hb.plots.convergence(runs)` and
-`hb.plots.iteration(run, i, problem, rng, settings, experiment)` draw the same
-figures; they need matplotlib (in the `examples` and `dev` pixi environments).
+iterations, showing `--iteration` (default: run 0, the last iteration), next to the
+runs. `--show` opens them, each with a slider over the iterations. In your own
+scripts, `hb.plots.convergence(runs)` and
+`hb.plots.iterations(run, problem, rng, settings, experiment)` draw the same figures;
+they need matplotlib (in the `examples` and `dev` pixi environments). Figures use the
+repo's matplotlib style, `hb.plots.STYLE` (`src/hybrid_bo/hybrid_bo.mplstyle`).
 
 [`./examples/flash_unit/`](./examples/flash_unit/) still targets the old API (tag
 `pre-refactor`) until it is ported.

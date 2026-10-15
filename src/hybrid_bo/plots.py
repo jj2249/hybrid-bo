@@ -1,11 +1,15 @@
-"""Plots of finished runs: convergence across runs, and the figure of one iteration.
+"""Plots of finished runs: convergence across runs, and a run's iterations.
 
 Plots are functions of a finished `Run` and the specs from the example, never
 callbacks during the loop, so a saved run is plotted without running it again
 (ADR 0003). matplotlib is imported on first use, so the library works without it.
+Figures are drawn in the repo's style, `STYLE` (a matplotlib style file); use it for
+other figures with `plt.style.use(hb.plots.STYLE)`.
 """
 
 from collections.abc import Sequence
+from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -15,8 +19,8 @@ from hybrid_bo.acquisition import EI, LCB, Scenarios, standard_acquisition
 from hybrid_bo.bo import HybridBOSettings, StandardBOSettings
 from hybrid_bo.errors import RootFindingError
 from hybrid_bo.evaluation import Experiment, _find_root, evaluate
-from hybrid_bo.gp import default_gp, fit_gp, predict
-from hybrid_bo.history import incumbents
+from hybrid_bo.gp import default_gp, predict
+from hybrid_bo.history import History, incumbents
 from hybrid_bo.problem import Problem, Symbolic
 from hybrid_bo.run import Run
 from hybrid_bo.sampling import _start_bounds, lhs
@@ -24,6 +28,9 @@ from hybrid_bo.sampling import _start_bounds, lhs
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
     from matplotlib.figure import Figure
+
+# The repo's matplotlib style: its rcParams for every figure
+STYLE = Path(__file__).with_name("hybrid_bo.mplstyle")
 
 _N_GRID = 101  # grid points over u
 _CONFIDENCE = 0.9  # probability inside the confidence bands
@@ -40,7 +47,8 @@ def _axes(ax: "Axes | None") -> "Axes":
         return ax
     import matplotlib.pyplot as plt  # only to draw, so the library works without it
 
-    _, ax = plt.subplots()
+    with plt.style.context(STYLE):
+        _, ax = plt.subplots()
     return ax
 
 
@@ -76,26 +84,28 @@ def convergence(
     ax.plot(np.arange(1, n + 1), median, color=color, linewidth=2, label=label)
 
     ax.axvline(runs[0].history.n_initial + 0.5, color="grey", linestyle=":")
-    ax.set_xlabel("Evaluations")
-    ax.set_ylabel("Incumbent")
+    ax.set_xlabel("evaluations")
+    ax.set_ylabel("incumbent")
     return ax
 
 
-def iteration(
+def iterations(
     run: Run,
-    i: int,
     problem: Problem,
     rng: np.random.Generator,
     settings: StandardBOSettings | HybridBOSettings | None = None,
     experiment: Experiment | None = None,
+    i: int = -1,
 ) -> "Figure":
-    """The figure of iteration i of a run, over a grid of the decision variable's
-    start bounds.
+    """The figure of a run's iterations over a grid of the decision variable's start
+    bounds, titled with the method, and a slider that steps through them (shown
+    first: iteration `i`; negative counts from the end).
 
-    Iteration i (negative counts from the end) is the state before the run's i-th
-    trial point (design point, for the baselines): the first n_initial + i points,
-    drawn black (initial) and red, their incumbent, and the GP fitted to them. The
-    next point is drawn as a red ring. The panels, by method:
+    Every iteration is computed when the figure is built, so the slider only
+    redraws. Iteration i is the state before the run's i-th trial point (design
+    point, for the baselines): the first n_initial + i points, drawn black (initial)
+    and red, their incumbent, and the GP fitted to them. The next point is a red
+    ring. The panels, by method:
 
     - hybrid BO (`HybridBOSettings`): the GP of y with its confidence band, f under
       the scenarios (their mean and a band holding the central share of the
@@ -106,16 +116,16 @@ def iteration(
       at that grid point, and the weights of the others are renormalized.
     - standard BO (`StandardBOSettings`): the GP of f with its confidence band and
       the acquisition function it minimized (-EI or LCB).
-    - the baselines (no settings): the GP of f, the default GP fitted here.
+    - the baselines (no settings): the points only, since they fit no GP.
 
     With `experiment`, the true curves (the oracle values, else the reconstruction)
     are drawn dashed. The experiment is run at every grid point, so pass an oracle
-    experiment, never a real system. `rng` draws the baselines' GP fit first, then the
-    experiment and root-finding starts.
+    experiment, never a real system. `rng` draws the experiment's starts first,
+    then the root-finding starts of each iteration in turn.
 
     Raises `ValueError` unless the problem has one decision variable (and, for hybrid
     BO, h takes only u), `TypeError` if the settings aren't the run's method's, and
-    `IndexError` if the run has no such iteration.
+    `IndexError` if the run has no iteration `i`.
     """
     # The checks: one decision variable, the method's settings, the iteration
     system = problem.system
@@ -140,75 +150,140 @@ def iteration(
         msg = f"The run has {n_iterations} iterations, so no iteration {i}"
         raise IndexError(msg)
 
-    # The points so far, the next one, and the grid
-    n_so_far = history.n_initial + i % n_iterations
-    so_far = slice(0, n_so_far)
-    incumbent = float(history.f[so_far].min())
-    grid = np.linspace(*_start_bounds(system.u), _N_GRID)
-
-    # The surrogate: the run's, or for a baseline the default GP fitted here
-    if settings is None:
-        gp = default_gp(system.n_u)
-        fitted = fit_gp(gp, history.u[so_far], history.f[so_far], rng)
-    else:
-        gp = default_gp(system.n_u) if settings.gp is None else settings.gp
-        fitted = run.surrogates[i]
-    mean, std = predict(gp, fitted, grid)
-
     # The true curves, from the experiment at every grid point
+    grid = np.linspace(*_start_bounds(system.u), _N_GRID)
     truth = None if experiment is None else evaluate(problem, experiment, grid, rng)
     y_true = None if truth is None else _true_values(truth.y_oracle, truth.y)[:, 0]
     f_true = None if truth is None else _true_values(truth.f_oracle, truth.f)
 
+    # Every iteration's panels, computed once
+    frames = [_frame(run, k, problem, settings, grid, rng) for k in range(n_iterations)]
+
     # The figure; matplotlib is imported only to draw
     import matplotlib.pyplot as plt
+    from matplotlib.widgets import Slider
 
     u, u_points = grid[:, 0], history.u[:, 0]
-    label = "Design points" if settings is None else "Points found with BO"
+    label = "design points" if settings is None else "trial points"
+    n_panels = {HybridBOSettings: 3, StandardBOSettings: 2}.get(type(settings), 1)
+    y_name, u_name = system.y[0].name, system.u[0].name
 
-    # Hybrid BO: the GP of y, f under the scenarios, the acquisition function
+    def draw(k: int) -> None:
+        """Draws iteration k's panels on the figure's axes."""
+        frame = frames[k]
+        with plt.style.context(STYLE):
+            # `clear` resets each axes to the current style
+            for ax in axes:
+                ax.clear()
+
+            # Hybrid BO: the GP of y, f under the scenarios, the acquisition function
+            if isinstance(settings, HybridBOSettings):
+                assert run.scenarios is not None  # hybrid BO runs hold their scenarios
+                _points(axes[0], u_points, history.y[:, 0], history, frame, label)
+                _gp_panel(axes[0], u, frame, y_true)
+                axes[0].set_ylabel(y_name)
+                _points(axes[1], u_points, history.f, history, frame, label)
+                _scenarios_panel(axes[1], u, frame, run.scenarios.w, f_true)
+                _acquisition_panel(axes[2], u, frame, settings.acquisition)
+
+            # Standard BO: the GP of f, the acquisition function
+            elif isinstance(settings, StandardBOSettings):
+                _points(axes[0], u_points, history.f, history, frame, label)
+                _gp_panel(axes[0], u, frame, f_true)
+                axes[0].set_ylabel("f")
+                _acquisition_panel(axes[1], u, frame, settings.acquisition)
+
+            # The baselines: the points and the true objective
+            else:
+                _points(axes[0], u_points, history.f, history, frame, label)
+                if f_true is not None:
+                    axes[0].plot(u, f_true, color="k", linestyle="--", label="true")
+                axes[0].set_ylabel("f")
+
+            axes[0].legend()
+            axes[-1].set_xlabel(u_name)
+
+    # The panels and the title, with room for the slider below them
+    with plt.style.context(STYLE):
+        figure, panels = plt.subplots(
+            n_panels, 1, sharex=True, figsize=(6, 2 + 2 * n_panels), squeeze=False
+        )
+        axes = list(panels[:, 0])
+        figure.suptitle(method)
+    draw(i % n_iterations)
+    figure.tight_layout(rect=(0, 0.08, 1, 1))  # after drawing, to fit the labels
+    if n_iterations == 1:
+        return figure
+
+    # The slider: moving it redraws its iteration
+    slider = Slider(
+        figure.add_axes((0.2, 0.02, 0.6, 0.03)),
+        "iteration",
+        0,
+        n_iterations - 1,
+        valinit=i % n_iterations,
+        valstep=1,
+    )
+
+    def on_change(value: float) -> None:
+        """Redraws the iteration the slider shows."""
+        draw(int(value))
+        figure.canvas.draw_idle()
+
+    slider.on_changed(on_change)
+    # matplotlib keeps only weak references to widgets, so the figure holds it
+    setattr(figure, "_hybrid_bo_slider", slider)  # noqa: B010
+    return figure
+
+
+@dataclass(frozen=True)
+class _Frame:
+    """One iteration's precomputed panels: the number of points so far, and the
+    GP's mean and std, f under the scenarios (n_grid, S) and the acquisition function
+    over the grid, each None where the method has none."""
+
+    n_so_far: int
+    mean: np.ndarray | None = None
+    std: np.ndarray | None = None
+    f: np.ndarray | None = None
+    acquisition: np.ndarray | None = None
+
+
+def _frame(
+    run: Run,
+    k: int,
+    problem: Problem,
+    settings: StandardBOSettings | HybridBOSettings | None,
+    grid: np.ndarray,
+    rng: np.random.Generator,
+) -> _Frame:
+    """The panels of iteration k of the run, over the grid (n_grid, 1)."""
+    # The points so far; the baselines stop there, since they fit no GP
+    history = run.history
+    n_so_far = history.n_initial + k
+    if settings is None:
+        return _Frame(n_so_far)
+    incumbent = float(history.f[:n_so_far].min())
+
+    # The GP behind the iteration's trial point
+    system = problem.system
+    gp = default_gp(system.n_u) if settings.gp is None else settings.gp
+    fitted = run.surrogates[k]
+    mean, std = predict(gp, fitted, grid)
+
+    # Hybrid BO: f under the scenarios, then the SAA acquisition function
     if isinstance(settings, HybridBOSettings):
         assert run.scenarios is not None  # hybrid BO runs hold their scenarios
-        figure, axes = plt.subplots(3, 1, sharex=True, figsize=(6, 6))
-        _points(axes[0], u_points, history.y[:, 0], history.n_initial, n_so_far, label)
-        _gp_panel(axes[0], u, mean, std, y_true)
-        axes[0].set_ylabel("Variable $y$")
         f = _scenario_objectives(problem, grid, mean, std, run.scenarios, rng)
-        _points(axes[1], u_points, history.f, history.n_initial, n_so_far, label)
-        _scenarios_panel(axes[1], u, f, run.scenarios.w, f_true)
-        values = _saa_acquisition(f, run.scenarios.w, incumbent, settings.acquisition)
-        _acquisition_panel(axes[2], u, values, settings.acquisition)
-
-    # Standard BO: the GP of f, the acquisition function
-    elif isinstance(settings, StandardBOSettings):
-        figure, axes = plt.subplots(2, 1, sharex=True, figsize=(6, 6))
-        _points(axes[0], u_points, history.f, history.n_initial, n_so_far, label)
-        _gp_panel(axes[0], u, mean, std, f_true)
-        axes[0].set_ylabel("Objective")
-        nlp, _ = standard_acquisition(
-            problem, gp, fitted, incumbent, settings.acquisition
+        acquisition = _saa_acquisition(
+            f, run.scenarios.w, incumbent, settings.acquisition
         )
-        values = np.array([nlp.f(point).full().item() for point in grid])
-        _acquisition_panel(axes[1], u, values, settings.acquisition)
+        return _Frame(n_so_far, mean, std, f, acquisition)
 
-    # The baselines: the GP of f
-    else:
-        figure, ax = plt.subplots()
-        axes = [ax]
-        _points(ax, u_points, history.f, history.n_initial, n_so_far, label)
-        _gp_panel(ax, u, mean, std, f_true)
-        ax.set_ylabel("Objective")
-
-    axes[0].legend(
-        ncols=2,
-        loc="lower right",
-        mode="expand",
-        bbox_to_anchor=(0, 1.02, 1, 0.2),
-        borderaxespad=0,
-    )
-    axes[-1].set_xlabel(system.u[0].name)
-    figure.tight_layout()
-    return figure
+    # Standard BO: the objective of its acquisition problem
+    nlp, _ = standard_acquisition(problem, gp, fitted, incumbent, settings.acquisition)
+    acquisition = np.array([nlp.f(point).full().item() for point in grid])
+    return _Frame(n_so_far, mean, std, acquisition=acquisition)
 
 
 def _true_values(oracle: np.ndarray | None, measured: np.ndarray) -> np.ndarray:
@@ -220,37 +295,35 @@ def _points(
     ax: "Axes",
     u: np.ndarray,
     values: np.ndarray,
-    n_initial: int,
-    n: int,
+    history: History,
+    frame: _Frame,
     label: str,
 ) -> None:
-    """The first n points, the initial ones in black and the rest in red, and point n,
-    the next one, as a red ring."""
-    ax.scatter(u[:n_initial], values[:n_initial], c="k", label="Initial points")
+    """The points so far, the initial ones in black and the rest in red, and the
+    next point as a red ring."""
+    n_initial, n = history.n_initial, frame.n_so_far
+    ax.scatter(u[:n_initial], values[:n_initial], c="k", label="initial points")
     ax.scatter(u[n_initial:n], values[n_initial:n], c="r", label=label)
-    ax.scatter(u[n], values[n], facecolors="none", edgecolors="r", label="Next point")
+    ax.scatter(u[n], values[n], facecolors="none", edgecolors="r", label="next point")
 
 
 def _gp_panel(
-    ax: "Axes",
-    u: np.ndarray,
-    mean: np.ndarray,
-    std: np.ndarray,
-    true: np.ndarray | None,
+    ax: "Axes", u: np.ndarray, frame: _Frame, true: np.ndarray | None
 ) -> None:
     """A GP's mean and confidence band over u, and the true curve if known."""
+    assert frame.mean is not None and frame.std is not None  # BO frames have a GP
     if true is not None:
-        ax.plot(u, true, color="k", linestyle="--", label="True")
-    ax.plot(u, mean, color="b", label="Predicted mean")
+        ax.plot(u, true, color="k", linestyle="--", label="true")
+    ax.plot(u, frame.mean, color="b", label="GP mean")
     # The band holds _CONFIDENCE of the normal's probability
-    half_width = scipy.stats.norm.ppf(0.5 + _CONFIDENCE / 2) * std
+    half_width = scipy.stats.norm.ppf(0.5 + _CONFIDENCE / 2) * frame.std
     ax.fill_between(
         u,
-        mean - half_width,
-        mean + half_width,
+        frame.mean - half_width,
+        frame.mean + half_width,
         alpha=0.2,
         color="b",
-        label="Confidence interval",
+        label=f"{_CONFIDENCE:.0%} band",
     )
 
 
@@ -304,17 +377,19 @@ def _weighted_mean(values: np.ndarray, weights: np.ndarray) -> np.ndarray:
 def _scenarios_panel(
     ax: "Axes",
     u: np.ndarray,
-    f: np.ndarray,
+    frame: _Frame,
     w: np.ndarray,
     true: np.ndarray | None,
 ) -> None:
     """f under the scenarios over u: the weighted mean, the band holding the central
     `_CONFIDENCE` of the scenario weight, and the true objective if known. Scenarios
     without a root at a grid point are left out there (`_scenario_weights`)."""
+    f = frame.f
+    assert f is not None  # hybrid BO frames have the scenarios
     if true is not None:
-        ax.plot(u, true, color="k", linestyle="--", label="True")
+        ax.plot(u, true, color="k", linestyle="--", label="true")
     weights = _scenario_weights(f, w)
-    ax.plot(u, _weighted_mean(f, weights), color="b", label="Scenario mean")
+    ax.plot(u, _weighted_mean(f, weights), color="b", label="scenario mean")
 
     # The band, per grid point over the scenarios with a root there
     tail = (1 - _CONFIDENCE) / 2
@@ -329,9 +404,9 @@ def _scenarios_panel(
                 method="inverted_cdf",
             )
     ax.fill_between(
-        u, band[:, 0], band[:, 1], alpha=0.2, color="b", label="Confidence interval"
+        u, band[:, 0], band[:, 1], alpha=0.2, color="b", label=f"{_CONFIDENCE:.0%} band"
     )
-    ax.set_ylabel("Objective")
+    ax.set_ylabel("f")
 
 
 def _saa_acquisition(
@@ -350,14 +425,10 @@ def _saa_acquisition(
 
 
 def _acquisition_panel(
-    ax: "Axes", u: np.ndarray, values: np.ndarray, acquisition: EI | LCB
+    ax: "Axes", u: np.ndarray, frame: _Frame, acquisition: EI | LCB
 ) -> None:
     """The acquisition function over u, as the acquisition problem minimizes it."""
-    label = (
-        "Lower confidence bound"
-        if isinstance(acquisition, LCB)
-        else "Expected improvement"
-    )
-    ax.plot(u, values, color="k", label=label)
-    ax.legend(loc="best")
-    ax.set_ylabel("Acq.-Fun.")
+    assert frame.acquisition is not None  # BO frames have an acquisition function
+    name = "LCB" if isinstance(acquisition, LCB) else "-EI"
+    ax.plot(u, frame.acquisition, color="k", label=name)
+    ax.set_ylabel(name)

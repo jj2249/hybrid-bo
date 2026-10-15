@@ -112,12 +112,15 @@ re-exports the public API.
   `saa_scenarios`, then the loop; fit `h_inputs -> y`, `hybrid_acquisition`; adds the
   scenarios to the run and to `error.run`). `_method_record` builds both methods'
   records.
-- `plots.py`: `convergence(runs, ax, label)` and `iteration(run, i, problem, rng,
-  settings, experiment) -> Figure`, the pre-refactor figure of iteration i over a
-  101-point grid of one-dimensional `u` (start bounds). The panels (`_gp_panel`,
-  `_scenarios_panel`, `_acquisition_panel`) are private. The settings must match
-  `run.record["method"]` (`TypeError`; None for the baselines, whose GP is fitted in
-  the plot from `rng`). Hybrid BO's f under the scenarios solves g for each x_s with
+- `plots.py`: `convergence(runs, ax, label)` and `iterations(run, problem, rng,
+  settings, experiment, i) -> Figure`: every iteration's panels (`_Frame`, computed
+  once by `_frame`) over a 101-point grid of one-dimensional `u` (start bounds),
+  titled with the method, with a slider (kept on the figure as `_hybrid_bo_slider`)
+  that redraws from the frames. The panels (`_gp_panel`, `_scenarios_panel`,
+  `_acquisition_panel`) are private. The settings must match `run.record["method"]`
+  (`TypeError`; None for the baselines, which show their points only). Figures are
+  drawn in `STYLE` (`hybrid_bo.mplstyle`, the repo's rcParams); labels and legends
+  are matplotlib's defaults. Hybrid BO's f under the scenarios solves g for each x_s with
   `_find_root` (NaN where no root); its acquisition curve is the SAA objective
   computed in numpy, standard BO's evaluates `standard_acquisition`'s NLP. matplotlib
   is imported inside the functions, so `import hybrid_bo` works without it.

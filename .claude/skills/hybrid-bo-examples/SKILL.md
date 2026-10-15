@@ -86,6 +86,7 @@ problem = hb.Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x -
 
 `run` spawns one generator per run from the seed (see Randomness) and saves a failed
 run's `error.run`. `plot` imports the example named by the results folder's parent,
-then saves `convergence.png` and `<method>.png` (`hb.plots.iteration` with
-`settings.get(method)` and the example's experiment) into the folder. The figures
+then, in `hb.plots.STYLE`, saves `convergence.png` and `<method>.png`
+(`hb.plots.iterations` with `settings.get(method)` and the example's experiment,
+showing `--iteration`) into the folder; `--show` opens them with their sliders. The figures
 need one decision variable; for other problems `plot` prints why and skips them.

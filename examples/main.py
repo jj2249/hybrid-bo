@@ -5,6 +5,8 @@
     python examples/main.py plot examples/results/illustrative_example/<UTC time>
         [--run 0] [--iteration -1] [--show]
 
+`plot --show` opens the figures, each with a slider over the run's iterations.
+
 An example is a module in this folder that defines `problem`, `experiment`,
 `methods`, `settings` (of the BO methods, for the plots) and the defaults `seed`,
 `n_runs`, `n_initial` and `n_iterations`. `run` pickles each method's runs to
@@ -78,11 +80,12 @@ def plot(
     example: ModuleType, results_dir: Path, run_index: int, iteration: int
 ) -> None:
     """Saves the convergence of every method's runs to `convergence.png`, and the
-    figure of one iteration of one run of each method to `<method>.png`, in
-    `results_dir`.
+    iterations of one run of each method, showing `iteration`, to `<method>.png`, in
+    `results_dir`. Returns nothing; the figures stay open for `plt.show`, where
+    each has a slider over its iterations.
 
-    The figures' GP fits and root-finding starts draw from a generator seeded with 0,
-    so plotting again gives the same figures.
+    The figures' root-finding starts draw from a generator seeded with 0, so plotting
+    again gives the same figures.
     """
     runs = {
         path.stem: pickle.loads(path.read_bytes())
@@ -91,25 +94,26 @@ def plot(
 
     # Convergence: every method on one axes
     figure, ax = plt.subplots()
+    ax.set_title("convergence")
     for name, method_runs in runs.items():
         if method_runs:
             hb.plots.convergence(method_runs, ax=ax, label=name)
     ax.legend()
     figure.savefig(results_dir / "convergence.png")
 
-    # One iteration of one run per method; a figure that can't be drawn is skipped
+    # The iterations of one run per method; a figure that can't be drawn is skipped
     for name, method_runs in runs.items():
         if len(method_runs) <= run_index:
             print(f"{name}: no run {run_index} to plot")
             continue
         try:
-            figure = hb.plots.iteration(
+            figure = hb.plots.iterations(
                 method_runs[run_index],
-                iteration,
                 example.problem,
                 np.random.default_rng(0),
                 example.settings.get(name),
                 example.experiment,
+                i=iteration,
             )
         except (ValueError, TypeError, IndexError, hb.HybridBOError) as error:
             print(f"{name}: no figure: {error}")
@@ -144,7 +148,10 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
     plot_parser.add_argument("--run", type=int, default=0, help="default: 0")
     plot_parser.add_argument(
-        "--iteration", type=int, default=-1, help="default: -1, the last"
+        "--iteration",
+        type=int,
+        default=-1,
+        help="the iteration shown first and saved; default: -1, the last",
     )
     plot_parser.add_argument("--show", action="store_true", help="open the figures")
 
@@ -172,7 +179,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     # Plot: the results folder is <results root>/<example>/<UTC time>
     else:
         example = importlib.import_module(args.results_dir.resolve().parent.name)
-        plot(example, args.results_dir, args.run, args.iteration)
+        with plt.style.context(hb.plots.STYLE):
+            plot(example, args.results_dir, args.run, args.iteration)
         if args.show:
             plt.show()
 

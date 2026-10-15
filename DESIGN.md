@@ -513,15 +513,20 @@ example, so a saved run is plotted without running it again.
 
 - `convergence(runs, ax=None, label=None)`: the incumbents of each run and their
   median; call it per method on one axes to compare.
-- `iteration(run, i, problem, rng, settings=None, experiment=None) -> Figure`: the
-  pre-refactor figure of iteration i (the state before the i-th trial or design point),
-  over a grid of one-dimensional `u`. Hybrid BO: the GP of y, f under the scenarios,
-  the acquisition function; standard BO: the GP of f, the acquisition function; the
-  baselines: the GP of f, the default GP fitted in the plot with `rng` (the runs hold
-  no GP). `experiment` adds the true curves; it is run at every grid point, so it is
-  meant for oracles.
+- `iterations(run, problem, rng, settings=None, experiment=None, i=-1) -> Figure`:
+  the panels of every iteration (the state before the i-th trial or design point),
+  computed once, over a grid of one-dimensional `u`, titled with the method, with a
+  slider that redraws the chosen iteration (shown first: `i`). Hybrid BO: the GP of y,
+  f under the scenarios, the acquisition function; standard BO: the GP of f, the
+  acquisition function; the baselines: their points only (they fit no GP; a GP of
+  `u -> f` fitted to their spread-out points collapses to the lengthscale's lower
+  bound, which looks like a bug). `experiment` adds the true curves; it is run at
+  every grid point, so it is meant for oracles.
 
 The panels are private for now; make them public when a custom figure needs one.
+Figures use matplotlib's defaults except for the repo's style file, `hb.plots.STYLE`
+(`src/hybrid_bo/hybrid_bo.mplstyle`, the grid so far); put rcParams there, not in
+plotting code.
 
 ## Order of random draws
 
