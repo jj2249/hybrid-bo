@@ -20,8 +20,7 @@ and ty put `examples/` on the path). At module level it defines, in this order:
 2. **Experiment**: for a test case, a module-level `def oracle(v)` (the study
    computes the oracle optimum from it) and `oracle_experiment(system, oracle,
    noise_std)`; otherwise a custom `(u (N,), rng) -> measured (P,)` function.
-3. **Methods**: `settings`, a dict from BO method name to its settings (the plots
-   need them), and `methods`, a dict from method name to a callable
+3. **Methods**: `settings`, a dict from BO method name to its settings, and `methods`, a dict from method name to a callable
    `(problem, experiment, initial_points, n, rng) -> Run`. Bind settings with
    `functools.partial(hb.hybrid_bo, settings=settings["hybrid_bo"])`; the baselines
    need no settings (`n` is their number of design points).
@@ -97,7 +96,8 @@ problem = hb.Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x -
 `run` runs a study from the seed (see Randomness), with the methods given and the
 `study_settings` overridden by the flags given, and saves it. `plot` loads the study
 with `hb.load`, imports the example named by the results folder's parent, then, in
-`hb.plots.STYLE`, saves `convergence.png` and `<method>.png`
-(`hb.plots.iterations` with `settings.get(method)` and the example's experiment,
-showing `--iteration`) into the folder; `--show` opens them with their - and + buttons. The figures
-need one decision variable; for other problems `plot` prints why and skips them.
+`hb.plots.STYLE`, saves `convergence.png`, `regret.png` (with an oracle optimum) and
+`<method>.png` (`hb.plots.iteration` of `--iteration` with the example's experiment)
+into the folder; `--show` opens them. The iteration figures need one decision
+variable and read the settings from the run's record (a custom GP needs `settings=`);
+otherwise `plot` prints why and skips them.

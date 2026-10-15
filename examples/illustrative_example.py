@@ -40,9 +40,8 @@ def oracle(v):
 experiment = hb.oracle_experiment(system, oracle, noise_std=0.0)
 
 # Methods: each takes (problem, experiment, initial_points, n, rng), where n is the
-# number of iterations, or of design points for the baselines. The plots take the BO
-# methods' settings too. Hybrid BO substitutes the GP prediction for the unknown
-# states, as this example always has
+# number of iterations, or of design points for the baselines. Hybrid BO substitutes
+# the GP prediction for the unknown states, as this example always has
 settings = {
     "hybrid_bo": hb.HybridBOSettings(unknown_states_as_variables=False),
     "standard_bo": hb.StandardBOSettings(),

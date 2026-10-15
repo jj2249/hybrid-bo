@@ -539,11 +539,9 @@ subclasses (`ReconstructionWarning`) so they can be filtered.
 
 ### Plots
 
-`hb.plots` today (#31; replaced by Analysis below in #55): `convergence(runs, ax=None,
-label=None)`, and `iterations(run, problem, rng, settings=None, experiment=None, i=-1)`,
-the panels of every iteration with - and + buttons, root-finding g per grid point and
-scenario. Figures use the repo's style file, `hb.plots.STYLE`
-(`src/hybrid_bo/hybrid_bo.mplstyle`); put rcParams there, not in plotting code.
+`hb.plots` is described under Analysis below (#55). Figures use the repo's style file,
+`hb.plots.STYLE` (`src/hybrid_bo/hybrid_bo.mplstyle`); put rcParams there, not in
+plotting code.
 
 ### Analysis (#53, #54, #55)
 
@@ -586,12 +584,19 @@ it. Polars and matplotlib are optional (imported on first use; the
   incumbent and regret). `hb.hyperparameters(study)`: one row per run, iteration and
   hyperparameter entry. Polars is imported on first use; without it a view raises an
   `ImportError` naming the extra.
-- **Plots** (#55), static, over **evaluations** (initial points are not free):
-  `plots.convergence(study)` (median with an IQR band), `plots.regret(study)` (log
-  scale, as in the paper) and `plots.iteration(run, problem, i, *, experiment=None,
-  gp=True, scenarios=True, acquisition=True)`, one iteration per call. The GP panel
-  comes from the stored surrogate; the acquisition panels replay the method's
-  acquisition problem with u fixed at each grid point (ADR 0005).
+- **Plots** (#55, done; `plots.py`), static, over **evaluations** (initial points are
+  not free): `plots.convergence(study)` (median oracle incumbent, else incumbent, with
+  an IQR band and a dotted line after the initial points), `plots.regret(study,
+  optimum=None)` (the same on a log scale, as in the paper) and
+  `plots.iteration(run, problem, i, *, experiment=None, gp=True, scenarios=True,
+  acquisition=True, settings=None)`, one iteration per call, no widgets and no `rng`.
+  The GP panel comes from the stored surrogate; the acquisition panels replay the
+  method's acquisition problem with u fixed at each grid point, warm-started outwards
+  from the stored solution (ADR 0005), so the curve passes through the stored
+  acquisition value. The settings are read from the run's record; `settings` is
+  needed only for a GP other than `default_gp`, since the record holds the GP as text,
+  not its kernel function. The fields the replay uses (acquisition function, and for
+  hybrid BO the solver and `unknown_states_as_variables`) must match the record.
 - **Entry point** (#51). `pixi run example <name> [flags]` and `pixi run plot <name>
   [study]` over `examples/main.py`. Results go to
   `examples/results/<name>/<study id>/{study.json, runs/, figures/}`.
