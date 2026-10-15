@@ -75,10 +75,10 @@ list with one CasADi expression per equation. The
    :end-before: # Test case:
 
 The *experiment* runs the system at a trial point and returns the measured variables.
-A real application passes a function that does this. A test case uses
-:py:func:`~hybrid_bo.evaluation.oracle_experiment`, which solves the known equations
-with the oracle in place of the unknown equations, then reads the measured variables,
-optionally with noise.
+A real application passes a function that does this. A test case uses the *oracle
+simulation*, :py:func:`~hybrid_bo.evaluation.oracle_experiment`, which solves the
+known equations with the oracle in place of the unknown equations, then reads the
+measured variables, optionally with noise.
 
 .. literalinclude:: ../examples/illustrative_example.py
    :language: python
@@ -97,9 +97,11 @@ A *run* evaluates the *initial points*, then runs the *optimization loop*. Each
    prediction at ``u`` is a distribution over ``y``, which the *sample-average
    approximation* (SAA) represents by *scenarios*: scenario ``s`` takes
    ``y_s = mean(u) + std(u) * z_s``, where the *scenario draws* ``z_s`` are standard
-   normal draws made once per run. Each scenario has its own mechanistic states
-   ``x_s``, constrained by the known equations ``0 = g(x_s, y_s, u)``, and its own
-   objective ``f_s``. The *acquisition function* is a weighted average over the
+   normal draws made once per run. (By default ``y_s`` is also a variable of the
+   acquisition problem, tied to this prediction by an equality constraint; the example
+   substitutes the prediction instead, with ``unknown_states_as_variables=False``.)
+   Each scenario has its own mechanistic states ``x_s``, constrained by the known
+   equations ``0 = g(x_s, y_s, u)``, and its own objective ``f_s``. The *acquisition function* is a weighted average over the
    scenarios: expected improvement over the *incumbent* (SAA-EI) or a lower
    confidence bound (SAA-LCB). The known equations are constraints of the acquisition
    problem, so it needs no root-finding. It is solved with IPOPT from several starts.
@@ -129,7 +131,9 @@ them in a dictionary, with their settings bound by ``functools.partial``.
 Every run gets its own random generator, which draws everything the run needs: the
 initial points, the scenarios, the multistart starts and any noise. The example
 spawns one generator per run from one seed, the same seed for every method, so run
-``i`` of each method starts from the same initial points.
+``i`` of each method starts from the same initial points. A method that fails raises
+a :py:class:`~hybrid_bo.errors.HybridBOError` carrying the partial run, which the
+example saves too.
 
 .. literalinclude:: ../examples/illustrative_example.py
    :language: python

@@ -126,9 +126,9 @@ pixi run -e dev python examples/illustrative_example.py
 
 ## Documentation
 
-The docs have a walkthrough of the illustrative example (`docs/walkthrough.rst`),
-which explains the problem class, hybrid BO and how to state a problem, and the API
-reference. Build them with
+The docs hold the API reference and a walkthrough of the illustrative example
+(`docs/walkthrough.rst`). The walkthrough explains the problem class, why hybrid BO
+helps and how to state a problem. Build the docs with
 
 ```bash
 pixi run -e dev docs
