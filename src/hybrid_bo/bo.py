@@ -141,6 +141,15 @@ class HybridBOSettings:
         _check_acquisition(self.acquisition)
 
 
+def _settings_text(settings: StandardBOSettings | HybridBOSettings) -> str:
+    """The settings as text for a run's record, every field but the GP."""
+    return ", ".join(
+        f"{f.name}={getattr(settings, f.name)!r}"
+        for f in fields(settings)
+        if f.name != "gp"
+    )
+
+
 def _method_record(
     problem: Problem,
     experiment: Experiment,
@@ -154,14 +163,7 @@ def _method_record(
     """The record of a BO run: `run_record` with the settings except the GP, which is
     recorded as text in its own entries (its repr would only name the kernel's
     function), over the names of its inputs."""
-    settings_text = ", ".join(
-        [f"n_iterations={n_iterations}"]
-        + [
-            f"{f.name}={getattr(settings, f.name)!r}"
-            for f in fields(settings)
-            if f.name != "gp"
-        ]
-    )
+    settings_text = f"n_iterations={n_iterations}, {_settings_text(settings)}"
     record = run_record(problem, experiment, rng, method, settings_text)
     return record | _gp_record(gp, [var.name for var in gp_inputs])
 

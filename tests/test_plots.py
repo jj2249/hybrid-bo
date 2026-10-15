@@ -1,10 +1,12 @@
-"""Plots of finished runs: convergence across runs and the figure of one iteration.
+"""Static plots: convergence and regret across a study's runs, and the figure of one
+iteration of a run.
 
 The plots are drawn without a window (the Agg backend, set in `conftest.py`), and the
 tests read the drawn data back from the matplotlib axes by their labels.
 """
 
 import pickle
+from dataclasses import replace
 
 import casadi as cas
 import illustrative_example as ex
@@ -21,6 +23,8 @@ from hybrid_bo import (
     Problem,
     Run,
     StandardBOSettings,
+    Study,
+    StudySettings,
     System,
     Var,
     hybrid_bo,
@@ -55,8 +59,15 @@ def illustrative_run(method, settings=None) -> Run:
 # slow to produce
 @pytest.fixture(scope="module")
 def hybrid_run() -> Run:
-    """A pickled hybrid BO run with the illustrative example's settings."""
+    """A pickled hybrid BO run with the illustrative example's settings (EI, the GP's
+    prediction substituted for the unknown states)."""
     return illustrative_run(hybrid_bo, ex.settings["hybrid_bo"])
+
+
+@pytest.fixture(scope="module")
+def hybrid_lcb_run() -> Run:
+    """A pickled hybrid BO run with LCB and the unknown states as variables."""
+    return illustrative_run(hybrid_bo, HybridBOSettings(acquisition=LCB(2.0)))
 
 
 @pytest.fixture(scope="module")
@@ -71,10 +82,15 @@ def lhs_run() -> Run:
     return illustrative_run(latin_hypercube_sampling)
 
 
+def drawn_line(ax, label: str):
+    """The line labeled `label` on the axes."""
+    (match,) = [line for line in ax.get_lines() if line.get_label() == label]
+    return match
+
+
 def line(ax, label: str) -> np.ndarray:
     """The y data of the line labeled `label` on the axes."""
-    (match,) = [line for line in ax.get_lines() if line.get_label() == label]
-    return np.asarray(match.get_ydata())
+    return np.asarray(drawn_line(ax, label).get_ydata())
 
 
 def has_grid(ax) -> bool:
@@ -82,58 +98,87 @@ def has_grid(ax) -> bool:
     return all(line.get_visible() for line in ax.xaxis.get_gridlines())
 
 
-def fake_run(f: list[float], n_initial: int = 2) -> Run:
-    """A run of one decision variable with these objective values and no oracle."""
+def legend_labels(figure) -> list[str]:
+    """The entries of the figure's one legend."""
+    (legend,) = figure.legends
+    return [text.get_text() for text in legend.get_texts()]
+
+
+# Convergence and regret
+
+
+def fake_run(
+    method: str, index: int, f: list[float], f_oracle: list[float] | None
+) -> Run:
+    """A run of one decision variable, after 2 initial points, with these measured
+    and oracle objective values."""
     n = len(f)
     history = History(
         u=np.zeros((n, 1)),
         x=np.zeros((n, 1)),
         y=np.zeros((n, 1)),
         f=np.array(f),
-        x_oracle=None,
-        y_oracle=None,
-        f_oracle=None,
-        n_initial=n_initial,
+        x_oracle=None if f_oracle is None else np.zeros((n, 1)),
+        y_oracle=None if f_oracle is None else np.zeros((n, 1)),
+        f_oracle=None if f_oracle is None else np.array(f_oracle),
+        n_initial=2,
     )
-    return Run(history, record={"method": "test"}, method="test")
+    return Run(history, record={"method": method}, method=method, index=index)
 
 
-def scenario_states(run: Run, iteration: int) -> np.ndarray:
-    """x_s at each grid point and scenario, (n_grid, S), computed independently: y_s
-    from the GP, then x_s from x + exp(x) = y_s with scipy's brentq."""
-    assert run.scenarios is not None
-    mean, std = predict(default_gp(1), run.surrogates[iteration], GRID[:, np.newaxis])
-    y = mean[:, np.newaxis] + std[:, np.newaxis] * run.scenarios.z[:, 0]
-    return np.vectorize(
-        lambda y_s: scipy.optimize.brentq(lambda x: x + np.exp(x) - y_s, -50, 50)
-    )(y)
+def fake_study(runs: list[Run], record: dict[str, str] | None = None) -> Study:
+    """A study of these runs, 2 initial points and 2 iterations each."""
+    settings = StudySettings(n_runs=2, n_initial=2, n_iterations=2, seed=0)
+    return Study(tuple(runs), settings, "fake", record or {})
 
 
-# Convergence
+def band(ax) -> np.ndarray:
+    """The vertices (x, y) of the one shaded band on the axes."""
+    (collection,) = ax.collections
+    return collection.get_paths()[0].vertices
 
 
-def test_convergence_draws_each_runs_incumbents_and_their_median():
-    """Each run is drawn as its running minimum of f over the evaluations, and the
-    median over the runs is drawn with the label."""
-    runs = [fake_run([3.0, 1.0, 2.0, 0.5]), fake_run([2.0, 4.0, 1.5, 1.0])]
+def test_convergence_draws_the_median_oracle_incumbent_with_its_iqr():
+    """Per method, the median over the runs of the oracle incumbent at each
+    evaluation is drawn with the method's label, the interquartile range is shaded,
+    and a dotted line marks the end of the initial points."""
+    # Setup: the oracle incumbents are [3, 1, 1, 1] and [2, 2, 2, 0.5] (the oracle f
+    # at each incumbent's point)
+    runs = [
+        fake_run("a", 0, [3.0, 1.0, 2.0, 1.5], [3.0, 1.0, 9.0, 9.0]),
+        fake_run("a", 1, [2.0, 4.0, 3.0, 1.0], [2.0, 9.0, 9.0, 0.5]),
+    ]
 
-    ax = plots.convergence(runs, label="hybrid BO")
+    ax = plots.convergence(fake_study(runs))
 
-    drawn = [np.asarray(line.get_ydata()) for line in ax.get_lines()]
-    np.testing.assert_array_equal(drawn[0], [3.0, 1.0, 1.0, 0.5])
-    np.testing.assert_array_equal(drawn[1], [2.0, 2.0, 1.5, 1.0])
-    np.testing.assert_array_equal(line(ax, "hybrid BO"), [2.5, 1.5, 1.25, 0.75])
+    # Check: the median, the band's quartiles (linear), the line, the legend
+    np.testing.assert_allclose(line(ax, "a"), [2.5, 1.5, 1.5, 0.75])
+    vertices = band(ax)
+    for x, lower, upper in [(1, 2.25, 2.75), (2, 1.25, 1.75), (4, 0.625, 0.875)]:
+        assert np.isclose(vertices, [x, lower]).all(axis=1).any()
+        assert np.isclose(vertices, [x, upper]).all(axis=1).any()
+    (dotted,) = [line for line in ax.get_lines() if line.get_linestyle() == ":"]
+    np.testing.assert_array_equal(dotted.get_xdata(), [2.5, 2.5])
+    legend = ax.get_legend()
+    assert legend is not None
+    assert [text.get_text() for text in legend.get_texts()] == ["a"]
+    assert ax.get_ylabel() == "oracle incumbent"
     assert has_grid(ax)
     plt.close("all")
 
 
-def test_convergence_takes_the_median_over_the_runs_that_reach_an_evaluation():
-    """A shorter (failed) run counts in the median only up to its last evaluation."""
-    runs = [fake_run([3.0, 1.0, 2.0]), fake_run([2.0, 4.0])]
+def test_convergence_without_an_oracle_draws_the_incumbent():
+    """Without oracle values the median incumbent is drawn instead, and a shorter
+    (failed) run counts only up to its last evaluation."""
+    runs = [
+        fake_run("a", 0, [3.0, 1.0, 2.0], None),
+        fake_run("a", 1, [2.0, 4.0], None),
+    ]
 
-    ax = plots.convergence(runs, label="median")
+    ax = plots.convergence(fake_study(runs))
 
-    np.testing.assert_array_equal(line(ax, "median"), [2.5, 1.5, 1.0])
+    np.testing.assert_allclose(line(ax, "a"), [2.5, 1.5, 1.0])
+    assert ax.get_ylabel() == "incumbent"
     plt.close("all")
 
 
@@ -141,200 +186,244 @@ def test_convergence_needs_a_run():
     """Without runs there is nothing to draw."""
     # `pytest.raises` passes only if the block raises this exception, with a message
     # matching the regular expression `match`
-    with pytest.raises(ValueError, match="at least one run"):
-        plots.convergence([])
+    with pytest.raises(ValueError, match="no incumbent"):
+        plots.convergence(fake_study([]))
 
 
-# The figure of a run's iterations
+def test_regret_is_the_median_regret_on_a_log_axis():
+    """Regret is the oracle incumbent minus the recorded optimum, or the one given,
+    drawn on a log y-axis."""
+    runs = [fake_run("a", 0, [3.0, 1.0], [3.0, 1.0])]
+    study = fake_study(runs, {"oracle_optimum": "0.5"})
 
+    ax = plots.regret(study)
+    given = plots.regret(study, optimum=0.0)
 
-def test_hybrid_bo_figure_from_a_pickled_run(hybrid_run):
-    """Hybrid BO's figure is titled with the method and has three gridded panels: the
-    GP of y with its true curve, f under the scenarios, and the acquisition
-    function, all over the grid of u, with one legend for the figure."""
-    # Act: the figure, showing iteration 1, with the oracle for the true curves
-    settings = ex.settings["hybrid_bo"]
-    rng = np.random.default_rng(0)
-    figure = plots.iterations(hybrid_run, ex.problem, rng, settings, ex.experiment, i=1)
-
-    # The title, three gridded panels (then the buttons' axes), the figure's legend
-    surrogate, scenarios, acquisition, *_buttons = figure.axes
-    assert figure.get_suptitle() == "hybrid_bo"
-    assert all(has_grid(ax) for ax in (surrogate, scenarios, acquisition))
-    assert [ax.get_legend() for ax in (surrogate, scenarios, acquisition)] == [None] * 3
-    (legend,) = figure.legends
-    assert len({text.get_text() for text in legend.get_texts()}) == len(
-        legend.get_texts()
-    )
-
-    # The GP of y: its prediction, and the oracle y = sin(u) as the true curve
-    mean, _ = predict(default_gp(1), hybrid_run.surrogates[1], GRID[:, np.newaxis])
-    np.testing.assert_allclose(line(surrogate, "GP mean"), mean, rtol=1e-12)
-    np.testing.assert_allclose(line(surrogate, "true"), np.sin(GRID), atol=1e-8)
-
-    # f under the scenarios: their mean, and the true objective
-    x = scenario_states(hybrid_run, 1)
-    f = (6 * x - 2) ** 2 * np.sin(12 * x - 4)
-    np.testing.assert_allclose(line(scenarios, "scenario mean"), f.mean(axis=1))
-    assert len(line(scenarios, "true")) == len(GRID)
-    assert acquisition.get_ylabel() == "-EI"
+    np.testing.assert_allclose(line(ax, "a"), [2.5, 0.5])
+    np.testing.assert_allclose(line(given, "a"), [3.0, 1.0])
+    assert ax.get_yscale() == "log"
     plt.close("all")
 
 
-def click(button) -> None:
-    """Clicks a matplotlib button, as a mouse click would."""
-    button._observers.process("clicked", None)
+@pytest.mark.parametrize(
+    ("f_oracle", "record"),
+    [(None, {"oracle_optimum": "0.5"}), ([3.0, 1.0], {})],
+)
+def test_regret_needs_an_oracle_and_an_optimum(f_oracle, record):
+    """Without oracle values, or without an optimum, there is no regret to draw."""
+    study = fake_study([fake_run("a", 0, [3.0, 1.0], f_oracle)], record)
+    with pytest.raises(ValueError, match="no regret"):
+        plots.regret(study)
 
 
-def test_buttons_step_through_the_iterations(hybrid_run):
-    """The - and + buttons redraw the previous and next iteration, still gridded, and
-    stop at the first and last."""
-    # Setup: the figure shows the last of the two iterations
-    settings = ex.settings["hybrid_bo"]
-    figure = plots.iterations(
-        hybrid_run, ex.problem, np.random.default_rng(0), settings
-    )
-    minus, plus = figure._hybrid_bo_buttons  # ty: ignore[unresolved-attribute]
-
-    def gp_mean_is(k: int) -> None:
-        """Checks the GP panel shows iteration k's GP."""
-        mean, _ = predict(default_gp(1), hybrid_run.surrogates[k], GRID[:, np.newaxis])
-        np.testing.assert_allclose(line(figure.axes[0], "GP mean"), mean, rtol=1e-12)
-
-    # + at the last iteration stays there; - steps back, and again stays at the first
-    click(plus)
-    gp_mean_is(1)
-    click(minus)
-    gp_mean_is(0)
-    click(minus)
-    gp_mean_is(0)
-    assert has_grid(figure.axes[0])
-
-    # + steps forward again
-    click(plus)
-    gp_mean_is(1)
-    plt.close("all")
+# The figure of one iteration
 
 
 # `parametrize` runs the test once per value in the list, each as its own test case
-@pytest.mark.parametrize("acquisition", [EI(), LCB(2.0)])
-def test_hybrid_bo_acquisition_is_the_objective_of_the_acquisition_problem(
-    hybrid_run, acquisition
+@pytest.mark.parametrize(
+    "run_name", ["hybrid_run", "hybrid_lcb_run", "standard_run", "lhs_run"]
+)
+def test_every_iteration_of_every_method_is_drawn(request, run_name, tmp_path):
+    """Each iteration of a run of each method draws a figure that saves as a PNG.
+
+    `tmp_path` is a pytest fixture: a fresh temporary folder for this test.
+    """
+    # `request.getfixturevalue` builds the fixture named by the parameter
+    run = request.getfixturevalue(run_name)
+    for i in range(2):
+        figure = plots.iteration(run, ex.problem, i)
+        figure.savefig(tmp_path / f"{run_name}-{i}.png")
+        assert (tmp_path / f"{run_name}-{i}.png").stat().st_size > 0
+    plt.close("all")
+
+
+@pytest.mark.parametrize("run_name", ["hybrid_run", "hybrid_lcb_run", "standard_run"])
+@pytest.mark.parametrize("i", [0, 1])
+def test_replayed_acquisition_at_the_trial_point_is_the_stored_value(
+    request, run_name, i
 ):
-    """The drawn acquisition function is the objective of hybrid BO's acquisition
-    problem at each grid point, with each scenario's states solving g."""
-    # Act: the figure of iteration 0, with this acquisition function
-    settings = HybridBOSettings(
-        acquisition=acquisition, unknown_states_as_variables=False
-    )
-    iteration = 0
-    figure = plots.iterations(
-        hybrid_run, ex.problem, np.random.default_rng(0), settings, i=iteration
+    """The acquisition curve, replayed from the stored surrogate (and for hybrid BO
+    the scenarios and the stored solution), passes through the acquisition value
+    the run stored at its trial point."""
+    # Act: the figure with the acquisition panel alone
+    run = request.getfixturevalue(run_name)
+    figure = plots.iteration(run, ex.problem, i, gp=False, scenarios=False)
+
+    # Check: the curve at the trial point
+    (ax,) = figure.axes
+    name = "LCB" if run_name == "hybrid_lcb_run" else "-EI"
+    curve = drawn_line(ax, name)
+    trial = run.history.u[run.history.n_initial + i, 0]
+    (at_trial,) = np.flatnonzero(np.asarray(curve.get_xdata()) == trial)
+    stored = run.acquisitions[i].value
+    np.testing.assert_allclose(curve.get_ydata()[at_trial], stored, rtol=1e-8)
+    plt.close("all")
+
+
+def scenario_states(run: Run, iteration: int, u: np.ndarray) -> np.ndarray:
+    """x_s at each u and scenario, (n_u, S), computed independently: y_s from the GP,
+    then x_s from x + exp(x) = y_s with scipy's brentq."""
+    assert run.scenarios is not None
+    mean, std = predict(default_gp(1), run.surrogates[iteration], u[:, np.newaxis])
+    y = mean[:, np.newaxis] + std[:, np.newaxis] * run.scenarios.z[:, 0]
+    return np.vectorize(
+        lambda y_s: scipy.optimize.brentq(lambda x: x + np.exp(x) - y_s, -50, 50)
+    )(y)
+
+
+def test_hybrid_bo_figure_from_a_pickled_run(hybrid_run):
+    """Hybrid BO's figure is titled with the method and iteration and has three
+    gridded panels: the GP of y with its true curve, f under the scenarios, and the
+    acquisition function, the objective of the acquisition problem at each u with
+    each scenario's states solving g, all with one legend for the figure."""
+    # Act: iteration 1, with the oracle for the true curves
+    figure = plots.iteration(hybrid_run, ex.problem, 1, experiment=ex.experiment)
+
+    # The title, three gridded panels, the figure's legend
+    surrogate, scenarios, acquisition = figure.axes
+    assert figure.get_suptitle() == "hybrid_bo, iteration 1"
+    assert all(has_grid(ax) for ax in figure.axes)
+    assert [ax.get_legend() for ax in figure.axes] == [None] * 3
+    labels = legend_labels(figure)
+    assert len(set(labels)) == len(labels)
+    assert {"initial points", "incumbent", "next point", "true"} <= set(labels)
+
+    # The GP of y: its prediction, and the oracle y = sin(u) as the true curve
+    u = np.asarray(drawn_line(surrogate, "GP mean").get_xdata())
+    mean, _ = predict(default_gp(1), hybrid_run.surrogates[1], u[:, np.newaxis])
+    np.testing.assert_allclose(line(surrogate, "GP mean"), mean, rtol=1e-12)
+    np.testing.assert_allclose(line(surrogate, "true"), np.sin(u), atol=1e-8)
+
+    # f under the scenarios: their mean, with x_s solving g (to IPOPT's tolerance)
+    x = scenario_states(hybrid_run, 1, u)
+    f = (6 * x - 2) ** 2 * np.sin(12 * x - 4)
+    np.testing.assert_allclose(
+        line(scenarios, "scenario mean"), f.mean(axis=1), atol=1e-4
     )
 
-    # Reference: the acquisition problem at (u, x_s), with x_s from brentq, and the
-    # incumbent of the initial points
-    incumbent = hybrid_run.history.f[: hybrid_run.history.n_initial].min()
+    # The acquisition function: the acquisition problem's objective at (u, x_s)
     assert hybrid_run.scenarios is not None
+    incumbent = hybrid_run.history.f[:3].min()
     nlp, _ = hybrid_acquisition(
         ex.problem,
         default_gp(1),
-        hybrid_run.surrogates[iteration],
+        hybrid_run.surrogates[1],
         hybrid_run.scenarios,
         incumbent,
-        acquisition,
+        EI(),
         unknown_states_as_variables=False,
     )
-    x_s = scenario_states(hybrid_run, iteration)
     expected = [
-        nlp.f(np.concatenate([[u], x_row])).full().item()
-        for u, x_row in zip(GRID, x_s, strict=True)
+        nlp.f(np.concatenate([[u_k], x_row])).full().item()
+        for u_k, x_row in zip(u, x, strict=True)
     ]
-
-    # Check: the third panel's curve, named by the acquisition function
-    name = "-EI" if isinstance(acquisition, EI) else "LCB"
-    drawn = line(figure.axes[2], name)
-    np.testing.assert_allclose(drawn, expected, rtol=1e-6, atol=1e-9)
+    np.testing.assert_allclose(line(acquisition, "-EI"), expected, atol=1e-4)
     plt.close("all")
 
 
 def test_standard_bo_figure_from_a_pickled_run(standard_run):
     """Standard BO's figure has two panels: the GP of f and the acquisition function,
-    the objective of its acquisition problem at each grid point."""
-    # Act: the figure of iteration 1, after 2 initial points and 1 trial point
-    settings = ex.settings["standard_bo"]
-    figure = plots.iterations(
-        standard_run, ex.problem, np.random.default_rng(0), settings, i=1
-    )
+    the objective of its acquisition problem at each u."""
+    # Act: iteration 1, after 2 initial points and 1 trial point
+    figure = plots.iteration(standard_run, ex.problem, 1)
 
     # The GP panel is the GP's prediction
-    gp_ax, acquisition_ax, *_buttons = figure.axes
-    assert figure.get_suptitle() == "standard_bo"
+    gp_ax, acquisition_ax = figure.axes
+    assert figure.get_suptitle() == "standard_bo, iteration 1"
+    u = np.asarray(drawn_line(gp_ax, "GP mean").get_xdata())
     surrogate = standard_run.surrogates[1]
-    mean, _ = predict(default_gp(1), surrogate, GRID[:, np.newaxis])
+    mean, _ = predict(default_gp(1), surrogate, u[:, np.newaxis])
     np.testing.assert_allclose(line(gp_ax, "GP mean"), mean, rtol=1e-12)
 
     # The acquisition panel is the acquisition problem's objective
     incumbent = standard_run.history.f[:3].min()
-    nlp, _ = standard_acquisition(
-        ex.problem, default_gp(1), surrogate, incumbent, settings.acquisition
-    )
-    expected = [nlp.f(u).full().item() for u in GRID]
+    nlp, _ = standard_acquisition(ex.problem, default_gp(1), surrogate, incumbent, EI())
+    expected = [nlp.f(u_k).full().item() for u_k in u]
     np.testing.assert_allclose(line(acquisition_ax, "-EI"), expected, rtol=1e-12)
     plt.close("all")
 
 
 def test_baseline_figure_shows_only_the_points_so_far(lhs_run):
     """A baseline fits no GP, so its figure shows the points before the iteration's
-    design point and the next one, with no GP."""
-    # Act: the figure of iteration 1, without the true curve
-    figure = plots.iterations(lhs_run, ex.problem, np.random.default_rng(0), i=1)
+    design point, their incumbent and the next one, with no curves."""
+    # Act: iteration 1, without the true curve
+    figure = plots.iteration(lhs_run, ex.problem, 1)
 
-    # Check: one panel titled with the method, no curves, and the points so far
-    ax, *_buttons = figure.axes
-    assert figure.get_suptitle() == "latin_hypercube_sampling"
+    # Check: one panel, no curves, and the points so far
+    (ax,) = figure.axes
+    assert figure.get_suptitle() == "latin_hypercube_sampling, iteration 1"
     assert ax.get_lines() == []
     history, n = lhs_run.history, lhs_run.history.n_initial + 1
-    initial, design, next_point = ax.collections
-    np.testing.assert_array_equal(
-        initial.get_offsets(), np.column_stack([history.u[:2, 0], history.f[:2]])
-    )
-    np.testing.assert_array_equal(
-        design.get_offsets(), np.column_stack([history.u[2:n, 0], history.f[2:n]])
-    )
-    np.testing.assert_array_equal(
-        next_point.get_offsets(), [[history.u[n, 0], history.f[n]]]
-    )
+    points = np.column_stack([history.u[:, 0], history.f])
+    initial, so_far, incumbent, next_point = ax.collections
+    np.testing.assert_array_equal(initial.get_offsets(), points[:2])
+    np.testing.assert_array_equal(so_far.get_offsets(), points[2:n])
+    best = np.argmin(history.f[:n])
+    np.testing.assert_array_equal(incumbent.get_offsets(), points[[best]])
+    np.testing.assert_array_equal(next_point.get_offsets(), points[[n]])
     plt.close("all")
 
 
-@pytest.mark.parametrize("iteration", [2, -3])
-def test_iteration_must_exist(standard_run, iteration):
-    """Two iterations ran, so only iterations 0 and 1 (or -2 and -1) can be shown."""
-    rng = np.random.default_rng(0)
+def test_flags_turn_panels_off(hybrid_run, standard_run):
+    """Each panel has a flag; with every panel off, the points with f remain."""
+    only_scenarios = plots.iteration(
+        hybrid_run, ex.problem, 0, gp=False, acquisition=False
+    )
+    nothing = plots.iteration(standard_run, ex.problem, 0, gp=False, acquisition=False)
+
+    assert [ax.get_ylabel() for ax in only_scenarios.axes] == ["f"]
+    assert drawn_line(only_scenarios.axes[0], "scenario mean") is not None
+    (ax,) = nothing.axes
+    assert ax.get_lines() == []
+    plt.close("all")
+
+
+def test_iteration_counts_from_the_end_when_negative(standard_run):
+    """Iteration -1 is the last one."""
+    figure = plots.iteration(standard_run, ex.problem, -1)
+    assert figure.get_suptitle() == "standard_bo, iteration 1"
+    plt.close("all")
+
+
+@pytest.mark.parametrize("i", [2, -3])
+def test_iteration_must_exist(standard_run, i):
+    """Two iterations ran, so only iterations 0 and 1 (or -2 and -1) can be drawn."""
     with pytest.raises(IndexError, match="iteration"):
-        plots.iterations(
-            standard_run, ex.problem, rng, ex.settings["standard_bo"], i=iteration
-        )
+        plots.iteration(standard_run, ex.problem, i)
+
+
+def test_settings_matching_the_record_are_used(hybrid_run):
+    """A run's settings, with the GP given, can be passed when they match the
+    record."""
+    settings = replace(ex.settings["hybrid_bo"], gp=default_gp(1))
+    figure = plots.iteration(hybrid_run, ex.problem, 0, settings=settings)
+    assert len(figure.axes) == 3
+    plt.close("all")
+
+
+def test_a_gp_other_than_the_default_needs_the_settings(hybrid_run):
+    """The record holds the GP as text, so a run whose GP isn't `default_gp` can't
+    be replayed without its settings."""
+    run = replace(hybrid_run, record=hybrid_run.record | {"kernel": "another"})
+    with pytest.raises(ValueError, match="settings"):
+        plots.iteration(run, ex.problem, 0)
 
 
 @pytest.mark.parametrize(
-    ("run_name", "settings"),
+    ("run_name", "settings", "error"),
     [
-        ("hybrid_run", StandardBOSettings()),
-        ("standard_run", HybridBOSettings()),
-        ("standard_run", None),
-        ("lhs_run", StandardBOSettings()),
+        ("hybrid_run", StandardBOSettings(), TypeError),
+        ("standard_run", HybridBOSettings(), TypeError),
+        ("lhs_run", StandardBOSettings(), TypeError),
+        ("hybrid_run", HybridBOSettings(), ValueError),
     ],
 )
-def test_settings_must_be_the_runs_method(request, run_name, settings):
-    """Hybrid BO runs take hybrid BO settings, standard BO runs standard BO settings,
-    and the baselines none."""
-    # `request.getfixturevalue` builds the fixture named by the parameter
+def test_settings_must_be_the_runs(request, run_name, settings, error):
+    """Settings must be the run's method's (else `TypeError`) and match its record
+    (else `ValueError`)."""
     run = request.getfixturevalue(run_name)
-    rng = np.random.default_rng(0)
-    with pytest.raises(TypeError, match="settings"):
-        plots.iterations(run, ex.problem, rng, settings)
+    with pytest.raises(error, match="settings"):
+        plots.iteration(run, ex.problem, 0, settings=settings)
 
 
 def test_figure_needs_one_decision_variable(lhs_run):
@@ -353,10 +442,10 @@ def test_figure_needs_one_decision_variable(lhs_run):
     problem = Problem(system, f=lambda v: v.x)
 
     with pytest.raises(ValueError, match="one decision variable"):
-        plots.iterations(lhs_run, problem, np.random.default_rng(0))
+        plots.iteration(lhs_run, problem, 0)
 
 
-def test_hybrid_bo_figure_needs_h_to_take_only_u(hybrid_run):
+def test_hybrid_bo_gp_panel_needs_h_to_take_only_u(hybrid_run):
     """The GP of y is drawn over u, so h must take u alone."""
     u = Var("u", lower=-2.0, upper=2.0)
     x = Var("x", start=(-2.5, 1.0))
@@ -372,28 +461,4 @@ def test_hybrid_bo_figure_needs_h_to_take_only_u(hybrid_run):
     problem = Problem(system, f=lambda v: v.x)
 
     with pytest.raises(ValueError, match="h_inputs"):
-        plots.iterations(
-            hybrid_run, problem, np.random.default_rng(0), HybridBOSettings()
-        )
-
-
-@pytest.mark.parametrize("acquisition", [EI(), LCB(2.0)])
-def test_scenarios_without_a_root_are_left_out_with_the_weights_renormalized(
-    acquisition,
-):
-    """At a grid point where a scenario has no root (NaN), the acquisition function
-    is computed from the other scenarios, their weights renormalized; where no
-    scenario has a root, it is NaN."""
-    # Setup: the second scenario has no root at the first grid point, and no
-    # scenario has one at the second
-    f = np.array([[1.0, np.nan, 3.0], [np.nan, np.nan, np.nan]])
-    w = np.array([0.5, 0.25, 0.25])
-
-    values = plots._saa_acquisition(f, w, 2.0, acquisition)
-
-    # Check: the first grid point is the other two scenarios, weighted 2/3 and 1/3
-    expected = plots._saa_acquisition(
-        f[:1, [0, 2]], np.array([2 / 3, 1 / 3]), 2.0, acquisition
-    )
-    np.testing.assert_allclose(values[0], expected[0])
-    assert np.isnan(values[1])
+        plots.iteration(hybrid_run, problem, 0)

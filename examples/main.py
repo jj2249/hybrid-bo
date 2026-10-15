@@ -5,11 +5,10 @@
     python examples/main.py plot examples/results/illustrative_example/<UTC time>
         [--run 0] [--iteration -1] [--show]
 
-`plot --show` opens the figures, each with - and + buttons over the run's iterations.
+`plot --show` opens the figures.
 
 An example is a module in this folder that defines `problem`, `experiment`,
-`methods`, `settings` (of the BO methods, for the plots), the default
-`study_settings` and, for a test case, the `oracle` (for the oracle optimum). `run` runs a study and saves it with `hb.save` to
+`methods`, the default `study_settings` and, for a test case, the `oracle` (for the oracle optimum). `run` runs a study and saves it with `hb.save` to
 `<results root>/<example>/<UTC time>/`; `plot` loads it with `hb.load` and saves the
 figures next to it.
 """
@@ -23,7 +22,6 @@ from pathlib import Path
 from types import ModuleType
 
 import matplotlib.pyplot as plt
-import numpy as np
 
 import hybrid_bo as hb
 
@@ -60,41 +58,37 @@ def run(
 def plot(
     example: ModuleType, results_dir: Path, run_index: int, iteration: int
 ) -> None:
-    """Saves the convergence of every method's runs to `convergence.png`, and the
-    iterations of one run of each method, showing `iteration`, to `<method>.png`, in
-    `results_dir`. Returns nothing; the figures stay open for `plt.show`, where
-    each has - and + buttons to step through its iterations.
-
-    The figures' root-finding starts draw from a generator seeded with 0, so plotting
-    again gives the same figures.
+    """Saves the convergence of every method's runs to `convergence.png`, their regret
+    to `regret.png` (when the study has an oracle optimum), and iteration `iteration`
+    of one run of each method to `<method>.png`, in `results_dir`. Returns nothing;
+    the figures stay open for `plt.show`.
     """
     study = hb.load(results_dir)
-    runs: dict[str, list[hb.Run]] = {}
-    for run in study.runs:
-        runs.setdefault(run.method, []).append(run)
 
-    # Convergence: every method on one axes
-    figure, ax = plt.subplots(figsize=(8, 4.8), layout="constrained")
-    figure.suptitle("convergence")
-    for name, method_runs in runs.items():
-        hb.plots.convergence(method_runs, ax=ax, label=name)
-    figure.legend(loc="outside right upper")
+    # Convergence, and regret when the study has one
+    figure, ax = plt.subplots(layout="constrained")
+    hb.plots.convergence(study, ax=ax)
     figure.savefig(results_dir / "convergence.png")
+    figure, ax = plt.subplots(layout="constrained")
+    try:
+        hb.plots.regret(study, ax=ax)
+    except ValueError as error:
+        plt.close(figure)
+        print(f"no regret figure: {error}")
+    else:
+        figure.savefig(results_dir / "regret.png")
 
-    # The iterations of one run per method; a figure that can't be drawn is skipped
-    for name, method_runs in runs.items():
-        selected = [run for run in method_runs if run.index == run_index]
+    # One iteration of one run per method; a figure that can't be drawn is skipped
+    for name in dict.fromkeys(run.method for run in study.runs):
+        selected = [
+            run for run in study.runs if run.method == name and run.index == run_index
+        ]
         if not selected:
             print(f"{name}: no run {run_index} to plot")
             continue
         try:
-            figure = hb.plots.iterations(
-                selected[0],
-                example.problem,
-                np.random.default_rng(0),
-                example.settings.get(name),
-                example.experiment,
-                i=iteration,
+            figure = hb.plots.iteration(
+                selected[0], example.problem, iteration, experiment=example.experiment
             )
         except (ValueError, TypeError, IndexError, hb.HybridBOError) as error:
             print(f"{name}: no figure: {error}")
@@ -132,7 +126,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         "--iteration",
         type=int,
         default=-1,
-        help="the iteration shown first and saved; default: -1, the last",
+        help="the iteration plotted, from 0; default: -1, the last",
     )
     plot_parser.add_argument("--show", action="store_true", help="open the figures")
 
