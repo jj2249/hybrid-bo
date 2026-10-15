@@ -20,22 +20,24 @@ and ty put `examples/` on the path). At module level it defines, in this order:
 2. **Experiment**: for a test case, a module-level `def oracle(v)` (the study
    computes the oracle optimum from it) and `oracle_experiment(system, oracle,
    noise_std)`; otherwise a custom `(u (N,), rng) -> measured (P,)` function.
-3. **Methods**: `settings`, a dict from BO method name to its settings, and `methods`, a dict from method name to a callable
+3. **Methods**: `methods`, a dict from method label to a callable
    `(problem, experiment, initial_points, n, rng) -> Run`. Bind settings with
-   `functools.partial(hb.hybrid_bo, settings=settings["hybrid_bo"])`; the baselines
-   need no settings (`n` is their number of design points).
-4. **The study**, the CLI's defaults: `study_settings = hb.StudySettings(n_runs,
+   `functools.partial(hb.hybrid_bo, settings=hb.HybridBOSettings(...))`; the
+   baselines need no settings (`n` is their number of design points). The plots read
+   a run's settings from its record.
+4. **The study**, the CLI's defaults: `settings = hb.StudySettings(n_runs,
    n_initial, n_iterations, seed=None)` (`None` draws a fresh seed, which the saved
-   study's settings keep).
+   study's settings keep). A test case that knows its oracle optimum may define
+   `optimum` too.
 
 The module has no `__main__` block: the CLI (`examples/main.py`) runs it as
-`hb.study(methods, problem, experiment, settings, name=..., oracle=example.oracle)` and
-saves the study with `hb.save` to `examples/results/<example>/<UTC time>/`
+`hb.study(methods, problem, experiment, settings, name=..., optimum=..., oracle=...)`
+and saves the study with `hb.save` to `examples/results/<example>/<study id>/`
 (`study.json`, `runs/<method>/run-000.json`; git-ignored). The library never writes
-files on its own; saving is an explicit call. Importing the module
-runs nothing, so `tests/test_regression.py` reuses its `problem`, `experiment` and
-`methods`, `tests/test_plots.py` its `settings`, and `tests/conftest.py`'s
-`illustrative_problem` fixture is its `problem`. Changing the illustrative example's
+files on its own; saving is an explicit call. `--help` lists every module in
+`examples/` that defines `methods`. Importing the module runs nothing, so
+`tests/test_regression.py` reuses its `problem`, `experiment`, `methods` and
+`settings`, and `tests/conftest.py`'s `illustrative_problem` fixture is its `problem`. Changing the illustrative example's
 problem, experiment or settings therefore moves the regression baselines: that is a
 *logic* change.
 
@@ -90,14 +92,18 @@ problem = hb.Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x -
 
 ## Running
 
-    pixi run -e dev python examples/main.py run illustrative_example [--method hybrid_bo ...] [--n-runs 10] [--seed 0] [--n-iterations 5]
-    pixi run -e dev python examples/main.py plot examples/results/illustrative_example/<UTC time> [--run 0] [--iteration -1] [--show]
+    pixi run example illustrative_example [--method hybrid_bo ...] [--n-runs 10] [--seed 0] [--n-iterations 5] [--name lcb-vs-ei] [--plot]
+    pixi run plot illustrative_example [STUDY]
+    pixi run example --help   # lists the examples and their methods
 
-`run` runs a study from the seed (see Randomness), with the methods given and the
-`study_settings` overridden by the flags given, and saves it. `plot` loads the study
-with `hb.load`, imports the example named by the results folder's parent, then, in
-`hb.plots.STYLE`, saves `convergence.png`, `regret.png` (with an oracle optimum) and
-`<method>.png` (`hb.plots.iteration` of `--iteration` with the example's experiment)
-into the folder; `--show` opens them. The iteration figures need one decision
-variable and read the settings from the run's record (a custom GP needs `settings=`);
-otherwise `plot` prints why and skips them.
+The pixi tasks run `examples/main.py run` and `plot` in the `examples` environment
+and pass flags through. `example` runs a study from the seed (see Randomness), with
+the methods given and the example's `settings` overridden by the flags given, and
+saves it to `<study id>`: `--name`, else the UTC time to the second, with `-2`, `-3`,
+... if taken. `plot` loads the study given, else the newest (the largest id, so a
+`--name` sorts after the timestamps), and, in `hb.plots.STYLE`, saves into its
+`figures/` folder `convergence.png`, `regret.png` (with an oracle optimum) and
+`<method>/run-000/iteration-00.png` for every iteration of every run (with the
+example's experiment for the true curves, if it has an `oracle`). The iteration
+figures need one decision variable and read the settings from the run's record (a
+custom GP needs `settings=`); otherwise `plot` prints why and skips that run's.

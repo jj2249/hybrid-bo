@@ -90,7 +90,7 @@ its own regression baseline on the new API. Scope is in the issues and DESIGN.md
 - [x] #53: `Study`, `StudySettings`, `hb.study`, JSON `hb.save`/`hb.load` (ADR 0004)
 - [x] #54: Polars views of a study
 - [x] #55: static plots: convergence, regret, iterations (ADR 0005)
-- [ ] #51: `pixi run example` / `pixi run plot` entry point
+- [x] #51: `pixi run example` / `pixi run plot` entry point
 
 ## Stage 6: publishing
 - [ ] Merge `refactor/initial` into `main` (`main` stays frozen until then), then

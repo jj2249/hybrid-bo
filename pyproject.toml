@@ -60,6 +60,11 @@ docs = "sphinx-build -b html docs docs/_build/html"
 matplotlib = ">=3.11.2,<4"
 polars = ">=2.0.0,<3"
 
+# Extra flags pass through to examples/main.py; see `pixi run example --help`
+[tool.pixi.feature.examples.tasks]
+example = { cmd = "python examples/main.py run", default-environment = "examples" }
+plot = { cmd = "python examples/main.py plot", default-environment = "examples" }
+
 [tool.pixi.environments]
 default = { solve-group = "default" }
 examples = { features = ["quality", "docs", "examples"], solve-group = "default" }

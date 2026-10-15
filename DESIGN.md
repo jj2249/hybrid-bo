@@ -597,9 +597,17 @@ it. Polars and matplotlib are optional (imported on first use; the
   needed only for a GP other than `default_gp`, since the record holds the GP as text,
   not its kernel function. The fields the replay uses (acquisition function, and for
   hybrid BO the solver and `unknown_states_as_variables`) must match the record.
-- **Entry point** (#51). `pixi run example <name> [flags]` and `pixi run plot <name>
-  [study]` over `examples/main.py`. Results go to
-  `examples/results/<name>/<study id>/{study.json, runs/, figures/}`.
+- **Entry point** (#51, done). `pixi run example <name> [flags]` and `pixi run plot
+  <name> [study]` are pixi tasks (`default-environment = "examples"`, flags passed
+  through) over a thin `examples/main.py`, which imports the example, overrides its
+  `settings` (`StudySettings`) with the flags and calls `hb.study` and `hb.save`, or
+  `hb.load` and `hb.plots`. Results go to
+  `examples/results/<name>/<study id>/{study.json, runs/, figures/}`; the study id is
+  `--name` or the UTC time to the second, with `-2`, `-3`, ... on a collision, and
+  `plot` takes the largest id by default. `plot` writes only under `figures/`:
+  convergence, regret and every iteration of every run
+  (`<method>/run-000/iteration-00.png`). `--help` lists the example modules (those
+  defining `methods`) and their methods.
 
 ## Order of random draws
 
@@ -726,6 +734,7 @@ The tickets, in a workable order:
 - **#52 Namespace**: `hb.*` holds only the user-facing names (see Decisions); a
   Getting started docs page. *Done*.
 - **#53 Study**: see Analysis. *Done*; `examples/main.py` runs and saves a study, and
-  the examples define `study_settings`.
+  the examples define their study settings.
 - **#54 Polars views**, then **#55 Plots**, then **#51 Entry point**: see Analysis.
-  In sequence; each is blocked by the one before.
+  *Done*. With #51 an example's study settings are its `settings`, and the separate
+  dict of method settings is gone (the plots read them from the record).

@@ -40,6 +40,10 @@ from hybrid_bo import (
 from hybrid_bo.acquisition import hybrid_acquisition, standard_acquisition
 from hybrid_bo.gp import default_gp, predict
 
+# The illustrative example's hybrid BO settings: the GP's prediction substituted for
+# the unknown states
+HYBRID_SETTINGS = HybridBOSettings(unknown_states_as_variables=False)
+
 
 def pickled(run: Run) -> Run:
     """The run after a round trip through pickle, as a saved run is loaded."""
@@ -66,7 +70,7 @@ def illustrative_run(
 def hybrid_run() -> Run:
     """A pickled hybrid BO run with the illustrative example's settings (EI, the GP's
     prediction substituted for the unknown states)."""
-    return illustrative_run(hybrid_bo, ex.settings["hybrid_bo"])
+    return illustrative_run(hybrid_bo, HYBRID_SETTINGS)
 
 
 @pytest.fixture(scope="module")
@@ -78,7 +82,7 @@ def hybrid_lcb_run() -> Run:
 @pytest.fixture(scope="module")
 def standard_run() -> Run:
     """A pickled standard BO run with the illustrative example's settings."""
-    return illustrative_run(standard_bo, ex.settings["standard_bo"])
+    return illustrative_run(standard_bo, StandardBOSettings())
 
 
 @pytest.fixture(scope="module")
@@ -401,7 +405,7 @@ def test_iteration_must_exist(standard_run, i):
 def test_settings_matching_the_record_are_used(hybrid_run):
     """A run's settings, with the GP given, can be passed when they match the
     record."""
-    settings = replace(ex.settings["hybrid_bo"], gp=default_gp(1))
+    settings = replace(HYBRID_SETTINGS, gp=default_gp(1))
     figure = plots.iteration(hybrid_run, ex.problem, 0, settings=settings)
     assert len(figure.axes) == 3
     plt.close("all")

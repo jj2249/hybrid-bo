@@ -37,8 +37,13 @@ pixi run -e dev lint | format | typecheck
 pixi run -e dev docs         # sphinx API docs -> docs/_build/html
 pixi run -e dev setup        # install pre-commit hooks
 pixi run -e quality pre-commit run --hook-stage manual ty   # ty hook is manual for now
-pixi run -e dev python examples/main.py run illustrative_example   # every method; the study saved to examples/results/
+pixi run example illustrative_example [--n-runs 3 --plot ...]   # every method; --help lists the examples
+pixi run plot illustrative_example [STUDY]   # figures of the newest (or named) study
 ```
+
+The examples' entry points are pixi tasks over `examples/main.py`: the tasks are the
+short commands, the logic stays in Python. They set `default-environment =
+"examples"`, so they need no `-e`, and pass extra flags through.
 
 The git hook hardcodes the pixi Python path. If commits fail with "`pre-commit`
 not found" after a Python upgrade, re-run `pixi run -e quality setup`.

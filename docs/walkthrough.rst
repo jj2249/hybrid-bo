@@ -141,7 +141,7 @@ methods with its :py:class:`~hybrid_bo.studies.StudySettings` and saves it:
 .. literalinclude:: ../examples/main.py
    :language: python
    :start-at: study = hb.study(
-   :end-at: hb.save(study, results_dir)
+   :end-at: hb.save(study, study_dir)
    :dedent:
 
 A method returns a :py:class:`~hybrid_bo.run.Run`, which is plain data, so
@@ -167,9 +167,9 @@ them.
   variables and equations, the experiment, the method and its settings, the seed and
   the package and code versions.
 
-``pixi run -e dev python examples/main.py run illustrative_example`` runs every
-method and saves the study to ``examples/results/``; the CLI's ``plot`` command
-draws it (see ``examples/main.py``).
+``pixi run example illustrative_example`` runs every method and saves the study to
+``examples/results/illustrative_example/``; ``pixi run plot illustrative_example``
+draws the newest one (see ``examples/main.py``).
 
 Plotting a study
 ----------------
