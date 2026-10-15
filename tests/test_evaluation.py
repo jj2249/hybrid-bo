@@ -23,6 +23,7 @@ from hybrid_bo import (
     oracle_incumbents,
 )
 from hybrid_bo.evaluation import OracleMeasurement, evaluate
+from hybrid_bo.history import n_iterations
 
 
 def illustrative_experiment(problem: Problem, noise_std: float):
@@ -287,6 +288,11 @@ def history_of(f: list[float], f_oracle: list[float] | None = None) -> History:
         f_oracle=None if f_oracle is None else np.array(f_oracle),
         n_initial=2,
     )
+
+
+def test_n_iterations_counts_the_points_after_the_initial_ones():
+    """A history of five points, two of them initial, has three iterations."""
+    assert n_iterations(history_of([3.0, 1.0, 2.0, 0.5, 0.2])) == 3
 
 
 def test_incumbents_are_the_running_minimum_of_measured_f():

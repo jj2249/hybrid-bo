@@ -141,7 +141,7 @@ methods with its :py:class:`~hybrid_bo.studies.StudySettings` and saves it:
 .. literalinclude:: ../examples/main.py
    :language: python
    :start-at: study = hb.study(
-   :end-at: hb.save(study, study_dir)
+   :end-at: study_dir = save_new(study, example_dir, study_id)
    :dedent:
 
 A method returns a :py:class:`~hybrid_bo.run.Run`, which is plain data, so

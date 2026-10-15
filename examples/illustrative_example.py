@@ -54,4 +54,4 @@ methods = {
 
 # The study, the CLI's defaults. Seed None draws a fresh seed, which the saved study
 # keeps, so it can be run again exactly
-settings = hb.StudySettings(n_runs=1, n_initial=2, n_iterations=5, seed=None)
+study_settings = hb.StudySettings(n_runs=1, n_initial=2, n_iterations=5, seed=None)

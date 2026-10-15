@@ -73,6 +73,23 @@ def test_a_named_study_gets_a_suffix_when_taken_and_plot_flag_plots(tmp_path):
     assert (example_dir / "demo-2" / "figures" / "convergence.png").exists()
 
 
+def test_plot_takes_the_study_saved_last(tmp_path):
+    """Without a study id, `plot` draws the study saved last, even when an older one
+    has a name that sorts after it."""
+    # Two studies: "zeta" first, then "alpha"
+    command = ["run", "illustrative_example", "--method", "uniform_sampling"]
+    command += ["--n-runs", "1", "--n-iterations", "1"]
+    command += ["--results-root", str(tmp_path)]
+    main.main([*command, "--name", "zeta"])
+    main.main([*command, "--name", "alpha"])
+
+    main.main(["plot", "illustrative_example", "--results-root", str(tmp_path)])
+
+    example_dir = tmp_path / "illustrative_example"
+    assert (example_dir / "alpha" / "figures").exists()
+    assert not (example_dir / "zeta" / "figures").exists()
+
+
 def test_help_lists_the_examples_and_their_methods(capsys):
     """`pixi run example --help` names every example and its methods.
 

@@ -5,13 +5,13 @@
     pixi run plot illustrative_example [STUDY]
 
 An example is a module in this folder that defines `problem`, `experiment`,
-`methods` (label -> method), its default study `settings` and, for a test case, the
+`methods` (label -> method), its default `study_settings` and, for a test case, the
 `oracle` (the study computes the oracle optimum from it) or the known `optimum`.
 `run` saves a study with `hb.save` to `<results root>/<example>/<study id>/` (the
-results root defaults to `results/` at the repo root), where
-the study id is `--name` or the UTC time, with `-2`, `-3`, ... appended if taken.
-`plot` loads a study (default: the newest, the largest id) with `hb.load` and saves
-its figures to its `figures/` folder.
+results root defaults to `results/` at the repo root), where the study id is
+`--name` or the UTC time at the start, with `-2`, `-3`, ... appended if taken when
+the study is saved. `plot` loads a study (default: the newest saved) with `hb.load`
+and saves its figures to its `figures/` folder.
 """
 
 import argparse
@@ -42,23 +42,27 @@ def examples() -> dict[str, ModuleType]:
     return {module.__name__: module for module in modules if hasattr(module, "methods")}
 
 
-def new_study_dir(example_dir: Path, name: str | None) -> Path:
-    """The folder of a new study in `example_dir`: `name`, else the UTC time to the
-    second, with `-2`, `-3`, ... appended if it is taken."""
-    stem = name or datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-    path, suffix = example_dir / stem, 2
-    while path.exists():
-        path, suffix = example_dir / f"{stem}-{suffix}", suffix + 1
-    return path
+def save_new(study: hb.Study, example_dir: Path, study_id: str) -> Path:
+    """Saves `study` to the folder `study_id` in `example_dir`, with `-2`, `-3`, ...
+    appended if it is taken, and returns the folder. `hb.save` creates the folder and
+    refuses an existing one, so studies saved at once never share a folder."""
+    path, suffix = example_dir / study_id, 2
+    while True:
+        try:
+            return hb.save(study, path)
+        except FileExistsError:
+            path, suffix = example_dir / f"{study_id}-{suffix}", suffix + 1
 
 
 def run(
     example: ModuleType,
     method_names: Sequence[str],
     settings: hb.StudySettings,
-    study_dir: Path,
-) -> None:
-    """Runs a study of the chosen methods and saves it to `study_dir`.
+    example_dir: Path,
+    study_id: str,
+) -> Path:
+    """Runs a study of the chosen methods, saves it to a new folder `study_id` in
+    `example_dir` (see `save_new`) and returns the folder.
 
     Run i of each method starts from the same initial points. A run that fails with a
     `HybridBOError` is saved as far as it got. Seed None draws a fresh seed, which
@@ -74,10 +78,11 @@ def run(
         optimum=getattr(example, "optimum", None),
         oracle=getattr(example, "oracle", None),
     )
-    hb.save(study, study_dir)
+    study_dir = save_new(study, example_dir, study_id)
     for name in method_names:
         n_saved = sum(run.method == name for run in study.runs)
         print(f"{name}: saved {n_saved} of {settings.n_runs} runs to {study_dir}")
+    return study_dir
 
 
 def plot(example: ModuleType, study_dir: Path) -> None:
@@ -112,8 +117,7 @@ def plot(example: ModuleType, study_dir: Path) -> None:
     experiment = example.experiment if hasattr(example, "oracle") else None
     for run in study.runs:
         run_dir = figures_dir / run.method / f"run-{run.index:03d}"
-        n_iterations = len(run.history.u) - run.history.n_initial
-        for i in range(n_iterations):
+        for i in range(hb.history.n_iterations(run.history)):
             try:
                 figure = hb.plots.iteration(
                     run, example.problem, i, experiment=experiment
@@ -189,19 +193,23 @@ def main(argv: Sequence[str] | None = None) -> None:
             "n_iterations": args.n_iterations,
         }
         settings = replace(
-            example.settings,
+            example.study_settings,
             **{name: value for name, value in given.items() if value is not None},
         )
-        study_dir = new_study_dir(example_dir, args.name)
-        run(example, methods, settings, study_dir)
+        study_id = args.name or datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+        study_dir = run(example, methods, settings, example_dir, study_id)
 
-    # Plot: the study given, else the newest
+    # Plot: the study given, else the one saved last
     else:
-        ids = sorted(path.parent.name for path in example_dir.glob("*/study.json"))
-        study_id = args.study or (ids[-1] if ids else None)
-        if study_id not in ids:
-            parser.error(f"{example_dir} holds no study {study_id or ''}")
-        study_dir = example_dir / study_id
+        saved = list(example_dir.glob("*/study.json"))
+        if args.study is not None:
+            study_dir = example_dir / args.study
+        elif saved:
+            study_dir = max(saved, key=lambda path: path.stat().st_mtime).parent
+        else:
+            parser.error(f"{example_dir} holds no study")
+        if not (study_dir / "study.json").exists():
+            parser.error(f"{study_dir} holds no study")
 
     # Plot, also straight after a run with --plot
     if args.command == "plot" or args.plot:
