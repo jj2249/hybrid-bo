@@ -8,7 +8,8 @@
 `plot --show` opens the figures.
 
 An example is a module in this folder that defines `problem`, `experiment`,
-`methods`, the default `study_settings` and, for a test case, the `oracle` (for the oracle optimum). `run` runs a study and saves it with `hb.save` to
+`methods`, the default `study_settings` and, for a test case, the `oracle` (for the
+oracle optimum). `run` runs a study and saves it with `hb.save` to
 `<results root>/<example>/<UTC time>/`; `plot` loads it with `hb.load` and saves the
 figures next to it.
 """

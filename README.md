@@ -118,7 +118,7 @@ print(run.history.f)
   function (`EI()` or `LCB(std_factor)`), the GP (`hb.gp.default_gp` unless given; see
   `hb.gp.GP`, `hb.gp.Hyper` and `hb.kernels`), the number of scenarios and the solver
   starts.
-- **Plots**: `hb.plots` draws a finished `Run`, so saved runs are plotted without
+- **Plots**: `hb.plots` draws a finished study, so saved studies are plotted without
   running them again (see Examples).
 - **Errors** are `HybridBOError` subclasses; one raised during a method carries the
   partial run as `error.run`.
@@ -139,14 +139,15 @@ pixi run -e dev python examples/main.py plot examples/results/illustrative_examp
 ```
 
 `run` takes `--method` (repeatable; default every method), `--n-runs`, `--seed` and
-`--n-iterations`, defaulting to the example's `study_settings`. `plot` saves `convergence.png`
-(the incumbents of every method's runs) and one figure per method of `--run`'s
-iterations, showing `--iteration` (default: run 0, the last iteration), next to the
-study. `--show` opens them, each with - and + buttons to step through the iterations. In your own
-scripts, `hb.plots.convergence(runs)` and
-`hb.plots.iterations(run, problem, rng, settings, experiment)` draw the same figures;
-they need matplotlib (in the `examples` and `dev` pixi environments). Figures use the
-repo's matplotlib style, `hb.plots.STYLE` (`src/hybrid_bo/hybrid_bo.mplstyle`).
+`--n-iterations`, defaulting to the example's `study_settings`. `plot` saves
+`convergence.png` (the median oracle incumbent of every method over the evaluations),
+`regret.png` (when the study has an oracle optimum) and one figure per method of
+`--run`'s iteration `--iteration` (default: run 0, the last iteration), next to the
+study; `--show` opens them. In your own scripts, `hb.plots.convergence(study)`,
+`hb.plots.regret(study)` and `hb.plots.iteration(run, problem, i, experiment=...)`
+draw the same figures; they need matplotlib and Polars (in the `examples` and `dev`
+pixi environments). Figures use the repo's matplotlib style, `hb.plots.STYLE`
+(`src/hybrid_bo/hybrid_bo.mplstyle`).
 
 [`./examples/flash_unit/`](./examples/flash_unit/) still targets the old API (tag
 `pre-refactor`) until it is ported.

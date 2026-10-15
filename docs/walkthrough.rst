@@ -121,8 +121,7 @@ Running it and reading a run
 A *method* is how a problem is solved. The example compares hybrid BO with standard
 BO and two baselines that sample without a model, Latin hypercube and uniform
 sampling. Each method is a function with the same arguments, so the example keeps
-them in a dictionary, with their settings bound by ``functools.partial``. The settings
-of the BO methods are also kept on their own, for the plots.
+them in a dictionary, with their settings bound by ``functools.partial``.
 
 .. literalinclude:: ../examples/illustrative_example.py
    :language: python
@@ -171,3 +170,22 @@ them.
 ``pixi run -e dev python examples/main.py run illustrative_example`` runs every
 method and saves the study to ``examples/results/``; the CLI's ``plot`` command
 draws it (see ``examples/main.py``).
+
+Plotting a study
+----------------
+
+The plots read a finished study, so a saved one is plotted without running it again.
+:py:func:`~hybrid_bo.plots.convergence` draws, per method, the median oracle incumbent
+over the evaluations with the interquartile range across runs shaded;
+:py:func:`~hybrid_bo.plots.regret` draws the same against the oracle optimum on a log
+scale, as in the paper. Both count evaluations, initial points included, since those
+are not free.
+
+:py:func:`~hybrid_bo.plots.iteration` draws one iteration of one run: the state before
+its trial point. For hybrid BO it has three panels, the steps of the iteration above:
+the GP of ``y`` over ``u``; ``f`` under the scenarios, with ``x_s`` solving the known
+equations; and the acquisition function, the objective of the acquisition problem with
+``u`` fixed at each grid point. The last two replay the acquisition problem the run
+solved, from its stored GP, scenarios and incumbent, so the curve passes through the
+acquisition value stored at the trial point. Standard BO's figure has the GP of ``f``
+and its analytic acquisition function; a baseline's has the points only.

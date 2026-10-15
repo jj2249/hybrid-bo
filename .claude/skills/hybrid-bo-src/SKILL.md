@@ -146,19 +146,19 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `saa_scenarios`, then the loop; fit `h_inputs -> y`, `hybrid_acquisition`; adds the
   scenarios to the run and to `error.run`). `_method_record` builds both methods'
   records.
-- `plots.py`: `convergence(runs, ax, label)` and `iterations(run, problem, rng,
-  settings, experiment, i) -> Figure`: every iteration's panels (`_Frame`, computed
-  once by `_frame`) over a 101-point grid of one-dimensional `u` (start bounds),
-  titled with the method, one figure legend (`_figure_legend`, outside the panels),
-  and - and + buttons (kept on the figure as `_hybrid_bo_buttons`, since matplotlib
-  holds widgets weakly) that redraw from the frames. The panels (`_gp_panel`, `_scenarios_panel`,
-  `_acquisition_panel`) are private. The settings must match `run.record["method"]`
-  (`TypeError`; None for the baselines, which show their points only). Figures are
-  drawn in `STYLE` (`hybrid_bo.mplstyle`, the repo's rcParams); labels and legends
-  are matplotlib's defaults. Hybrid BO's f under the scenarios solves g for each x_s with
-  `_find_root` (NaN where no root); its acquisition curve is the SAA objective
-  computed in numpy, standard BO's evaluates `standard_acquisition`'s NLP. matplotlib
-  is imported inside the functions, so `import hybrid_bo` works without it.
+- `plots.py`: static figures, no widgets and no `rng`. `convergence(study, ax)` and
+  `regret(study, optimum, ax)` draw `evaluations` (median and IQR per method over
+  evaluations, `_over_evaluations`). `iteration(run, problem, i, *, experiment, gp,
+  scenarios, acquisition, settings) -> Figure` draws the state before trial point i
+  over a 101-point grid of one-dimensional `u` (start bounds) plus the trial point,
+  with one figure legend (`_figure_legend`). `_replay_settings` reads the acquisition
+  function and `unknown_states_as_variables` from the record (regex on
+  `_settings_text`); given settings must match it, and a non-default GP needs them.
+  `_replay`: standard BO evaluates `standard_acquisition`'s NLP; hybrid BO rebuilds
+  `hybrid_acquisition` and solves it with u as an `nlpsol` parameter, outwards from
+  the stored solution (NaN where a solve fails), then f per scenario at
+  `_scenario_states`. Figures are drawn in `STYLE` (`hybrid_bo.mplstyle`).
+  matplotlib and Polars are imported inside the functions.
 - `errors.py`: `HybridBOError` (with `.history`, the points evaluated before the
   error, and `.run`, the partial run when raised in a method), `RootFindingError`,
   `NoSolutionError`, `ReconstructionWarning`. The library raises these, never bare
