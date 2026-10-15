@@ -631,8 +631,6 @@ The tickets, in a workable order:
   instead. The plot callbacks go with it; plots return in #31.
 - **#31 Plots and CLI**: `hb.plots`; a CLI for the examples. Blocked by #30.
 - **#32 Benchmark metric** (*logic*): the oracle objective at the believed best
-  point. *Done*; `oracle_incumbents(history)` computes it from the history, so nothing
-  is stored twice. A later point that only ties the incumbent doesn't replace it.
-  Without noise it is the running minimum of `f_oracle`, the incumbent behind the
-  paper's regret figures (no noise there), so the noise-free baselines don't change;
-  the regression test's `incumbents_no_noise` now uses it.
+  point. *Done*: `oracle_incumbents(history)`. Without noise it is the running
+  minimum of `f_oracle`, as in the paper's (noise-free) regret figures, so the
+  baselines don't change.

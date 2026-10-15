@@ -120,7 +120,8 @@ One step of the optimization loop.
 _Avoid_: run, step
 
 **Incumbent**:
-The best measured objective value so far.
+The best measured objective value so far. The point that measured it is the
+incumbent's point, the one the optimizer believes is best.
 _Avoid_: best value, current best
 
 **Oracle incumbent** (`oracle_incumbents`):

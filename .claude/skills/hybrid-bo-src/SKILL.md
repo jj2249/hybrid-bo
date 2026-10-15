@@ -157,9 +157,9 @@ re-exports the public API.
   carries the partial run (`error.run`) and the example decides whether to save it
   and continue.
 - **Oracle incumbents.** `incumbents(history)` is the running minimum of the measured
-  `f`. The benchmark metric is `oracle_incumbents(history)`: `f_oracle` at the
-  incumbent's point (the earlier point on a tie), not the running minimum of
-  `f_oracle`. They agree only without noise. `ValueError` without oracle values.
+  `f`. The benchmark metric `oracle_incumbents(history)` is `f_oracle` at the
+  incumbent's point, not the running minimum of `f_oracle`; they agree only
+  without noise.
 
 ## Testing rules
 

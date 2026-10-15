@@ -53,8 +53,8 @@ def incumbents(history: History) -> np.ndarray:
 
 
 def oracle_incumbents(history: History) -> np.ndarray:
-    """The oracle objective value at the incumbent's point after each evaluation,
-    shape (n): the benchmark metric.
+    """The benchmark metric: the oracle objective at the incumbent's point after each
+    evaluation, shape (n,).
 
     The incumbent's point is the one the optimizer believes is best, so this is
     what acting on the run would give. Under noise it can be worse than the best
