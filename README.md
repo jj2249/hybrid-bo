@@ -130,18 +130,21 @@ print(run.history.f)
 
 [`./examples/illustrative_example.py`](./examples/illustrative_example.py) defines the
 illustrative example of the [publication](https://arxiv.org/abs/2603.11199) and the
-methods to compare. Two pixi tasks over [`./examples/main.py`](./examples/main.py)
-run an example's methods as a study and plot saved studies:
+methods to compare, and ends by passing them all to
+[`./examples/cli.py`](./examples/cli.py), which runs them as a study or plots saved
+studies. Two pixi tasks run the script:
 
 ```bash
-pixi run example illustrative_example --n-runs 10 --seed 0   # --help lists the examples
+pixi run example illustrative_example --n-runs 10 --seed 0   # --help lists the flags
 pixi run plot illustrative_example                           # the newest study, or name one
 ```
 
 `example` takes `--method` (repeatable; default every method), `--n-runs`, `--seed`
 and `--n-iterations`, defaulting to the example's `study_settings`, plus `--name`
 (the study id; default the UTC time) and `--plot` (plot straight after). A study is
-saved to `results/<example>/<study id>/` (`study.json`, `runs/`). `plot` writes
+saved to `results/<example>/<study id>/` (`study.json`, `runs/`), with its
+`hb.summary` table (median and IQR of the final values per method) printed and saved
+as `summary.csv`. `plot` writes
 into its `figures/`: `convergence.png` (the median oracle incumbent of every method
 over the evaluations), `regret.png` (when the study has an oracle optimum) and
 `<method>/run-000/iteration-00.png` for every iteration of every run. In your own

@@ -135,10 +135,22 @@ generators spawned from one seed, the same ones for every method, so run ``i`` o
 each method starts from the same initial points, and the same seed gives the same
 study. A method that fails raises a
 :py:class:`~hybrid_bo.errors.HybridBOError` carrying the partial run, which the study
-keeps. The examples' CLI, ``examples/main.py``, runs a study of the example's
-methods with its :py:class:`~hybrid_bo.studies.StudySettings` and saves it:
+keeps. The example ends by passing everything it defines to its command line,
+``examples/cli.py``:
 
-.. literalinclude:: ../examples/main.py
+.. literalinclude:: ../examples/illustrative_example.py
+   :language: python
+   :start-at: # The study
+   :end-before: # Run or plot
+
+.. literalinclude:: ../examples/illustrative_example.py
+   :language: python
+   :start-at: # Run or plot
+
+which runs a study of the example's methods with its
+:py:class:`~hybrid_bo.studies.StudySettings`, overridden by the flags, and saves it:
+
+.. literalinclude:: ../examples/cli.py
    :language: python
    :start-at: study = hb.study(
    :end-at: study_dir = save_new(study, example_dir, study_id)
@@ -169,7 +181,7 @@ them.
 
 ``pixi run example illustrative_example`` runs every method and saves the study to
 ``results/illustrative_example/``; ``pixi run plot illustrative_example``
-draws the newest one (see ``examples/main.py``).
+draws the newest one (see ``examples/cli.py``).
 
 Plotting a study
 ----------------

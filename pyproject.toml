@@ -60,10 +60,12 @@ docs = "sphinx-build -b html docs docs/_build/html"
 matplotlib = ">=3.11.2,<4"
 polars = ">=2.0.0,<3"
 
-# Extra flags pass through to examples/main.py; see `pixi run example --help`
+# Each runs an example script as a module from examples/. `example` declares no args,
+# so the example's name and every flag pass through; see
+# `pixi run example illustrative_example --help`
 [tool.pixi.feature.examples.tasks]
-example = { cmd = "python examples/main.py run", default-environment = "examples" }
-plot = { cmd = "python examples/main.py plot", default-environment = "examples" }
+example = { cmd = "python -m", cwd = "examples", default-environment = "examples", description = "Run an example as a study: pixi run example <name> [flags]" }
+plot = { cmd = "python -m {{ name }} plot {{ study }}", cwd = "examples", default-environment = "examples", args = ["name", { arg = "study", default = "" }], description = "Plot a saved study of an example (default: the newest)" }
 
 [tool.pixi.environments]
 default = { solve-group = "default" }
@@ -99,7 +101,7 @@ quote-style = "double"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Examples are imported as top-level modules, as in examples/main.py
+# Examples are imported as top-level modules, as `python -m` runs them from examples/
 pythonpath = ["examples"]
 
 [tool.ty.environment]
