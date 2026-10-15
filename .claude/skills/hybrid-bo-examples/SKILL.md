@@ -5,7 +5,7 @@ description: Use when writing, modifying or running an example under examples/. 
 
 # Writing and running examples
 
-`examples/illustrative_example.py` is the reference: one Python script, in the style of
+`examples/illustrative_example.py` is the reference: one Python module, in the style of
 DESIGN.md's "Target example". `examples/flash_unit/` still targets the `pre-refactor`
 tag and is out of scope until its port (#42), so leave it alone. Use CONTEXT.md's terms
 (decision variables `u`, mechanistic states `x`, unknown states `y`, known equations
@@ -19,20 +19,22 @@ and ty put `examples/` on the path). At module level it defines, in this order:
 1. **Problem**: `Var`s, `System`, `Problem` (below).
 2. **Experiment**: `oracle_experiment(system, oracle, noise_std)` for a test case, or a
    custom `(u (N,), rng) -> measured (P,)` function.
-3. **Methods**: `methods`, a dict from method name to a callable
+3. **Methods**: `settings`, a dict from BO method name to its settings (the plots
+   need them), and `methods`, a dict from method name to a callable
    `(problem, experiment, initial_points, n, rng) -> Run`. Bind settings with
-   `functools.partial(hb.hybrid_bo, settings=hb.HybridBOSettings(...))`; the baselines
+   `functools.partial(hb.hybrid_bo, settings=settings["hybrid_bo"])`; the baselines
    need no settings (`n` is their number of design points).
-4. **Runs**: `seed` (`None` draws a fresh one, recorded in every run), `n_runs`,
-   `n_initial`, `n_iterations`.
+4. **Runs**, the CLI's defaults: `seed` (`None` draws a fresh one, recorded in every
+   run), `n_runs`, `n_initial`, `n_iterations`.
 
-Under `if __name__ == "__main__":` it runs every method `n_runs` times and pickles
+The module has no `__main__` block: the CLI (`examples/main.py`) runs it, and pickles
 each method's `list[Run]` to `examples/results/<example>/<UTC time>/<method>.pkl`
-(git-ignored). The library returns runs; the script saves them. Importing the module
+(git-ignored). The library returns runs; the CLI saves them. Importing the module
 runs nothing, so `tests/test_regression.py` reuses its `problem`, `experiment` and
-`methods`, and `tests/conftest.py`'s `illustrative_problem` fixture is its `problem`.
-Changing the illustrative example's problem, experiment or settings therefore moves
-the regression baselines: that is a *logic* change.
+`methods`, `tests/test_plots.py` its `settings`, and `tests/conftest.py`'s
+`illustrative_problem` fixture is its `problem`. Changing the illustrative example's
+problem, experiment or settings therefore moves the regression baselines: that is a
+*logic* change.
 
 **Randomness.** One generator per run, spawned from one seed that every method shares,
 so run `i` of each method starts from the same initial points:
@@ -79,7 +81,12 @@ problem = hb.Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x -
 
 ## Running
 
-    pixi run -e dev python examples/illustrative_example.py
+    pixi run -e dev python examples/main.py run illustrative_example [--method hybrid_bo ...] [--n-runs 10] [--seed 0] [--n-iterations 5]
+    pixi run -e dev python examples/main.py plot examples/results/illustrative_example/<UTC time> [--run 0] [--iteration -1] [--show]
 
-`examples/main.py` runs the example named at its top the same way (a CLI comes in #31).
-There are no plots until `hb.plots` (#31); a `Run` holds everything they need.
+`run` spawns one generator per run from the seed (see Randomness) and saves a failed
+run's `error.run`. `plot` imports the example named by the results folder's parent,
+then, in `hb.plots.STYLE`, saves `convergence.png` and `<method>.png`
+(`hb.plots.iterations` with `settings.get(method)` and the example's experiment,
+showing `--iteration`) into the folder; `--show` opens them with their - and + buttons. The figures
+need one decision variable; for other problems `plot` prints why and skips them.
