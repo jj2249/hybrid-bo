@@ -8,9 +8,16 @@ from pathlib import Path
 import cli
 import illustrative_example as ex
 import numpy as np
+import polars as pl
 import pytest
 
-from hybrid_bo import initial_points, load
+from hybrid_bo import initial_points, load, summary
+
+
+def summary_of(study):
+    """`hb.summary(study)` as it reads back from CSV."""
+    return pl.read_csv(summary(study).write_csv().encode())
+
 
 EXAMPLES_DIR = Path(__file__).parent.parent / "examples"
 
@@ -61,8 +68,17 @@ def test_run_then_plot_the_newest_study(tmp_path):
         "uniform_sampling",
     ]
 
-    # Plot the newest study: convergence, regret and every iteration of every run
+    # The summary, one row per method, saved with the study
+    summary = pl.read_csv(study_dir / "summary.csv")
+    assert summary.equals(summary_of(study))
+
+    # Plot the newest study, without its summary as a study saved before summaries
+    (study_dir / "summary.csv").unlink()
     run_cli(["plot", "--results-root", str(tmp_path)], true_curves=True)
+
+    # The summary is back; the figures are convergence, regret and every iteration of
+    # every run
+    assert pl.read_csv(study_dir / "summary.csv").equals(summary)
 
     figures = {
         path.relative_to(study_dir / "figures").as_posix()

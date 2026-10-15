@@ -129,8 +129,10 @@ example, and a typo in the name fails with "No module named ...". A relative
 the methods given and the example's `study_settings` overridden by the flags given,
 and saves it to `<study id>`: `--name`, else the UTC time to the second at the start,
 with `-2`, `-3`, ... appended if taken when it is saved (`hb.save` creates the
-folder, so parallel runs never share one). `plot` loads the study given, else the
-one whose `study.json` was written last, and, in `hb.plots.STYLE`, saves into its
+folder, so parallel runs never share one), then prints `hb.summary(study)` and saves
+it as `summary.csv` beside `study.json`. `plot` loads the study given, else the
+one whose `study.json` was written last, saves `summary.csv` if the study has none
+(studies saved before summaries), and, in `hb.plots.STYLE`, saves into its
 `figures/` folder `convergence.png`, `regret.png` (with an oracle optimum) and
 `<method>/run-000/iteration-00.png` for every iteration of every run (with the
 experiment's true curves when the script passes `true_curves=True`). The iteration

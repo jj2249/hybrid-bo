@@ -15,8 +15,9 @@ and the pixi tasks run the script as a module from this folder:
 Running saves the study with `hb.save` to `<results root>/<example>/<study id>/` (the
 results root defaults to `results/` at the repo root), where the study id is `--name`
 or the UTC time at the start, with `-2`, `-3`, ... appended if taken when the study is
-saved. `plot` loads a study (default: the newest saved) with `hb.load` and saves its
-figures to its `figures/` folder.
+saved, and prints `hb.summary` of it and saves it as `summary.csv` there. `plot` loads
+a study (default: the newest saved) with `hb.load` and saves its figures to its
+`figures/` folder.
 """
 
 import argparse
@@ -28,6 +29,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import polars as pl
 
 import hybrid_bo as hb
 from hybrid_bo.studies import Method
@@ -82,6 +84,7 @@ def main(
         for label in chosen:
             n_saved = sum(run.method == label for run in study.runs)
             print(f"{label}: saved {n_saved} of {settings.n_runs} runs to {study_dir}")
+        save_summary(study, study_dir)
 
     # Plot: the study given, else the one saved last
     else:
@@ -154,6 +157,14 @@ def save_new(study: hb.Study, example_dir: Path, study_id: str) -> Path:
             path, suffix = example_dir / f"{study_id}-{suffix}", suffix + 1
 
 
+def save_summary(study: hb.Study, study_dir: Path) -> None:
+    """Prints `hb.summary(study)` and saves it to `summary.csv` in `study_dir`."""
+    table = hb.summary(study)
+    table.write_csv(study_dir / "summary.csv")
+    with pl.Config(tbl_cols=-1, tbl_width_chars=200):
+        print(table)
+
+
 def plot(
     name: str,
     problem: hb.Problem,
@@ -164,7 +175,8 @@ def plot(
     `convergence.png`, `regret.png` (when the study has an oracle optimum) and
     `<method>/run-000/iteration-00.png` for every iteration of every run, with the
     true curves from `experiment` if given. A figure that can't be drawn is skipped
-    with a message.
+    with a message. Saves `summary.csv` too if the study has none (a study saved
+    before the CLI wrote summaries).
 
     Raises `ValueError` if the study was run on another example.
     """
@@ -172,6 +184,8 @@ def plot(
     if study.name != name:
         msg = f"{study_dir} holds a study of {study.name}, not {name}"
         raise ValueError(msg)
+    if not (study_dir / "summary.csv").exists():
+        save_summary(study, study_dir)
     figures_dir = study_dir / "figures"
     figures_dir.mkdir(exist_ok=True)
 

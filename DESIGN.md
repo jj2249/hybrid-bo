@@ -610,9 +610,10 @@ it. Polars and matplotlib are optional (imported on first use; the
   dropped that because the example then didn't say what its names were for, and a
   typo silently changed the study. The cost is that no command lists every example.
   A relative `--results-root` is relative to where pixi was started (`INIT_CWD`).
-  Results go to `results/<name>/<study id>/{study.json, runs/,
-  figures/}` at the repo root; `plot` takes the study saved last by default and
-  writes only under `figures/`. The `hybrid-bo-examples` skill has the details. The
+  Results go to `results/<name>/<study id>/{study.json, runs/, summary.csv,
+  figures/}` at the repo root. Running prints `hb.summary` and saves it as
+  `summary.csv`; `plot` takes the study saved last by default, writes under
+  `figures/`, and saves `summary.csv` only if the study has none (older studies). The `hybrid-bo-examples` skill has the details. The
   CLI stays in `examples/` for people who clone the repo; it is not part of the
   package.
 

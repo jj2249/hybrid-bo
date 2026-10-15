@@ -142,7 +142,9 @@ pixi run plot illustrative_example                           # the newest study,
 `example` takes `--method` (repeatable; default every method), `--n-runs`, `--seed`
 and `--n-iterations`, defaulting to the example's `study_settings`, plus `--name`
 (the study id; default the UTC time) and `--plot` (plot straight after). A study is
-saved to `results/<example>/<study id>/` (`study.json`, `runs/`). `plot` writes
+saved to `results/<example>/<study id>/` (`study.json`, `runs/`), with its
+`hb.summary` table (median and IQR of the final values per method) printed and saved
+as `summary.csv`. `plot` writes
 into its `figures/`: `convergence.png` (the median oracle incumbent of every method
 over the evaluations), `regret.png` (when the study has an oracle optimum) and
 `<method>/run-000/iteration-00.png` for every iteration of every run. In your own
