@@ -137,18 +137,17 @@ repo's matplotlib style, `hb.plots.STYLE` (`src/hybrid_bo/hybrid_bo.mplstyle`).
 [`./examples/flash_unit/`](./examples/flash_unit/) still targets the old API (tag
 `pre-refactor`) until it is ported.
 
-## API documentation
+## Documentation
 
-You can create an API documentation locally.  
-For that, make sure you have installed the dependency group `docs`, see [`./pyproject.toml`](./pyproject.toml).  
-In a terminal, type:
+The docs hold the API reference and a walkthrough of the illustrative example
+(`docs/walkthrough.rst`). The walkthrough explains the problem class, why hybrid BO
+helps and how to state a problem. Build the docs with
 
 ```bash
-cd ./docs/
-sphinx-build -b html . _build
+pixi run -e dev docs
 ```
 
-Now, there exists a file `./docs/_build/index.html` that contains the API documentation.
+and open `docs/_build/html/index.html`.
 
 ## License
 

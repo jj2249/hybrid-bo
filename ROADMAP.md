@@ -76,6 +76,8 @@ its own regression baseline on the new API. Scope is in the issues and DESIGN.md
 - [x] #31: plots and CLI
 - [x] #32 *logic*: benchmark metric
 - [x] #41: the tests that survive #30 follow the test comment rules
+- [x] #47: a walkthrough of the illustrative example in the Sphinx docs (figures
+      from `hb.plots` are a follow-up)
 
 ## Stage 5: examples
 - [ ] Only require the minimum from users (defaults recorded in the run)
