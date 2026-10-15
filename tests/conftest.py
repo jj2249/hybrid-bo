@@ -1,7 +1,11 @@
 import illustrative_example
+import matplotlib
 import pytest
 
 from hybrid_bo import Problem
+
+# Draw plots without opening windows
+matplotlib.use("Agg")
 
 
 def pytest_addoption(parser):

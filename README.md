@@ -103,6 +103,8 @@ print(run.history.f)
 - **Settings**: `HybridBOSettings` and `StandardBOSettings` choose the acquisition
   function (`EI()` or `LCB(std_factor)`), the GP (`default_gp` unless given; see `GP`,
   `Hyper` and `hybrid_bo.kernels`), the number of scenarios and the solver starts.
+- **Plots**: `hb.plots` draws a finished `Run`, so saved runs are plotted without
+  running them again (see Examples).
 - **Errors** are `HybridBOError` subclasses; one raised during a method carries the
   partial run as `error.run`.
 
@@ -110,15 +112,24 @@ print(run.history.f)
 
 ## Examples
 
-[`./examples/illustrative_example.py`](./examples/illustrative_example.py) runs every
-method on the illustrative example of the [publication](https://arxiv.org/abs/2603.11199)
-and saves the runs to `examples/results/`:
+[`./examples/illustrative_example.py`](./examples/illustrative_example.py) defines the
+illustrative example of the [publication](https://arxiv.org/abs/2603.11199) and the
+methods to compare. The CLI in [`./examples/main.py`](./examples/main.py) runs an
+example's methods, saving the runs to `examples/results/`, and plots saved runs:
 
 ```bash
-pixi run -e dev python examples/illustrative_example.py
+pixi run -e dev python examples/main.py run illustrative_example --n-runs 10 --seed 0
+pixi run -e dev python examples/main.py plot examples/results/illustrative_example/<UTC time>
 ```
 
-[`./examples/main.py`](./examples/main.py) runs the example named at its top.
+`run` takes `--method` (repeatable; default every method), `--n-runs`, `--seed` and
+`--n-iterations`, defaulting to the example's values. `plot` saves `convergence.png`
+(the incumbents of every method's runs) and one figure per method of `--run`'s
+`--iteration` (default: run 0, the last iteration) next to the runs; `--show` opens
+them. In your own scripts, `hb.plots.convergence(runs)` and
+`hb.plots.iteration(run, i, problem, rng, settings, experiment)` draw the same
+figures; they need matplotlib (in the `examples` and `dev` pixi environments).
+
 [`./examples/flash_unit/`](./examples/flash_unit/) still targets the old API (tag
 `pre-refactor`) until it is ported.
 

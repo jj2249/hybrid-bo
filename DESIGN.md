@@ -507,9 +507,21 @@ subclasses (`ReconstructionWarning`) so they can be filtered.
 
 ### Plots
 
-`hb.plots` (matplotlib optional): convergence of incumbents across runs, the surrogate
-with its uncertainty band for one-dimensional `u`, and the scenarios at an iteration.
-All are functions of a finished `Run` and the specs from the example.
+`hb.plots` (matplotlib imported on first use; the pixi `examples` feature has it, and a
+pip extra comes with packaging): functions of a finished `Run` and the specs from the
+example, so a saved run is plotted without running it again.
+
+- `convergence(runs, ax=None, label=None)`: the incumbents of each run and their
+  median; call it per method on one axes to compare.
+- `iteration(run, i, problem, rng, settings=None, experiment=None) -> Figure`: the
+  pre-refactor figure of iteration i (the state before the i-th trial or design point),
+  over a grid of one-dimensional `u`. Hybrid BO: the GP of y, f under the scenarios,
+  the acquisition function; standard BO: the GP of f, the acquisition function; the
+  baselines: the GP of f, the default GP fitted in the plot with `rng` (the runs hold
+  no GP). `experiment` adds the true curves; it is run at every grid point, so it is
+  meant for oracles.
+
+The panels are private for now; make them public when a custom figure needs one.
 
 ## Order of random draws
 
@@ -628,6 +640,8 @@ The tickets, in a workable order:
   `methods`, runs and saves every method when run directly, and is what the
   regression test runs. Tests that compared with the legacy code check closed forms
   instead. The plot callbacks go with it; plots return in #31.
-- **#31 Plots and CLI**: `hb.plots`; a CLI for the examples. Blocked by #30.
+- **#31 Plots and CLI**: `hb.plots` (see Plots); `examples/main.py` is the CLI (`run`
+  an example's methods, `plot` a results folder), and example modules only define
+  things (a `settings` dict of the BO methods joins `methods`). *Done*.
 - **#32 Benchmark metric** (*logic*): the oracle objective at the believed best
   point. Blocked by #30.
