@@ -61,7 +61,8 @@ The code is hard to change for three reasons:
   `Problem`, `Experiment`, `oracle_experiment`, `initial_points`, the methods and their
   settings, `EI`, `LCB`, `StudySettings`, `Study`, `repeat`, `study`,
   `oracle_optimum`, `save`, `load`, `Run`, `History`, `incumbents`,
-  `oracle_incumbents`, the errors and `plots`. Everything else is reached through its module (`hb.gp.fit_gp`,
+  `oracle_incumbents`, `evaluations`, `summary`, `hyperparameters`, the errors and
+  `plots`. Everything else is reached through its module (`hb.gp.fit_gp`,
   `hb.solvers.multistart`). A new name joins the top level only if the target example
   or a typical analysis script would use it.
 
@@ -575,10 +576,16 @@ it. Polars and matplotlib are optional (imported on first use; the
 - **Saving** (#53, done; `saving.py`). `hb.save(study, path)` writes `study.json`
   (settings, name, record, the run files in order) and `runs/<method>/run-000.json`;
   `hb.load(path)` reads them back exactly. `save` refuses an existing folder.
-- **Views** (#54). `hb.evaluations(study)`: one row per evaluation (method, run,
-  evaluation, iteration, the variables, f, oracle values, incumbent, oracle incumbent,
-  regret, acquisition). `hb.summary(study)`: one row per method.
-  `hb.hyperparameters(study)`: fitted values over the iterations.
+- **Views** (#54, done; `views.py`). `hb.evaluations(study, optimum=None)`: one row
+  per evaluation (method, run, evaluation from 1, iteration from 1 or null for initial
+  points, `u_<name>`/`x_<name>`/`y_<name>`, f, `x_oracle_<name>`/`y_oracle_<name>`/
+  `f_oracle`, incumbent, oracle incumbent, regret, acquisition). Variables are named
+  from the study's record. Regret is the oracle incumbent minus `optimum`, else the
+  recorded oracle optimum, else null. `hb.summary(study)`: one row per method (runs,
+  failed runs against `n_runs`, median and IQR of the final incumbent, oracle
+  incumbent and regret). `hb.hyperparameters(study)`: one row per run, iteration and
+  hyperparameter entry. Polars is imported on first use; without it a view raises an
+  `ImportError` naming the extra.
 - **Plots** (#55), static, over **evaluations** (initial points are not free):
   `plots.convergence(study)` (median with an IQR band), `plots.regret(study)` (log
   scale, as in the paper) and `plots.iteration(run, problem, i, *, experiment=None,

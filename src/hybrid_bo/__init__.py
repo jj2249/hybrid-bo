@@ -22,6 +22,7 @@ from hybrid_bo import (
     saving,
     solvers,
     studies,
+    views,
 )
 from hybrid_bo.acquisition import EI, LCB
 from hybrid_bo.baselines import latin_hypercube_sampling, uniform_sampling
@@ -39,3 +40,4 @@ from hybrid_bo.run import Run
 from hybrid_bo.sampling import initial_points
 from hybrid_bo.saving import load, save
 from hybrid_bo.studies import Study, StudySettings, repeat, study
+from hybrid_bo.views import evaluations, hyperparameters, summary

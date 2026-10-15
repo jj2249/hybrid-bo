@@ -43,6 +43,9 @@ Look at the results
 - :py:func:`~hybrid_bo.history.incumbents` and
   :py:func:`~hybrid_bo.history.oracle_incumbents`: the best point after each
   evaluation, and the oracle objective there (the benchmark metric).
+- :py:func:`~hybrid_bo.views.evaluations`, :py:func:`~hybrid_bo.views.summary` and
+  :py:func:`~hybrid_bo.views.hyperparameters`: Polars data frames of a study, one row
+  per evaluation, per method or per fitted hyperparameter (Polars is optional).
 - :py:mod:`hybrid_bo.plots`: convergence and per-iteration figures of finished runs.
 
 The :doc:`walkthrough` puts these together on the illustrative example.

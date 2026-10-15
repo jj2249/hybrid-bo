@@ -58,6 +58,7 @@ docs = "sphinx-build -b html docs docs/_build/html"
 
 [tool.pixi.feature.examples.dependencies]
 matplotlib = ">=3.11.2,<4"
+polars = ">=2.0.0,<3"
 
 [tool.pixi.environments]
 default = { solve-group = "default" }

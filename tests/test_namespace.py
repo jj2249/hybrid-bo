@@ -34,6 +34,9 @@ USER_FACING = {
     "History",
     "incumbents",
     "oracle_incumbents",
+    "evaluations",
+    "summary",
+    "hyperparameters",
     # Errors
     "HybridBOError",
     "NoSolutionError",

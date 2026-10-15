@@ -105,6 +105,12 @@ print(run.history.f)
   its own.
 - **Benchmarking**: with an oracle, `oracle_incumbents(run.history)` is the oracle
   objective at the point the run believes is best after each evaluation.
+- **Analysis**: Polars views of a study. `hb.evaluations(study)` has one row per
+  evaluation (the variables, incumbents, regret against the oracle optimum and the
+  acquisition value), `hb.summary(study)` one row per method (median and IQR of the
+  final values) and `hb.hyperparameters(study)` the fitted GP hyperparameters over the
+  iterations. Polars is optional (in the `examples` and `dev` pixi environments; the
+  `hybrid-bo[analysis]` extra once packaged).
 - **Experiments**: a real application passes a function `(u, rng) -> measured` that
   returns the measured variables at `u`. `oracle_experiment` simulates one from known
   unknown equations, for test cases.
