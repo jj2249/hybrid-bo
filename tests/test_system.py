@@ -1,4 +1,9 @@
-"""Var, System and Problem: building the CasADi functions and checking the inputs."""
+"""Var, System and Problem: building the CasADi functions and checking the inputs.
+
+pytest runs every function whose name starts with `test_`. A test argument named like
+a fixture in `conftest.py` (here `illustrative_problem`) is filled in by pytest with
+that fixture's value.
+"""
 
 from collections.abc import Callable, Sequence
 from typing import Any
@@ -24,6 +29,8 @@ def test_illustrative_equations_take_x_y_u(illustrative_problem):
 
 
 def test_flash_unit_shaped_system():
+    """A system shaped like the flash unit, with two decision variables, traces g
+    correctly and counts its variables."""
     # h takes a decision variable and a mechanistic state; the sensor reads a state
     F, D, z1 = 1.0, 0.3, 0.5
 
@@ -41,6 +48,7 @@ def test_flash_unit_shaped_system():
         u=[T, p], x=[x1], y=[ln_gamma1], g=g, h_inputs=[T, x1], measured=[x1]
     )
 
+    # g at one point, by hand and traced. `pytest.approx` compares with a tolerance
     T_, p_, x1_, ln_gamma1_ = 0.38, 1.2, 0.4, 0.1
     vapor_fraction = (F * z1 - (F - D) * x1_) / D
     expected = p_ * vapor_fraction - p1_sat(T_) * x1_ * np.exp(ln_gamma1_)
@@ -50,10 +58,12 @@ def test_flash_unit_shaped_system():
 
 
 def test_var_start_defaults_to_finite_bounds():
+    """A Var's start bounds default to its bounds when they are finite."""
     assert Var("u", -2.0, 2.0).start == (-2.0, 2.0)
     assert Var("x", start=(0.0, 1.0)).start == (0.0, 1.0)
 
 
+# `parametrize` runs the test once per entry of the list, each as its own test case
 @pytest.mark.parametrize(
     ("kwargs", "match"),
     [
@@ -69,6 +79,10 @@ def test_var_start_defaults_to_finite_bounds():
     ],
 )
 def test_var_rejects(kwargs, match):
+    """Var raises ValueError for each invalid argument, with a message saying what is
+    wrong."""
+    # `pytest.raises` fails the test unless the block raises that exception, with a
+    # message matching `match`
     with pytest.raises(ValueError, match=match):
         Var(**kwargs)
 
@@ -104,16 +118,21 @@ def system(
     ],
 )
 def test_system_rejects(overrides, match):
+    """System raises ValueError for each invalid argument, with a message saying what
+    is wrong."""
     with pytest.raises(ValueError, match=match):
         system(**overrides)
 
 
 def test_more_than_one_unknown_state_is_not_supported_yet():
+    """A system with two unknown states raises NotImplementedError."""
     with pytest.raises(NotImplementedError, match="one unknown state"):
         system(y=[Y, Z], measured=[Y, Z])
 
 
 def test_unknown_name_in_a_callable():
+    """Using a name that isn't a variable in g raises, listing the available
+    ones."""
     with pytest.raises(
         AttributeError, match="Unknown variable 'w'; available: x, y, u"
     ):
@@ -124,16 +143,20 @@ def test_unknown_name_in_a_callable():
     "g", [lambda v: None, lambda v: [[v.x - v.y]], lambda v: "x - y"]
 )
 def test_callable_output_that_is_not_an_expression(g):
+    """A g that returns something other than a list of CasADi expressions raises
+    TypeError."""
     with pytest.raises(TypeError, match="g must return a CasADi expression"):
         system(g=g)
 
 
 def test_problem_rejects_a_non_scalar_objective():
+    """Problem raises when f returns more than one value."""
     with pytest.raises(ValueError, match="f must be a scalar"):
         Problem(system(), f=lambda v: [v.x, v.y])
 
 
 def test_initial_points_is_lhs_over_the_start_bounds():
+    """initial_points is a Latin hypercube over the start bounds of the variables."""
     variables = [Var("a", -2.0, 2.0), Var("b", start=(0.0, 5.0))]
 
     points = initial_points(variables, 4, np.random.default_rng(0))

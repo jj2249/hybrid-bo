@@ -21,9 +21,13 @@ def evaluate(kernel, *args):
 
 
 def scaled_distance(lengthscale):
+    """The Euclidean distance between each row of X1 and of X2, each dimension
+    divided by its lengthscale, shape (5, 4)."""
     return cdist(X1 / lengthscale.T, X2 / lengthscale.T)
 
 
+# `parametrize` runs the test once per entry of the list, each as its own test case.
+# Two of them stacked run every combination: each kernel, with each lengthscale
 @pytest.mark.parametrize(
     ("kernel", "reference"),
     [
@@ -40,6 +44,8 @@ def scaled_distance(lengthscale):
     "lengthscale", [LENGTHSCALE, np.array([[0.8]])], ids=["ARD", "shared"]
 )
 def test_stationary(kernel, reference, lengthscale):
+    """Each stationary kernel is its closed form of the scaled distance, with one
+    lengthscale per dimension (ARD) or one shared by all."""
     np.testing.assert_allclose(
         evaluate(kernel, cas.DM(lengthscale)),
         reference(scaled_distance(lengthscale)),
@@ -49,6 +55,7 @@ def test_stationary(kernel, reference, lengthscale):
 
 
 def test_constant():
+    """The constant kernel is 1 between every pair of points."""
     np.testing.assert_allclose(
         evaluate(kernels.constant), np.ones((5, 4)), rtol=RTOL, atol=ATOL
     )
@@ -63,12 +70,15 @@ def test_constant():
     ids=["shared", "ARD"],
 )
 def test_linear(scale, expected):
+    """The linear kernel is the dot product of the points, weighted by one scale per
+    dimension (ARD) or one shared by all."""
     np.testing.assert_allclose(
         evaluate(kernels.linear, cas.DM(scale)), expected, rtol=RTOL, atol=ATOL
     )
 
 
 def test_linear_ard_scale_is_trainable():
+    """The linear kernel depends on its symbolic ARD scale, so a fit can tune it."""
     scale = cas.SX.sym("scale", 2)
     X = cas.SX.sym("X", 3, 2)
     assert cas.depends_on(kernels.linear(X, X, scale), scale)

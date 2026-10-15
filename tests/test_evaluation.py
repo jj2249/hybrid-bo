@@ -1,4 +1,9 @@
-"""Evaluation: experiments, the oracle simulation, the root-finding problem, History."""
+"""Evaluation: experiments, the oracle simulation, the root-finding problem, History.
+
+pytest runs every function whose name starts with `test_`. A test argument named like
+a fixture in `conftest.py` (here `illustrative_problem`) is filled in by pytest with
+that fixture's value; `monkeypatch` is a fixture built into pytest.
+"""
 
 import casadi as cas
 import numpy as np
@@ -22,6 +27,8 @@ from hybrid_bo import (
 
 
 def illustrative_experiment(problem: Problem, noise_std: float):
+    """The oracle simulation of the illustrative example, with Gaussian noise of
+    `noise_std` on the measurement."""
     return oracle_experiment(
         problem.system, oracle=lambda v: [cas.sin(v.u)], noise_std=noise_std
     )
@@ -85,8 +92,9 @@ def test_noise_free_evaluation_matches_the_closed_form(illustrative_problem):
 
 
 def test_noise_is_the_first_stream_draw(illustrative_problem):
+    """The measurement noise is the first draw from the evaluation's generator."""
     # The root-finding starts come from lhs, which spawns instead of consuming the
-    # stream, so the noise is the evaluation's first stream draw
+    # stream
     experiment = illustrative_experiment(illustrative_problem, noise_std=0.1)
 
     history = evaluate(
@@ -99,6 +107,8 @@ def test_noise_is_the_first_stream_draw(illustrative_problem):
 
 
 def test_root_finding_starts_cover_the_unmeasured_variables(monkeypatch):
+    """The root-finding starts are a Latin hypercube over the start bounds of the
+    variables that are not measured, and the root found solves g."""
     # Two mechanistic states and one measured unknown state: the starts are a
     # two-dimensional Latin hypercube over the start bounds of x1 and x2
     u = Var("u", -1.0, 1.0)
@@ -114,6 +124,8 @@ def test_root_finding_starts_cover_the_unmeasured_variables(monkeypatch):
     )
     problem = Problem(system, f=lambda v: v.x2)
 
+    # Record the arguments of each lhs call. `monkeypatch.setattr` replaces lhs in
+    # the evaluation module for this test only
     calls = []
 
     def spy(lower, upper, n, rng):
@@ -129,6 +141,7 @@ def test_root_finding_starts_cover_the_unmeasured_variables(monkeypatch):
         n_starts=7,
     )
 
+    # One lhs call over the start bounds of x1 and x2, and the root x1 = y + u
     [(lower, upper, n)] = calls
     np.testing.assert_array_equal(lower, [0.0, 2.0])
     np.testing.assert_array_equal(upper, [1.0, 3.0])
@@ -138,6 +151,8 @@ def test_root_finding_starts_cover_the_unmeasured_variables(monkeypatch):
 
 
 def test_experiment_without_an_oracle_gives_no_oracle_values():
+    """An experiment that returns only the measurement gives reconstructed values and
+    no oracle values."""
     problem = two_branch_problem()
 
     history = evaluate(
@@ -156,6 +171,9 @@ def test_experiment_without_an_oracle_gives_no_oracle_values():
 
 
 def test_disagreement_with_the_oracle_warns():
+    """A reconstruction on a different branch from the oracle values warns, and both
+    are kept."""
+
     # The oracle is on the negative branch; the reconstruction can only find the
     # positive one
     def experiment(u, rng):
@@ -163,6 +181,8 @@ def test_disagreement_with_the_oracle_warns():
             measured=np.array([1.0]), x=np.array([-1.0]), y=np.array([1.0])
         )
 
+    # `pytest.warns` fails the test unless the block warns with a message matching
+    # `match`
     with pytest.warns(ReconstructionWarning, match="oracle"):
         history = evaluate(
             two_branch_problem(),
@@ -179,6 +199,8 @@ def test_disagreement_with_the_oracle_warns():
 
 @pytest.mark.filterwarnings("error")
 def test_noisy_reconstruction_on_the_oracle_branch_does_not_warn():
+    """A reconstruction moved by noise, but on the oracle's branch, does not warn."""
+
     # Noise moves the reconstruction away from the oracle values, but along the
     # same branch
     def experiment(u, rng):
@@ -194,10 +216,15 @@ def test_noisy_reconstruction_on_the_oracle_branch_does_not_warn():
 
 
 def test_failed_root_finding_raises_with_the_points_before():
+    """When the root-finding fails, the error carries the history of the points
+    evaluated before."""
+
     # x**2 = -1 has no real root
     def experiment(u, rng):
         return np.array([1.0]) if u[0] < 0 else np.array([-1.0])
 
+    # `pytest.raises` fails the test unless the block raises that exception; `info`
+    # holds the exception
     with pytest.raises(RootFindingError) as info:
         evaluate(
             two_branch_problem(),
@@ -207,6 +234,7 @@ def test_failed_root_finding_raises_with_the_points_before():
             n_starts=5,
         )
 
+    # Only the first point, before the failing second one
     history = info.value.history
     assert history is not None
     np.testing.assert_array_equal(history.u, [[-0.5]])
@@ -214,6 +242,8 @@ def test_failed_root_finding_raises_with_the_points_before():
 
 
 def test_failed_oracle_simulation_raises():
+    """When the oracle simulation has no solution, evaluation raises with an empty
+    history."""
     # y = -1 - x**2 and y = x**2 have no common real root
     problem = two_branch_problem()
     experiment = oracle_experiment(
@@ -228,6 +258,7 @@ def test_failed_oracle_simulation_raises():
 
 
 def test_experiment_returning_the_wrong_shape_raises():
+    """An experiment returning more values than there are measured variables raises."""
     with pytest.raises(ValueError, match="measured"):
         evaluate(
             two_branch_problem(),
@@ -238,6 +269,7 @@ def test_experiment_returning_the_wrong_shape_raises():
 
 
 def test_oracle_must_give_one_value_per_unknown_state():
+    """An oracle with more expressions than unknown states is rejected."""
     with pytest.raises(ValueError, match="oracle"):
         oracle_experiment(two_branch_problem().system, oracle=lambda v: [v.u, 2 * v.u])
 
