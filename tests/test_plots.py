@@ -153,16 +153,21 @@ def test_convergence_needs_a_run():
 def test_hybrid_bo_figure_from_a_pickled_run(hybrid_run):
     """Hybrid BO's figure is titled with the method and has three gridded panels: the
     GP of y with its true curve, f under the scenarios, and the acquisition
-    function, all over the grid of u; a slider below them picks the iteration."""
+    function, all over the grid of u, with one legend for the figure."""
     # Act: the figure, showing iteration 1, with the oracle for the true curves
     settings = ex.settings["hybrid_bo"]
     rng = np.random.default_rng(0)
     figure = plots.iterations(hybrid_run, ex.problem, rng, settings, ex.experiment, i=1)
 
-    # The title, three panels plus the slider, all panels gridded
-    surrogate, scenarios, acquisition, _slider = figure.axes
+    # The title, three gridded panels (then the buttons' axes), the figure's legend
+    surrogate, scenarios, acquisition, *_buttons = figure.axes
     assert figure.get_suptitle() == "hybrid_bo"
     assert all(has_grid(ax) for ax in (surrogate, scenarios, acquisition))
+    assert [ax.get_legend() for ax in (surrogate, scenarios, acquisition)] == [None] * 3
+    (legend,) = figure.legends
+    assert len({text.get_text() for text in legend.get_texts()}) == len(
+        legend.get_texts()
+    )
 
     # The GP of y: its prediction, and the oracle y = sin(u) as the true curve
     mean, _ = predict(default_gp(1), hybrid_run.surrogates[1], GRID[:, np.newaxis])
@@ -178,21 +183,38 @@ def test_hybrid_bo_figure_from_a_pickled_run(hybrid_run):
     plt.close("all")
 
 
-def test_slider_redraws_the_iteration_it_shows(hybrid_run):
-    """Moving the slider redraws the panels from that iteration's GP, still gridded."""
-    # Setup: the figure shows the last iteration
+def click(button) -> None:
+    """Clicks a matplotlib button, as a mouse click would."""
+    button._observers.process("clicked", None)
+
+
+def test_buttons_step_through_the_iterations(hybrid_run):
+    """The - and + buttons redraw the previous and next iteration, still gridded, and
+    stop at the first and last."""
+    # Setup: the figure shows the last of the two iterations
     settings = ex.settings["hybrid_bo"]
     figure = plots.iterations(
         hybrid_run, ex.problem, np.random.default_rng(0), settings
     )
+    minus, plus = figure._hybrid_bo_buttons  # ty: ignore[unresolved-attribute]
 
-    # Act: move the slider to iteration 0
-    figure._hybrid_bo_slider.set_val(0)  # ty: ignore[unresolved-attribute]
+    def gp_mean_is(k: int) -> None:
+        """Checks the GP panel shows iteration k's GP."""
+        mean, _ = predict(default_gp(1), hybrid_run.surrogates[k], GRID[:, np.newaxis])
+        np.testing.assert_allclose(line(figure.axes[0], "GP mean"), mean, rtol=1e-12)
 
-    # Check: the GP panel is iteration 0's GP
-    mean, _ = predict(default_gp(1), hybrid_run.surrogates[0], GRID[:, np.newaxis])
-    np.testing.assert_allclose(line(figure.axes[0], "GP mean"), mean, rtol=1e-12)
+    # + at the last iteration stays there; - steps back, and again stays at the first
+    click(plus)
+    gp_mean_is(1)
+    click(minus)
+    gp_mean_is(0)
+    click(minus)
+    gp_mean_is(0)
     assert has_grid(figure.axes[0])
+
+    # + steps forward again
+    click(plus)
+    gp_mean_is(1)
     plt.close("all")
 
 
@@ -248,7 +270,7 @@ def test_standard_bo_figure_from_a_pickled_run(standard_run):
     )
 
     # The GP panel is the GP's prediction
-    gp_ax, acquisition_ax, _slider = figure.axes
+    gp_ax, acquisition_ax, *_buttons = figure.axes
     assert figure.get_suptitle() == "standard_bo"
     surrogate = standard_run.surrogates[1]
     mean, _ = predict(default_gp(1), surrogate, GRID[:, np.newaxis])
@@ -271,7 +293,7 @@ def test_baseline_figure_shows_only_the_points_so_far(lhs_run):
     figure = plots.iterations(lhs_run, ex.problem, np.random.default_rng(0), i=1)
 
     # Check: one panel titled with the method, no curves, and the points so far
-    ax, _slider = figure.axes
+    ax, *_buttons = figure.axes
     assert figure.get_suptitle() == "latin_hypercube_sampling"
     assert ax.get_lines() == []
     history, n = lhs_run.history, lhs_run.history.n_initial + 1

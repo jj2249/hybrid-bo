@@ -126,7 +126,7 @@ pixi run -e dev python examples/main.py plot examples/results/illustrative_examp
 `--n-iterations`, defaulting to the example's values. `plot` saves `convergence.png`
 (the incumbents of every method's runs) and one figure per method of `--run`'s
 iterations, showing `--iteration` (default: run 0, the last iteration), next to the
-runs. `--show` opens them, each with a slider over the iterations. In your own
+runs. `--show` opens them, each with - and + buttons to step through the iterations. In your own
 scripts, `hb.plots.convergence(runs)` and
 `hb.plots.iterations(run, problem, rng, settings, experiment)` draw the same figures;
 they need matplotlib (in the `examples` and `dev` pixi environments). Figures use the

@@ -515,8 +515,9 @@ example, so a saved run is plotted without running it again.
   median; call it per method on one axes to compare.
 - `iterations(run, problem, rng, settings=None, experiment=None, i=-1) -> Figure`:
   the panels of every iteration (the state before the i-th trial or design point),
-  computed once, over a grid of one-dimensional `u`, titled with the method, with a
-  slider that redraws the chosen iteration (shown first: `i`). Hybrid BO: the GP of y,
+  computed once, over a grid of one-dimensional `u`, titled with the method, with one
+  legend for the figure and - and + buttons that redraw the previous or next
+  iteration (shown first: `i`). Hybrid BO: the GP of y,
   f under the scenarios, the acquisition function; standard BO: the GP of f, the
   acquisition function; the baselines: their points only (they fit no GP; a GP of
   `u -> f` fitted to their spread-out points collapses to the lengthscale's lower

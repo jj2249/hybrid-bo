@@ -10,7 +10,7 @@ other figures with `plt.style.use(hb.plots.STYLE)`.
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import scipy
@@ -98,11 +98,12 @@ def iterations(
     i: int = -1,
 ) -> "Figure":
     """The figure of a run's iterations over a grid of the decision variable's start
-    bounds, titled with the method, and a slider that steps through them (shown
-    first: iteration `i`; negative counts from the end).
+    bounds, titled with the method, with the legend beside the panels and - and +
+    buttons that step through the iterations (shown first: iteration `i`; negative
+    counts from the end).
 
-    Every iteration is computed when the figure is built, so the slider only
-    redraws. Iteration i is the state before the run's i-th trial point (design
+    Every iteration is computed when the figure is built, so the buttons only
+    redraw. Iteration i is the state before the run's i-th trial point (design
     point, for the baselines): the first n_initial + i points, drawn black (initial)
     and red, their incumbent, and the GP fitted to them. The next point is a red
     ring. The panels, by method:
@@ -161,7 +162,8 @@ def iterations(
 
     # The figure; matplotlib is imported only to draw
     import matplotlib.pyplot as plt
-    from matplotlib.widgets import Slider
+    from matplotlib.layout_engine import ConstrainedLayoutEngine
+    from matplotlib.widgets import Button
 
     u, u_points = grid[:, 0], history.u[:, 0]
     label = "design points" if settings is None else "trial points"
@@ -169,7 +171,7 @@ def iterations(
     y_name, u_name = system.y[0].name, system.u[0].name
 
     def draw(k: int) -> None:
-        """Draws iteration k's panels on the figure's axes."""
+        """Draws iteration k's panels on the figure's axes, and the figure's legend."""
         frame = frames[k]
         with plt.style.context(STYLE):
             # `clear` resets each axes to the current style
@@ -200,40 +202,61 @@ def iterations(
                     axes[0].plot(u, f_true, color="k", linestyle="--", label="true")
                 axes[0].set_ylabel("f")
 
-            axes[0].legend()
             axes[-1].set_xlabel(u_name)
+            _figure_legend(figure, axes)
+            counter.set_text(f"iteration {k} of {n_iterations - 1}")
 
-    # The panels and the title, with room for the slider below them
+    # The panels and the title, with a strip for the buttons below them (in inches,
+    # so it is the same in every figure)
+    height = 2 + 2 * n_panels
+    strip, button_height = 0.5 / height, 0.3 / height
     with plt.style.context(STYLE):
         figure, panels = plt.subplots(
-            n_panels, 1, sharex=True, figsize=(6, 2 + 2 * n_panels), squeeze=False
+            n_panels,
+            1,
+            sharex=True,
+            figsize=(8, height),
+            squeeze=False,
+            layout=ConstrainedLayoutEngine(rect=(0, strip, 1, 1 - strip)),
         )
         axes = list(panels[:, 0])
         figure.suptitle(method)
-    draw(i % n_iterations)
-    figure.tight_layout(rect=(0, 0.08, 1, 1))  # after drawing, to fit the labels
+        counter = figure.text(0.5, strip / 2, "", ha="center", va="center")
+    shown = i % n_iterations
+    draw(shown)
     if n_iterations == 1:
         return figure
 
-    # The slider: moving it redraws its iteration
-    slider = Slider(
-        figure.add_axes((0.2, 0.02, 0.6, 0.03)),
-        "iteration",
-        0,
-        n_iterations - 1,
-        valinit=i % n_iterations,
-        valstep=1,
-    )
+    # The buttons: - and + step to the previous and next iteration, within the run
+    bottom = (strip - button_height) / 2
+    minus = Button(figure.add_axes((0.32, bottom, 0.05, button_height)), "-")
+    plus = Button(figure.add_axes((0.63, bottom, 0.05, button_height)), "+")
 
-    def on_change(value: float) -> None:
-        """Redraws the iteration the slider shows."""
-        draw(int(value))
-        figure.canvas.draw_idle()
+    def step(by: int) -> None:
+        """Redraws the iteration `by` after the one shown, if the run has it."""
+        nonlocal shown
+        if 0 <= shown + by < n_iterations:
+            shown += by
+            draw(shown)
+            figure.canvas.draw_idle()
 
-    slider.on_changed(on_change)
-    # matplotlib keeps only weak references to widgets, so the figure holds it
-    setattr(figure, "_hybrid_bo_slider", slider)  # noqa: B010
+    minus.on_clicked(lambda _: step(-1))
+    plus.on_clicked(lambda _: step(1))
+    # matplotlib keeps only weak references to widgets, so the figure holds them
+    setattr(figure, "_hybrid_bo_buttons", (minus, plus))  # noqa: B010
     return figure
+
+
+def _figure_legend(figure: "Figure", axes: Sequence["Axes"]) -> None:
+    """Replaces the figure's legend with one entry per label across the axes, outside
+    them on the right."""
+    for legend in list(figure.legends):
+        legend.remove()
+    handles: dict[str, Any] = {}
+    for ax in axes:
+        for handle, label in zip(*ax.get_legend_handles_labels(), strict=True):
+            handles.setdefault(label, handle)
+    figure.legend(list(handles.values()), list(handles), loc="outside right upper")
 
 
 @dataclass(frozen=True)

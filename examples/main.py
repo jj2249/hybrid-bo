@@ -5,7 +5,7 @@
     python examples/main.py plot examples/results/illustrative_example/<UTC time>
         [--run 0] [--iteration -1] [--show]
 
-`plot --show` opens the figures, each with a slider over the run's iterations.
+`plot --show` opens the figures, each with - and + buttons over the run's iterations.
 
 An example is a module in this folder that defines `problem`, `experiment`,
 `methods`, `settings` (of the BO methods, for the plots) and the defaults `seed`,
@@ -82,7 +82,7 @@ def plot(
     """Saves the convergence of every method's runs to `convergence.png`, and the
     iterations of one run of each method, showing `iteration`, to `<method>.png`, in
     `results_dir`. Returns nothing; the figures stay open for `plt.show`, where
-    each has a slider over its iterations.
+    each has - and + buttons to step through its iterations.
 
     The figures' root-finding starts draw from a generator seeded with 0, so plotting
     again gives the same figures.
@@ -93,12 +93,12 @@ def plot(
     }
 
     # Convergence: every method on one axes
-    figure, ax = plt.subplots()
-    ax.set_title("convergence")
+    figure, ax = plt.subplots(figsize=(8, 4.8), layout="constrained")
+    figure.suptitle("convergence")
     for name, method_runs in runs.items():
         if method_runs:
             hb.plots.convergence(method_runs, ax=ax, label=name)
-    ax.legend()
+    figure.legend(loc="outside right upper")
     figure.savefig(results_dir / "convergence.png")
 
     # The iterations of one run per method; a figure that can't be drawn is skipped

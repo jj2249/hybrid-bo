@@ -115,8 +115,9 @@ re-exports the public API.
 - `plots.py`: `convergence(runs, ax, label)` and `iterations(run, problem, rng,
   settings, experiment, i) -> Figure`: every iteration's panels (`_Frame`, computed
   once by `_frame`) over a 101-point grid of one-dimensional `u` (start bounds),
-  titled with the method, with a slider (kept on the figure as `_hybrid_bo_slider`)
-  that redraws from the frames. The panels (`_gp_panel`, `_scenarios_panel`,
+  titled with the method, one figure legend (`_figure_legend`, outside the panels),
+  and - and + buttons (kept on the figure as `_hybrid_bo_buttons`, since matplotlib
+  holds widgets weakly) that redraw from the frames. The panels (`_gp_panel`, `_scenarios_panel`,
   `_acquisition_panel`) are private. The settings must match `run.record["method"]`
   (`TypeError`; None for the baselines, which show their points only). Figures are
   drawn in `STYLE` (`hybrid_bo.mplstyle`, the repo's rcParams); labels and legends
