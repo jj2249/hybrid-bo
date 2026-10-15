@@ -14,7 +14,7 @@ import illustrative_example as ex
 import numpy as np
 import pytest
 
-from hybrid_bo import Run, incumbents, initial_points
+from hybrid_bo import Run, incumbents, initial_points, oracle_incumbents
 
 BASELINE_DIR = Path(__file__).parent / "data" / "regression"
 RTOL, ATOL = 1e-6, 1e-8
@@ -36,7 +36,7 @@ def as_baseline_columns(run: Run) -> dict[str, np.ndarray]:
         "incumbents": incumbents(history)[:, np.newaxis],
         "x_no_noise": np.column_stack([history.x_oracle, history.y_oracle]),
         "f_no_noise": history.f_oracle[:, np.newaxis],
-        "incumbents_no_noise": np.minimum.accumulate(history.f_oracle)[:, np.newaxis],
+        "incumbents_no_noise": oracle_incumbents(history)[:, np.newaxis],
     }
     n = history.n_initial
     return {

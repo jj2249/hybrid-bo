@@ -74,7 +74,7 @@ its own regression baseline on the new API. Scope is in the issues and DESIGN.md
 - [x] #30: switch the illustrative example and delete the old code (removes the
       `epsilon_ei_standard` and `indices_x_opt` Known issues)
 - [ ] #31: plots and CLI. Blocked by #30
-- [ ] #32 *logic*: benchmark metric. Blocked by #30
+- [x] #32 *logic*: benchmark metric
 
 ## Stage 5: examples
 - [ ] Only require the minimum from users (defaults recorded in the run)
