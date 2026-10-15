@@ -108,7 +108,7 @@ methods = {"hybrid_bo": functools.partial(hb.hybrid_bo, settings=settings)}
 # Study: 10 runs, run i of every method from the same initial points; the same seed
 # gives the same study
 study_settings = hb.StudySettings(n_runs=10, n_initial=2, n_iterations=5, seed=0)
-study = hb.study(methods, problem, experiment, study_settings, oracle=oracle)
+study = hb.study(methods, problem, experiment, study_settings, optimum=-50.4608)
 hb.save(study, "results/illustrative")
 ```
 
@@ -557,20 +557,21 @@ it. Polars and matplotlib are optional (imported on first use; the
   comes from the seed, so the same settings give the same study.
   `Study(runs: tuple[Run, ...], settings, name, record)` is a flat collection; its
   settings hold the seed actually used (a fresh one for seed None) and its record
-  holds the problem, experiment, methods, oracle optimum (`oracle_optimum`, with `oracle_optimum_source` "stated" or
-  "computed") and versions once.
+  holds the problem, experiment, methods, oracle optimum (`oracle_optimum`, when
+  stated) and versions once.
 - **Running** (#53, done). `hb.repeat(method, problem, experiment, settings)` runs
   one method `n_runs` times, run i from `SeedSequence(seed).spawn(n_runs)[i]`, logging
   failed runs and keeping them as far as they got. A `Method` is called as
   `method(problem, experiment, initial_points, n, rng=rng)`.
-  `hb.study(methods, problem, experiment, settings, name=None, optimum=None,
-  oracle=None)` resolves the seed once and gives run i of every method the same
+  `hb.study(methods, problem, experiment, settings, name=None, optimum=None)`
+  resolves the seed once and gives run i of every method the same
   generator, so the same initial points; each method's later draws come from its own
   copy. Studies take a seed, not an `rng`, so that the settings alone reproduce a
   study and the caller's generator is never advanced as a side effect. The oracle
-  optimum is `optimum` when given, else `hb.oracle_optimum(problem, oracle, rng)`
-  when `oracle` is given (passed explicitly, as to `oracle_experiment`), from child
-  `n_runs` of the seed; the study records it and its source.
+  optimum is stated (`optimum`), never computed (#62): a multistart search can miss
+  it, and a wrong optimum silently corrupts every regret. `hb.oracle_optimum(problem,
+  oracle, rng, n_starts)` helps find it once. The study records it and warns with
+  `OracleOptimumWarning` if an evaluated point's oracle objective is below it.
 - **Saving** (#53, done; `saving.py`). `hb.save(study, path)` writes `study.json`
   (settings, name, record, the run files in order) and `runs/<method>/run-000.json`;
   `hb.load(path)` reads them back exactly. `save` refuses an existing folder.

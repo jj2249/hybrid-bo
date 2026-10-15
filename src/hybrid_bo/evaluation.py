@@ -188,7 +188,9 @@ def oracle_optimum(
 
     `oracle` is written as for `oracle_experiment`. Solved like the acquisition
     problem: by `multistart` from `n_starts` Latin hypercube starts over the start
-    bounds of u, x and y, so it is the best local optimum found. Raises `ValueError`
+    bounds of u, x and y, so it is the best local optimum found, which can miss the
+    global one: use it to find a test case's optimum once, from many starts, and
+    state that value in the study. Raises `ValueError`
     if the oracle doesn't give one value per unknown state, and `NoSolutionError` if
     every start fails.
     """

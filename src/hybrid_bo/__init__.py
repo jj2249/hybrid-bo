@@ -30,6 +30,7 @@ from hybrid_bo.bo import HybridBOSettings, StandardBOSettings, hybrid_bo, standa
 from hybrid_bo.errors import (
     HybridBOError,
     NoSolutionError,
+    OracleOptimumWarning,
     ReconstructionWarning,
     RootFindingError,
 )

@@ -179,7 +179,8 @@ The plots read a finished study, so a saved one is plotted without running it ag
 over the evaluations with the interquartile range across runs shaded;
 :py:func:`~hybrid_bo.plots.regret` draws the same against the oracle optimum on a log
 scale, as in the paper. Both count evaluations, initial points included, since those
-are not free.
+are not free. The test case states the oracle optimum (``optimum`` above); a study
+never computes it, since a search can miss it and a wrong value corrupts every regret.
 
 :py:func:`~hybrid_bo.plots.iteration` draws one iteration of one run: the state before
 its trial point. For hybrid BO it has three panels, the steps of the iteration above:

@@ -40,6 +40,7 @@ USER_FACING = {
     # Errors
     "HybridBOError",
     "NoSolutionError",
+    "OracleOptimumWarning",
     "ReconstructionWarning",
     "RootFindingError",
 }
