@@ -121,8 +121,8 @@ def study(
     a study.
 
     The oracle optimum is `optimum` when given; otherwise, when the experiment is an
-    oracle simulation, it is computed with `oracle_optimum` from the next generator
-    spawned from `rng`. The study records it and whether it was stated or computed.
+    oracle simulation, it is computed with `oracle_optimum` from `rng`, after the
+    runs' generators have been spawned from it. The study records it and whether it was stated or computed.
     Raises `TypeError` unless `rng` was seeded through a `SeedSequence`.
     """
     # The record of the study's generator, before anything is spawned from it
@@ -136,14 +136,16 @@ def study(
         runs += [replace(run, method=label) for run in method_runs]
     rng.spawn(settings.n_runs)
 
-    # Each method with its settings, from its first run's record
-    first_runs = {run.method: run.record for run in reversed(runs)}
-    record["methods"] = "\n".join(
-        f"{label}: {first_runs[label]['method']}({first_runs[label]['settings']})"
-        if label in first_runs
-        else f"{label}: no runs"
-        for label in methods
-    )
+    # Each method with its settings, from the record of one of its runs
+    records = {run.method: run.record for run in runs}
+    method_lines = []
+    for label in methods:
+        if label in records:
+            text = f"{records[label]['method']}({records[label]['settings']})"
+        else:
+            text = "no runs"
+        method_lines.append(f"{label}: {text}")
+    record["methods"] = "\n".join(method_lines)
 
     # The oracle optimum, stated or computed from the oracle
     oracle = getattr(experiment, "oracle", None)

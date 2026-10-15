@@ -128,7 +128,8 @@ class Scenarios:
 @dataclass(frozen=True)
 class AcquisitionSolution:
     """The solution of one iteration's acquisition problem: the acquisition
-    function's value at the trial point (the objective the problem minimizes) and,
+    function's value at the trial point, as the objective the problem minimizes
+    (-EI for EI, so lower is better for both EI and LCB), and,
     for hybrid BO, the scenario states there, x (S, M) and y (S, P), one row per
     scenario. Standard BO has no scenario states, so they are None."""
 
