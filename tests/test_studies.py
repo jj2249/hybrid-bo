@@ -8,6 +8,7 @@ that fixture's value.
 import dataclasses
 import functools
 import json
+import warnings
 
 import illustrative_example as ex
 import numpy as np
@@ -71,7 +72,7 @@ def illustrative_study() -> hb.Study:
         ex.experiment,
         SETTINGS,
         name="illustrative_example",
-        oracle=ex.oracle,
+        optimum=ex.optimum,
     )
 
 
@@ -110,45 +111,50 @@ def test_run_i_of_every_method_starts_from_the_same_initial_points(
     assert not np.array_equal(run_0.history.u, run_1.history.u)
 
 
-def test_study_records_the_problem_methods_and_computed_oracle_optimum(
+def test_study_records_the_problem_methods_and_stated_oracle_optimum(
     illustrative_study,
 ):
     """The study's record holds the problem, each method with its settings and the
-    oracle optimum, computed from the oracle since none was stated."""
+    stated oracle optimum."""
     record = illustrative_study.record
     run_record = illustrative_study.runs[0].record
     for key in ("u", "x", "y", "h_inputs", "measured", "g", "f", "experiment"):
         assert record[key] == run_record[key]
     assert "hybrid_bo: hybrid_bo(" in record["methods"]
     assert "uniform_sampling: uniform_sampling(n_points=1)" in record["methods"]
-    assert record["oracle_optimum_source"] == "computed"
-    expected = hb.oracle_optimum(ex.problem, ex.oracle, np.random.default_rng(0))
-    assert float(record["oracle_optimum"]) == pytest.approx(expected, abs=1e-8)
+    assert record["oracle_optimum"] == repr(ex.optimum)
     assert illustrative_study.name == "illustrative_example"
     assert illustrative_study.settings == SETTINGS
 
 
-def test_stated_oracle_optimum_is_recorded_without_solving(illustrative_problem):
-    """An optimum given to `study` is recorded as stated, even with an oracle;
-    without an oracle and without an optimum there is none."""
-    # A cheap method: one uniform point
+def test_without_a_stated_optimum_the_study_has_none(illustrative_problem):
+    """The study never computes the oracle optimum, even when the experiment has an
+    oracle."""
     methods = {"uniform": hb.uniform_sampling}
     settings = hb.StudySettings(n_runs=1, n_initial=1, n_iterations=1)
 
-    stated = hb.study(
-        methods,
-        illustrative_problem,
-        ex.experiment,
-        settings,
-        optimum=-1.5,
-        oracle=ex.oracle,
-    )
+    study = hb.study(methods, illustrative_problem, ex.experiment, settings)
 
-    without_oracle = hb.study(methods, illustrative_problem, ex.experiment, settings)
+    assert "oracle_optimum" not in study.record
 
-    assert stated.record["oracle_optimum"] == "-1.5"
-    assert stated.record["oracle_optimum_source"] == "stated"
-    assert "oracle_optimum" not in without_oracle.record
+
+def test_an_optimum_beaten_by_an_evaluated_point_warns(illustrative_problem):
+    """A stated optimum above an evaluated point's oracle objective can't be the
+    optimum, so `study` warns; the true optimum gives no warning."""
+    # Two uniform points; the true optimum is about -50.46, and f is at most about 75
+    methods = {"uniform": hb.uniform_sampling}
+    settings = hb.StudySettings(n_runs=1, n_initial=1, n_iterations=1, seed=0)
+
+    # `pytest.warns` fails unless the block warns with the category, matching `match`
+    with pytest.warns(hb.OracleOptimumWarning, match="below the stated"):
+        hb.study(methods, illustrative_problem, ex.experiment, settings, optimum=100.0)
+
+    # The warning turned into an error, so the test fails if it is raised
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", hb.OracleOptimumWarning)
+        hb.study(
+            methods, illustrative_problem, ex.experiment, settings, optimum=ex.optimum
+        )
 
 
 def test_two_configurations_of_one_method_keep_their_labels(illustrative_problem):

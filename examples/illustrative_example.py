@@ -30,14 +30,17 @@ system = hb.System(
 problem = hb.Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x - 4))
 
 
-# Test case: an oracle plays the real system. The study computes the oracle optimum
-# from it too
+# Test case: an oracle plays the real system
 def oracle(v):
     """The unknown equation y = h(u), known only to the test case."""
     return [cas.sin(v.u)]
 
 
 experiment = hb.oracle_experiment(system, oracle, noise_std=0.0)
+
+# The oracle optimum, which regret is measured from, at u = -0.45. Found once with
+# hb.oracle_optimum(problem, oracle, np.random.default_rng(0), n_starts=200)
+optimum = -50.4608044704652
 
 # Methods: each takes (problem, experiment, initial_points, n, rng), where n is the
 # number of iterations, or of design points for the baselines. Hybrid BO substitutes
@@ -54,4 +57,4 @@ methods = {
 
 # The study, the CLI's defaults. Seed None draws a fresh seed, which the saved study
 # keeps, so it can be run again exactly
-study_settings = hb.StudySettings(n_runs=1, n_initial=2, n_iterations=5, seed=None)
+study_settings = hb.StudySettings(n_runs=10, n_initial=2, n_iterations=5, seed=None)

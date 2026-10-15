@@ -137,7 +137,8 @@ _Avoid_: incumbents_no_noise, true incumbent
 
 **Oracle optimum** (`f*`):
 The best objective value the oracle allows: the reference that regret is measured
-against. Test cases only; usually stated by the test case, else computed from the oracle.
+against. Test cases only; always stated by the test case, never computed by a study,
+since a search can miss it.
 _Avoid_: true optimum, global optimum
 
 **Regret**:

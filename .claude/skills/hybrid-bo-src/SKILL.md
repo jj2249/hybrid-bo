@@ -89,9 +89,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `default_rng(SeedSequence(seed).spawn(n_runs)[i])`, initial points then the method;
   catches `HybridBOError`, logs it and keeps `error.run`) and `study` (resolves a
   None seed to fresh entropy kept in its settings, then each method's `repeat` from
-  that seed; relabels runs with their key; without a stated `optimum` but with an
-  `oracle`, computes the oracle optimum from child `n_runs` of the seed; records it
-  as `oracle_optimum` and `oracle_optimum_source`). Studies take a seed, not an
+  that seed; relabels runs with their key; records a stated `optimum` as
+  `oracle_optimum`, never computes one, and warns with `OracleOptimumWarning` if an
+  evaluated point's `f_oracle` is below it). Studies take a seed, not an
   `rng`: the settings alone reproduce a study.
 - `saving.py`: `save(study, path)` / `load(path)` (ADR 0004): `study.json` lists the
   run files `runs/<method>/run-<index:03d>.json`. `_encode`/`_decode` convert any
@@ -162,7 +162,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   matplotlib and Polars are imported inside the functions.
 - `errors.py`: `HybridBOError` (with `.history`, the points evaluated before the
   error, and `.run`, the partial run when raised in a method), `RootFindingError`,
-  `NoSolutionError`, `ReconstructionWarning`. The library raises these, never bare
+  `NoSolutionError`, `ReconstructionWarning`, `OracleOptimumWarning`. The library raises these, never bare
   `Exception` (ruff `TRY002`/`BLE001` apply everywhere but `examples/flash_unit/`).
   It imports `History` and `Run` only for type checking, since `run.py` imports
   `gp.py`, which imports `errors.py`.

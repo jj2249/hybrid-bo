@@ -3,19 +3,18 @@ starts from the same initial points.
 
 `repeat` runs one method `n_runs` times from generators spawned from one seed; `study`
 runs every method from the same seed and records the problem, the methods and the
-oracle optimum once. Save and load a study with `hb.save` and
-`hb.load`.
+stated oracle optimum once. Save and load a study with `hb.save` and `hb.load`.
 """
 
 import logging
+import warnings
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
-from typing import Any
 
 import numpy as np
 
-from hybrid_bo.errors import HybridBOError
-from hybrid_bo.evaluation import Experiment, oracle_optimum
+from hybrid_bo.errors import HybridBOError, OracleOptimumWarning
+from hybrid_bo.evaluation import Experiment
 from hybrid_bo.problem import Problem
 from hybrid_bo.run import Run, _problem_record, _versions_record
 from hybrid_bo.sampling import initial_points
@@ -50,8 +49,8 @@ class Study:
     (`run.index`), and run i of every method starts from the same initial points.
 
     `record` holds, as text, what the runs share: the problem, the experiment, each
-    method with its settings, the oracle optimum (if any) with whether it was stated
-    or computed, and the versions. The seed is in `settings`.
+    method with its settings, the oracle optimum (if stated) and the versions. The
+    seed is in `settings`.
     """
 
     runs: tuple[Run, ...]
@@ -98,7 +97,6 @@ def study(
     settings: StudySettings,
     name: str | None = None,
     optimum: float | None = None,
-    oracle: Callable[[Any], Any] | None = None,
 ) -> Study:
     """Runs every method with `repeat` from the same seed, so run i of every method
     starts from the same initial points, and the same seed gives the same study.
@@ -106,11 +104,10 @@ def study(
     method can share a study.
 
     Seed None draws a fresh seed first, and the study's settings hold it, so the
-    saved study can be run again exactly. The oracle optimum is `optimum` when given;
-    otherwise, when `oracle` (written as for `oracle_experiment`) is given, it is
-    computed with `oracle_optimum` from the generator spawned after the runs' (child
-    `n_runs` of the seed). The study records it and whether it was stated or
-    computed.
+    saved study can be run again exactly. `optimum` is the oracle optimum of a test
+    case, which regret is measured from. It is stated, never computed, since a search
+    can miss it (`oracle_optimum` helps find it once); the study records it. Warns
+    with `OracleOptimumWarning` if an evaluated point's oracle objective is below it.
     """
     # One seed for every method; a fresh one is kept in the settings
     seed = np.random.SeedSequence(settings.seed).entropy
@@ -134,14 +131,28 @@ def study(
         method_lines.append(f"{label}: {text}")
     record["methods"] = "\n".join(method_lines)
 
-    # The oracle optimum, stated or computed from the oracle
+    # The stated oracle optimum, checked against the points the runs evaluated
     if optimum is not None:
         record["oracle_optimum"] = repr(float(optimum))
-        record["oracle_optimum_source"] = "stated"
-    elif oracle is not None:
-        child = np.random.SeedSequence(seed, spawn_key=(settings.n_runs,))
-        value = oracle_optimum(problem, oracle, np.random.default_rng(child))
-        record["oracle_optimum"] = repr(value)
-        record["oracle_optimum_source"] = "computed"
+        _check_optimum(runs, float(optimum))
 
     return Study(tuple(runs), settings, name, record | _versions_record())
+
+
+def _check_optimum(runs: list[Run], optimum: float) -> None:
+    """Warns with `OracleOptimumWarning` if a run evaluated a point whose oracle
+    objective is below `optimum`, by more than a relative 1e-6 (solver tolerance)."""
+    oracle_values = [
+        run.history.f_oracle
+        for run in runs
+        if run.history.f_oracle is not None and len(run.history.f_oracle) > 0
+    ]
+    if not oracle_values:
+        return
+    lowest = float(np.min(np.concatenate(oracle_values)))
+    if lowest < optimum - 1e-6 * max(1.0, abs(optimum)):
+        msg = (
+            f"An evaluated point has oracle objective {lowest!r}, below the stated "
+            f"oracle optimum {optimum!r}, so the regret is wrong"
+        )
+        warnings.warn(msg, OracleOptimumWarning, stacklevel=3)

@@ -17,9 +17,10 @@ An example is one module under `examples/`, importable as a top-level module (py
 and ty put `examples/` on the path). At module level it defines, in this order:
 
 1. **Problem**: `Var`s, `System`, `Problem` (below).
-2. **Experiment**: for a test case, a module-level `def oracle(v)` (the study
-   computes the oracle optimum from it) and `oracle_experiment(system, oracle,
-   noise_std)`; otherwise a custom `(u (N,), rng) -> measured (P,)` function.
+2. **Experiment**: for a test case, a module-level `def oracle(v)` (the iteration
+   figures draw the true curves from it), `oracle_experiment(system, oracle,
+   noise_std)` and the stated oracle `optimum`; otherwise a custom
+   `(u (N,), rng) -> measured (P,)` function.
 3. **Methods**: `methods`, a dict from method label to a callable
    `(problem, experiment, initial_points, n, rng) -> Run`. Bind settings with
    `functools.partial(hb.hybrid_bo, settings=hb.HybridBOSettings(...))`; the
@@ -27,11 +28,10 @@ and ty put `examples/` on the path). At module level it defines, in this order:
    a run's settings from its record.
 4. **The study**, the CLI's defaults: `study_settings = hb.StudySettings(n_runs,
    n_initial, n_iterations, seed=None)` (`None` draws a fresh seed, which the saved
-   study's settings keep). A test case that knows its oracle optimum may define
-   `optimum` too.
+   study's settings keep).
 
 The module has no `__main__` block: the CLI (`examples/main.py`) runs it as
-`hb.study(methods, problem, experiment, study_settings, name=..., optimum=..., oracle=...)`
+`hb.study(methods, problem, experiment, study_settings, name=..., optimum=...)`
 and saves the study with `hb.save` to `results/<example>/<study id>/`
 (`study.json`, `runs/<method>/run-000.json`; git-ignored). The library never writes
 files on its own; saving is an explicit call. `--help` lists every module in
@@ -52,9 +52,12 @@ generator.
 **Failures.** A `HybridBOError` raised during a method carries the partial run as
 `error.run`; `hb.repeat` logs the error and keeps the partial run in the study.
 
-**Oracle optimum.** Given `oracle=`, `hb.study` computes the oracle optimum
-(`hb.oracle_optimum`) and records it in `study.record`. If the test case knows it,
-pass `optimum=` instead; it is recorded as stated.
+**Oracle optimum.** A test case states it as a module-level `optimum`, which
+`hb.study` records and regret is measured from. The study never computes it: a
+10-start search found a local minimum for the illustrative example (#62). Find it
+once with `hb.oracle_optimum(problem, oracle, rng, n_starts=200)`, check it, and say
+how in a comment. `hb.study` warns with `OracleOptimumWarning` if a run evaluates a
+point whose oracle objective is below it.
 
 ## Defining the problem
 

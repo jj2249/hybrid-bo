@@ -6,7 +6,7 @@
 
 An example is a module in this folder that defines `problem`, `experiment`,
 `methods` (label -> method), its default `study_settings` and, for a test case, the
-`oracle` (the study computes the oracle optimum from it) or the known `optimum`.
+`oracle` (for the true curves in the iteration figures) and the oracle `optimum`.
 `run` saves a study with `hb.save` to `<results root>/<example>/<study id>/` (the
 results root defaults to `results/` at the repo root), where the study id is
 `--name` or the UTC time at the start, with `-2`, `-3`, ... appended if taken when
@@ -66,8 +66,8 @@ def run(
 
     Run i of each method starts from the same initial points. A run that fails with a
     `HybridBOError` is saved as far as it got. Seed None draws a fresh seed, which
-    the saved settings hold. The oracle optimum is the example's `optimum`, else
-    computed from its `oracle`, if it defines either.
+    the saved settings hold. The oracle optimum is the example's `optimum`, if it
+    defines one.
     """
     study = hb.study(
         {name: example.methods[name] for name in method_names},
@@ -76,7 +76,6 @@ def run(
         settings,
         name=example.__name__,
         optimum=getattr(example, "optimum", None),
-        oracle=getattr(example, "oracle", None),
     )
     study_dir = save_new(study, example_dir, study_id)
     for name in method_names:

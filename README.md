@@ -98,9 +98,10 @@ print(run.history.f)
   the fitted GPs, the acquisition problems' solutions and a record of how the run was
   produced. A `Run` is plain data, so it saves and loads without your code.
 - **Studies**: `hb.study(methods, problem, experiment, hb.StudySettings(n_runs,
-  n_initial, n_iterations, seed), oracle=oracle)` runs every method `n_runs` times,
-  run i of each from the same initial points, and records the oracle optimum. The
-  same seed gives the same study. `hb.save(study, path)`
+  n_initial, n_iterations, seed), optimum=optimum)` runs every method `n_runs` times,
+  run i of each from the same initial points, and records the oracle optimum you
+  state (find it once with `hb.oracle_optimum`). The same seed gives the same study.
+  `hb.save(study, path)`
   writes it as JSON; `hb.load(path)` reads it back. The library never writes files on
   its own.
 - **Benchmarking**: with an oracle, `oracle_incumbents(run.history)` is the oracle
