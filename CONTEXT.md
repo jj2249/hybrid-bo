@@ -115,6 +115,11 @@ _Avoid_: re-solve, fixed-x evaluation
 One complete optimization from the initial points to the end of the optimization loop.
 Runs are repeated with different seeds for statistics.
 
+**Study**:
+A collection of runs of one or more methods on one problem, where run i of every
+method starts from the same initial points. The unit that is saved, loaded and analyzed.
+_Avoid_: benchmark, experiment, results, batch
+
 **Iteration**:
 One step of the optimization loop.
 _Avoid_: run, step
@@ -129,6 +134,16 @@ The oracle objective at the incumbent's point: what acting on the run would give
 The benchmark metric. Under noise it can be worse than the best oracle objective so far;
 without noise it equals it.
 _Avoid_: incumbents_no_noise, true incumbent
+
+**Oracle optimum** (`f*`):
+The best objective value the oracle allows: the reference that regret is measured
+against. Test cases only; usually stated by the test case, else computed from the oracle.
+_Avoid_: true optimum, global optimum
+
+**Regret**:
+The oracle incumbent minus the oracle optimum, after each evaluation. Counted over
+evaluations, not iterations, because initial points are not free.
+_Avoid_: simple regret, error
 
 **Initial points**:
 The decision variables evaluated before the optimization loop starts.
