@@ -230,6 +230,9 @@ class History:  # every evaluated point of one run, in order
 
 
 def incumbents(history) -> np.ndarray: ...  # np.minimum.accumulate(history.f)
+def oracle_incumbents(
+    history,
+) -> np.ndarray: ...  # f_oracle at each incumbent's point (#32)
 
 
 @dataclass(frozen=True)
@@ -585,8 +588,6 @@ Not built now; the design leaves room for them.
   (deterministic `z`, specific `w`); the acquisition builders already take weights.
 - **More than one unknown state (P > 1).** Shapes already allow it; the open modeling
   question is whether each unknown equation has its own arguments.
-- **Benchmark metric.** The oracle objective at the point the optimizer believes is
-  best, computed from the history. Its own logic PR (#32), checked against the paper's figures.
 
 ## Restructure PRs
 
@@ -650,4 +651,6 @@ The tickets, in a workable order:
   an example's methods, `plot` a results folder), and example modules only define
   things (a `settings` dict of the BO methods joins `methods`). *Done*.
 - **#32 Benchmark metric** (*logic*): the oracle objective at the believed best
-  point. Blocked by #30.
+  point. *Done*: `oracle_incumbents(history)`. Without noise it is the running
+  minimum of `f_oracle`, as in the paper's (noise-free) regret figures, so the
+  baselines don't change.

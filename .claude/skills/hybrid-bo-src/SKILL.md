@@ -67,7 +67,8 @@ re-exports the public API.
   `ReconstructionWarning`. `_start_bounds` (in `sampling.py`) and `_as_text` (in
   `problem.py`, an equation as text in the variable names) are shared helpers.
 - `history.py`: `History` (`u`, `x`, `y`, `f`, oracle values or `None`, `n_initial`)
-  and `incumbents`; `_concatenate` appends one history to another.
+  `incumbents` and `oracle_incumbents` (the benchmark metric); `_concatenate`
+  appends one history to another.
 - `run.py`: `Run` (`history`, `record`, `surrogates`: one `FittedGP` per iteration,
   the one behind its trial point, empty for the baselines; `scenarios`, hybrid BO
   only, else None), pure data that pickles without user code (ADR 0003).
@@ -169,8 +170,9 @@ re-exports the public API.
   carries the partial run (`error.run`) and the example decides whether to save it
   and continue.
 - **Oracle incumbents.** `incumbents(history)` is the running minimum of the measured
-  `f`. The running minimum of `f_oracle` is not the oracle value at the measured
-  incumbent (see the benchmark metric in DESIGN.md, #32).
+  `f`. The benchmark metric `oracle_incumbents(history)` is `f_oracle` at the
+  incumbent's point, not the running minimum of `f_oracle`; they agree only
+  without noise.
 
 ## Testing rules
 

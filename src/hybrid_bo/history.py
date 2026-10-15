@@ -50,3 +50,25 @@ def _concatenate(history: History, later: History) -> History:
 def incumbents(history: History) -> np.ndarray:
     """The best measured objective value after each evaluation, shape (n,)."""
     return np.minimum.accumulate(history.f)
+
+
+def oracle_incumbents(history: History) -> np.ndarray:
+    """The benchmark metric: the oracle objective at the incumbent's point after each
+    evaluation, shape (n,).
+
+    The incumbent's point is the one the optimizer believes is best, so this is
+    what acting on the run would give. Under noise it can be worse than the best
+    oracle value so far. A later point that only ties the incumbent doesn't replace
+    it. Raises `ValueError` when the history has no oracle values.
+    """
+    if history.f_oracle is None:
+        msg = "the benchmark metric needs oracle values; the experiment had no oracle"
+        raise ValueError(msg)
+
+    # A point becomes the incumbent's point when it beats every earlier one
+    best_before = np.minimum.accumulate(np.concatenate([[np.inf], history.f[:-1]]))
+    improves = history.f < best_before
+    incumbent_index = np.maximum.accumulate(
+        np.where(improves, np.arange(len(history.f)), 0)
+    )
+    return history.f_oracle[incumbent_index]

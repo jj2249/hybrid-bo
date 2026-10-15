@@ -97,6 +97,8 @@ print(run.history.f)
   and `uniform_sampling`. Each returns a `Run`: the evaluated points (`run.history`),
   the fitted GPs and a record of how the run was produced. A `Run` is plain data, so it
   pickles and loads without your code.
+- **Benchmarking**: with an oracle, `oracle_incumbents(run.history)` is the oracle
+  objective at the point the run believes is best after each evaluation.
 - **Experiments**: a real application passes a function `(u, rng) -> measured` that
   returns the measured variables at `u`. `oracle_experiment` simulates one from known
   unknown equations, for test cases.
