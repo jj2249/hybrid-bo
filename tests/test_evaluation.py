@@ -13,17 +13,16 @@ from scipy.special import lambertw
 import hybrid_bo
 from hybrid_bo import (
     History,
-    OracleMeasurement,
     Problem,
     ReconstructionWarning,
     RootFindingError,
     System,
     Var,
-    evaluate,
     incumbents,
     oracle_experiment,
     oracle_incumbents,
 )
+from hybrid_bo.evaluation import OracleMeasurement, evaluate
 
 
 def illustrative_experiment(problem: Problem, noise_std: float):

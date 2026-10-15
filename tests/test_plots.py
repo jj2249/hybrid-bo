@@ -22,16 +22,14 @@ from hybrid_bo import (
     StandardBOSettings,
     System,
     Var,
-    default_gp,
-    hybrid_acquisition,
     hybrid_bo,
     initial_points,
     latin_hypercube_sampling,
     plots,
-    predict,
-    standard_acquisition,
     standard_bo,
 )
+from hybrid_bo.acquisition import hybrid_acquisition, standard_acquisition
+from hybrid_bo.gp import default_gp, predict
 from hybrid_bo.history import History
 
 GRID = np.linspace(-2.0, 2.0, 101)  # the illustrative example's u start bounds

@@ -8,18 +8,18 @@ import numpy as np
 import pytest
 from scipy.stats import multivariate_normal
 
-from hybrid_bo import (
+from hybrid_bo import kernels
+from hybrid_bo.gp import (
     GP,
     FittedGP,
     Hyper,
-    Ipopt,
+    Scaler,
     default_gp,
     fit_gp,
-    kernels,
     log_likelihood,
     predict,
 )
-from hybrid_bo.gp import Scaler
+from hybrid_bo.solvers import Ipopt
 
 RTOL, ATOL = 1e-8, 1e-10
 NOISE_STD = 0.1

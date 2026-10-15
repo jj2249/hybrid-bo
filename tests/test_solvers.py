@@ -6,7 +6,8 @@ import casadi as cas
 import numpy as np
 import pytest
 
-from hybrid_bo import NLP, Ipopt, NoSolutionError, multistart
+from hybrid_bo import NoSolutionError
+from hybrid_bo.solvers import NLP, Ipopt, multistart
 
 w = cas.SX.sym("w")
 # Two local minima, near -1 (the global one) and near +1

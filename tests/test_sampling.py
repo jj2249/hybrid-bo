@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 from scipy.stats import qmc
 
-from hybrid_bo import lhs, uniform
+from hybrid_bo.sampling import lhs, uniform
 
 LOWER = np.array([-2.0, 0.0, 10.0])
 UPPER = np.array([2.0, 1.0, 10.5])

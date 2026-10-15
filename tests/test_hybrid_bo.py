@@ -15,23 +15,18 @@ import pytest
 from hybrid_bo import (
     EI,
     LCB,
-    FittedGP,
     HybridBOSettings,
     Problem,
     RootFindingError,
     Run,
-    Scenarios,
     System,
     Var,
-    default_gp,
-    fit_gp,
-    hybrid_acquisition,
     hybrid_bo,
     initial_points,
     oracle_experiment,
-    predict,
-    saa_scenarios,
 )
+from hybrid_bo.acquisition import Scenarios, hybrid_acquisition, saa_scenarios
+from hybrid_bo.gp import FittedGP, default_gp, fit_gp, predict
 
 # Three scenarios with unequal weights, so a plain mean would give other values
 SCENARIOS = Scenarios(z=np.array([[-1.0], [0.5], [2.0]]), w=np.array([0.2, 0.3, 0.5]))

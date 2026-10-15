@@ -1,46 +1,31 @@
-from hybrid_bo import kernels, plots
-from hybrid_bo.acquisition import (
-    EI,
-    LCB,
-    Scenarios,
-    hybrid_acquisition,
-    saa_scenarios,
-    standard_acquisition,
+"""Bayesian optimization of partially known systems with hybrid models.
+
+The top level holds what a typical script uses: define a problem, run a method, look
+at the results. Everything else is reachable through its module (`hb.gp.fit_gp`,
+`hb.solvers.multistart`).
+"""
+
+from hybrid_bo import (
+    acquisition,
+    bo,
+    evaluation,
+    gp,
+    kernels,
+    plots,
+    sampling,
+    solvers,
 )
+from hybrid_bo.acquisition import EI, LCB
 from hybrid_bo.baselines import latin_hypercube_sampling, uniform_sampling
-from hybrid_bo.bo import (
-    HybridBOSettings,
-    StandardBOSettings,
-    TrialPoint,
-    hybrid_bo,
-    optimization_loop,
-    standard_bo,
-)
+from hybrid_bo.bo import HybridBOSettings, StandardBOSettings, hybrid_bo, standard_bo
 from hybrid_bo.errors import (
     HybridBOError,
     NoSolutionError,
     ReconstructionWarning,
     RootFindingError,
 )
-from hybrid_bo.evaluation import (
-    Experiment,
-    OracleMeasurement,
-    evaluate,
-    oracle_experiment,
-)
-from hybrid_bo.gp import (
-    GP,
-    FittedGP,
-    Hyper,
-    Scaler,
-    default_gp,
-    fit_gp,
-    log_likelihood,
-    predict,
-    zero_mean,
-)
+from hybrid_bo.evaluation import Experiment, oracle_experiment
 from hybrid_bo.history import History, incumbents, oracle_incumbents
 from hybrid_bo.problem import Problem, System, Var
 from hybrid_bo.run import Run
-from hybrid_bo.sampling import initial_points, lhs, uniform
-from hybrid_bo.solvers import NLP, Ipopt, Solution, multistart
+from hybrid_bo.sampling import initial_points

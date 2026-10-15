@@ -57,6 +57,12 @@ The code is hard to change for three reasons:
   runs.
 - **Iteration plots replay the acquisition problem**
   ([ADR 0005](docs/adr/0005-iteration-plots-replay-the-acquisition-problem.md)).
+- **A slim top level** (#52). `hb.*` holds what a typical script uses: `Var`, `System`,
+  `Problem`, `Experiment`, `oracle_experiment`, `initial_points`, the methods and their
+  settings, `EI`, `LCB`, `Run`, `History`, `incumbents`, `oracle_incumbents`, the
+  errors and `plots`. Everything else is reached through its module (`hb.gp.fit_gp`,
+  `hb.solvers.multistart`). A new name joins the top level only if the target example
+  or a typical analysis script would use it.
 
 ## Target example
 
@@ -338,11 +344,11 @@ Kernels are plain functions (`matern12/32/52`, `squared_exponential`, `linear`,
 `h.<name>`, a `(size, 1)` CasADi column:
 
 ```python
-gp = hb.GP(
+gp = hb.gp.GP(
     hyperparameters=(
-        hb.Hyper("noise_std", 1e-2, bounds=(1e-6, 1.0)),
-        hb.Hyper("outputscale", 1.0, bounds=(0.1, 10.0)),
-        hb.Hyper("lengthscale", 1.0, bounds=(1e-3, 1e2), size=2),
+        hb.gp.Hyper("noise_std", 1e-2, bounds=(1e-6, 1.0)),
+        hb.gp.Hyper("outputscale", 1.0, bounds=(0.1, 10.0)),
+        hb.gp.Hyper("lengthscale", 1.0, bounds=(1e-3, 1e2), size=2),
     ),
     kernel=lambda h, X1, X2: h.outputscale * hb.kernels.matern52(X1, X2, h.lengthscale),
 )
@@ -481,8 +487,8 @@ def latin_hypercube_sampling(
 def uniform_sampling(problem, experiment, initial_points, n_points, rng) -> Run: ...
 ```
 
-The baselines are named `*_sampling` because `hb.uniform` and `hb.lhs` are the
-sampling primitives.
+The baselines are named `*_sampling` because `hb.sampling.uniform` and
+`hb.sampling.lhs` are the sampling primitives.
 
 - `hybrid_bo` draws the scenarios from `rng`, then runs `optimization_loop` with a
   trial-point function that fits the GP on `(u, x)[h_inputs] -> y`, builds
@@ -675,7 +681,7 @@ The tickets, in a workable order:
   point. *Done*: `oracle_incumbents(history)`. Without noise it is the running
   minimum of `f_oracle`, as in the paper's (noise-free) regret figures, so the
   baselines don't change.
-- **#52 Namespace**: `hb.*` holds only the user-facing names; a Getting started docs
-  page.
+- **#52 Namespace**: `hb.*` holds only the user-facing names (see Decisions); a
+  Getting started docs page. *Done*.
 - **#53 Study**, then **#54 Polars views**, then **#55 Plots**, then **#51 Entry
   point**: see Analysis. In sequence; each is blocked by the one before.

@@ -74,7 +74,7 @@ problem = hb.Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x -
 - **Measured variables**: exactly one per unknown state (`len(measured) == P`), so the
   root-finding problem is square. Only `P == 1` is supported.
 - **Noise**: with `noise_std > 0`, give the GP a `noise_std` hyperparameter
-  (`hb.Hyper("noise_std", ...)` in a custom `hb.GP`); `default_gp` is noise-free.
+  (`hb.gp.Hyper("noise_std", ...)` in a custom `hb.gp.GP`); `default_gp` is noise-free.
 - **Ambiguous reconstruction**: a `ReconstructionWarning` means the measured variables
   don't pin the states to the oracle's root. Narrow the unmeasured start bounds to the
   right branch, or measure other variables.
