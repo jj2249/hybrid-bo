@@ -22,6 +22,7 @@ from hybrid_bo import (
     evaluate,
     incumbents,
     oracle_experiment,
+    oracle_incumbents,
 )
 
 
@@ -273,17 +274,63 @@ def test_oracle_must_give_one_value_per_unknown_state():
         oracle_experiment(two_branch_problem().system, oracle=lambda v: [v.u, 2 * v.u])
 
 
-def test_incumbents_are_the_running_minimum_of_measured_f():
-    """The incumbents are the running minimum of the measured objective."""
-    history = History(
-        u=np.zeros((4, 1)),
-        x=np.zeros((4, 1)),
-        y=np.zeros((4, 1)),
-        f=np.array([3.0, 1.0, 2.0, 0.5]),
-        x_oracle=None,
-        y_oracle=None,
-        f_oracle=None,
+def history_of(f: list[float], f_oracle: list[float] | None = None) -> History:
+    """A history with the given measured and oracle objective values, the first two
+    of them initial points; the other fields are zero."""
+    n = len(f)
+    return History(
+        u=np.zeros((n, 1)),
+        x=np.zeros((n, 1)),
+        y=np.zeros((n, 1)),
+        f=np.array(f),
+        x_oracle=None if f_oracle is None else np.zeros((n, 1)),
+        y_oracle=None if f_oracle is None else np.zeros((n, 1)),
+        f_oracle=None if f_oracle is None else np.array(f_oracle),
         n_initial=2,
     )
 
+
+def test_incumbents_are_the_running_minimum_of_measured_f():
+    """The incumbent after each evaluation is the best measured f so far."""
+    history = history_of([3.0, 1.0, 2.0, 0.5])
+
     np.testing.assert_array_equal(incumbents(history), [3.0, 1.0, 1.0, 0.5])
+
+
+def test_oracle_incumbents_are_the_oracle_f_at_the_measured_incumbent():
+    """Under noise, the benchmark metric follows the point the measured f ranks best,
+    not the best oracle f so far."""
+    # The third point measures worse than the second but is better at the oracle;
+    # the fourth measures best but is worse at the oracle
+    history = history_of(f=[3.0, 1.0, 2.0, 0.5], f_oracle=[3.0, 1.5, 0.5, 2.0])
+
+    np.testing.assert_array_equal(oracle_incumbents(history), [3.0, 1.5, 1.5, 2.0])
+
+
+def test_oracle_incumbents_keep_the_earlier_point_on_a_tie():
+    """A later point that only equals the incumbent's measured f doesn't replace it."""
+    history = history_of(f=[1.0, 1.0, 1.0], f_oracle=[2.0, 0.0, 3.0])
+
+    np.testing.assert_array_equal(oracle_incumbents(history), [2.0, 2.0, 2.0])
+
+
+def test_oracle_incumbents_without_noise_are_the_running_minimum_of_oracle_f(
+    illustrative_problem,
+):
+    """Without noise the measured and oracle f agree, so the benchmark metric is the
+    running minimum of the oracle f (the paper's convergence figures)."""
+    u = np.array([[2.0], [-0.5], [1.0], [0.0], [-2.0], [0.4]])
+    experiment = illustrative_experiment(illustrative_problem, noise_std=0.0)
+
+    history = evaluate(illustrative_problem, experiment, u, np.random.default_rng(0))
+
+    assert history.f_oracle is not None
+    np.testing.assert_allclose(
+        oracle_incumbents(history), np.minimum.accumulate(history.f_oracle)
+    )
+
+
+def test_oracle_incumbents_need_oracle_values():
+    """A history from an experiment without an oracle has no benchmark metric."""
+    with pytest.raises(ValueError, match="oracle"):
+        oracle_incumbents(history_of([3.0, 1.0]))
