@@ -47,6 +47,12 @@ def _concatenate(history: History, later: History) -> History:
     )
 
 
+def n_iterations(history: History) -> int:
+    """The number of points evaluated after the initial points: the iterations, or
+    the design points for the baselines."""
+    return len(history.u) - history.n_initial
+
+
 def incumbents(history: History) -> np.ndarray:
     """The best measured objective value after each evaluation, shape (n,)."""
     return np.minimum.accumulate(history.f)

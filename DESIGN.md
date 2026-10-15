@@ -597,9 +597,15 @@ it. Polars and matplotlib are optional (imported on first use; the
   needed only for a GP other than `default_gp`, since the record holds the GP as text,
   not its kernel function. The fields the replay uses (acquisition function, and for
   hybrid BO the solver and `unknown_states_as_variables`) must match the record.
-- **Entry point** (#51). `pixi run example <name> [flags]` and `pixi run plot <name>
-  [study]` over `examples/main.py`. Results go to
-  `examples/results/<name>/<study id>/{study.json, runs/, figures/}`.
+- **Entry point** (#51, done). `pixi run example <name> [flags]` and `pixi run plot
+  <name> [study]` are pixi tasks (`default-environment = "examples"`, flags passed
+  through) over a thin `examples/main.py`, which imports the example, overrides its
+  `study_settings` with the flags and calls `hb.study` and `hb.save`, or `hb.load`
+  and `hb.plots`. Results go to `results/<name>/<study id>/{study.json, runs/,
+  figures/}` at the repo root; `plot` takes the study saved last by default and
+  writes only under `figures/`. The `hybrid-bo-examples` skill has the details. The
+  CLI stays in `examples/` for people who clone the repo; it is not part of the
+  package.
 
 ## Order of random draws
 
@@ -726,6 +732,7 @@ The tickets, in a workable order:
 - **#52 Namespace**: `hb.*` holds only the user-facing names (see Decisions); a
   Getting started docs page. *Done*.
 - **#53 Study**: see Analysis. *Done*; `examples/main.py` runs and saves a study, and
-  the examples define `study_settings`.
+  the examples define their study settings.
 - **#54 Polars views**, then **#55 Plots**, then **#51 Entry point**: see Analysis.
-  In sequence; each is blocked by the one before.
+  *Done*. With #51 the separate dict of method settings in an example is gone (the
+  plots read them from the record).

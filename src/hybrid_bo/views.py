@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from hybrid_bo.history import incumbents, oracle_incumbents
+from hybrid_bo.history import incumbents, n_iterations, oracle_incumbents
 from hybrid_bo.run import Run
 from hybrid_bo.studies import Study
 
@@ -46,7 +46,7 @@ def _run_evaluations(
     pl = _polars()
     history = run.history
     n = len(history.f)
-    n_iterations = n - history.n_initial
+    n_later = n_iterations(history)
 
     def floats(values: np.ndarray | list[float | None] | None) -> "pl.Series":
         """A Float64 column, all null when `values` is None."""
@@ -55,9 +55,7 @@ def _run_evaluations(
     def per_iteration(values: list) -> list:
         """`values`, one per iteration, as a column: null for the initial points and
         for iterations past the end of `values`."""
-        return (
-            [None] * history.n_initial + values + [None] * (n_iterations - len(values))
-        )
+        return [None] * history.n_initial + values + [None] * (n_later - len(values))
 
     # Where the row is: the method, the run, and its evaluation and iteration
     columns = {
@@ -65,7 +63,7 @@ def _run_evaluations(
         "run": pl.Series([run.index] * n, dtype=pl.Int64),
         "evaluation": pl.Series(range(1, n + 1), dtype=pl.Int64),
         "iteration": pl.Series(
-            per_iteration(list(range(1, n_iterations + 1))),
+            per_iteration(list(range(1, n_later + 1))),
             dtype=pl.Int64,
         ),
     }
@@ -92,7 +90,7 @@ def _run_evaluations(
     columns["incumbent"] = floats(incumbents(history))
     columns["oracle_incumbent"] = floats(oracle_incumbent)
     columns["regret"] = floats(oracle_incumbent - optimum if has_regret else None)
-    values = [solution.value for solution in run.acquisitions[:n_iterations]]
+    values = [solution.value for solution in run.acquisitions[:n_later]]
     columns["acquisition"] = floats(per_iteration(values))
     return pl.DataFrame(columns)
 

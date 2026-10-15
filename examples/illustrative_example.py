@@ -2,10 +2,10 @@
 
 One decision variable u, one mechanistic state x and one unknown state y. The known
 equation is x + exp(x) = y; the unknown equation is y = sin(u), which only the oracle
-knows. Run and plot it with the CLI in `examples/main.py`:
+knows. Run it, then plot the newest study:
 
-    pixi run -e dev python examples/main.py run illustrative_example
-    pixi run -e dev python examples/main.py plot examples/results/illustrative_example/<UTC time>
+    pixi run example illustrative_example
+    pixi run plot illustrative_example
 """
 
 import functools
@@ -42,13 +42,12 @@ experiment = hb.oracle_experiment(system, oracle, noise_std=0.0)
 # Methods: each takes (problem, experiment, initial_points, n, rng), where n is the
 # number of iterations, or of design points for the baselines. Hybrid BO substitutes
 # the GP prediction for the unknown states, as this example always has
-settings = {
-    "hybrid_bo": hb.HybridBOSettings(unknown_states_as_variables=False),
-    "standard_bo": hb.StandardBOSettings(),
-}
 methods = {
-    "hybrid_bo": functools.partial(hb.hybrid_bo, settings=settings["hybrid_bo"]),
-    "standard_bo": functools.partial(hb.standard_bo, settings=settings["standard_bo"]),
+    "hybrid_bo": functools.partial(
+        hb.hybrid_bo,
+        settings=hb.HybridBOSettings(unknown_states_as_variables=False),
+    ),
+    "standard_bo": functools.partial(hb.standard_bo, settings=hb.StandardBOSettings()),
     "latin_hypercube_sampling": hb.latin_hypercube_sampling,
     "uniform_sampling": hb.uniform_sampling,
 }

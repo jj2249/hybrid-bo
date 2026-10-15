@@ -129,21 +129,22 @@ print(run.history.f)
 
 [`./examples/illustrative_example.py`](./examples/illustrative_example.py) defines the
 illustrative example of the [publication](https://arxiv.org/abs/2603.11199) and the
-methods to compare. The CLI in [`./examples/main.py`](./examples/main.py) runs an
-example's methods as a study, saving it to `examples/results/`, and plots saved
-studies:
+methods to compare. Two pixi tasks over [`./examples/main.py`](./examples/main.py)
+run an example's methods as a study and plot saved studies:
 
 ```bash
-pixi run -e dev python examples/main.py run illustrative_example --n-runs 10 --seed 0
-pixi run -e dev python examples/main.py plot examples/results/illustrative_example/<UTC time>
+pixi run example illustrative_example --n-runs 10 --seed 0   # --help lists the examples
+pixi run plot illustrative_example                           # the newest study, or name one
 ```
 
-`run` takes `--method` (repeatable; default every method), `--n-runs`, `--seed` and
-`--n-iterations`, defaulting to the example's `study_settings`. `plot` saves
-`convergence.png` (the median oracle incumbent of every method over the evaluations),
-`regret.png` (when the study has an oracle optimum) and one figure per method of
-`--run`'s iteration `--iteration` (default: run 0, the last iteration), next to the
-study; `--show` opens them. In your own scripts, `hb.plots.convergence(study)`,
+`example` takes `--method` (repeatable; default every method), `--n-runs`, `--seed`
+and `--n-iterations`, defaulting to the example's `study_settings`, plus `--name`
+(the study id; default the UTC time) and `--plot` (plot straight after). A study is
+saved to `results/<example>/<study id>/` (`study.json`, `runs/`). `plot` writes
+into its `figures/`: `convergence.png` (the median oracle incumbent of every method
+over the evaluations), `regret.png` (when the study has an oracle optimum) and
+`<method>/run-000/iteration-00.png` for every iteration of every run. In your own
+scripts, `hb.plots.convergence(study)`,
 `hb.plots.regret(study)` and `hb.plots.iteration(run, problem, i, experiment=...)`
 draw the same figures; they need matplotlib and Polars (in the `examples` and `dev`
 pixi environments). Figures use the repo's matplotlib style, `hb.plots.STYLE`

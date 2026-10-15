@@ -26,6 +26,7 @@ from hybrid_bo.acquisition import (
 from hybrid_bo.bo import HybridBOSettings, StandardBOSettings
 from hybrid_bo.evaluation import Experiment, evaluate
 from hybrid_bo.gp import GP, _gp_record, default_gp, predict
+from hybrid_bo.history import n_iterations
 from hybrid_bo.problem import Problem, Symbolic
 from hybrid_bo.run import Run
 from hybrid_bo.sampling import _start_bounds
@@ -175,11 +176,11 @@ def iteration(
     if is_hybrid and gp and list(system.h_inputs) != list(system.u):
         msg = "The GP of y is drawn over u, so h_inputs must be the decision variable"
         raise ValueError(msg)
-    n_iterations = len(history.u) - history.n_initial
-    if not -n_iterations <= i < n_iterations:
-        msg = f"The run has {n_iterations} iterations, so no iteration {i}"
+    n_later = n_iterations(history)
+    if not -n_later <= i < n_later:
+        msg = f"The run has {n_later} iterations, so no iteration {i}"
         raise IndexError(msg)
-    i %= n_iterations
+    i %= n_later
     settings, gp_spec = _replay_settings(run, problem, settings)
 
     # The grid, with the trial point in it so the replay starts there
