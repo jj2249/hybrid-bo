@@ -1,17 +1,13 @@
-.. hybrid-bo documentation master file, created by
-   sphinx-quickstart on Sat Nov 15 16:29:20 2025.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
+hybrid-bo
+=========
 
-hybrid-bo documentation
-=======================
-
-Add your content using ``reStructuredText`` syntax. See the
-`reStructuredText <https://www.sphinx-doc.org/en/master/usage/restructuredtext/index.html>`_
-documentation for details.
-
+Bayesian optimization of partially known systems with hybrid models
+(`arXiv 2603.11199 <https://arxiv.org/abs/2603.11199>`_): the known equations of a
+system are used as they are, and a Gaussian process learns the unknown ones. Start
+with the walkthrough; the API reference covers every function.
 
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
 
+   walkthrough

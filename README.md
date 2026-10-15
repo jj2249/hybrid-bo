@@ -124,18 +124,17 @@ pixi run -e dev python examples/illustrative_example.py
 [`./examples/flash_unit/`](./examples/flash_unit/) still targets the old API (tag
 `pre-refactor`) until it is ported.
 
-## API documentation
+## Documentation
 
-You can create an API documentation locally.  
-For that, make sure you have installed the dependency group `docs`, see [`./pyproject.toml`](./pyproject.toml).  
-In a terminal, type:
+The docs have a walkthrough of the illustrative example (`docs/walkthrough.rst`),
+which explains the problem class, hybrid BO and how to state a problem, and the API
+reference. Build them with
 
 ```bash
-cd ./docs/
-sphinx-build -b html . _build
+pixi run -e dev docs
 ```
 
-Now, there exists a file `./docs/_build/index.html` that contains the API documentation.
+and open `docs/_build/html/index.html`.
 
 ## License
 
