@@ -87,7 +87,7 @@ its own regression baseline on the new API. Scope is in the issues and DESIGN.md
 - [ ] #42: port flash_unit (its custom evaluation becomes a custom experiment)
 - [ ] A short example in the style of DESIGN.md's target example, linked from the README
 - [x] #52: slim `hb.*` namespace and a Getting started docs page
-- [ ] #53: `Study`, `StudySettings`, `hb.study`, JSON `hb.save`/`hb.load` (ADR 0004)
+- [x] #53: `Study`, `StudySettings`, `hb.study`, JSON `hb.save`/`hb.load` (ADR 0004)
 - [ ] #54: Polars views of a study
 - [ ] #55: static plots: convergence, regret, iterations (ADR 0005)
 - [ ] #51: `pixi run example` / `pixi run plot` entry point

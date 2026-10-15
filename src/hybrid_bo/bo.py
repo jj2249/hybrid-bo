@@ -14,7 +14,9 @@ import numpy as np
 from hybrid_bo.acquisition import (
     EI,
     LCB,
+    AcquisitionSolution,
     _check_acquisition,
+    _scenario_states,
     hybrid_acquisition,
     saa_scenarios,
     standard_acquisition,
@@ -29,9 +31,11 @@ from hybrid_bo.sampling import lhs
 from hybrid_bo.solvers import Ipopt, multistart
 
 # Chooses the next trial point (N,) from the points evaluated so far, drawing from the
-# run's generator, and returns it with the fitted surrogate model behind it
+# run's generator, and returns it with the fitted surrogate model behind it and the
+# solution of the acquisition problem it came from
 TrialPoint = Callable[
-    [Problem, History, np.random.Generator], tuple[np.ndarray, FittedGP]
+    [Problem, History, np.random.Generator],
+    tuple[np.ndarray, FittedGP, AcquisitionSolution],
 ]
 
 
@@ -47,32 +51,48 @@ def optimization_loop(
     """Evaluates the initial points (n, N), then runs `n_iterations` iterations: each
     calls `trial_point` and evaluates the trial point it returns.
 
-    Returns the run with `record`, and one surrogate per iteration (the one behind
-    that iteration's trial point). For writing new methods: `record` comes from
+    Returns the run with `record`, labeled with the method it names, and per
+    iteration the surrogate and the acquisition problem's solution behind that
+    iteration's trial point. For writing new methods: `record` comes from
     `run_record`, built before the method draws anything.
 
     Raises what `evaluate` and `trial_point` raise; a `HybridBOError` carries the
     partial run as `error.run`, and its history (every point evaluated before the
-    error) as `error.history`. If evaluating a trial point fails, the surrogate behind
-    it is dropped with it, so the run keeps one surrogate per evaluated trial point.
+    error) as `error.history`. If evaluating a trial point fails, its surrogate and
+    acquisition solution are dropped with it, so the run keeps one of each per
+    evaluated trial point.
     """
     history: History | None = None
     surrogates: list[FittedGP] = []
+    acquisitions: list[AcquisitionSolution] = []
     try:
         history = evaluate(problem, experiment, initial_points, rng)
         for _ in range(n_iterations):
-            u, surrogate = trial_point(problem, history, rng)
+            u, surrogate, acquisition = trial_point(problem, history, rng)
             later = evaluate(problem, experiment, u[np.newaxis], rng)
             history = _concatenate(history, later)
             surrogates.append(surrogate)
+            acquisitions.append(acquisition)
     except HybridBOError as error:
         # Before the loop, the initial points evaluated so far are the partial run
         partial = error.history if history is None else history
         if partial is not None:
             error.history = partial
-            error.run = Run(partial, record, surrogates)
+            error.run = Run(
+                partial,
+                record,
+                record["method"],
+                surrogates=surrogates,
+                acquisitions=acquisitions,
+            )
         raise
-    return Run(history, record, surrogates)
+    return Run(
+        history,
+        record,
+        record["method"],
+        surrogates=surrogates,
+        acquisitions=acquisitions,
+    )
 
 
 @dataclass(frozen=True)
@@ -160,6 +180,7 @@ def standard_bo(
     Evaluates the initial points (n, N), then in each iteration fits the GP to the
     measured objective so far, solves the acquisition problem by multistart from
     Latin hypercube starts over the start bounds of `u`, and evaluates the solution.
+    Each iteration's acquisition solution holds the acquisition value only.
 
     Raises what `evaluate` and `multistart` raise; a `HybridBOError` carries the
     partial run as `error.run`.
@@ -173,7 +194,7 @@ def standard_bo(
 
     def trial_point(
         problem: Problem, history: History, rng: np.random.Generator
-    ) -> tuple[np.ndarray, FittedGP]:
+    ) -> tuple[np.ndarray, FittedGP, AcquisitionSolution]:
         """Fits the GP to the points so far and solves the acquisition problem."""
         fitted = fit_gp(
             gp, history.u, history.f, rng, settings.n_starts_gp, settings.solver
@@ -183,7 +204,8 @@ def standard_bo(
             problem, gp, fitted, incumbent, settings.acquisition
         )
         starts = lhs(*start_bounds, settings.n_starts, rng)
-        return multistart(nlp, starts, settings.solver).w, fitted
+        solution = multistart(nlp, starts, settings.solver)
+        return solution.w, fitted, AcquisitionSolution(solution.f)
 
     return optimization_loop(
         problem, experiment, initial_points, n_iterations, trial_point, rng, record
@@ -206,7 +228,8 @@ def hybrid_bo(
     and in each iteration fits the GP to the measured and reconstructed states so far,
     solves `hybrid_acquisition` by multistart from Latin hypercube starts over the
     start bounds of its variables, and evaluates the decision variables of the
-    solution. The run holds the scenarios.
+    solution. The run holds the scenarios, and each iteration's acquisition solution
+    holds the scenario states at its trial point.
 
     Raises what `evaluate` and `multistart` raise; a `HybridBOError` carries the
     partial run, with the scenarios, as `error.run`.
@@ -228,7 +251,7 @@ def hybrid_bo(
 
     def trial_point(
         problem: Problem, history: History, rng: np.random.Generator
-    ) -> tuple[np.ndarray, FittedGP]:
+    ) -> tuple[np.ndarray, FittedGP, AcquisitionSolution]:
         """Fits the GP to the points so far and solves the acquisition problem."""
         # One unknown state (P = 1), so the GP has one output
         X = np.column_stack(_h_inputs(system, history.u, history.x))
@@ -246,7 +269,19 @@ def hybrid_bo(
             settings.unknown_states_as_variables,
         )
         starts = lhs(*start_bounds, settings.n_starts, rng)
-        return multistart(nlp, starts, settings.solver).w[: system.n_u], fitted
+        solution = multistart(nlp, starts, settings.solver)
+
+        # The trial point, and the scenario states at the solution
+        x, y = _scenario_states(
+            problem,
+            gp,
+            fitted,
+            scenarios,
+            solution.w,
+            settings.unknown_states_as_variables,
+        )
+        acquisition = AcquisitionSolution(solution.f, x, y)
+        return solution.w[: system.n_u], fitted, acquisition
 
     try:
         run = optimization_loop(

@@ -125,6 +125,18 @@ class Scenarios:
         object.__setattr__(self, "w", w)
 
 
+@dataclass(frozen=True)
+class AcquisitionSolution:
+    """The solution of one iteration's acquisition problem: the acquisition
+    function's value at the trial point (the objective the problem minimizes) and,
+    for hybrid BO, the scenario states there, x (S, M) and y (S, P), one row per
+    scenario. Standard BO has no scenario states, so they are None."""
+
+    value: float
+    x: np.ndarray | None = None
+    y: np.ndarray | None = None
+
+
 def saa_scenarios(n: int, n_y: int, rng: np.random.Generator) -> Scenarios:
     """n scenarios for the sample-average approximation: standard normal scenario
     draws z (n, n_y) and equal weights 1/n."""
@@ -215,3 +227,31 @@ def hybrid_acquisition(
         cas.Function("g", [w], [cas.vertcat(*constraints)]),
     )
     return nlp, (np.repeat(start_lower, copies), np.repeat(start_upper, copies))
+
+
+def _scenario_states(
+    problem: Problem,
+    gp: GP,
+    fitted: FittedGP,
+    scenarios: Scenarios,
+    w: np.ndarray,
+    unknown_states_as_variables: bool = True,
+) -> tuple[np.ndarray, np.ndarray]:
+    """The scenario states x (S, M) and y (S, P) at a point w of
+    `hybrid_acquisition`'s variables.
+
+    The x_s are read from w. So are the y_s when they are variables; otherwise they
+    are the GP's prediction at each scenario's arguments of h, mean + std * z_s.
+    """
+    # w holds u, then each state's S copies in turn (column by column)
+    system = problem.system
+    n = len(scenarios.w)
+    u, states = w[: system.n_u], w[system.n_u :]
+    x = states[: n * system.n_x].reshape((n, system.n_x), order="F")
+    if unknown_states_as_variables:
+        return x, states[n * system.n_x :].reshape((n, system.n_y), order="F")
+
+    # One unknown state (P = 1), so the GP has one output
+    inputs = np.column_stack(_h_inputs(system, np.tile(u, (n, 1)), x))
+    mean, std = predict(gp, fitted, inputs)
+    return x, (mean + std * scenarios.z[:, 0])[:, np.newaxis]

@@ -10,7 +10,7 @@ from pathlib import Path
 
 import numpy as np
 
-from hybrid_bo.acquisition import Scenarios
+from hybrid_bo.acquisition import AcquisitionSolution, Scenarios
 from hybrid_bo.gp import FittedGP
 from hybrid_bo.history import History
 from hybrid_bo.problem import Problem, _as_text
@@ -18,20 +18,27 @@ from hybrid_bo.problem import Problem, _as_text
 
 @dataclass(frozen=True)
 class Run:
-    """One run of a method: the evaluated points, the fitted surrogate models and a
-    record of how they were produced.
+    """One run of a method: the evaluated points, the fitted surrogate models, the
+    acquisition problems' solutions and a record of how they were produced.
 
     Holds only arrays, numbers and strings, never the problem or any user callable,
     so it pickles cleanly and loads without the code that produced it (ADR 0003).
-    `surrogates` has one fitted surrogate model per iteration, the one behind that
-    iteration's trial point, and is empty for the baselines; `scenarios` are hybrid
+    `method` is the label the run was run under: the key in the study's methods, or
+    the method's name when run on its own. `index` is its position among that
+    method's runs in a study, so run i of every method starts from the same initial
+    points. `surrogates` has one fitted surrogate model per iteration, the one behind
+    that iteration's trial point, and `acquisitions` the solution of that iteration's
+    acquisition problem; both are empty for the baselines. `scenarios` are hybrid
     BO's, the same in every iteration, and None for the other methods. So every saved
     run has the same fields.
     """
 
     history: History
     record: dict[str, str]
+    method: str
+    index: int = 0
     surrogates: list[FittedGP] = field(default_factory=list)
+    acquisitions: list[AcquisitionSolution] = field(default_factory=list)
     scenarios: Scenarios | None = None
 
 
@@ -60,6 +67,54 @@ def _version(distribution: str) -> str:
         return "unknown"
 
 
+def _problem_record(problem: Problem, experiment: object) -> dict[str, str]:
+    """The problem's variables, structure and equations, and the experiment, as text.
+
+    The experiment is described by its docstring when it has one (the oracle
+    simulation does), else by its name.
+    """
+    system = problem.system
+    blocks = (system.x, system.y, system.u)
+    name = getattr(experiment, "__qualname__", type(experiment).__qualname__)
+    return {
+        "u": "; ".join(repr(var) for var in system.u),
+        "x": "; ".join(repr(var) for var in system.x),
+        "y": "; ".join(repr(var) for var in system.y),
+        "h_inputs": ", ".join(var.name for var in system.h_inputs),
+        "measured": ", ".join(var.name for var in system.measured),
+        "g": _as_text(system.g, *blocks),
+        "f": _as_text(problem.f, *blocks),
+        "experiment": inspect.getdoc(experiment) or name,
+    }
+
+
+def _generator_record(rng: np.random.Generator) -> dict[str, str]:
+    """The generator's seed, spawn key and state, as text: rebuild it with
+    `SeedSequence(seed, spawn_key=spawn_key)`."""
+    seed_sequence = rng.bit_generator.seed_seq
+    return {
+        "seed": str(getattr(seed_sequence, "entropy", None)),
+        "spawn_key": str(getattr(seed_sequence, "spawn_key", None)),
+        "generator_state": (
+            f"{getattr(seed_sequence, 'n_children_spawned', None)} children spawned, "
+            f"bit generator state {rng.bit_generator.state}"
+        ),
+    }
+
+
+def _versions_record() -> dict[str, str]:
+    """The versions of hybrid_bo (with its git commit), Python and the numerical
+    packages."""
+    return {
+        "hybrid_bo": _version("hybrid-bo"),
+        "git": _code_version(),
+        "python": platform.python_version(),
+        "casadi": _version("casadi"),
+        "numpy": _version("numpy"),
+        "scipy": _version("scipy"),
+    }
+
+
 def run_record(
     problem: Problem,
     experiment: object,
@@ -75,35 +130,9 @@ def run_record(
     the run starts from. The experiment is described by its docstring when it has
     one (the oracle simulation does), else by its name.
     """
-    system = problem.system
-    seed_sequence = rng.bit_generator.seed_seq
-    blocks = (system.x, system.y, system.u)
-    name = getattr(experiment, "__qualname__", type(experiment).__qualname__)
-    return {
-        # The problem
-        "u": "; ".join(repr(var) for var in system.u),
-        "x": "; ".join(repr(var) for var in system.x),
-        "y": "; ".join(repr(var) for var in system.y),
-        "h_inputs": ", ".join(var.name for var in system.h_inputs),
-        "measured": ", ".join(var.name for var in system.measured),
-        "g": _as_text(system.g, *blocks),
-        "f": _as_text(problem.f, *blocks),
-        # The experiment and the method
-        "experiment": inspect.getdoc(experiment) or name,
-        "method": method,
-        "settings": settings,
-        # The generator: rebuild it with SeedSequence(seed, spawn_key=spawn_key)
-        "seed": str(getattr(seed_sequence, "entropy", None)),
-        "spawn_key": str(getattr(seed_sequence, "spawn_key", None)),
-        "generator_state": (
-            f"{getattr(seed_sequence, 'n_children_spawned', None)} children spawned, "
-            f"bit generator state {rng.bit_generator.state}"
-        ),
-        # The versions
-        "hybrid_bo": _version("hybrid-bo"),
-        "git": _code_version(),
-        "python": platform.python_version(),
-        "casadi": _version("casadi"),
-        "numpy": _version("numpy"),
-        "scipy": _version("scipy"),
-    }
+    return (
+        _problem_record(problem, experiment)
+        | {"method": method, "settings": settings}
+        | _generator_record(rng)
+        | _versions_record()
+    )

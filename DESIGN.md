@@ -53,20 +53,23 @@ The code is hard to change for three reasons:
   the PR says which Known issue it removes.
 - **Saving.** The library never writes files on its own; saving is an explicit call.
   `hb.save`/`hb.load` write and read a study as JSON
-  ([ADR 0004](docs/adr/0004-studies-are-saved-as-json.md)). Until #53, examples pickle
-  runs.
+  ([ADR 0004](docs/adr/0004-studies-are-saved-as-json.md)). Examples call them; the
+  library never does.
 - **Iteration plots replay the acquisition problem**
   ([ADR 0005](docs/adr/0005-iteration-plots-replay-the-acquisition-problem.md)).
 - **A slim top level** (#52). `hb.*` holds what a typical script uses: `Var`, `System`,
   `Problem`, `Experiment`, `oracle_experiment`, `initial_points`, the methods and their
-  settings, `EI`, `LCB`, `Run`, `History`, `incumbents`, `oracle_incumbents`, the
-  errors and `plots`. Everything else is reached through its module (`hb.gp.fit_gp`,
+  settings, `EI`, `LCB`, `StudySettings`, `Study`, `repeat`, `study`,
+  `oracle_optimum`, `save`, `load`, `Run`, `History`, `incumbents`,
+  `oracle_incumbents`, the errors and `plots`. Everything else is reached through its module (`hb.gp.fit_gp`,
   `hb.solvers.multistart`). A new name joins the top level only if the target example
   or a typical analysis script would use it.
 
 ## Target example
 
 ```python
+import functools
+
 import casadi as cas
 import numpy as np
 
@@ -95,13 +98,12 @@ experiment = hb.oracle_experiment(
 # Method: how we search
 settings = hb.HybridBOSettings(acquisition=hb.EI(), n_scenarios=25)  # default GP
 
-rng = np.random.default_rng(0)
-runs = []
-for run_rng in rng.spawn(10):
-    initial_points = hb.initial_points(system.u, n=2, rng=run_rng)
-    runs.append(hb.hybrid_bo(problem, experiment, initial_points, 5, settings, run_rng))
+methods = {"hybrid_bo": functools.partial(hb.hybrid_bo, settings=settings)}
 
-hb.plots.convergence(runs)
+# Study: 10 runs, run i of every method from the same initial points
+study_settings = hb.StudySettings(n_runs=10, n_initial=2, n_iterations=5, seed=0)
+study = hb.study(methods, problem, experiment, study_settings, np.random.default_rng(0))
+hb.save(study, "results/illustrative")
 ```
 
 ## Target API
@@ -246,10 +248,20 @@ def oracle_incumbents(
 
 
 @dataclass(frozen=True)
+class AcquisitionSolution:  # acquisition.py (#53)
+    value: float  # the acquisition problem's objective at the trial point
+    x: np.ndarray | None = None  # (S, M) scenario states; hybrid BO only
+    y: np.ndarray | None = None  # (S, P)
+
+
+@dataclass(frozen=True)
 class Run:
     history: History
     record: dict[str, str]  # how the run was produced, as text
+    method: str  # its label: the key in the study's methods (#53)
+    index: int = 0  # its position among that method's runs (#53)
     surrogates: list[FittedGP]  # one per iteration; empty for baselines (default)
+    acquisitions: list[AcquisitionSolution]  # one per iteration (#53)
     scenarios: Scenarios | None = None  # hybrid BO only (#29)
 ```
 
@@ -460,7 +472,8 @@ class StandardBOSettings:
 
 
 TrialPoint = Callable[
-    [Problem, History, np.random.Generator], tuple[np.ndarray, FittedGP]
+    [Problem, History, np.random.Generator],
+    tuple[np.ndarray, FittedGP, AcquisitionSolution],
 ]
 
 
@@ -532,19 +545,27 @@ The ArviZ-like layer: a `Study` is the data object; Polars views and static plot
 it. Polars and matplotlib are optional (imported on first use; the
 `hybrid-bo[analysis]` extra once packaged).
 
-- **Data** (#53). `Run` gains `method` (its label in the study), `index` and
-  `acquisitions` (per iteration: the acquisition value at the trial point and, for
-  hybrid BO, the scenario states there), and keeps its full `record`.
-  `StudySettings(n_runs, n_initial, n_iterations, seed=None)`.
-  `Study(runs: tuple[Run, ...], settings, name, record)` is a flat collection.
-- **Running** (#53). `hb.repeat(method, problem, experiment, settings, rng)` runs one
-  method `n_runs` times, keeping failed runs as far as they got.
+- **Data** (#53, done; `studies.py`). `Run` gains `method` (its label in the study),
+  `index` and `acquisitions`, one `AcquisitionSolution` per iteration (the
+  acquisition value at the trial point and, for hybrid BO, the scenario states
+  there), and keeps its full `record`.
+  `StudySettings(n_runs, n_initial, n_iterations, seed=None)`; the seed is what the
+  caller builds `rng` from. `Study(runs: tuple[Run, ...], settings, name, record)` is
+  a flat collection; its record holds the problem, experiment, methods, generator,
+  oracle optimum (`oracle_optimum`, with `oracle_optimum_source` "stated" or
+  "computed") and versions once.
+- **Running** (#53, done). `hb.repeat(method, problem, experiment, settings, rng)` runs
+  one method `n_runs` times from `rng.spawn(n_runs)`, logging failed runs and keeping
+  them as far as they got. A `Method` is called as `method(problem, experiment,
+  initial_points, n, rng=rng)`.
   `hb.study(methods, problem, experiment, settings, rng, name=None, optimum=None)`
   gives run i of every method the same generator, so the same initial points. The oracle
   optimum is `optimum` when given, else `hb.oracle_optimum(problem, oracle, rng)` for
-  oracle experiments; the study records it and its source.
-- **Saving** (#53). `hb.save(study, path)` writes `study.json` and
-  `runs/<method>/run-000.json`; `hb.load(path)` reads them back exactly.
+  oracle experiments (`oracle_experiment` carries its oracle as `.oracle`), from the
+  generator spawned after the runs'; the study records it and its source.
+- **Saving** (#53, done; `saving.py`). `hb.save(study, path)` writes `study.json`
+  (settings, name, record, the run files in order) and `runs/<method>/run-000.json`;
+  `hb.load(path)` reads them back exactly. `save` refuses an existing folder.
 - **Views** (#54). `hb.evaluations(study)`: one row per evaluation (method, run,
   evaluation, iteration, the variables, f, oracle values, incumbent, oracle incumbent,
   regret, acquisition). `hb.summary(study)`: one row per method.
@@ -596,7 +617,7 @@ scipy behavior.
 | `use_jacobian` (fsolve without the CasADi Jacobian) | every equation is CasADi-traceable ([ADR 0002](docs/adr/0002-equations-are-casadi-callables.md)) | tag `pre-refactor` |
 | `Problem.solve` (true optimum with `h` known) | called nowhere; would be a function on `multistart` | tag `pre-refactor` |
 | `Config` and `config.yaml` | functions take what they use; problems are Python | tag `pre-refactor` |
-| `hybrid_bo.legacy`: the `do_*` routines, `ResultsBO` pickles, the old `Problem`, GP and optimizers | replaced by the new API (#30); runs are pickled `Run`s | tag `pre-refactor` |
+| `hybrid_bo.legacy`: the `do_*` routines, `ResultsBO` pickles, the old `Problem`, GP and optimizers | replaced by the new API (#30); studies are saved as JSON (#53) | tag `pre-refactor` |
 | Kernel and mean classes, `Parameterized`, `JoinedParameters` | hyperparameters are named specs; kernels are functions | tag `pre-refactor` |
 | Per-iteration plot callbacks | plots are functions of a finished run ([ADR 0003](docs/adr/0003-runs-are-pure-data.md)) | tag `pre-refactor` |
 | Strategy classes (planned, never built) | methods are settings plus functions | earlier DESIGN.md in git history |
@@ -683,5 +704,7 @@ The tickets, in a workable order:
   baselines don't change.
 - **#52 Namespace**: `hb.*` holds only the user-facing names (see Decisions); a
   Getting started docs page. *Done*.
-- **#53 Study**, then **#54 Polars views**, then **#55 Plots**, then **#51 Entry
-  point**: see Analysis. In sequence; each is blocked by the one before.
+- **#53 Study**: see Analysis. *Done*; `examples/main.py` runs and saves a study, and
+  the examples define `study_settings`.
+- **#54 Polars views**, then **#55 Plots**, then **#51 Entry point**: see Analysis.
+  In sequence; each is blocked by the one before.

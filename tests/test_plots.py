@@ -95,7 +95,7 @@ def fake_run(f: list[float], n_initial: int = 2) -> Run:
         f_oracle=None,
         n_initial=n_initial,
     )
-    return Run(history, record={"method": "test"})
+    return Run(history, record={"method": "test"}, method="test")
 
 
 def scenario_states(run: Run, iteration: int) -> np.ndarray:

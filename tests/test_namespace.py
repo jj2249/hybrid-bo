@@ -21,6 +21,14 @@ USER_FACING = {
     "LCB",
     "latin_hypercube_sampling",
     "uniform_sampling",
+    # Run a study, and save and load it
+    "StudySettings",
+    "Study",
+    "repeat",
+    "study",
+    "oracle_optimum",
+    "save",
+    "load",
     # Look at the results
     "Run",
     "History",

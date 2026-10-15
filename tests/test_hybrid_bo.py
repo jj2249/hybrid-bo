@@ -22,6 +22,7 @@ from hybrid_bo import (
     System,
     Var,
     hybrid_bo,
+    incumbents,
     initial_points,
     oracle_experiment,
 )
@@ -272,6 +273,54 @@ def test_both_settings_solve_the_illustrative_example(
     assert run.scenarios is not None
     np.testing.assert_array_equal(run.scenarios.z, rng.standard_normal((25, 1)))
     np.testing.assert_array_equal(run.scenarios.w, np.full(25, 1 / 25))
+
+
+@pytest.mark.parametrize("unknown_states_as_variables", [True, False])
+def test_stored_acquisition_solution_solves_the_acquisition_problem(
+    illustrative_problem, unknown_states_as_variables
+):
+    """Each iteration stores the acquisition problem's objective at its solution, and
+    the scenario states there: they satisfy the known equations, and the unknown
+    states are the GP's scenarios at the trial point."""
+    settings = HybridBOSettings(
+        n_scenarios=5, unknown_states_as_variables=unknown_states_as_variables
+    )
+
+    run = illustrative_run(illustrative_problem, settings)
+
+    # One solution per iteration, with every scenario's states
+    history, gp = run.history, default_gp(1)
+    assert run.scenarios is not None
+    assert len(run.acquisitions) == 2
+    for i, (solution, fitted) in enumerate(
+        zip(run.acquisitions, run.surrogates, strict=True)
+    ):
+        assert solution.x is not None and solution.y is not None
+        assert solution.x.shape == (5, 1) and solution.y.shape == (5, 1)
+
+        # The value is the acquisition problem's objective at the stored solution
+        point = history.n_initial + i
+        u = history.u[point, 0]
+        incumbent = float(incumbents(history)[point - 1])
+        nlp, _ = hybrid_acquisition(
+            illustrative_problem,
+            gp,
+            fitted,
+            run.scenarios,
+            incumbent,
+            EI(),
+            unknown_states_as_variables,
+        )
+        w = variables_at(
+            u, solution.x[:, 0], solution.y[:, 0], unknown_states_as_variables
+        )
+        assert solution.value == pytest.approx(float(nlp.f(w)), abs=1e-12)
+
+        # The known equations hold, and y_s is the GP's scenario at (u, x_s)
+        x_s, y_s = solution.x[:, 0], solution.y[:, 0]
+        np.testing.assert_allclose(x_s + np.exp(x_s), y_s, atol=1e-6)
+        mean, std = predict(gp, fitted, np.full((5, 1), u))
+        np.testing.assert_allclose(y_s, mean + std * run.scenarios.z[:, 0], atol=1e-6)
 
 
 def test_gp_inputs_are_the_arguments_of_h():

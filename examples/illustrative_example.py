@@ -49,8 +49,6 @@ methods = {
     "uniform_sampling": hb.uniform_sampling,
 }
 
-# Runs, the CLI's defaults
-seed = None  # None draws a fresh seed; every run records the seed it used
-n_runs = 1
-n_initial = 2
-n_iterations = 5
+# The study, the CLI's defaults. Seed None draws a fresh seed; the study and every run
+# record the seed they used
+study_settings = hb.StudySettings(n_runs=1, n_initial=2, n_iterations=5, seed=None)

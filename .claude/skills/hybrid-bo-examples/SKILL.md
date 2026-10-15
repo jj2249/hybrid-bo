@@ -24,26 +24,33 @@ and ty put `examples/` on the path). At module level it defines, in this order:
    `(problem, experiment, initial_points, n, rng) -> Run`. Bind settings with
    `functools.partial(hb.hybrid_bo, settings=settings["hybrid_bo"])`; the baselines
    need no settings (`n` is their number of design points).
-4. **Runs**, the CLI's defaults: `seed` (`None` draws a fresh one, recorded in every
-   run), `n_runs`, `n_initial`, `n_iterations`.
+4. **The study**, the CLI's defaults: `study_settings = hb.StudySettings(n_runs,
+   n_initial, n_iterations, seed=None)` (`None` draws a fresh seed, which the CLI
+   saves in the settings and every run records).
 
-The module has no `__main__` block: the CLI (`examples/main.py`) runs it, and pickles
-each method's `list[Run]` to `examples/results/<example>/<UTC time>/<method>.pkl`
-(git-ignored). The library returns runs; the CLI saves them. Importing the module
+The module has no `__main__` block: the CLI (`examples/main.py`) runs it as
+`hb.study(methods, problem, experiment, settings, np.random.default_rng(seed))` and
+saves the study with `hb.save` to `examples/results/<example>/<UTC time>/`
+(`study.json`, `runs/<method>/run-000.json`; git-ignored). The library never writes
+files on its own; saving is an explicit call. Importing the module
 runs nothing, so `tests/test_regression.py` reuses its `problem`, `experiment` and
 `methods`, `tests/test_plots.py` its `settings`, and `tests/conftest.py`'s
 `illustrative_problem` fixture is its `problem`. Changing the illustrative example's
 problem, experiment or settings therefore moves the regression baselines: that is a
 *logic* change.
 
-**Randomness.** One generator per run, spawned from one seed that every method shares,
-so run `i` of each method starts from the same initial points:
-`np.random.default_rng(entropy).spawn(n_runs)`, then
-`hb.initial_points(system.u, n_initial, rng)` and the method, both from that run's
-`rng`. Draw nothing else from it.
+**Randomness.** `hb.study` gives every method the same generators spawned from its
+`rng`, so run `i` of each method starts from the same initial points. Within
+`hb.repeat`, run `i` draws `hb.initial_points(system.u, n_initial, rng)` and runs the
+method, both from the `i`th child of `rng`. Outside a study, do the same by hand:
+`rng.spawn(n_runs)`, and draw nothing else from a run's generator.
 
 **Failures.** A `HybridBOError` raised during a method carries the partial run as
-`error.run`; save it with the others.
+`error.run`; `hb.repeat` logs the error and keeps the partial run in the study.
+
+**Oracle optimum.** With an oracle experiment, `hb.study` computes the oracle optimum
+(`hb.oracle_optimum`) and records it in `study.record`. If the test case knows it,
+pass `optimum=` instead; it is recorded as stated.
 
 ## Defining the problem
 
@@ -84,9 +91,10 @@ problem = hb.Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x -
     pixi run -e dev python examples/main.py run illustrative_example [--method hybrid_bo ...] [--n-runs 10] [--seed 0] [--n-iterations 5]
     pixi run -e dev python examples/main.py plot examples/results/illustrative_example/<UTC time> [--run 0] [--iteration -1] [--show]
 
-`run` spawns one generator per run from the seed (see Randomness) and saves a failed
-run's `error.run`. `plot` imports the example named by the results folder's parent,
-then, in `hb.plots.STYLE`, saves `convergence.png` and `<method>.png`
+`run` runs a study from the seed (see Randomness), with the methods given and the
+`study_settings` overridden by the flags given, and saves it. `plot` loads the study
+with `hb.load`, imports the example named by the results folder's parent, then, in
+`hb.plots.STYLE`, saves `convergence.png` and `<method>.png`
 (`hb.plots.iterations` with `settings.get(method)` and the example's experiment,
 showing `--iteration`) into the folder; `--show` opens them with their - and + buttons. The figures
 need one decision variable; for other problems `plot` prints why and skips them.

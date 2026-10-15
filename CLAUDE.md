@@ -37,7 +37,7 @@ pixi run -e dev lint | format | typecheck
 pixi run -e dev docs         # sphinx API docs -> docs/_build/html
 pixi run -e dev setup        # install pre-commit hooks
 pixi run -e quality pre-commit run --hook-stage manual ty   # ty hook is manual for now
-pixi run -e dev python examples/illustrative_example.py   # every method; runs saved to examples/results/
+pixi run -e dev python examples/main.py run illustrative_example   # every method; the study saved to examples/results/
 ```
 
 The git hook hardcodes the pixi Python path. If commits fail with "`pre-commit`
@@ -100,7 +100,7 @@ remove the marker in the PR that fixes the bug.
 - Functions take what they use. Randomness is an explicit `rng`.
 - Rows are points: a point is `(n,)`, a set is `(n_points, n)`, `f` is
   `(n_points,)`. Column vectors only in CasADi glue code.
-- The library returns results; examples save them.
+- The library never writes files on its own; saving is an explicit call (`hb.save`).
 - Errors raise specific exceptions; the caller decides whether to continue.
 - Annotate signatures and dataclass fields, not local variables. Type errors are
   fixed, not suppressed; if a suppression is unavoidable, use
