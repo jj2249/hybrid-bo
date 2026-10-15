@@ -127,24 +127,28 @@ of the BO methods are also kept on their own, for the plots.
 .. literalinclude:: ../examples/illustrative_example.py
    :language: python
    :start-at: # Methods:
-   :end-before: # Runs
+   :end-before: # The study
 
 Every run gets its own random generator, which draws everything the run needs: the
-initial points, the scenarios, the multistart starts and any noise. The example
-The examples' CLI, ``examples/main.py``, spawns one generator per run from one
-seed, the same seed for every method, so run ``i`` of each method starts from the
-same initial points. A method that fails raises a
-:py:class:`~hybrid_bo.errors.HybridBOError` carrying the partial run, which the CLI
-saves too.
+initial points, the scenarios, the multistart starts and any noise. A *study*
+(:py:func:`~hybrid_bo.studies.study`) runs every method ``n_runs`` times from
+generators spawned from one seed, the same ones for every method, so run ``i`` of
+each method starts from the same initial points, and the same seed gives the same
+study. A method that fails raises a
+:py:class:`~hybrid_bo.errors.HybridBOError` carrying the partial run, which the study
+keeps. The examples' CLI, ``examples/main.py``, runs a study of the example's
+methods with its :py:class:`~hybrid_bo.studies.StudySettings` and saves it:
 
 .. literalinclude:: ../examples/main.py
    :language: python
-   :start-at: # One seed for every method
-   :end-before: # One pickle per method
+   :start-at: study = hb.study(
+   :end-at: hb.save(study, results_dir)
    :dedent:
 
-A method returns a :py:class:`~hybrid_bo.run.Run`, which is plain data, so it pickles
-and loads without the code that produced it.
+A method returns a :py:class:`~hybrid_bo.run.Run`, which is plain data, so
+:py:func:`~hybrid_bo.saving.save` writes a study's runs as JSON and
+:py:func:`~hybrid_bo.saving.load` reads them back without the code that produced
+them.
 
 - ``run.history`` (:py:class:`~hybrid_bo.history.History`) holds every evaluated
   point in order, the initial points first: ``u``, ``x``, ``y`` and ``f``, measured or
@@ -152,8 +156,12 @@ and loads without the code that produced it.
   *oracle values*, what the evaluation would give without measurement noise.
   :py:func:`~hybrid_bo.history.oracle_incumbents` turns them into the benchmark
   metric: the oracle objective at the incumbent's point after each evaluation.
+- ``run.method`` and ``run.index`` are the label the run was run under and its
+  position among that method's runs.
 - ``run.surrogates`` holds one fitted GP per iteration, the one behind that
-  iteration's trial point. It is empty for the baselines.
+  iteration's trial point, and ``run.acquisitions`` the acquisition problem's
+  solution: the acquisition value at the trial point and, for hybrid BO, the
+  scenario states there. Both are empty for the baselines.
 - ``run.scenarios`` holds hybrid BO's scenario draws and weights, the same in every
   iteration, and is ``None`` for the other methods.
 - ``run.record`` describes, as text, how the run was produced: the problem's
@@ -161,5 +169,5 @@ and loads without the code that produced it.
   the package and code versions.
 
 ``pixi run -e dev python examples/main.py run illustrative_example`` runs every
-method and saves the runs to ``examples/results/``; the CLI's ``plot`` command draws
-them (see ``examples/main.py``).
+method and saves the study to ``examples/results/``; the CLI's ``plot`` command
+draws it (see ``examples/main.py``).

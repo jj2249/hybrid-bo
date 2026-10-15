@@ -20,11 +20,12 @@ from hybrid_bo import (
     RootFindingError,
     Run,
     StandardBOSettings,
+    incumbents,
     initial_points,
     oracle_experiment,
     standard_bo,
 )
-from hybrid_bo.acquisition import standard_acquisition
+from hybrid_bo.acquisition import AcquisitionSolution, standard_acquisition
 from hybrid_bo.bo import optimization_loop
 from hybrid_bo.gp import FittedGP, default_gp, fit_gp, predict
 from hybrid_bo.run import run_record
@@ -69,6 +70,7 @@ class _DataOnlyUnpickler(pickle.Unpickler):
         "hybrid_bo.run",
         "hybrid_bo.history",
         "hybrid_bo.gp",
+        "hybrid_bo.acquisition",
         "numpy",
         "builtins",
     )
@@ -240,6 +242,26 @@ def test_failed_evaluation_carries_the_partial_run(illustrative_problem):
     assert info.value.history is run.history
 
 
+def test_stored_acquisition_value_is_the_objective_at_the_trial_point(
+    illustrative_problem,
+):
+    """Each iteration stores the acquisition problem's objective (-EI) at its trial
+    point; standard BO has no scenario states."""
+    run = illustrative_run(illustrative_problem)
+
+    history, gp = run.history, default_gp(1)
+    assert len(run.acquisitions) == 2
+    for i, (solution, fitted) in enumerate(
+        zip(run.acquisitions, run.surrogates, strict=True)
+    ):
+        point = history.n_initial + i
+        incumbent = float(incumbents(history)[point - 1])
+        nlp, _ = standard_acquisition(illustrative_problem, gp, fitted, incumbent, EI())
+        expected = acquisition_values(nlp, history.u[point : point + 1])[0]
+        assert solution.value == pytest.approx(expected, abs=1e-12)
+        assert solution.x is None and solution.y is None
+
+
 # The optimization loop, with test trial-point functions in place of a method
 
 
@@ -254,7 +276,8 @@ def test_loop_evaluates_each_trial_point_after_the_initial_points(
     trial_points = iter([np.array([1.0]), np.array([-1.0])])
 
     def trial_point(problem, history, rng):
-        return next(trial_points), f"surrogate behind point {len(history.u)}"
+        n = len(history.u)
+        return next(trial_points), f"surrogate behind point {n}", AcquisitionSolution(n)
 
     run = optimization_loop(
         problem,
@@ -272,6 +295,7 @@ def test_loop_evaluates_each_trial_point_after_the_initial_points(
     assert run.history.n_initial == 1
     assert run.history.f_oracle is not None
     assert run.surrogates == ["surrogate behind point 1", "surrogate behind point 2"]
+    assert [solution.value for solution in run.acquisitions] == [1, 2]
 
 
 def test_failed_trial_point_carries_the_partial_run(illustrative_problem):
@@ -284,7 +308,7 @@ def test_failed_trial_point_carries_the_partial_run(illustrative_problem):
         if len(history.u) == 3:
             msg = "no acquisition solution"
             raise NoSolutionError(msg)
-        return np.array([1.0]), "surrogate"
+        return np.array([1.0]), "surrogate", AcquisitionSolution(0.0)
 
     with pytest.raises(NoSolutionError) as info:
         optimization_loop(
@@ -303,6 +327,7 @@ def test_failed_trial_point_carries_the_partial_run(illustrative_problem):
     assert run.history.u.shape == (3, 1)
     assert run.history.n_initial == 2
     assert run.surrogates == ["surrogate"]
+    assert len(run.acquisitions) == 1
     assert info.value.history is run.history
 
 
@@ -317,7 +342,7 @@ def test_failed_initial_point_carries_the_points_before_it(illustrative_problem)
         return np.sin(u) if u[0] < 1.0 else np.array([np.nan])
 
     def trial_point(problem, history, rng):
-        return np.array([0.0]), "surrogate"
+        return np.array([0.0]), "surrogate", AcquisitionSolution(0.0)
 
     with pytest.raises(RootFindingError) as info:
         optimization_loop(

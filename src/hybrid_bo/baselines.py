@@ -37,9 +37,9 @@ def _run_design(
         if error.history is not None:
             n_evaluated = len(error.history.u)
             partial = replace(error.history, n_initial=min(n_initial, n_evaluated))
-            error.run = Run(partial, record)
+            error.run = Run(partial, record, record["method"])
         raise
-    return Run(replace(history, n_initial=n_initial), record)
+    return Run(replace(history, n_initial=n_initial), record, record["method"])
 
 
 def latin_hypercube_sampling(

@@ -43,6 +43,7 @@ from hybrid_bo.errors import HybridBOError, ReconstructionWarning, RootFindingEr
 from hybrid_bo.history import History
 from hybrid_bo.problem import Problem, Symbolic, System, Var, _as_text, _trace
 from hybrid_bo.sampling import _start_bounds, lhs
+from hybrid_bo.solvers import NLP, Ipopt, multistart
 
 
 @dataclass(frozen=True)
@@ -129,14 +130,7 @@ def oracle_experiment(
     Raises `ValueError` if the oracle doesn't give one value per unknown state. The
     experiment raises `RootFindingError` if no start gives a root.
     """
-    # The oracle: one value per unknown state, like g traced over (x, y, u)
-    oracle_function = _trace("oracle", oracle, system.x, system.y, system.u)
-    if oracle_function.size_out(0) != (system.n_y, 1):
-        msg = (
-            f"The oracle must give one value per unknown state ({system.n_y}) as a "
-            f"column, got shape {oracle_function.size_out(0)}"
-        )
-        raise ValueError(msg)
+    oracle_function = _trace_oracle(system, oracle)
 
     # Where each measured variable sits in an array of states
     states = _states(system)
@@ -165,6 +159,57 @@ def oracle_experiment(
         f"n_starts={n_starts}, tol={tol}"
     )
     return experiment
+
+
+def _trace_oracle(system: System, oracle: Callable[[Any], Any]) -> cas.Function:
+    """The oracle traced like g, over the columns (x, y, u).
+
+    Raises `ValueError` unless it gives one value per unknown state.
+    """
+    oracle_function = _trace("oracle", oracle, system.x, system.y, system.u)
+    if oracle_function.size_out(0) != (system.n_y, 1):
+        msg = (
+            f"The oracle must give one value per unknown state ({system.n_y}) as a "
+            f"column, got shape {oracle_function.size_out(0)}"
+        )
+        raise ValueError(msg)
+    return oracle_function
+
+
+def oracle_optimum(
+    problem: Problem,
+    oracle: Callable[[Any], Any],
+    rng: np.random.Generator,
+    n_starts: int = 10,
+    solver: Ipopt = Ipopt(),  # noqa: B008  (frozen, never mutated)
+) -> float:
+    """The oracle optimum: the lowest objective the oracle allows, min f(x, y, u)
+    subject to g(x, y, u) = 0 and y = oracle(x, u), within the bounds.
+
+    `oracle` is written as for `oracle_experiment`. Solved like the acquisition
+    problem: by `multistart` from `n_starts` Latin hypercube starts over the start
+    bounds of u, x and y, so it is the best local optimum found. Raises `ValueError`
+    if the oracle doesn't give one value per unknown state, and `NoSolutionError` if
+    every start fails.
+    """
+    # The variables w = (u, x, y), with g and the oracle as constraints
+    system = problem.system
+    oracle_function = _trace_oracle(system, oracle)
+    variables = (*system.u, *system.x, *system.y)
+    w = Symbolic.sym("w", len(variables))
+    u = w[: system.n_u]
+    x = w[system.n_u : system.n_u + system.n_x]
+    y = w[system.n_u + system.n_x :]
+    constraints = cas.vertcat(system.g(x, y, u), oracle_function(x, y, u) - y)
+    nlp = NLP(
+        cas.Function("f", [w], [problem.f(x, y, u)]),
+        np.array([var.lower for var in variables]),
+        np.array([var.upper for var in variables]),
+        cas.Function("g", [w], [constraints]),
+    )
+
+    starts = lhs(*_start_bounds(variables), n_starts, rng)
+    return multistart(nlp, starts, solver).f
 
 
 def _reconstruct(

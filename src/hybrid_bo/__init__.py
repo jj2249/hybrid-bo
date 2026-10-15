@@ -19,7 +19,9 @@ from hybrid_bo import (
     problem,
     run,
     sampling,
+    saving,
     solvers,
+    studies,
 )
 from hybrid_bo.acquisition import EI, LCB
 from hybrid_bo.baselines import latin_hypercube_sampling, uniform_sampling
@@ -30,8 +32,10 @@ from hybrid_bo.errors import (
     ReconstructionWarning,
     RootFindingError,
 )
-from hybrid_bo.evaluation import Experiment, oracle_experiment
+from hybrid_bo.evaluation import Experiment, oracle_experiment, oracle_optimum
 from hybrid_bo.history import History, incumbents, oracle_incumbents
 from hybrid_bo.problem import Problem, System, Var
 from hybrid_bo.run import Run
 from hybrid_bo.sampling import initial_points
+from hybrid_bo.saving import load, save
+from hybrid_bo.studies import Study, StudySettings, repeat, study

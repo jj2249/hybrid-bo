@@ -4,7 +4,8 @@ These lock in the *current* behavior. If a PR intentionally changes behavior,
 regenerate with `pixi run -e dev test --update-baselines` and review the JSON diff.
 
 The baselines were recorded by the pre-refactor code, so each `Run` is mapped to the
-keys of its result files (`ResultsBO`) to compare.
+keys of its result files (`ResultsBO`) to compare. The acquisition problems' solutions
+(#53) came later and have keys of their own.
 """
 
 import json
@@ -39,11 +40,22 @@ def as_baseline_columns(run: Run) -> dict[str, np.ndarray]:
         "incumbents_no_noise": oracle_incumbents(history)[:, np.newaxis],
     }
     n = history.n_initial
-    return {
+    baseline = {
         f"{name}_{part}": value[:n] if part == "initial" else value[n:]
         for part in ("initial", "bo")
         for name, value in columns.items()
     }
+
+    # The BO methods' acquisition solutions: the value per iteration, and hybrid BO's
+    # scenario states (iteration, scenario, state)
+    if run.acquisitions:
+        baseline["acquisition_values"] = np.array([a.value for a in run.acquisitions])
+    x = [a.x for a in run.acquisitions if a.x is not None]
+    y = [a.y for a in run.acquisitions if a.y is not None]
+    if x and y:
+        baseline["acquisition_x"] = np.stack(x)
+        baseline["acquisition_y"] = np.stack(y)
+    return baseline
 
 
 def run_method(method: str) -> dict[str, np.ndarray]:
@@ -51,7 +63,7 @@ def run_method(method: str) -> dict[str, np.ndarray]:
     `ResultsBO` keys."""
     # As in the example: one generator per run, initial points drawn from it
     rng = np.random.default_rng(SEED).spawn(1)[0]
-    u = initial_points(ex.system.u, ex.n_initial, rng)
+    u = initial_points(ex.system.u, ex.study_settings.n_initial, rng)
     run = ex.methods[method](ex.problem, ex.experiment, u, N_ITERATIONS, rng=rng)
     return as_baseline_columns(run)
 

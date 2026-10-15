@@ -29,10 +29,15 @@ system = hb.System(
 )
 problem = hb.Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x - 4))
 
-# Test case: an oracle plays the real system
-experiment = hb.oracle_experiment(
-    system, oracle=lambda v: [cas.sin(v.u)], noise_std=0.0
-)
+
+# Test case: an oracle plays the real system. The study computes the oracle optimum
+# from it too
+def oracle(v):
+    """The unknown equation y = h(u), known only to the test case."""
+    return [cas.sin(v.u)]
+
+
+experiment = hb.oracle_experiment(system, oracle, noise_std=0.0)
 
 # Methods: each takes (problem, experiment, initial_points, n, rng), where n is the
 # number of iterations, or of design points for the baselines. The plots take the BO
@@ -49,8 +54,6 @@ methods = {
     "uniform_sampling": hb.uniform_sampling,
 }
 
-# Runs, the CLI's defaults
-seed = None  # None draws a fresh seed; every run records the seed it used
-n_runs = 1
-n_initial = 2
-n_iterations = 5
+# The study, the CLI's defaults. Seed None draws a fresh seed, which the saved study
+# keeps, so it can be run again exactly
+study_settings = hb.StudySettings(n_runs=1, n_initial=2, n_iterations=5, seed=None)

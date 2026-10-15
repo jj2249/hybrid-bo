@@ -59,7 +59,10 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   them for any Latin hypercube or uniform draw.
 - `evaluation.py`: an `Experiment` is `(u (N,), rng) -> measured (P,)`, or an
   `OracleMeasurement` (measured plus oracle `x`, `y`) in test cases.
-  `oracle_experiment(system, oracle, noise_std, ...)` traces the oracle like `g`.
+  `oracle_experiment(system, oracle, noise_std, ...)` traces the oracle like `g`
+  (`_trace_oracle`).
+  `oracle_optimum(problem, oracle, rng)` solves min f s.t. g = 0, y = oracle by
+  `multistart` from `lhs` starts over the start bounds of (u, x, y).
   `evaluate(problem, experiment, u, rng)` runs the experiment per row, then always
   solves the root-finding problem (`_reconstruct`, starts over the unmeasured
   variables), and returns a `History` whose points are all initial points. Every
@@ -71,12 +74,30 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - `history.py`: `History` (`u`, `x`, `y`, `f`, oracle values or `None`, `n_initial`)
   `incumbents` and `oracle_incumbents` (the benchmark metric); `_concatenate`
   appends one history to another.
-- `run.py`: `Run` (`history`, `record`, `surrogates`: one `FittedGP` per iteration,
-  the one behind its trial point, empty for the baselines; `scenarios`, hybrid BO
-  only, else None), pure data that pickles without user code (ADR 0003).
-  `run_record(problem, experiment, rng, method, settings)` builds the text record;
-  call it before the method draws. An experiment is recorded by its docstring, else
-  its name (`oracle_experiment` sets the docstring).
+- `run.py`: `Run` (`history`, `record`, `method`: its label, `record["method"]`
+  unless a study relabels it; `index` in its study; `surrogates`: one `FittedGP` per
+  iteration, the one behind its trial point, and `acquisitions`: one
+  `AcquisitionSolution` per iteration, both empty for the baselines; `scenarios`,
+  hybrid BO only, else None), pure data that loads without user code (ADR 0003).
+  `run_record(problem, experiment, rng, method, settings)` builds the text record
+  from `_problem_record`, `_generator_record` and `_versions_record` (a study's
+  record reuses them); call it before the method draws. An experiment is recorded by
+  its docstring, else its name (`oracle_experiment` sets the docstring).
+- `studies.py`: `StudySettings(n_runs, n_initial, n_iterations, seed)`, `Study(runs,
+  settings, name, record)`, `Method` (called as `method(problem, experiment,
+  initial_points, n, rng=rng)`), `repeat` (run i from
+  `default_rng(SeedSequence(seed).spawn(n_runs)[i])`, initial points then the method;
+  catches `HybridBOError`, logs it and keeps `error.run`) and `study` (resolves a
+  None seed to fresh entropy kept in its settings, then each method's `repeat` from
+  that seed; relabels runs with their key; without a stated `optimum` but with an
+  `oracle`, computes the oracle optimum from child `n_runs` of the seed; records it
+  as `oracle_optimum` and `oracle_optimum_source`). Studies take a seed, not an
+  `rng`: the settings alone reproduce a study.
+- `saving.py`: `save(study, path)` / `load(path)` (ADR 0004): `study.json` lists the
+  run files `runs/<method>/run-<index:03d>.json`. `_encode`/`_decode` convert any
+  dataclass by its type hints; arrays are nested lists of floats (an empty one is
+  `{"shape": ...}`). A new field on `Run` or its parts round-trips without changes if
+  its type is one `_decode` handles. `save` refuses an existing folder.
 - `baselines.py`: `latin_hypercube_sampling` and `uniform_sampling` draw the whole
   design over the `u` start bounds, then `evaluate` initial points plus design in
   one call.
@@ -105,10 +126,14 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `w (S,)`, checked), `saa_scenarios(n, n_y, rng)` and `hybrid_acquisition` (variables
   `u`, then `vec` of the `(S, M)` x copies, then of the `(S, P)` y copies if variables;
   bounds and start bounds from each `Var`, repeated per scenario; `g` per scenario,
-  followed by its GP tie).
+  followed by its GP tie). `AcquisitionSolution(value, x, y)` is one iteration's
+  solution: the minimized objective at the trial point and, for hybrid BO, the
+  scenario states `(S, M)`, `(S, P)`, which `_scenario_states` reads from the
+  solution (or predicts, when the y_s are substituted).
 - `bo.py`: `optimization_loop(problem, experiment, initial_points, n_iterations,
   trial_point, rng, record) -> Run` (evaluate initial points, then per iteration
-  `trial_point(problem, history, rng) -> (u, surrogate)` and evaluate u; a
+  `trial_point(problem, history, rng) -> (u, surrogate, acquisition solution)` and
+  evaluate u; a
   `HybridBOError` gets the partial run as `error.run`), `StandardBOSettings` and
   `standard_bo` (fit `u -> f`, `standard_acquisition`, `multistart` from `lhs` over
   the `u` start bounds), `HybridBOSettings` and `hybrid_bo` (record, then
@@ -145,7 +170,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   Start bounds are finite and set the ranges of initial points, multistart starts and
   `fsolve` starts.
 - **Runs are pure data.** A `Run` holds arrays, numbers and strings only, so it
-  pickles without user code; the record is text. Plots are functions of a
+  saves as JSON (and pickles) without user code; the record is text. Plots are functions of a
   finished run.
 - **Runtime aliases** (e.g. `Symbolic`) are used at runtime. Keep them as plain
   assignments, never `type X = ...`.
@@ -168,9 +193,10 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   (`normal`, `uniform`, `standard_normal`) only among themselves. The regression
   baselines depend on both orders, so adding, removing or reordering a draw in either
   is a logic change. `tests/test_sampling.py` pins this scipy behavior.
-- **Errors propagate.** Nothing in the library catches per run; a `HybridBOError`
-  carries the partial run (`error.run`) and the example decides whether to save it
-  and continue.
+- **Errors propagate** out of a method: a `HybridBOError` carries the partial run
+  (`error.run`). Only `repeat` (and so `study`) catches them, per run: it logs the
+  error and keeps the partial run.
+- **The library never writes files on its own.** Saving is an explicit `save` call.
 - **Oracle incumbents.** `incumbents(history)` is the running minimum of the measured
   `f`. The benchmark metric `oracle_incumbents(history)` is `f_oracle` at the
   incumbent's point, not the running minimum of `f_oracle`; they agree only
@@ -182,12 +208,16 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - `tests/test_regression.py` runs each method of `examples/illustrative_example.py`
   (seed 0, 2 iterations) and compares with `tests/data/regression/*.json`. The
   baselines were recorded by the pre-refactor code, so the test maps each `Run` to
-  their `ResultsBO` keys (`x` holds `[x, y]`, `*_initial`/`*_bo` halves). A non-logic
-  PR must not touch `tests/data/regression/`. A logic PR regenerates them with
-  `--update-baselines` and explains the diff.
+  their `ResultsBO` keys (`x` holds `[x, y]`, `*_initial`/`*_bo` halves), plus
+  `acquisition_values` (BO methods) and `acquisition_x`/`acquisition_y` (hybrid BO)
+  since #53. A non-logic PR must not change stored values. A logic PR regenerates
+  them with `--update-baselines` and explains the diff. Regenerating on another
+  machine moves the last digits of stored values, so a PR that only adds fields adds
+  their keys to the stored files and leaves the other values as they are.
 - The unit tests (`test_kernels.py`, `test_gp.py`, `test_scalers.py`,
   `test_sampling.py`, `test_solvers.py`, `test_system.py`, `test_evaluation.py`,
-  `test_baselines.py`, `test_standard_bo.py`, `test_hybrid_bo.py`) compare against
+  `test_baselines.py`, `test_standard_bo.py`, `test_hybrid_bo.py`,
+  `test_studies.py`) compare against
   numpy/scipy references or closed forms. Add one when changing math.
 - Tests follow the comment rules in CLAUDE.md Conventions (docstrings, commented
   blocks, a note on the first use of each pytest feature); `test_standard_bo.py` is

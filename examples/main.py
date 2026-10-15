@@ -8,16 +8,16 @@
 `plot --show` opens the figures, each with - and + buttons over the run's iterations.
 
 An example is a module in this folder that defines `problem`, `experiment`,
-`methods`, `settings` (of the BO methods, for the plots) and the defaults `seed`,
-`n_runs`, `n_initial` and `n_iterations`. `run` pickles each method's runs to
-`<results root>/<example>/<UTC time>/<method>.pkl`; `plot` reads them back and saves
-the figures next to them.
+`methods`, `settings` (of the BO methods, for the plots), the default
+`study_settings` and, for a test case, the `oracle` (for the oracle optimum). `run` runs a study and saves it with `hb.save` to
+`<results root>/<example>/<UTC time>/`; `plot` loads it with `hb.load` and saves the
+figures next to it.
 """
 
 import argparse
 import importlib
-import pickle
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from types import ModuleType
@@ -33,47 +33,28 @@ RESULTS_ROOT = Path(__file__).parent / "results"
 def run(
     example: ModuleType,
     method_names: Sequence[str],
-    n_runs: int,
-    seed: int | None,
-    n_iterations: int,
+    settings: hb.StudySettings,
     results_dir: Path,
 ) -> None:
-    """Runs each method `n_runs` times and pickles its list of runs to
-    `results_dir/<method>.pkl`.
+    """Runs a study of the chosen methods and saves it to `results_dir`.
 
-    One seed for every method, so run i of each method starts from the same initial
-    points. A run that fails with a `HybridBOError` is saved as far as it got.
+    Run i of each method starts from the same initial points. A run that fails with a
+    `HybridBOError` is saved as far as it got. Seed None draws a fresh seed, which
+    the saved settings hold. The oracle optimum is computed from the example's
+    `oracle`, if it defines one.
     """
-    # One seed for every method, so run i of each method starts from the same
-    # initial points
-    results_dir.mkdir(parents=True)
-    entropy = np.random.SeedSequence(seed).entropy
+    study = hb.study(
+        {name: example.methods[name] for name in method_names},
+        example.problem,
+        example.experiment,
+        settings,
+        name=example.__name__,
+        oracle=getattr(example, "oracle", None),
+    )
+    hb.save(study, results_dir)
     for name in method_names:
-        runs = []
-        for rng in np.random.default_rng(entropy).spawn(n_runs):
-            # A failed run still saves the points evaluated before the error
-            initial_points = hb.initial_points(
-                example.problem.system.u, example.n_initial, rng
-            )
-            try:
-                runs.append(
-                    example.methods[name](
-                        example.problem,
-                        example.experiment,
-                        initial_points,
-                        n_iterations,
-                        rng=rng,
-                    )
-                )
-            except hb.HybridBOError as error:
-                print(f"{name}: run failed: {error!r}")
-                if error.run is not None:
-                    runs.append(error.run)
-
-        # One pickle per method: its list of runs
-        with (results_dir / f"{name}.pkl").open("wb") as file:
-            pickle.dump(runs, file)
-        print(f"{name}: saved {len(runs)} of {n_runs} runs to {results_dir}")
+        n_saved = sum(run.method == name for run in study.runs)
+        print(f"{name}: saved {n_saved} of {settings.n_runs} runs to {results_dir}")
 
 
 def plot(
@@ -87,28 +68,28 @@ def plot(
     The figures' root-finding starts draw from a generator seeded with 0, so plotting
     again gives the same figures.
     """
-    runs = {
-        path.stem: pickle.loads(path.read_bytes())
-        for path in sorted(results_dir.glob("*.pkl"))
-    }
+    study = hb.load(results_dir)
+    runs: dict[str, list[hb.Run]] = {}
+    for run in study.runs:
+        runs.setdefault(run.method, []).append(run)
 
     # Convergence: every method on one axes
     figure, ax = plt.subplots(figsize=(8, 4.8), layout="constrained")
     figure.suptitle("convergence")
     for name, method_runs in runs.items():
-        if method_runs:
-            hb.plots.convergence(method_runs, ax=ax, label=name)
+        hb.plots.convergence(method_runs, ax=ax, label=name)
     figure.legend(loc="outside right upper")
     figure.savefig(results_dir / "convergence.png")
 
     # The iterations of one run per method; a figure that can't be drawn is skipped
     for name, method_runs in runs.items():
-        if len(method_runs) <= run_index:
+        selected = [run for run in method_runs if run.index == run_index]
+        if not selected:
             print(f"{name}: no run {run_index} to plot")
             continue
         try:
             figure = hb.plots.iterations(
-                method_runs[run_index],
+                selected[0],
                 example.problem,
                 np.random.default_rng(0),
                 example.settings.get(name),
@@ -168,14 +149,16 @@ def main(argv: Sequence[str] | None = None) -> None:
             / args.example
             / datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
         )
-        run(
-            example,
-            methods,
-            example.n_runs if args.n_runs is None else args.n_runs,
-            example.seed if args.seed is None else args.seed,
-            example.n_iterations if args.n_iterations is None else args.n_iterations,
-            results_dir,
+        given = {
+            "n_runs": args.n_runs,
+            "seed": args.seed,
+            "n_iterations": args.n_iterations,
+        }
+        settings = replace(
+            example.study_settings,
+            **{name: value for name, value in given.items() if value is not None},
         )
+        run(example, methods, settings, results_dir)
     # Plot: the results folder is <results root>/<example>/<UTC time>
     else:
         example = importlib.import_module(args.results_dir.resolve().parent.name)
