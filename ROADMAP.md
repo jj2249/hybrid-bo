@@ -86,6 +86,11 @@ its own regression baseline on the new API. Scope is in the issues and DESIGN.md
 - [ ] Skill: specify an example in markdown (equations, parameters, assumptions)
 - [ ] #42: port flash_unit (its custom evaluation becomes a custom experiment)
 - [ ] A short example in the style of DESIGN.md's target example, linked from the README
+- [ ] #52: slim `hb.*` namespace and a Getting started docs page
+- [ ] #53: `Study`, `StudySettings`, `hb.study`, JSON `hb.save`/`hb.load` (ADR 0004)
+- [ ] #54: Polars views of a study
+- [ ] #55: static plots: convergence, regret, iterations (ADR 0005)
+- [ ] #51: `pixi run example` / `pixi run plot` entry point
 
 ## Stage 6: publishing
 - [ ] Merge `refactor/initial` into `main` (`main` stays frozen until then), then
@@ -95,8 +100,8 @@ its own regression baseline on the new API. Scope is in the issues and DESIGN.md
       doesn't exist)
 - [ ] CI (lint, typecheck, tests)
 - [ ] Tidy pixi environments (`examples` and `dev` are currently identical)
-- [ ] Packaging and PyPI (with a `plots` extra for matplotlib, which `hb.plots`
-      imports on first use)
+- [ ] Packaging and PyPI (with an `analysis` extra for Polars and matplotlib, which
+      the library imports on first use)
 
 ## Known issues (fix only once a test covers them)
 Each entry says where it gets fixed. "Goes away" means the new code does not reproduce

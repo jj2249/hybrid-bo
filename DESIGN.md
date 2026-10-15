@@ -51,8 +51,12 @@ The code is hard to change for three reasons:
 - **Known issues are not rebuilt.** Where the new design makes a Known issue impossible
   and the regression baselines do not move, the new code simply does not reproduce it;
   the PR says which Known issue it removes.
-- **Saving.** The library returns values. Examples save them (pickle or npz) and loop
-  over runs.
+- **Saving.** The library never writes files on its own; saving is an explicit call.
+  `hb.save`/`hb.load` write and read a study as JSON
+  ([ADR 0004](docs/adr/0004-studies-are-saved-as-json.md)). Until #53, examples pickle
+  runs.
+- **Iteration plots replay the acquisition problem**
+  ([ADR 0005](docs/adr/0005-iteration-plots-replay-the-acquisition-problem.md)).
 
 ## Target example
 
@@ -510,27 +514,44 @@ subclasses (`ReconstructionWarning`) so they can be filtered.
 
 ### Plots
 
-`hb.plots` (matplotlib imported on first use; the pixi `examples` feature has it, and a
-pip extra comes with packaging): functions of a finished `Run` and the specs from the
-example, so a saved run is plotted without running it again.
+`hb.plots` today (#31; replaced by Analysis below in #55): `convergence(runs, ax=None,
+label=None)`, and `iterations(run, problem, rng, settings=None, experiment=None, i=-1)`,
+the panels of every iteration with - and + buttons, root-finding g per grid point and
+scenario. Figures use the repo's style file, `hb.plots.STYLE`
+(`src/hybrid_bo/hybrid_bo.mplstyle`); put rcParams there, not in plotting code.
 
-- `convergence(runs, ax=None, label=None)`: the incumbents of each run and their
-  median; call it per method on one axes to compare.
-- `iterations(run, problem, rng, settings=None, experiment=None, i=-1) -> Figure`:
-  the panels of every iteration (the state before the i-th trial or design point),
-  computed once, over a grid of one-dimensional `u`, titled with the method, with one
-  legend for the figure and - and + buttons that redraw the previous or next
-  iteration (shown first: `i`). Hybrid BO: the GP of y,
-  f under the scenarios, the acquisition function; standard BO: the GP of f, the
-  acquisition function; the baselines: their points only (they fit no GP; a GP of
-  `u -> f` fitted to their spread-out points collapses to the lengthscale's lower
-  bound, which looks like a bug). `experiment` adds the true curves; it is run at
-  every grid point, so it is meant for oracles.
+### Analysis (#53, #54, #55)
 
-The panels are private for now; make them public when a custom figure needs one.
-Figures use matplotlib's defaults except for the repo's style file, `hb.plots.STYLE`
-(`src/hybrid_bo/hybrid_bo.mplstyle`, the grid so far); put rcParams there, not in
-plotting code.
+The ArviZ-like layer: a `Study` is the data object; Polars views and static plots read
+it. Polars and matplotlib are optional (imported on first use; the
+`hybrid-bo[analysis]` extra once packaged).
+
+- **Data** (#53). `Run` gains `method` (its label in the study), `index` and
+  `acquisitions` (per iteration: the acquisition value at the trial point and, for
+  hybrid BO, the scenario states there), and keeps its full `record`.
+  `StudySettings(n_runs, n_initial, n_iterations, seed=None)`.
+  `Study(runs: tuple[Run, ...], settings, name, record)` is a flat collection.
+- **Running** (#53). `hb.repeat(method, problem, experiment, settings, rng)` runs one
+  method `n_runs` times, keeping failed runs as far as they got.
+  `hb.study(methods, problem, experiment, settings, rng, name=None, optimum=None)`
+  gives run i of every method the same generator, so the same initial points. The oracle
+  optimum is `optimum` when given, else `hb.oracle_optimum(problem, oracle, rng)` for
+  oracle experiments; the study records it and its source.
+- **Saving** (#53). `hb.save(study, path)` writes `study.json` and
+  `runs/<method>/run-000.json`; `hb.load(path)` reads them back exactly.
+- **Views** (#54). `hb.evaluations(study)`: one row per evaluation (method, run,
+  evaluation, iteration, the variables, f, oracle values, incumbent, oracle incumbent,
+  regret, acquisition). `hb.summary(study)`: one row per method.
+  `hb.hyperparameters(study)`: fitted values over the iterations.
+- **Plots** (#55), static, over **evaluations** (initial points are not free):
+  `plots.convergence(study)` (median with an IQR band), `plots.regret(study)` (log
+  scale, as in the paper) and `plots.iteration(run, problem, i, *, experiment=None,
+  gp=True, scenarios=True, acquisition=True)`, one iteration per call. The GP panel
+  comes from the stored surrogate; the acquisition panels replay the method's
+  acquisition problem with u fixed at each grid point (ADR 0005).
+- **Entry point** (#51). `pixi run example <name> [flags]` and `pixi run plot <name>
+  [study]` over `examples/main.py`. Results go to
+  `examples/results/<name>/<study id>/{study.json, runs/, figures/}`.
 
 ## Order of random draws
 
@@ -654,3 +675,7 @@ The tickets, in a workable order:
   point. *Done*: `oracle_incumbents(history)`. Without noise it is the running
   minimum of `f_oracle`, as in the paper's (noise-free) regret figures, so the
   baselines don't change.
+- **#52 Namespace**: `hb.*` holds only the user-facing names; a Getting started docs
+  page.
+- **#53 Study**, then **#54 Polars views**, then **#55 Plots**, then **#51 Entry
+  point**: see Analysis. In sequence; each is blocked by the one before.
