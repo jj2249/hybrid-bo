@@ -2,7 +2,7 @@
 
 Issues and specs for this repo live as GitHub issues on `jj2249/hybrid-bo`
 (the `origin` remote). Use the `gh` CLI for all operations. The `nrw` remote is
-a GitLab mirror; don't file issues there. Because the clone has two remotes,
+a temporary GitLab mirror; don't file issues there. Because the clone has two remotes,
 pass `--repo jj2249/hybrid-bo` to `gh` commands.
 
 ## Conventions
