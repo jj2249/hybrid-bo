@@ -132,8 +132,9 @@ of the BO methods are also kept on their own, for the plots.
 Every run gets its own random generator, which draws everything the run needs: the
 initial points, the scenarios, the multistart starts and any noise. A *study*
 (:py:func:`~hybrid_bo.studies.study`) runs every method ``n_runs`` times from
-generators spawned from one generator, the same ones for every method, so run ``i``
-of each method starts from the same initial points. A method that fails raises a
+generators spawned from one seed, the same ones for every method, so run ``i`` of
+each method starts from the same initial points, and the same seed gives the same
+study. A method that fails raises a
 :py:class:`~hybrid_bo.errors.HybridBOError` carrying the partial run, which the study
 keeps. The examples' CLI, ``examples/main.py``, runs a study of the example's
 methods with its :py:class:`~hybrid_bo.studies.StudySettings` and saves it:

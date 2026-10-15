@@ -90,19 +90,24 @@ system = hb.System(
 )
 problem = hb.Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x - 4))
 
+
 # Test case: an oracle plays the real system
-experiment = hb.oracle_experiment(
-    system, oracle=lambda v: [cas.sin(v.u)], noise_std=0.0
-)
+def oracle(v):
+    """The unknown equation y = h(u), known only to the test case."""
+    return [cas.sin(v.u)]
+
+
+experiment = hb.oracle_experiment(system, oracle, noise_std=0.0)
 
 # Method: how we search
 settings = hb.HybridBOSettings(acquisition=hb.EI(), n_scenarios=25)  # default GP
 
 methods = {"hybrid_bo": functools.partial(hb.hybrid_bo, settings=settings)}
 
-# Study: 10 runs, run i of every method from the same initial points
+# Study: 10 runs, run i of every method from the same initial points; the same seed
+# gives the same study
 study_settings = hb.StudySettings(n_runs=10, n_initial=2, n_iterations=5, seed=0)
-study = hb.study(methods, problem, experiment, study_settings, np.random.default_rng(0))
+study = hb.study(methods, problem, experiment, study_settings, oracle=oracle)
 hb.save(study, "results/illustrative")
 ```
 
@@ -549,20 +554,24 @@ it. Polars and matplotlib are optional (imported on first use; the
   `index` and `acquisitions`, one `AcquisitionSolution` per iteration (the
   acquisition value at the trial point and, for hybrid BO, the scenario states
   there), and keeps its full `record`.
-  `StudySettings(n_runs, n_initial, n_iterations, seed=None)`; the seed is what the
-  caller builds `rng` from. `Study(runs: tuple[Run, ...], settings, name, record)` is
-  a flat collection; its record holds the problem, experiment, methods, generator,
-  oracle optimum (`oracle_optimum`, with `oracle_optimum_source` "stated" or
+  `StudySettings(n_runs, n_initial, n_iterations, seed=None)`; every draw of a study
+  comes from the seed, so the same settings give the same study.
+  `Study(runs: tuple[Run, ...], settings, name, record)` is a flat collection; its
+  settings hold the seed actually used (a fresh one for seed None) and its record
+  holds the problem, experiment, methods, oracle optimum (`oracle_optimum`, with `oracle_optimum_source` "stated" or
   "computed") and versions once.
-- **Running** (#53, done). `hb.repeat(method, problem, experiment, settings, rng)` runs
-  one method `n_runs` times from `rng.spawn(n_runs)`, logging failed runs and keeping
-  them as far as they got. A `Method` is called as `method(problem, experiment,
-  initial_points, n, rng=rng)`.
-  `hb.study(methods, problem, experiment, settings, rng, name=None, optimum=None)`
-  gives run i of every method the same generator, so the same initial points. The oracle
-  optimum is `optimum` when given, else `hb.oracle_optimum(problem, oracle, rng)` for
-  oracle experiments (`oracle_experiment` carries its oracle as `.oracle`), from the
-  generator spawned after the runs'; the study records it and its source.
+- **Running** (#53, done). `hb.repeat(method, problem, experiment, settings)` runs
+  one method `n_runs` times, run i from `SeedSequence(seed).spawn(n_runs)[i]`, logging
+  failed runs and keeping them as far as they got. A `Method` is called as
+  `method(problem, experiment, initial_points, n, rng=rng)`.
+  `hb.study(methods, problem, experiment, settings, name=None, optimum=None,
+  oracle=None)` resolves the seed once and gives run i of every method the same
+  generator, so the same initial points; each method's later draws come from its own
+  copy. Studies take a seed, not an `rng`, so that the settings alone reproduce a
+  study and the caller's generator is never advanced as a side effect. The oracle
+  optimum is `optimum` when given, else `hb.oracle_optimum(problem, oracle, rng)`
+  when `oracle` is given (passed explicitly, as to `oracle_experiment`), from child
+  `n_runs` of the seed; the study records it and its source.
 - **Saving** (#53, done; `saving.py`). `hb.save(study, path)` writes `study.json`
   (settings, name, record, the run files in order) and `runs/<method>/run-000.json`;
   `hb.load(path)` reads them back exactly. `save` refuses an existing folder.

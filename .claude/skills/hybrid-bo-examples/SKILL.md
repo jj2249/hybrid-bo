@@ -17,19 +17,20 @@ An example is one module under `examples/`, importable as a top-level module (py
 and ty put `examples/` on the path). At module level it defines, in this order:
 
 1. **Problem**: `Var`s, `System`, `Problem` (below).
-2. **Experiment**: `oracle_experiment(system, oracle, noise_std)` for a test case, or a
-   custom `(u (N,), rng) -> measured (P,)` function.
+2. **Experiment**: for a test case, a module-level `def oracle(v)` (the study
+   computes the oracle optimum from it) and `oracle_experiment(system, oracle,
+   noise_std)`; otherwise a custom `(u (N,), rng) -> measured (P,)` function.
 3. **Methods**: `settings`, a dict from BO method name to its settings (the plots
    need them), and `methods`, a dict from method name to a callable
    `(problem, experiment, initial_points, n, rng) -> Run`. Bind settings with
    `functools.partial(hb.hybrid_bo, settings=settings["hybrid_bo"])`; the baselines
    need no settings (`n` is their number of design points).
 4. **The study**, the CLI's defaults: `study_settings = hb.StudySettings(n_runs,
-   n_initial, n_iterations, seed=None)` (`None` draws a fresh seed, which the CLI
-   saves in the settings and every run records).
+   n_initial, n_iterations, seed=None)` (`None` draws a fresh seed, which the saved
+   study's settings keep).
 
 The module has no `__main__` block: the CLI (`examples/main.py`) runs it as
-`hb.study(methods, problem, experiment, settings, np.random.default_rng(seed))` and
+`hb.study(methods, problem, experiment, settings, name=..., oracle=example.oracle)` and
 saves the study with `hb.save` to `examples/results/<example>/<UTC time>/`
 (`study.json`, `runs/<method>/run-000.json`; git-ignored). The library never writes
 files on its own; saving is an explicit call. Importing the module
@@ -39,16 +40,18 @@ runs nothing, so `tests/test_regression.py` reuses its `problem`, `experiment` a
 problem, experiment or settings therefore moves the regression baselines: that is a
 *logic* change.
 
-**Randomness.** `hb.study` gives every method the same generators spawned from its
-`rng`, so run `i` of each method starts from the same initial points. Within
-`hb.repeat`, run `i` draws `hb.initial_points(system.u, n_initial, rng)` and runs the
-method, both from the `i`th child of `rng`. Outside a study, do the same by hand:
-`rng.spawn(n_runs)`, and draw nothing else from a run's generator.
+**Randomness.** Every draw of a study comes from `settings.seed`: the same settings
+give the same study. Run `i` of every method gets the same generator, the `i`th
+child of the seed, so run `i` of each method starts from the same initial points.
+Within `hb.repeat`, run `i` draws `hb.initial_points(system.u, n_initial, rng)` and
+runs the method, both from that generator. Outside a study, do the same by hand:
+`np.random.default_rng(seed).spawn(n_runs)`, and draw nothing else from a run's
+generator.
 
 **Failures.** A `HybridBOError` raised during a method carries the partial run as
 `error.run`; `hb.repeat` logs the error and keeps the partial run in the study.
 
-**Oracle optimum.** With an oracle experiment, `hb.study` computes the oracle optimum
+**Oracle optimum.** Given `oracle=`, `hb.study` computes the oracle optimum
 (`hb.oracle_optimum`) and records it in `study.record`. If the test case knows it,
 pass `optimum=` instead; it is recorded as stated.
 

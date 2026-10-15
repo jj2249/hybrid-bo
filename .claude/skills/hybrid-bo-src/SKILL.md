@@ -60,7 +60,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - `evaluation.py`: an `Experiment` is `(u (N,), rng) -> measured (P,)`, or an
   `OracleMeasurement` (measured plus oracle `x`, `y`) in test cases.
   `oracle_experiment(system, oracle, noise_std, ...)` traces the oracle like `g`
-  (`_trace_oracle`) and carries it as `experiment.oracle`, which `study` reads.
+  (`_trace_oracle`).
   `oracle_optimum(problem, oracle, rng)` solves min f s.t. g = 0, y = oracle by
   `multistart` from `lhs` starts over the start bounds of (u, x, y).
   `evaluate(problem, experiment, u, rng)` runs the experiment per row, then always
@@ -85,13 +85,14 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   its docstring, else its name (`oracle_experiment` sets the docstring).
 - `studies.py`: `StudySettings(n_runs, n_initial, n_iterations, seed)`, `Study(runs,
   settings, name, record)`, `Method` (called as `method(problem, experiment,
-  initial_points, n, rng=rng)`), `repeat` (run i from `rng.spawn(n_runs)[i]`,
-  initial points then the method; catches `HybridBOError`, logs it and keeps
-  `error.run`) and `study` (each method's `repeat` from `_copy(rng)`, so all spawn
-  the same children; relabels runs with their key; then spawns `n_runs` from `rng`
-  and, for an oracle experiment without a stated `optimum`, computes the oracle
-  optimum from the next child; records it as `oracle_optimum` and
-  `oracle_optimum_source`).
+  initial_points, n, rng=rng)`), `repeat` (run i from
+  `default_rng(SeedSequence(seed).spawn(n_runs)[i])`, initial points then the method;
+  catches `HybridBOError`, logs it and keeps `error.run`) and `study` (resolves a
+  None seed to fresh entropy kept in its settings, then each method's `repeat` from
+  that seed; relabels runs with their key; without a stated `optimum` but with an
+  `oracle`, computes the oracle optimum from child `n_runs` of the seed; records it
+  as `oracle_optimum` and `oracle_optimum_source`). Studies take a seed, not an
+  `rng`: the settings alone reproduce a study.
 - `saving.py`: `save(study, path)` / `load(path)` (ADR 0004): `study.json` lists the
   run files `runs/<method>/run-<index:03d>.json`. `_encode`/`_decode` convert any
   dataclass by its type hints; arrays are nested lists of floats (an empty one is

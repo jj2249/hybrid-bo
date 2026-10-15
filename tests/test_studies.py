@@ -9,7 +9,6 @@ import dataclasses
 import functools
 import json
 
-import casadi as cas
 import illustrative_example as ex
 import numpy as np
 import pytest
@@ -71,8 +70,8 @@ def illustrative_study() -> hb.Study:
         ex.problem,
         ex.experiment,
         SETTINGS,
-        np.random.default_rng(SETTINGS.seed),
         name="illustrative_example",
+        oracle=ex.oracle,
     )
 
 
@@ -82,8 +81,9 @@ def illustrative_study() -> hb.Study:
 def test_study_gives_the_runs_of_each_method_from_spawned_generators(
     illustrative_study,
 ):
-    """Run i of every method is the run the method gives with the ith child of the
-    seed's generator, initial points drawn from it, as `examples/main.py` ran them."""
+    """Run i of every method is the run the method gives with the ith generator
+    spawned from the seed, initial points drawn from it, as `examples/main.py` ran
+    them before studies."""
     for name, method in ex.methods.items():
         runs = [run for run in illustrative_study.runs if run.method == name]
         assert [run.index for run in runs] == [0, 1]
@@ -113,27 +113,24 @@ def test_run_i_of_every_method_starts_from_the_same_initial_points(
 def test_study_records_the_problem_methods_and_computed_oracle_optimum(
     illustrative_study,
 ):
-    """The study's record holds the problem, each method with its settings, the seed
-    and the oracle optimum, computed from the oracle since none was stated."""
+    """The study's record holds the problem, each method with its settings and the
+    oracle optimum, computed from the oracle since none was stated."""
     record = illustrative_study.record
     run_record = illustrative_study.runs[0].record
     for key in ("u", "x", "y", "h_inputs", "measured", "g", "f", "experiment"):
         assert record[key] == run_record[key]
     assert "hybrid_bo: hybrid_bo(" in record["methods"]
     assert "uniform_sampling: uniform_sampling(n_points=1)" in record["methods"]
-    assert record["seed"] == "0"
     assert record["oracle_optimum_source"] == "computed"
-    expected = hb.oracle_optimum(
-        ex.problem, lambda v: [cas.sin(v.u)], np.random.default_rng(0)
-    )
+    expected = hb.oracle_optimum(ex.problem, ex.oracle, np.random.default_rng(0))
     assert float(record["oracle_optimum"]) == pytest.approx(expected, abs=1e-8)
     assert illustrative_study.name == "illustrative_example"
     assert illustrative_study.settings == SETTINGS
 
 
 def test_stated_oracle_optimum_is_recorded_without_solving(illustrative_problem):
-    """An optimum given to `study` is recorded as stated; without an oracle and
-    without an optimum there is none."""
+    """An optimum given to `study` is recorded as stated, even with an oracle;
+    without an oracle and without an optimum there is none."""
     # A cheap method: one uniform point
     methods = {"uniform": hb.uniform_sampling}
     settings = hb.StudySettings(n_runs=1, n_initial=1, n_iterations=1)
@@ -143,17 +140,11 @@ def test_stated_oracle_optimum_is_recorded_without_solving(illustrative_problem)
         illustrative_problem,
         ex.experiment,
         settings,
-        np.random.default_rng(0),
         optimum=-1.5,
+        oracle=ex.oracle,
     )
 
-    def experiment(u, rng):
-        """y = sin(u), measured exactly, without an oracle."""
-        return np.sin(u)
-
-    without_oracle = hb.study(
-        methods, illustrative_problem, experiment, settings, np.random.default_rng(0)
-    )
+    without_oracle = hb.study(methods, illustrative_problem, ex.experiment, settings)
 
     assert stated.record["oracle_optimum"] == "-1.5"
     assert stated.record["oracle_optimum_source"] == "stated"
@@ -175,8 +166,6 @@ def test_two_configurations_of_one_method_keep_their_labels(illustrative_problem
         illustrative_problem,
         ex.experiment,
         settings,
-        np.random.default_rng(0),
-        optimum=0.0,
     )
 
     assert [run.method for run in study.runs] == ["ei", "lcb"]
@@ -205,7 +194,6 @@ def test_repeat_keeps_a_failed_run_as_far_as_it_got(illustrative_problem, caplog
         illustrative_problem,
         experiment,
         settings,
-        np.random.default_rng(0),
     )
 
     # Every run failed at its second initial point, after one evaluated point
@@ -213,6 +201,22 @@ def test_repeat_keeps_a_failed_run_as_far_as_it_got(illustrative_problem, caplog
     assert [len(run.history.u) for run in runs] == [1, 1, 1]
     assert all(run.method == "uniform_sampling" for run in runs)
     assert caplog.text.count("RootFindingError") == 3
+
+
+def test_the_same_seed_gives_the_same_study(illustrative_problem):
+    """A study is reproducible from its settings: seed None draws a seed, which the
+    study's settings keep, and running again with them gives the same runs."""
+    methods = {"uniform": hb.uniform_sampling}
+    settings = hb.StudySettings(n_runs=2, n_initial=1, n_iterations=1)
+
+    first = hb.study(methods, illustrative_problem, ex.experiment, settings)
+    again = hb.study(methods, illustrative_problem, ex.experiment, first.settings)
+
+    assert first.settings.seed is not None
+    assert again.settings == first.settings
+    assert_same(
+        [run.history for run in again.runs], [run.history for run in first.runs]
+    )
 
 
 # The oracle optimum

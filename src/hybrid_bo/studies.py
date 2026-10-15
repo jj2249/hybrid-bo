@@ -1,22 +1,23 @@
 """Studies: runs of one or more methods on one problem, where run i of every method
 starts from the same initial points.
 
-`repeat` runs one method `n_runs` times from generators spawned from one generator;
-`study` runs every method from the same spawned generators and records the problem,
-the methods and the oracle optimum once. Save and load a study with `hb.save` and
+`repeat` runs one method `n_runs` times from generators spawned from one seed; `study`
+runs every method from the same seed and records the problem, the methods and the
+oracle optimum once. Save and load a study with `hb.save` and
 `hb.load`.
 """
 
 import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
+from typing import Any
 
 import numpy as np
 
 from hybrid_bo.errors import HybridBOError
 from hybrid_bo.evaluation import Experiment, oracle_optimum
 from hybrid_bo.problem import Problem
-from hybrid_bo.run import Run, _generator_record, _problem_record, _versions_record
+from hybrid_bo.run import Run, _problem_record, _versions_record
 from hybrid_bo.sampling import initial_points
 
 _logger = logging.getLogger(__name__)
@@ -31,9 +32,9 @@ Method = Callable[..., Run]
 class StudySettings:
     """How many runs of each method, with how many initial points and iterations.
 
-    `seed` is what the caller builds the study's generator from
-    (`np.random.default_rng(seed)`); None draws a fresh seed. The study and every
-    run record the seed they used.
+    `seed` is where every random draw of the study comes from: the same seed gives
+    the same runs. None draws a fresh seed, which `study` keeps in its settings and
+    every run records.
     """
 
     n_runs: int
@@ -49,8 +50,8 @@ class Study:
     (`run.index`), and run i of every method starts from the same initial points.
 
     `record` holds, as text, what the runs share: the problem, the experiment, each
-    method with its settings, the study's generator, the oracle optimum (if any)
-    with whether it was stated or computed, and the versions.
+    method with its settings, the oracle optimum (if any) with whether it was stated
+    or computed, and the versions. The seed is in `settings`.
     """
 
     runs: tuple[Run, ...]
@@ -59,44 +60,28 @@ class Study:
     record: dict[str, str]
 
 
-def _copy(rng: np.random.Generator) -> np.random.Generator:
-    """A new generator whose seed sequence is in the state of `rng`'s, so it spawns
-    the same children `rng` would spawn next.
-
-    Raises `TypeError` unless `rng` was seeded through a `SeedSequence`, as
-    `np.random.default_rng` seeds it.
-    """
-    seed_sequence = rng.bit_generator.seed_seq
-    if not isinstance(seed_sequence, np.random.SeedSequence):
-        msg = f"A study needs a generator seeded through a SeedSequence, got {rng!r}"
-        raise TypeError(msg)
-    copy = np.random.SeedSequence(
-        seed_sequence.entropy,
-        spawn_key=seed_sequence.spawn_key,
-        n_children_spawned=seed_sequence.n_children_spawned,
-    )
-    return np.random.Generator(type(rng.bit_generator)(copy))
-
-
 def repeat(
     method: Method,
     problem: Problem,
     experiment: Experiment,
     settings: StudySettings,
-    rng: np.random.Generator,
 ) -> tuple[Run, ...]:
-    """Runs `method` `settings.n_runs` times, run i with the ith generator spawned
-    from `rng` and initial points drawn from it, and returns the runs with their
-    indices.
+    """Runs `method` `settings.n_runs` times and returns the runs with their indices.
 
-    A run that raises a `HybridBOError` is logged as a warning and kept as far as it
-    got (`error.run`); the next run goes on.
+    Run i draws its initial points and runs the method with the ith generator spawned
+    from `settings.seed` (`SeedSequence(seed).spawn(n_runs)[i]`), so the same seed
+    gives the same runs, and run i of any method starts from the same initial points.
+    Seed None draws a fresh seed, which every run records. A run that raises a
+    `HybridBOError` is logged as a warning and kept as far as it got (`error.run`);
+    the next run goes on.
     """
     runs = []
-    for index, run_rng in enumerate(rng.spawn(settings.n_runs)):
-        u = initial_points(problem.system.u, settings.n_initial, run_rng)
+    children = np.random.SeedSequence(settings.seed).spawn(settings.n_runs)
+    for index, child in enumerate(children):
+        rng = np.random.default_rng(child)
+        u = initial_points(problem.system.u, settings.n_initial, rng)
         try:
-            run = method(problem, experiment, u, settings.n_iterations, rng=run_rng)
+            run = method(problem, experiment, u, settings.n_iterations, rng=rng)
         except HybridBOError as error:
             _logger.warning("Run %d failed: %r", index, error)
             if error.run is None:
@@ -111,32 +96,34 @@ def study(
     problem: Problem,
     experiment: Experiment,
     settings: StudySettings,
-    rng: np.random.Generator,
     name: str | None = None,
     optimum: float | None = None,
+    oracle: Callable[[Any], Any] | None = None,
 ) -> Study:
-    """Runs every method with `repeat`, each from the same generators spawned from
-    `rng`, so run i of every method starts from the same initial points. Each run is
-    labeled with its key in `methods`, so two configurations of one method can share
-    a study.
+    """Runs every method with `repeat` from the same seed, so run i of every method
+    starts from the same initial points, and the same seed gives the same study.
+    Each run is labeled with its key in `methods`, so two configurations of one
+    method can share a study.
 
-    The oracle optimum is `optimum` when given; otherwise, when the experiment is an
-    oracle simulation, it is computed with `oracle_optimum` from `rng`, after the
-    runs' generators have been spawned from it. The study records it and whether it was stated or computed.
-    Raises `TypeError` unless `rng` was seeded through a `SeedSequence`.
+    Seed None draws a fresh seed first, and the study's settings hold it, so the
+    saved study can be run again exactly. The oracle optimum is `optimum` when given;
+    otherwise, when `oracle` (written as for `oracle_experiment`) is given, it is
+    computed with `oracle_optimum` from the generator spawned after the runs' (child
+    `n_runs` of the seed). The study records it and whether it was stated or
+    computed.
     """
-    # The record of the study's generator, before anything is spawned from it
-    record = _problem_record(problem, experiment) | _generator_record(rng)
+    # One seed for every method; a fresh one is kept in the settings
+    seed = np.random.SeedSequence(settings.seed).entropy
+    settings = replace(settings, seed=seed)
 
-    # Every method from a copy of rng, so each spawns the same generators; then
-    # spawn them from rng itself, so it moves on as one `repeat` moves it
+    # Every method's runs, labeled with their key
     runs: list[Run] = []
     for label, method in methods.items():
-        method_runs = repeat(method, problem, experiment, settings, _copy(rng))
+        method_runs = repeat(method, problem, experiment, settings)
         runs += [replace(run, method=label) for run in method_runs]
-    rng.spawn(settings.n_runs)
 
     # Each method with its settings, from the record of one of its runs
+    record = _problem_record(problem, experiment)
     records = {run.method: run.record for run in runs}
     method_lines = []
     for label in methods:
@@ -148,12 +135,13 @@ def study(
     record["methods"] = "\n".join(method_lines)
 
     # The oracle optimum, stated or computed from the oracle
-    oracle = getattr(experiment, "oracle", None)
     if optimum is not None:
         record["oracle_optimum"] = repr(float(optimum))
         record["oracle_optimum_source"] = "stated"
     elif oracle is not None:
-        record["oracle_optimum"] = repr(oracle_optimum(problem, oracle, rng))
+        child = np.random.SeedSequence(seed, spawn_key=(settings.n_runs,))
+        value = oracle_optimum(problem, oracle, np.random.default_rng(child))
+        record["oracle_optimum"] = repr(value)
         record["oracle_optimum_source"] = "computed"
 
     return Study(tuple(runs), settings, name, record | _versions_record())

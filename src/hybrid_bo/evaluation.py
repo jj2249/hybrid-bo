@@ -59,8 +59,7 @@ class OracleMeasurement:
 
 # Runs the system at u (N,) and returns the measured variables (P,) in the order of
 # `system.measured`. A real system (the plant or an in silico simulation of it) returns
-# an array; the oracle simulation returns an OracleMeasurement, and carries its oracle
-# as `.oracle`, from which a study computes the oracle optimum.
+# an array; the oracle simulation returns an OracleMeasurement.
 Experiment = Callable[[np.ndarray, np.random.Generator], np.ndarray | OracleMeasurement]
 
 
@@ -128,10 +127,8 @@ def oracle_experiment(
     `noise_std`. The noise is drawn even when `noise_std` is 0, so the draws don't
     depend on it.
 
-    The experiment carries `oracle` as its attribute `.oracle`, so a study can
-    compute the oracle optimum. Raises `ValueError` if the oracle doesn't give one
-    value per unknown state. The experiment raises `RootFindingError` if no start
-    gives a root.
+    Raises `ValueError` if the oracle doesn't give one value per unknown state. The
+    experiment raises `RootFindingError` if no start gives a root.
     """
     oracle_function = _trace_oracle(system, oracle)
 
@@ -161,9 +158,6 @@ def oracle_experiment(
         f"oracle simulation: y = {oracle_text}, noise_std={noise_std}, "
         f"n_starts={n_starts}, tol={tol}"
     )
-    # A study reads the oracle back to compute the oracle optimum. Set through the
-    # function's attribute dict, since a function type declares no `oracle`
-    vars(experiment)["oracle"] = oracle
     return experiment
 
 

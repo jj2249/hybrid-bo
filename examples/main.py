@@ -8,8 +8,8 @@
 `plot --show` opens the figures, each with - and + buttons over the run's iterations.
 
 An example is a module in this folder that defines `problem`, `experiment`,
-`methods`, `settings` (of the BO methods, for the plots) and the default
-`study_settings`. `run` runs a study and saves it with `hb.save` to
+`methods`, `settings` (of the BO methods, for the plots), the default
+`study_settings` and, for a test case, the `oracle` (for the oracle optimum). `run` runs a study and saves it with `hb.save` to
 `<results root>/<example>/<UTC time>/`; `plot` loads it with `hb.load` and saves the
 figures next to it.
 """
@@ -40,17 +40,16 @@ def run(
 
     Run i of each method starts from the same initial points. A run that fails with a
     `HybridBOError` is saved as far as it got. Seed None draws a fresh seed, which
-    the saved settings hold.
+    the saved settings hold. The oracle optimum is computed from the example's
+    `oracle`, if it defines one.
     """
-    seed = np.random.SeedSequence(settings.seed).entropy
-    settings = replace(settings, seed=seed)
     study = hb.study(
         {name: example.methods[name] for name in method_names},
         example.problem,
         example.experiment,
         settings,
-        np.random.default_rng(settings.seed),
         name=example.__name__,
+        oracle=getattr(example, "oracle", None),
     )
     hb.save(study, results_dir)
     for name in method_names:
