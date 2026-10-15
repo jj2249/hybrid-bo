@@ -22,11 +22,8 @@ docs/_templates/
 *.pkl
 
 
-# Example results (written by examples/main.py)
-examples/*/hybrid_bo/
-examples/*/standard_bo/
-examples/*/latin_hypercube_sampling/
-examples/*/uniform_sampling/
+# Example results (written by the example scripts)
+examples/results/
 
 # Personal Claude Code settings (shared skills in .claude/skills are committed)
 .claude/settings.local.json

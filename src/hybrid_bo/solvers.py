@@ -54,8 +54,8 @@ def multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
     A start that fails is expected, so it is logged (at debug level, without a
     traceback) and skipped. Raises `NoSolutionError` if every start fails.
     """
-    # The problem, with the bounds as constraints (as the legacy optimizer had them, so
-    # IPOPT takes the same steps)
+    # The problem, with the bounds as constraints (as the pre-refactor optimizer had
+    # them, so IPOPT takes the steps the regression baselines record)
     opti = cas.Opti()
     w = opti.variable(len(nlp.lower))
     opti.minimize(nlp.f(w))

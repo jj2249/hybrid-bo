@@ -34,3 +34,21 @@ def test_shape_and_bounds(sample):
     assert points.shape == (50, 3)
     assert (points >= LOWER).all()
     assert (points <= UPPER).all()
+
+
+def test_lhs_spawns_instead_of_consuming_the_stream():
+    """lhs takes the generator's next spawned child and leaves its stream untouched,
+    the scipy behavior the draw order relies on (DESIGN.md)."""
+    rng = np.random.default_rng(0)
+    lhs(np.zeros(1), np.ones(1), 3, rng)
+    second = lhs(np.zeros(1), np.ones(1), 3, rng)
+
+    # Each call takes the next SeedSequence child, sharing the counter with spawn
+    after_one_spawn = np.random.default_rng(0)
+    after_one_spawn.spawn(1)
+    np.testing.assert_array_equal(
+        second, lhs(np.zeros(1), np.ones(1), 3, after_one_spawn)
+    )
+
+    # ... and leaves the stream untouched
+    assert rng.random() == np.random.default_rng(0).random()

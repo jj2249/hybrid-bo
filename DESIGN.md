@@ -352,8 +352,8 @@ gp = hb.GP(
   negative log marginal likelihood, draws starts with `lhs` over the (log-transformed)
   hyperparameter bounds and calls `multistart`. If every start fails it keeps the
   initial values and logs a warning. With the same data and generator its
-  hyperparameters match the legacy GP bit for bit, and its predictions to rounding
-  (`tests/test_gp.py`).
+  hyperparameters matched the legacy GP bit for bit, and its predictions to rounding
+  (checked until #30; the regression baselines still pin the fit).
 - `predict` traces the posterior once as a `cas.Function` of X; a numpy X gives arrays
   `(n,)`, a symbolic X (SX or MX) gives `(n, 1)` columns. The std is the square root of
   the posterior variance, so callers need no covariance.
@@ -536,7 +536,7 @@ against other `lhs` calls and `spawn`s, and the stream draws (`normal`, `uniform
 order above holds within each sequence; the order *between* the two sequences (e.g.
 noise before or after the oracle's fsolve starts) has no effect on any value. New code must keep using
 `LatinHypercube(..., rng=rng)` for `lhs`, and must not add a `spawn` or an `lhs` call
-in the middle of a run, or the baselines move. `tests/test_problem.py` pins this
+in the middle of a run, or the baselines move. `tests/test_sampling.py` pins this
 scipy behavior.
 
 ## Removed
@@ -548,6 +548,7 @@ scipy behavior.
 | `use_jacobian` (fsolve without the CasADi Jacobian) | every equation is CasADi-traceable ([ADR 0002](docs/adr/0002-equations-are-casadi-callables.md)) | tag `pre-refactor` |
 | `Problem.solve` (true optimum with `h` known) | called nowhere; would be a function on `multistart` | tag `pre-refactor` |
 | `Config` and `config.yaml` | functions take what they use; problems are Python | tag `pre-refactor` |
+| `hybrid_bo.legacy`: the `do_*` routines, `ResultsBO` pickles, the old `Problem`, GP and optimizers | replaced by the new API (#30); runs are pickled `Run`s | tag `pre-refactor` |
 | Kernel and mean classes, `Parameterized`, `JoinedParameters` | hyperparameters are named specs; kernels are functions | tag `pre-refactor` |
 | Per-iteration plot callbacks | plots are functions of a finished run ([ADR 0003](docs/adr/0003-runs-are-pure-data.md)) | tag `pre-refactor` |
 | Strategy classes (planned, never built) | methods are settings plus functions | earlier DESIGN.md in git history |
@@ -575,9 +576,9 @@ Every PR keeps `tests/data/regression/` unchanged unless it is marked *logic*. E
 updates `hybrid-bo-src`, `hybrid-bo-examples`, the README and this file where its change
 affects them.
 
-The old code is moved to `hybrid_bo/legacy/` and the new modules are built at their
-final paths. New code never depends on old code (old code may call new helpers such
-as `lhs`), so no shims are needed and deleting `legacy/` touches nothing new.
+The old code was moved to `hybrid_bo/legacy/` and the new modules built at their
+final paths. New code never depended on old code (old code could call new helpers such
+as `lhs`), so no shims were needed and deleting `legacy/` (#30) touched nothing new.
 
 PRs 0-4 were planned layer by layer. After PR 4, the work is GitHub issues sliced
 by method: each method ticket ports its own regression test to the new API and
@@ -597,9 +598,9 @@ behavior, so they are "new code" PRs, not *logic*.
    noise per evaluation (`noise_std` instead of a pre-drawn array), root-finding
    always runs, `measurement_noise.pkl` dropped (it is `x - x_no_noise` on the
    measured states). Baselines regenerated.
-3. **Legacy**. *Done.* The old code is in `hybrid_bo/legacy/`, imported as
-   `hybrid_bo.legacy`; the top-level `hybrid_bo` exports only the new API. Legacy may
-   import new code, never the reverse. Result pickles saved before this PR
+3. **Legacy**. *Done.* The old code moved to `hybrid_bo/legacy/` (deleted in #30),
+   imported as `hybrid_bo.legacy`; the top-level `hybrid_bo` exported only the new
+   API. Legacy could import new code, never the reverse. Result pickles saved before this PR
    (`hybrid_bo.results.ResultsBO`) need the old path to unpickle.
 4. **Problem** (#23): `Var`, `System`, `Problem`, `initial_points`. *Done.*
 
@@ -612,10 +613,10 @@ The tickets, in a workable order:
   against the legacy evaluation bit for bit.
 - **#26 Baselines**: Latin hypercube and uniform as methods returning a `Run` and its
   record; their regression tests on the new API. *Done*; the regression test maps the
-  `Run` to the legacy `ResultsBO` keys until #30.
+  `Run` to the `ResultsBO` keys the baselines were recorded with.
 - **#27 Solvers and GP**: `NLP`, `Ipopt`, `multistart`; `Hyper`, kernel functions, `GP`,
   `fit_gp`, `predict`, scalers, `default_gp`; port the kernel, GP and scaler tests.
-  *Done*; `tests/test_gp.py` checks the fit against the legacy GP.
+  *Done*; `tests/test_gp.py` checked the fit against the legacy GP until #30.
 - **#28 Standard BO**: `optimization_loop`, `EI`/`LCB`, `standard_bo`; its regression
   test on the new API. *Done*; it reproduces the legacy baseline.
 - **#29 Hybrid BO**: `Scenarios`, the hybrid acquisition problem, `hybrid_bo`; its
@@ -623,7 +624,10 @@ The tickets, in a workable order:
   regression test now runs on the new API.
 - **#30 Switch**: the illustrative example as one script on the new API; delete
   `legacy/`, `Config` and YAML; README and both skills describe the new API.
-  Blocked by #26, #28, #29.
+  *Done*; `examples/illustrative_example.py` defines the problem, experiment and
+  `methods`, runs and saves every method when run directly, and is what the
+  regression test runs. Tests that compared with the legacy code check closed forms
+  instead. The plot callbacks go with it; plots return in #31.
 - **#31 Plots and CLI**: `hb.plots`; a CLI for the examples. Blocked by #30.
 - **#32 Benchmark metric** (*logic*): the oracle objective at the believed best
   point. Blocked by #30.

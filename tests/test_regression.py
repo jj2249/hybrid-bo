@@ -1,51 +1,31 @@
-"""Regression tests: each method on the illustrative example vs stored results.
+"""Regression tests: each method of the illustrative example vs stored results.
 
 These lock in the *current* behavior. If a PR intentionally changes behavior,
 regenerate with `pixi run -e dev test --update-baselines` and review the JSON diff.
 
-Every method runs on the new API; its `Run` is mapped to the legacy `ResultsBO` keys,
-so the baselines keep the format they were recorded in until #30.
+The baselines were recorded by the pre-refactor code, so each `Run` is mapped to the
+keys of its result files (`ResultsBO`) to compare.
 """
 
-import functools
 import json
 from pathlib import Path
 
-import casadi as cas
+import illustrative_example as ex
 import numpy as np
 import pytest
 
-from hybrid_bo import (
-    HybridBOSettings,
-    Run,
-    StandardBOSettings,
-    hybrid_bo,
-    incumbents,
-    initial_points,
-    latin_hypercube_sampling,
-    oracle_experiment,
-    standard_bo,
-    uniform_sampling,
-)
+from hybrid_bo import Run, incumbents, initial_points
 
 BASELINE_DIR = Path(__file__).parent / "data" / "regression"
 RTOL, ATOL = 1e-6, 1e-8
-METHODS = {
-    # The legacy settings of the illustrative example are the defaults (EI, 25
-    # scenarios, 10 starts for the acquisition problem and the GP fit, the default
-    # GP), except that the unknown states are substituted, not variables
-    "hybrid_bo": functools.partial(
-        hybrid_bo, settings=HybridBOSettings(unknown_states_as_variables=False)
-    ),
-    "standard_bo": functools.partial(standard_bo, settings=StandardBOSettings()),
-    "latin_hypercube_sampling": latin_hypercube_sampling,
-    "uniform_sampling": uniform_sampling,
-}
+
+# Small, seeded runs so the test is fast and deterministic
+SEED, N_ITERATIONS = 0, 2
 
 
-def as_legacy_results(run: Run) -> dict[str, np.ndarray]:
-    """The run under the `ResultsBO` keys: legacy stores y inside x, f as a column,
-    and splits every array into the initial points and the rest."""
+def as_baseline_columns(run: Run) -> dict[str, np.ndarray]:
+    """The run under the `ResultsBO` keys: they store y inside x, f as a column, and
+    split every array into the initial points and the rest."""
     history = run.history
     assert history.x_oracle is not None and history.y_oracle is not None
     assert history.f_oracle is not None
@@ -66,32 +46,22 @@ def as_legacy_results(run: Run) -> dict[str, np.ndarray]:
     }
 
 
-def run_method(method, config, problem):
-    """Runs a method as the legacy routine did and returns its results under the
+def run_method(method: str) -> dict[str, np.ndarray]:
+    """Runs one run of a method as the example does and returns it under the
     `ResultsBO` keys."""
-    # As in examples/main.py: one generator per run, initial points drawn from it
-    rng = np.random.default_rng(config.seed).spawn(1)[0]
-    u = initial_points(problem.system.u, 2, rng)
-    experiment = oracle_experiment(
-        problem.system,
-        oracle=lambda v: [cas.sin(v.u)],
-        noise_std=config.std_measurement_noise,
-    )
-    run = METHODS[method](problem, experiment, u, config.n_iterations_bo, rng=rng)
-    return as_legacy_results(run)
+    # As in the example: one generator per run, initial points drawn from it
+    rng = np.random.default_rng(SEED).spawn(1)[0]
+    u = initial_points(ex.system.u, ex.n_initial, rng)
+    run = ex.methods[method](ex.problem, ex.experiment, u, N_ITERATIONS, rng=rng)
+    return as_baseline_columns(run)
 
 
 # `parametrize` runs the test once per method, each as its own test case. The other
-# arguments are fixtures from `conftest.py`, filled in by pytest
-@pytest.mark.parametrize("method", list(METHODS))
-def test_illustrative_example(
-    method,
-    illustrative_config,
-    illustrative_problem,
-    update_baselines,
-):
+# argument is a fixture from `conftest.py`, filled in by pytest
+@pytest.mark.parametrize("method", list(ex.methods))
+def test_illustrative_example(method, update_baselines):
     """The method reproduces its stored results on the illustrative example."""
-    actual = run_method(method, illustrative_config, illustrative_problem)
+    actual = run_method(method)
 
     baseline_path = BASELINE_DIR / f"illustrative_{method}.json"
     if update_baselines:
