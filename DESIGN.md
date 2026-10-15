@@ -598,11 +598,19 @@ it. Polars and matplotlib are optional (imported on first use; the
   needed only for a GP other than `default_gp`, since the record holds the GP as text,
   not its kernel function. The fields the replay uses (acquisition function, and for
   hybrid BO the solver and `unknown_states_as_variables`) must match the record.
-- **Entry point** (#51, done). `pixi run example <name> [flags]` and `pixi run plot
-  <name> [study]` are pixi tasks (`default-environment = "examples"`, flags passed
-  through) over a thin `examples/main.py`, which imports the example, overrides its
-  `study_settings` with the flags and calls `hb.study` and `hb.save`, or `hb.load`
-  and `hb.plots`. Results go to `results/<name>/<study id>/{study.json, runs/,
+- **Entry point** (#51, done; revised in #65). An example script ends with an
+  explicit call that passes everything it defines: `cli.main(name, problem,
+  experiment, methods, study_settings, optimum=..., true_curves=...)`.
+  `examples/cli.py` parses the flags (run by default, or `plot [STUDY]`), overrides
+  the settings and calls `hb.study` and `hb.save`, or `hb.load` and `hb.plots`.
+  `pixi run example <name> [flags]` is `python -m <name> [flags]` run from
+  `examples/` (a task with no declared args, so flags pass through), and `pixi run
+  plot <name> [study]` a templated task over `python -m <name> plot`. #51 had
+  `examples/main.py` discover the example and read its names with `getattr`; #65
+  dropped that because the example then didn't say what its names were for, and a
+  typo silently changed the study. The cost is that no command lists every example.
+  A relative `--results-root` is relative to where pixi was started (`INIT_CWD`).
+  Results go to `results/<name>/<study id>/{study.json, runs/,
   figures/}` at the repo root; `plot` takes the study saved last by default and
   writes only under `figures/`. The `hybrid-bo-examples` skill has the details. The
   CLI stays in `examples/` for people who clone the repo; it is not part of the

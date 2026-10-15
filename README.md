@@ -130,11 +130,12 @@ print(run.history.f)
 
 [`./examples/illustrative_example.py`](./examples/illustrative_example.py) defines the
 illustrative example of the [publication](https://arxiv.org/abs/2603.11199) and the
-methods to compare. Two pixi tasks over [`./examples/main.py`](./examples/main.py)
-run an example's methods as a study and plot saved studies:
+methods to compare, and ends by passing them all to
+[`./examples/cli.py`](./examples/cli.py), which runs them as a study or plots saved
+studies. Two pixi tasks run the script:
 
 ```bash
-pixi run example illustrative_example --n-runs 10 --seed 0   # --help lists the examples
+pixi run example illustrative_example --n-runs 10 --seed 0   # --help lists the flags
 pixi run plot illustrative_example                           # the newest study, or name one
 ```
 

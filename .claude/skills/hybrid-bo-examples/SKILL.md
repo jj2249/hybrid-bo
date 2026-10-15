@@ -17,25 +17,44 @@ An example is one module under `examples/`, importable as a top-level module (py
 and ty put `examples/` on the path). At module level it defines, in this order:
 
 1. **Problem**: `Var`s, `System`, `Problem` (below).
-2. **Experiment**: for a test case, a module-level `def oracle(v)` (the iteration
-   figures draw the true curves from it), `oracle_experiment(system, oracle,
-   noise_std)` and the stated oracle `optimum`; otherwise a custom
-   `(u (N,), rng) -> measured (P,)` function.
+2. **Experiment**: for a test case, a module-level `def oracle(v)`,
+   `oracle_experiment(system, oracle, noise_std)` and the stated oracle `optimum`;
+   otherwise a custom `(u (N,), rng) -> measured (P,)` function.
 3. **Methods**: `methods`, a dict from method label to a callable
    `(problem, experiment, initial_points, n, rng) -> Run`. Bind settings with
    `functools.partial(hb.hybrid_bo, settings=hb.HybridBOSettings(...))`; the
    baselines need no settings (`n` is their number of design points). The plots read
    a run's settings from its record.
-4. **The study**, the CLI's defaults: `study_settings = hb.StudySettings(n_runs,
-   n_initial, n_iterations, seed=None)` (`None` draws a fresh seed, which the saved
-   study's settings keep).
+4. **The study**, the defaults the flags override: `study_settings =
+   hb.StudySettings(n_runs, n_initial, n_iterations, seed=None)` (`None` draws a
+   fresh seed, which the saved study's settings keep).
+5. **The command line**: a `__main__` block that passes everything above to
+   `cli.main` (`import cli`, from `examples/cli.py`):
 
-The module has no `__main__` block: the CLI (`examples/main.py`) runs it as
-`hb.study(methods, problem, experiment, study_settings, name=..., optimum=...)`
-and saves the study with `hb.save` to `results/<example>/<study id>/`
-(`study.json`, `runs/<method>/run-000.json`; git-ignored). The library never writes
-files on its own; saving is an explicit call. `--help` lists every module in
-`examples/` that defines `methods`. Importing the module runs nothing, so
+   ```python
+   if __name__ == "__main__":
+       cli.main(
+           "illustrative_example",
+           problem,
+           experiment,
+           methods,
+           study_settings,
+           optimum=optimum,
+           true_curves=True,
+       )
+   ```
+
+   The first argument names the study and its results folder; use the module's
+   name. `optimum` is the stated oracle optimum, which only the study sees (regret);
+   the methods never do. `true_curves=True` makes the iteration figures evaluate the
+   experiment over the grid, so set it only for a cheap experiment (an oracle).
+
+Every name the module defines is used in that call: nothing is read from the module
+by name. `cli.main` runs `hb.study(methods, problem, experiment, study_settings,
+name=..., optimum=...)` and saves the study with `hb.save` to
+`results/<example>/<study id>/` (`study.json`, `runs/<method>/run-000.json`;
+git-ignored). The library never writes files on its own; saving is an explicit call.
+Importing the module runs nothing (the call is under `__main__`), so
 `tests/test_regression.py` reuses its `problem`, `experiment`, `methods` and
 `study_settings`, and `tests/conftest.py`'s `illustrative_problem` fixture is its `problem`. Changing the illustrative example's
 problem, experiment or settings therefore moves the regression baselines: that is a
@@ -97,10 +116,16 @@ problem = hb.Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x -
 
     pixi run example illustrative_example [--method hybrid_bo ...] [--n-runs 10] [--seed 0] [--n-iterations 5] [--name lcb-vs-ei] [--plot]
     pixi run plot illustrative_example [STUDY]
-    pixi run example --help   # lists the examples and their methods
+    pixi run example illustrative_example --help   # the flags and the methods
+    pixi run example illustrative_example plot [STUDY] [--results-root DIR]
 
-The pixi tasks run `examples/main.py run` and `plot` in the `examples` environment
-and pass flags through. `example` runs a study from the seed (see Randomness), with
+The pixi tasks run the example script as a module from `examples/`, in the
+`examples` environment: `example` is `python -m <name>` and passes every flag
+through; `plot` is `python -m <name> plot [STUDY]` and takes nothing else, so plot
+with other flags through `example` (last line above). No command lists every
+example, and a typo in the name fails with "No module named ...". A relative
+`--results-root` is relative to where pixi was started (`INIT_CWD`), not
+`examples/`. Running (the default command) runs a study from the seed (see Randomness), with
 the methods given and the example's `study_settings` overridden by the flags given,
 and saves it to `<study id>`: `--name`, else the UTC time to the second at the start,
 with `-2`, `-3`, ... appended if taken when it is saved (`hb.save` creates the
@@ -108,6 +133,6 @@ folder, so parallel runs never share one). `plot` loads the study given, else th
 one whose `study.json` was written last, and, in `hb.plots.STYLE`, saves into its
 `figures/` folder `convergence.png`, `regret.png` (with an oracle optimum) and
 `<method>/run-000/iteration-00.png` for every iteration of every run (with the
-example's experiment for the true curves, if it has an `oracle`). The iteration
+experiment's true curves when the script passes `true_curves=True`). The iteration
 figures need one decision variable and read the settings from the run's record (a
 custom GP needs `settings=`); otherwise `plot` prints why and skips that run's.

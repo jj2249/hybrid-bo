@@ -4,13 +4,16 @@ One decision variable u, one mechanistic state x and one unknown state y. The kn
 equation is x + exp(x) = y; the unknown equation is y = sin(u), which only the oracle
 knows. Run it, then plot the newest study:
 
-    pixi run example illustrative_example
+    pixi run example illustrative_example [--n-runs 3 --plot ...]
     pixi run plot illustrative_example
+
+`pixi run example illustrative_example --help` lists the flags.
 """
 
 import functools
 
 import casadi as cas
+import cli
 
 import hybrid_bo as hb
 
@@ -38,7 +41,8 @@ def oracle(v):
 
 experiment = hb.oracle_experiment(system, oracle, noise_std=0.0)
 
-# The oracle optimum, which regret is measured from, at u = -0.45. Found once with
+# The oracle optimum, at u = -0.45: the study measures regret from it, the methods
+# never see it. Found once with
 # hb.oracle_optimum(problem, oracle, np.random.default_rng(0), n_starts=200), and
 # checked: hybrid BO runs reach it, and none evaluates a point below it
 optimum = -50.4608044704652
@@ -56,6 +60,19 @@ methods = {
     "uniform_sampling": hb.uniform_sampling,
 }
 
-# The study, the CLI's defaults. Seed None draws a fresh seed, which the saved study
-# keeps, so it can be run again exactly
+# The study, which the command line's flags override. Seed None draws a fresh seed,
+# which the saved study keeps, so it can be run again exactly
 study_settings = hb.StudySettings(n_runs=10, n_initial=2, n_iterations=5, seed=None)
+
+# Run or plot from the command line. The oracle experiment is cheap, so the iteration
+# figures draw its true curves
+if __name__ == "__main__":
+    cli.main(
+        "illustrative_example",
+        problem,
+        experiment,
+        methods,
+        study_settings,
+        optimum=optimum,
+        true_curves=True,
+    )
