@@ -41,8 +41,10 @@ code uses CONTEXT.md's terms; use them in PRs, tests and comments too.
 
 ## Module map
 
-Everything lives at the top level of `hybrid_bo`, and `hybrid_bo/__init__.py`
-re-exports the public API.
+Every module lives at the top level of `hybrid_bo`. `hybrid_bo/__init__.py`
+re-exports only what a typical script uses (DESIGN.md, "A slim top level");
+`tests/test_namespace.py` pins that set. Everything else, tests included, is imported
+from its module (`from hybrid_bo.gp import fit_gp`).
 
 - `problem.py`: `Var` (name, bounds, start bounds), `System` (`u`, `x`, `y`, `g`,
   `h_inputs`, `measured`) and `Problem` (`system`, `f`). `g` and `f` are user

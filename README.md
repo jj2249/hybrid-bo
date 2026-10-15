@@ -103,8 +103,9 @@ print(run.history.f)
   returns the measured variables at `u`. `oracle_experiment` simulates one from known
   unknown equations, for test cases.
 - **Settings**: `HybridBOSettings` and `StandardBOSettings` choose the acquisition
-  function (`EI()` or `LCB(std_factor)`), the GP (`default_gp` unless given; see `GP`,
-  `Hyper` and `hybrid_bo.kernels`), the number of scenarios and the solver starts.
+  function (`EI()` or `LCB(std_factor)`), the GP (`hb.gp.default_gp` unless given; see
+  `hb.gp.GP`, `hb.gp.Hyper` and `hb.kernels`), the number of scenarios and the solver
+  starts.
 - **Plots**: `hb.plots` draws a finished `Run`, so saved runs are plotted without
   running them again (see Examples).
 - **Errors** are `HybridBOError` subclasses; one raised during a method carries the
@@ -139,7 +140,8 @@ repo's matplotlib style, `hb.plots.STYLE` (`src/hybrid_bo/hybrid_bo.mplstyle`).
 
 ## Documentation
 
-The docs hold the API reference and a walkthrough of the illustrative example
+The docs hold the API reference, a Getting started page listing the entry points
+(`docs/getting_started.rst`) and a walkthrough of the illustrative example
 (`docs/walkthrough.rst`). The walkthrough explains the problem class, why hybrid BO
 helps and how to state a problem. Build the docs with
 

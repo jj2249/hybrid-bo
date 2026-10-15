@@ -16,20 +16,17 @@ import scipy
 from hybrid_bo import (
     EI,
     LCB,
-    FittedGP,
     NoSolutionError,
     RootFindingError,
     Run,
     StandardBOSettings,
-    default_gp,
-    fit_gp,
     initial_points,
-    optimization_loop,
     oracle_experiment,
-    predict,
-    standard_acquisition,
     standard_bo,
 )
+from hybrid_bo.acquisition import standard_acquisition
+from hybrid_bo.bo import optimization_loop
+from hybrid_bo.gp import FittedGP, default_gp, fit_gp, predict
 from hybrid_bo.run import run_record
 
 
