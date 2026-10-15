@@ -16,6 +16,7 @@ def test_run_then_plot_the_illustrative_example(tmp_path):
 
     `tmp_path` is a pytest fixture: a fresh temporary folder for this test.
     """
+    # Run two methods, two runs each, into a temporary results root
     main.main(
         [
             "run",
@@ -48,6 +49,7 @@ def test_run_then_plot_the_illustrative_example(tmp_path):
         "uniform_sampling.pkl",
     ]
 
+    # Plot from the pickles: the convergence figure and one figure per method
     main.main(["plot", str(results_dir)])
 
     assert {"convergence.png", "standard_bo.png", "uniform_sampling.png"} <= {

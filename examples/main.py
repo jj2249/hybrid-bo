@@ -42,11 +42,14 @@ def run(
     One seed for every method, so run i of each method starts from the same initial
     points. A run that fails with a `HybridBOError` is saved as far as it got.
     """
+    # One seed for every method, so run i of each method starts from the same
+    # initial points
     results_dir.mkdir(parents=True)
     entropy = np.random.SeedSequence(seed).entropy
     for name in method_names:
         runs = []
         for rng in np.random.default_rng(entropy).spawn(n_runs):
+            # A failed run still saves the points evaluated before the error
             initial_points = hb.initial_points(
                 example.problem.system.u, example.n_initial, rng
             )
@@ -65,6 +68,7 @@ def run(
                 if error.run is not None:
                     runs.append(error.run)
 
+        # One pickle per method: its list of runs
         with (results_dir / f"{name}.pkl").open("wb") as file:
             pickle.dump(runs, file)
         print(f"{name}: saved {len(runs)} of {n_runs} runs to {results_dir}")
@@ -93,7 +97,7 @@ def plot(
     ax.legend()
     figure.savefig(results_dir / "convergence.png")
 
-    # One iteration of one run per method
+    # One iteration of one run per method; a figure that can't be drawn is skipped
     for name, method_runs in runs.items():
         if len(method_runs) <= run_index:
             print(f"{name}: no run {run_index} to plot")
@@ -107,7 +111,7 @@ def plot(
                 example.settings.get(name),
                 example.experiment,
             )
-        except (ValueError, IndexError) as error:
+        except (ValueError, TypeError, IndexError, hb.HybridBOError) as error:
             print(f"{name}: no figure: {error}")
             continue
         figure.savefig(results_dir / f"{name}.png")
@@ -116,6 +120,7 @@ def plot(
 
 def main(argv: Sequence[str] | None = None) -> None:
     """Parses the command line (`argv`, default `sys.argv`) and runs or plots."""
+    # The `run` command
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     commands = parser.add_subparsers(dest="command", required=True)
 
@@ -132,6 +137,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     run_parser.add_argument("--n-iterations", type=int, help="default: the example's")
     run_parser.add_argument("--results-root", type=Path, default=RESULTS_ROOT)
 
+    # The `plot` command
     plot_parser = commands.add_parser("plot", help="plot the runs in a results folder")
     plot_parser.add_argument(
         "results_dir", type=Path, help="<results root>/<example>/<UTC time>"
@@ -142,6 +148,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
     plot_parser.add_argument("--show", action="store_true", help="open the figures")
 
+    # Run: the example's defaults unless given, into a new folder per invocation
     args = parser.parse_args(argv)
     if args.command == "run":
         example = importlib.import_module(args.example)
@@ -162,8 +169,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             example.n_iterations if args.n_iterations is None else args.n_iterations,
             results_dir,
         )
+    # Plot: the results folder is <results root>/<example>/<UTC time>
     else:
-        # The results folder is <results root>/<example>/<UTC time>
         example = importlib.import_module(args.results_dir.resolve().parent.name)
         plot(example, args.results_dir, args.run, args.iteration)
         if args.show:

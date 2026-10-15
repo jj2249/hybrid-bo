@@ -148,9 +148,9 @@ def test_convergence_needs_a_run():
 def test_hybrid_bo_figure_from_a_pickled_run(hybrid_run):
     """Hybrid BO's figure has three panels: the GP of y with its true curve, f under
     the scenarios, and the acquisition function, all over the grid of u."""
+    # Act: the figure of iteration 1, with the oracle for the true curves
     settings = ex.settings["hybrid_bo"]
     rng = np.random.default_rng(0)
-
     figure = plots.iteration(hybrid_run, 1, ex.problem, rng, settings, ex.experiment)
 
     # The GP of y: its prediction, and the oracle y = sin(u) as the true curve
@@ -168,23 +168,25 @@ def test_hybrid_bo_figure_from_a_pickled_run(hybrid_run):
     plt.close("all")
 
 
+# `parametrize` runs the test once per value in the list, each as its own test case
 @pytest.mark.parametrize("acquisition", [EI(), LCB(2.0)])
 def test_hybrid_bo_acquisition_is_the_objective_of_the_acquisition_problem(
     hybrid_run, acquisition
 ):
     """The drawn acquisition function is the objective of hybrid BO's acquisition
     problem at each grid point, with each scenario's states solving g."""
+    # Act: the figure of iteration 0, with this acquisition function
     settings = HybridBOSettings(
         acquisition=acquisition, unknown_states_as_variables=False
     )
     iteration = 0
-    incumbent = hybrid_run.history.f[: hybrid_run.history.n_initial].min()
-
     figure = plots.iteration(
         hybrid_run, iteration, ex.problem, np.random.default_rng(0), settings
     )
 
-    # Reference: the acquisition problem at (u, x_s), with x_s from brentq
+    # Reference: the acquisition problem at (u, x_s), with x_s from brentq, and the
+    # incumbent of the initial points
+    incumbent = hybrid_run.history.f[: hybrid_run.history.n_initial].min()
     assert hybrid_run.scenarios is not None
     nlp, _ = hybrid_acquisition(
         ex.problem,
@@ -200,10 +202,12 @@ def test_hybrid_bo_acquisition_is_the_objective_of_the_acquisition_problem(
         nlp.f(np.concatenate([[u], x_row])).full().item()
         for u, x_row in zip(GRID, x_s, strict=True)
     ]
+
+    # Check: the third panel's curve, labeled by the acquisition function
     label = (
         "Expected improvement"
         if isinstance(acquisition, EI)
-        else ("Lower confidence bound")
+        else "Lower confidence bound"
     )
     drawn = line(figure.axes[2], label)
     np.testing.assert_allclose(drawn, expected, rtol=1e-6, atol=1e-9)
@@ -213,17 +217,20 @@ def test_hybrid_bo_acquisition_is_the_objective_of_the_acquisition_problem(
 def test_standard_bo_figure_from_a_pickled_run(standard_run):
     """Standard BO's figure has two panels: the GP of f and the acquisition function,
     the objective of its acquisition problem at each grid point."""
+    # Act: the figure of iteration 1, after 2 initial points and 1 trial point
     settings = ex.settings["standard_bo"]
-    surrogate = standard_run.surrogates[1]
-    incumbent = standard_run.history.f[:3].min()
-
     figure = plots.iteration(
         standard_run, 1, ex.problem, np.random.default_rng(0), settings
     )
 
+    # The GP panel is the GP's prediction
     gp_ax, acquisition_ax = figure.axes
+    surrogate = standard_run.surrogates[1]
     mean, _ = predict(default_gp(1), surrogate, GRID[:, np.newaxis])
     np.testing.assert_allclose(line(gp_ax, "Predicted mean"), mean, rtol=1e-12)
+
+    # The acquisition panel is the acquisition problem's objective
+    incumbent = standard_run.history.f[:3].min()
     nlp, _ = standard_acquisition(
         ex.problem, default_gp(1), surrogate, incumbent, settings.acquisition
     )
@@ -240,6 +247,7 @@ def test_baseline_figure_fits_a_gp_to_the_points_so_far(lhs_run):
     iteration = 1
     n = lhs_run.history.n_initial + iteration
 
+    # No experiment, so the fit is the only use of the generator
     figure = plots.iteration(lhs_run, iteration, ex.problem, np.random.default_rng(1))
 
     # Reference: the same fit with a generator in the same state
@@ -253,7 +261,6 @@ def test_baseline_figure_fits_a_gp_to_the_points_so_far(lhs_run):
     plt.close("all")
 
 
-# `parametrize` runs the test once per value in the list, each as its own test case
 @pytest.mark.parametrize("iteration", [2, -3])
 def test_iteration_must_exist(standard_run, iteration):
     """Two iterations ran, so only iterations 0 and 1 (or -2 and -1) have a figure."""
@@ -321,3 +328,25 @@ def test_hybrid_bo_figure_needs_h_to_take_only_u(hybrid_run):
         plots.iteration(
             hybrid_run, 0, problem, np.random.default_rng(0), HybridBOSettings()
         )
+
+
+@pytest.mark.parametrize("acquisition", [EI(), LCB(2.0)])
+def test_scenarios_without_a_root_are_left_out_with_the_weights_renormalized(
+    acquisition,
+):
+    """At a grid point where a scenario has no root (NaN), the acquisition function
+    is computed from the other scenarios, their weights renormalized; where no
+    scenario has a root, it is NaN."""
+    # Setup: the second scenario has no root at the first grid point, and no
+    # scenario has one at the second
+    f = np.array([[1.0, np.nan, 3.0], [np.nan, np.nan, np.nan]])
+    w = np.array([0.5, 0.25, 0.25])
+
+    values = plots._saa_acquisition(f, w, 2.0, acquisition)
+
+    # Check: the first grid point is the other two scenarios, weighted 2/3 and 1/3
+    expected = plots._saa_acquisition(
+        f[:1, [0, 2]], np.array([2 / 3, 1 / 3]), 2.0, acquisition
+    )
+    np.testing.assert_allclose(values[0], expected[0])
+    assert np.isnan(values[1])

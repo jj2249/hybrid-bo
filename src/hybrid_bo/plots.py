@@ -83,14 +83,14 @@ def convergence(
 
 def iteration(
     run: Run,
-    iteration: int,
+    i: int,
     problem: Problem,
     rng: np.random.Generator,
     settings: StandardBOSettings | HybridBOSettings | None = None,
     experiment: Experiment | None = None,
 ) -> "Figure":
-    """The figure of one iteration of a run over a grid of the decision variable's
-    start bounds, as drawn before the refactor.
+    """The figure of iteration i of a run, over a grid of the decision variable's
+    start bounds.
 
     Iteration i (negative counts from the end) is the state before the run's i-th
     trial point (design point, for the baselines): the first n_initial + i points,
@@ -100,8 +100,10 @@ def iteration(
     - hybrid BO (`HybridBOSettings`): the GP of y with its confidence band, f under
       the scenarios (their mean and a band holding the central share of the
       scenario weight), and the acquisition function it minimized (-SAA-EI or
-      SAA-LCB). A scenario whose state x_s has no root from the plot's starts is
-      left out (NaN) at that grid point.
+      SAA-LCB). Each scenario's states x_s are the first root of g that fsolve finds
+      from the plot's starts; where g has several roots, this may not be the one
+      the acquisition problem's solver chose. A scenario with no root is left out
+      at that grid point, and the weights of the others are renormalized.
     - standard BO (`StandardBOSettings`): the GP of f with its confidence band and
       the acquisition function it minimized (-EI or LCB).
     - the baselines (no settings): the GP of f, the default GP fitted here.
@@ -134,13 +136,14 @@ def iteration(
         raise ValueError(msg)
     history = run.history
     n_iterations = len(history.u) - history.n_initial
-    if not -n_iterations <= iteration < n_iterations:
-        msg = f"The run has {n_iterations} iterations, so no iteration {iteration}"
+    if not -n_iterations <= i < n_iterations:
+        msg = f"The run has {n_iterations} iterations, so no iteration {i}"
         raise IndexError(msg)
 
     # The points so far, the next one, and the grid
-    n = history.n_initial + iteration % n_iterations
-    so_far, incumbent = slice(0, n), float(history.f[:n].min())
+    n_so_far = history.n_initial + i % n_iterations
+    so_far = slice(0, n_so_far)
+    incumbent = float(history.f[so_far].min())
     grid = np.linspace(*_start_bounds(system.u), _N_GRID)
 
     # The surrogate: the run's, or for a baseline the default GP fitted here
@@ -149,7 +152,7 @@ def iteration(
         fitted = fit_gp(gp, history.u[so_far], history.f[so_far], rng)
     else:
         gp = default_gp(system.n_u) if settings.gp is None else settings.gp
-        fitted = run.surrogates[iteration]
+        fitted = run.surrogates[i]
     mean, std = predict(gp, fitted, grid)
 
     # The true curves, from the experiment at every grid point
@@ -167,11 +170,11 @@ def iteration(
     if isinstance(settings, HybridBOSettings):
         assert run.scenarios is not None  # hybrid BO runs hold their scenarios
         figure, axes = plt.subplots(3, 1, sharex=True, figsize=(6, 6))
-        _points(axes[0], u_points, history.y[:, 0], history.n_initial, n, label)
+        _points(axes[0], u_points, history.y[:, 0], history.n_initial, n_so_far, label)
         _gp_panel(axes[0], u, mean, std, y_true)
         axes[0].set_ylabel("Variable $y$")
         f = _scenario_objectives(problem, grid, mean, std, run.scenarios, rng)
-        _points(axes[1], u_points, history.f, history.n_initial, n, label)
+        _points(axes[1], u_points, history.f, history.n_initial, n_so_far, label)
         _scenarios_panel(axes[1], u, f, run.scenarios.w, f_true)
         values = _saa_acquisition(f, run.scenarios.w, incumbent, settings.acquisition)
         _acquisition_panel(axes[2], u, values, settings.acquisition)
@@ -179,7 +182,7 @@ def iteration(
     # Standard BO: the GP of f, the acquisition function
     elif isinstance(settings, StandardBOSettings):
         figure, axes = plt.subplots(2, 1, sharex=True, figsize=(6, 6))
-        _points(axes[0], u_points, history.f, history.n_initial, n, label)
+        _points(axes[0], u_points, history.f, history.n_initial, n_so_far, label)
         _gp_panel(axes[0], u, mean, std, f_true)
         axes[0].set_ylabel("Objective")
         nlp, _ = standard_acquisition(
@@ -192,7 +195,7 @@ def iteration(
     else:
         figure, ax = plt.subplots()
         axes = [ax]
-        _points(ax, u_points, history.f, history.n_initial, n, label)
+        _points(ax, u_points, history.f, history.n_initial, n_so_far, label)
         _gp_panel(ax, u, mean, std, f_true)
         ax.set_ylabel("Objective")
 
@@ -211,12 +214,6 @@ def iteration(
 def _true_values(oracle: np.ndarray | None, measured: np.ndarray) -> np.ndarray:
     """The oracle values, or the measured and reconstructed ones without an oracle."""
     return measured if oracle is None else oracle
-
-
-def _band(confidence: float) -> float:
-    """The number of standard deviations either side of a normal's mean that hold
-    `confidence` of its probability."""
-    return float(scipy.stats.norm.ppf(0.5 + confidence / 2))
 
 
 def _points(
@@ -245,7 +242,8 @@ def _gp_panel(
     if true is not None:
         ax.plot(u, true, color="k", linestyle="--", label="True")
     ax.plot(u, mean, color="b", label="Predicted mean")
-    half_width = _band(_CONFIDENCE) * std
+    # The band holds _CONFIDENCE of the normal's probability
+    half_width = scipy.stats.norm.ppf(0.5 + _CONFIDENCE / 2) * std
     ax.fill_between(
         u,
         mean - half_width,
@@ -269,6 +267,8 @@ def _scenario_objectives(
     Scenario s has y_s = mean + std * z_s, and its mechanistic states x_s solve
     g(x_s, y_s, u) = 0 from Latin hypercube starts over their start bounds, as in the
     acquisition problem. Where no start gives a root within the bounds, f is NaN.
+    Where g has several roots, the first one found may not be the one the
+    acquisition problem's solver chose.
     """
     system = problem.system
     x = Symbolic.sym("x", system.n_x)
@@ -285,6 +285,22 @@ def _scenario_objectives(
     return f
 
 
+def _scenario_weights(f: np.ndarray, w: np.ndarray) -> np.ndarray:
+    """The weight of each scenario at each grid point, (n_grid, S): the scenario
+    weights w of the scenarios with a root there (f not NaN), renormalized to sum to
+    1, and 0 for the others. A grid point where no scenario has a root gets NaN."""
+    weights = np.where(np.isnan(f), 0.0, w)
+    total = weights.sum(axis=1, keepdims=True)
+    with np.errstate(invalid="ignore"):
+        return weights / total
+
+
+def _weighted_mean(values: np.ndarray, weights: np.ndarray) -> np.ndarray:
+    """The weighted mean of each row, skipping the entries with weight 0 (which may
+    be NaN), shape (n_grid,)."""
+    return np.sum(np.where(weights > 0, values, 0.0) * weights, axis=1)
+
+
 def _scenarios_panel(
     ax: "Axes",
     u: np.ndarray,
@@ -293,15 +309,28 @@ def _scenarios_panel(
     true: np.ndarray | None,
 ) -> None:
     """f under the scenarios over u: the weighted mean, the band holding the central
-    `_CONFIDENCE` of the scenario weight, and the true objective if known."""
+    `_CONFIDENCE` of the scenario weight, and the true objective if known. Scenarios
+    without a root at a grid point are left out there (`_scenario_weights`)."""
     if true is not None:
         ax.plot(u, true, color="k", linestyle="--", label="True")
-    ax.plot(u, f @ w, color="b", label="Scenario mean")
+    weights = _scenario_weights(f, w)
+    ax.plot(u, _weighted_mean(f, weights), color="b", label="Scenario mean")
+
+    # The band, per grid point over the scenarios with a root there
     tail = (1 - _CONFIDENCE) / 2
-    lower, upper = np.quantile(
-        f, [tail, 1 - tail], axis=1, weights=w, method="inverted_cdf"
+    band = np.full((len(u), 2), np.nan)
+    for row, (f_row, w_row) in enumerate(zip(f, weights, strict=True)):
+        has_root = w_row > 0
+        if has_root.any():
+            band[row] = np.quantile(
+                f_row[has_root],
+                [tail, 1 - tail],
+                weights=w_row[has_root],
+                method="inverted_cdf",
+            )
+    ax.fill_between(
+        u, band[:, 0], band[:, 1], alpha=0.2, color="b", label="Confidence interval"
     )
-    ax.fill_between(u, lower, upper, alpha=0.2, color="b", label="Confidence interval")
     ax.set_ylabel("Objective")
 
 
@@ -310,12 +339,14 @@ def _saa_acquisition(
 ) -> np.ndarray:
     """Hybrid BO's acquisition function at each grid point from f under the scenarios
     (n_grid, S), as its acquisition problem minimizes it: -SAA-EI, the weighted
-    average of min(f_s - incumbent, 0), or SAA-LCB."""
+    average of min(f_s - incumbent, 0), or SAA-LCB. Scenarios without a root at a
+    grid point are left out there (`_scenario_weights`)."""
+    weights = _scenario_weights(f, w)
     if isinstance(acquisition, LCB):
-        f_mean = f @ w
-        f_std = np.sqrt(((f - f_mean[:, np.newaxis]) ** 2) @ w)
-        return f_mean - acquisition.std_factor * f_std
-    return np.fmin(f - incumbent, 0) @ w
+        f_mean = _weighted_mean(f, weights)
+        f_variance = _weighted_mean((f - f_mean[:, np.newaxis]) ** 2, weights)
+        return f_mean - acquisition.std_factor * np.sqrt(f_variance)
+    return _weighted_mean(np.fmin(f - incumbent, 0), weights)
 
 
 def _acquisition_panel(
