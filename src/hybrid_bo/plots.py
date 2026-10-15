@@ -23,7 +23,7 @@ from hybrid_bo.acquisition import (
     hybrid_acquisition,
     standard_acquisition,
 )
-from hybrid_bo.bo import HybridBOSettings, StandardBOSettings, _settings_text
+from hybrid_bo.bo import HybridBOSettings, StandardBOSettings
 from hybrid_bo.evaluation import Experiment, evaluate
 from hybrid_bo.gp import GP, _gp_record, default_gp, predict
 from hybrid_bo.problem import Problem, Symbolic
@@ -43,8 +43,15 @@ STYLE = Path(__file__).with_name("hybrid_bo.mplstyle")
 _N_GRID = 101  # grid points over u
 _CONFIDENCE = 0.9  # probability inside the confidence bands
 
-# The settings type of each BO method, by the method in the record
-_SETTINGS = {"hybrid_bo": HybridBOSettings, "standard_bo": StandardBOSettings}
+# Each BO method's settings type and the fields its replay uses, by the method in
+# the record
+_REPLAYED = {
+    "hybrid_bo": (
+        HybridBOSettings,
+        ["acquisition", "unknown_states_as_variables", "solver"],
+    ),
+    "standard_bo": (StandardBOSettings, ["acquisition"]),
+}
 
 
 def convergence(study: Study, ax: "Axes | None" = None) -> "Axes":
@@ -135,7 +142,7 @@ def iteration(
     state before its i-th trial point (design point, for the baselines), over a grid
     of the decision variable's start bounds.
 
-    Each panel of values shows the points so far, the incumbent and the next point.
+    Each panel of values shows the points so far, the incumbent and the trial point.
     The panels, each turned off by its flag:
 
     - `gp`: the stored surrogate's mean and band; of y for hybrid BO, of f for
@@ -219,7 +226,7 @@ def iteration(
                 ax.plot(u, curve, color="k", label=label)
                 value = run.acquisitions[i].value
                 ax.scatter(
-                    trial, value, facecolors="none", edgecolors="r", label="next point"
+                    trial, value, facecolors="none", edgecolors="r", label="trial point"
                 )
                 ax.set_ylabel(label)
                 continue
@@ -252,11 +259,11 @@ def _replay_settings(
     None and `default_gp` for the baselines.
 
     Raises `TypeError` if `settings` aren't the run's method's, and `ValueError` if
-    they, or the GP, don't match the record.
+    the fields the replay uses, or the GP, don't match the record.
     """
     # The method's settings type; the baselines have none
     method = run.record.get("method", "")
-    expected = _SETTINGS.get(method)
+    expected, replayed = _REPLAYED.get(method, (None, []))
     if settings is not None and (expected is None or type(settings) is not expected):
         name = "no" if expected is None else expected.__name__
         msg = f"A {method} run takes {name} settings, got {type(settings).__name__}"
@@ -265,17 +272,21 @@ def _replay_settings(
     if expected is None:
         return None, default_gp(len(gp_inputs))
 
-    # The settings: given ones must be the recorded ones, else they are read from it
-    recorded = re.sub(r"^n_iterations=\d+, ", "", run.record.get("settings", ""))
-    if settings is not None and _settings_text(settings) != recorded:
-        msg = f"The settings don't match the run's record: {recorded}"
-        raise ValueError(msg)
+    # The settings: given, else the defaults with the recorded acquisition function
+    # and unknown states
+    recorded = run.record.get("settings", "")
     if settings is None:
         lcb = re.search(r"acquisition=LCB\(std_factor=([^)]*)\)", recorded)
         settings = expected(acquisition=EI() if lcb is None else LCB(float(lcb[1])))
         if isinstance(settings, HybridBOSettings):
             as_variables = "unknown_states_as_variables=False" not in recorded
             settings = replace(settings, unknown_states_as_variables=as_variables)
+
+    # The fields the replay uses must be the recorded ones (a custom solver, say)
+    texts = [f"{name}={getattr(settings, name)!r}" for name in replayed]
+    if any(text not in recorded for text in texts):
+        msg = f"The settings don't match the run's record ({recorded}); pass them"
+        raise ValueError(msg)
 
     # The GP, whose text must be the recorded one
     gp_spec = default_gp(len(gp_inputs)) if settings.gp is None else settings.gp
@@ -323,11 +334,11 @@ def _replay(
     assert nlp.g is not None  # hybrid BO's problem has the known equations
     n_u = problem.system.n_u
     fixed_u, states = Symbolic.sym("u", n_u), Symbolic.sym("w", len(nlp.lower) - n_u)
-    w = cas.vertcat(fixed_u, states)
+    variables = cas.vertcat(fixed_u, states)
     solver = cas.nlpsol(
         "replay",
         "ipopt",
-        {"x": states, "p": fixed_u, "f": nlp.f(w), "g": nlp.g(w)},
+        {"x": states, "p": fixed_u, "f": nlp.f(variables), "g": nlp.g(variables)},
         settings.solver.plugin_options | {"ipopt": settings.solver.solver_options},
     )
     bounds = {"lbx": nlp.lower[n_u:], "ubx": nlp.upper[n_u:], "lbg": 0, "ubg": 0}
@@ -376,12 +387,13 @@ def _points(
     ax: "Axes", u: np.ndarray, values: np.ndarray, f: np.ndarray, n_initial: int, n: int
 ) -> None:
     """The first n points (initial points black, the rest red), the incumbent's point
-    among them (by the measured f) as a star, and the next point as a red ring."""
+    among them (by the measured f) as a star, and point n, the trial point (design
+    point, for the baselines), as a red ring."""
     ax.scatter(u[:n_initial], values[:n_initial], c="k", label="initial points")
     ax.scatter(u[n_initial:n], values[n_initial:n], c="r", label="points so far")
     best = int(np.argmin(f[:n]))
     ax.scatter(u[best], values[best], marker="*", s=150, c="gold", label="incumbent")
-    ax.scatter(u[n], values[n], facecolors="none", edgecolors="r", label="next point")
+    ax.scatter(u[n], values[n], facecolors="none", edgecolors="r", label="trial point")
 
 
 def _band(ax: "Axes", u: np.ndarray, mean: np.ndarray, std: np.ndarray) -> None:

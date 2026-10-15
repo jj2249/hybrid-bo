@@ -6,6 +6,7 @@ tests read the drawn data back from the matplotlib axes by their labels.
 """
 
 import pickle
+from collections.abc import Callable
 from dataclasses import replace
 
 import casadi as cas
@@ -14,6 +15,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 import scipy
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
+from matplotlib.lines import Line2D
 
 from hybrid_bo import (
     EI,
@@ -36,15 +40,16 @@ from hybrid_bo import (
 from hybrid_bo.acquisition import hybrid_acquisition, standard_acquisition
 from hybrid_bo.gp import default_gp, predict
 
-GRID = np.linspace(-2.0, 2.0, 101)  # the illustrative example's u start bounds
-
 
 def pickled(run: Run) -> Run:
     """The run after a round trip through pickle, as a saved run is loaded."""
     return pickle.loads(pickle.dumps(run))
 
 
-def illustrative_run(method, settings=None) -> Run:
+def illustrative_run(
+    method: Callable[..., Run],
+    settings: HybridBOSettings | StandardBOSettings | None = None,
+) -> Run:
     """A pickled run of `method` on the illustrative example: 2 initial points, then
     2 iterations (or design points)."""
     rng = np.random.default_rng(0)
@@ -82,23 +87,23 @@ def lhs_run() -> Run:
     return illustrative_run(latin_hypercube_sampling)
 
 
-def drawn_line(ax, label: str):
+def drawn_line(ax: Axes, label: str) -> Line2D:
     """The line labeled `label` on the axes."""
     (match,) = [line for line in ax.get_lines() if line.get_label() == label]
     return match
 
 
-def line(ax, label: str) -> np.ndarray:
+def line(ax: Axes, label: str) -> np.ndarray:
     """The y data of the line labeled `label` on the axes."""
     return np.asarray(drawn_line(ax, label).get_ydata())
 
 
-def has_grid(ax) -> bool:
+def has_grid(ax: Axes) -> bool:
     """Whether the axes draw grid lines (the repo style turns them on)."""
     return all(line.get_visible() for line in ax.xaxis.get_gridlines())
 
 
-def legend_labels(figure) -> list[str]:
+def legend_labels(figure: Figure) -> list[str]:
     """The entries of the figure's one legend."""
     (legend,) = figure.legends
     return [text.get_text() for text in legend.get_texts()]
@@ -132,10 +137,10 @@ def fake_study(runs: list[Run], record: dict[str, str] | None = None) -> Study:
     return Study(tuple(runs), settings, "fake", record or {})
 
 
-def band(ax) -> np.ndarray:
+def band(ax: Axes) -> np.ndarray:
     """The vertices (x, y) of the one shaded band on the axes."""
     (collection,) = ax.collections
-    return collection.get_paths()[0].vertices
+    return np.asarray(collection.get_paths()[0].vertices)
 
 
 def test_convergence_draws_the_median_oracle_incumbent_with_its_iqr():
@@ -256,7 +261,8 @@ def test_replayed_acquisition_at_the_trial_point_is_the_stored_value(
     trial = run.history.u[run.history.n_initial + i, 0]
     (at_trial,) = np.flatnonzero(np.asarray(curve.get_xdata()) == trial)
     stored = run.acquisitions[i].value
-    np.testing.assert_allclose(curve.get_ydata()[at_trial], stored, rtol=1e-8)
+    replayed = np.asarray(curve.get_ydata())[at_trial]
+    np.testing.assert_allclose(replayed, stored, rtol=1e-8)
     plt.close("all")
 
 
@@ -286,7 +292,7 @@ def test_hybrid_bo_figure_from_a_pickled_run(hybrid_run):
     assert [ax.get_legend() for ax in figure.axes] == [None] * 3
     labels = legend_labels(figure)
     assert len(set(labels)) == len(labels)
-    assert {"initial points", "incumbent", "next point", "true"} <= set(labels)
+    assert {"initial points", "incumbent", "trial point", "true"} <= set(labels)
 
     # The GP of y: its prediction, and the oracle y = sin(u) as the true curve
     u = np.asarray(drawn_line(surrogate, "GP mean").get_xdata())
@@ -355,12 +361,12 @@ def test_baseline_figure_shows_only_the_points_so_far(lhs_run):
     assert ax.get_lines() == []
     history, n = lhs_run.history, lhs_run.history.n_initial + 1
     points = np.column_stack([history.u[:, 0], history.f])
-    initial, so_far, incumbent, next_point = ax.collections
+    initial, so_far, incumbent, trial_point = ax.collections
     np.testing.assert_array_equal(initial.get_offsets(), points[:2])
     np.testing.assert_array_equal(so_far.get_offsets(), points[2:n])
     best = np.argmin(history.f[:n])
     np.testing.assert_array_equal(incumbent.get_offsets(), points[[best]])
-    np.testing.assert_array_equal(next_point.get_offsets(), points[[n]])
+    np.testing.assert_array_equal(trial_point.get_offsets(), points[[n]])
     plt.close("all")
 
 
@@ -405,6 +411,17 @@ def test_a_gp_other_than_the_default_needs_the_settings(hybrid_run):
     """The record holds the GP as text, so a run whose GP isn't `default_gp` can't
     be replayed without its settings."""
     run = replace(hybrid_run, record=hybrid_run.record | {"kernel": "another"})
+    with pytest.raises(ValueError, match="settings"):
+        plots.iteration(run, ex.problem, 0)
+
+
+def test_a_custom_solver_needs_the_settings(hybrid_run):
+    """The replay solves with the run's solver options, so a run whose record shows
+    other options than the defaults can't be replayed without its settings."""
+    settings = hybrid_run.record["settings"].replace(
+        "'print_level': 0", "'print_level': 5"
+    )
+    run = replace(hybrid_run, record=hybrid_run.record | {"settings": settings})
     with pytest.raises(ValueError, match="settings"):
         plots.iteration(run, ex.problem, 0)
 

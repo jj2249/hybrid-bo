@@ -595,7 +595,8 @@ it. Polars and matplotlib are optional (imported on first use; the
   from the stored solution (ADR 0005), so the curve passes through the stored
   acquisition value. The settings are read from the run's record; `settings` is
   needed only for a GP other than `default_gp`, since the record holds the GP as text,
-  not its kernel function. Given settings must match the record.
+  not its kernel function. The fields the replay uses (acquisition function, and for
+  hybrid BO the solver and `unknown_states_as_variables`) must match the record.
 - **Entry point** (#51). `pixi run example <name> [flags]` and `pixi run plot <name>
   [study]` over `examples/main.py`. Results go to
   `examples/results/<name>/<study id>/{study.json, runs/, figures/}`.

@@ -67,17 +67,14 @@ def plot(
     study = hb.load(results_dir)
 
     # Convergence, and regret when the study has one
-    figure, ax = plt.subplots(layout="constrained")
-    hb.plots.convergence(study, ax=ax)
-    figure.savefig(results_dir / "convergence.png")
-    figure, ax = plt.subplots(layout="constrained")
+    hb.plots.convergence(study)
+    plt.savefig(results_dir / "convergence.png")
     try:
-        hb.plots.regret(study, ax=ax)
+        hb.plots.regret(study)
     except ValueError as error:
-        plt.close(figure)
         print(f"no regret figure: {error}")
     else:
-        figure.savefig(results_dir / "regret.png")
+        plt.savefig(results_dir / "regret.png")
 
     # One iteration of one run per method; a figure that can't be drawn is skipped
     for name in dict.fromkeys(run.method for run in study.runs):

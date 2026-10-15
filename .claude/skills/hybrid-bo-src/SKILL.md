@@ -152,8 +152,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   scenarios, acquisition, settings) -> Figure` draws the state before trial point i
   over a 101-point grid of one-dimensional `u` (start bounds) plus the trial point,
   with one figure legend (`_figure_legend`). `_replay_settings` reads the acquisition
-  function and `unknown_states_as_variables` from the record (regex on
-  `_settings_text`); given settings must match it, and a non-default GP needs them.
+  function and `unknown_states_as_variables` from the record's settings text; the
+  fields the replay uses (`_REPLAYED`) must appear in that text, so a custom solver
+  or a non-default GP needs `settings`.
   `_replay`: standard BO evaluates `standard_acquisition`'s NLP; hybrid BO rebuilds
   `hybrid_acquisition` and solves it with u as an `nlpsol` parameter, outwards from
   the stored solution (NaN where a solve fails), then f per scenario at
