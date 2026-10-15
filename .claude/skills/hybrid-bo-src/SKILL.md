@@ -98,6 +98,12 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   dataclass by its type hints; arrays are nested lists of floats (an empty one is
   `{"shape": ...}`). A new field on `Run` or its parts round-trips without changes if
   its type is one `_decode` handles. `save` refuses an existing folder.
+- `views.py`: `evaluations(study, optimum=None)`, `summary(study)` and
+  `hyperparameters(study)`, Polars data frames (one row per evaluation, per method,
+  per fitted hyperparameter entry); each docstring lists its columns. Variable
+  columns are named from the study's record (`_names` reads `Var(name='...')`).
+  Polars is imported inside the functions (`_polars`), so `import hybrid_bo` works
+  without it; a missing Polars raises `ImportError` naming `hybrid-bo[analysis]`.
 - `baselines.py`: `latin_hypercube_sampling` and `uniform_sampling` draw the whole
   design over the `u` start bounds, then `evaluate` initial points plus design in
   one call.
@@ -217,7 +223,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - The unit tests (`test_kernels.py`, `test_gp.py`, `test_scalers.py`,
   `test_sampling.py`, `test_solvers.py`, `test_system.py`, `test_evaluation.py`,
   `test_baselines.py`, `test_standard_bo.py`, `test_hybrid_bo.py`,
-  `test_studies.py`) compare against
+  `test_studies.py`, `test_views.py`) compare against
   numpy/scipy references or closed forms. Add one when changing math.
 - Tests follow the comment rules in CLAUDE.md Conventions (docstrings, commented
   blocks, a note on the first use of each pytest feature); `test_standard_bo.py` is
