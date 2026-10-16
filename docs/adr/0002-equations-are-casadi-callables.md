@@ -16,7 +16,7 @@ hand-written `cas.Function`s.
 - **Arbitrary Python callables** (e.g. an external thermodynamics package as the
   oracle), evaluated numerically with finite-difference Jacobians: rejected because
   finite differences perform worse in root-finding and optimization. Such an oracle can
-  still be wrapped in a custom experiment.
+  still be wrapped in a custom measurement.
 
 ## Consequences
 

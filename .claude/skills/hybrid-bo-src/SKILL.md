@@ -14,8 +14,8 @@ code uses CONTEXT.md's terms; use them in PRs, tests and comments too.
 
     min_u f(x, y, u)   s.t.   0 = g(x, y, u),   y = h(x, u)  (unknown)
 
-- **Evaluation** (`evaluate`): the experiment returns the measured variables for each
-  trial point. The oracle simulation (`oracle_experiment`) solves `g` with
+- **Evaluation** (`evaluate`): the measurement returns the measured variables for each
+  trial point. The oracle simulation (`oracle_measure`) solves `g` with
   `y = oracle(x, u)` for every state by multistart `fsolve`, reads the measured
   variables and adds `rng.normal(0, noise_std)` (drawn also when `noise_std` is 0).
   The library then always solves the **root-finding problem**: `g` for the unmeasured
@@ -57,13 +57,13 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - `sampling.py`: `lhs(lower, upper, n, rng)` and `uniform(...)` over a box, shape
   `(n, d)`; `initial_points(variables, n, rng)` is `lhs` over `Var` start bounds. Use
   them for any Latin hypercube or uniform draw.
-- `evaluation.py`: an `Experiment` is `(u (N,), rng) -> measured (P,)`, or an
-  `OracleMeasurement` (measured plus oracle `x`, `y`) in test cases.
-  `oracle_experiment(system, oracle, noise_std, ...)` traces the oracle like `g`
+- `evaluation.py`: a `Measure` is `(u (N,), rng) -> measured (P,)`, or an
+  `OracleMeasurement` (measured plus oracle `x`, `y`) in benchmark experiments.
+  `oracle_measure(system, oracle, noise_std, ...)` traces the oracle like `g`
   (`_trace_oracle`).
   `oracle_optimum(problem, oracle, rng)` solves min f s.t. g = 0, y = oracle by
   `multistart` from `lhs` starts over the start bounds of (u, x, y).
-  `evaluate(problem, experiment, u, rng)` runs the experiment per row, then always
+  `evaluate(problem, measure, u, rng)` runs the measurement per row, then always
   solves the root-finding problem (`_reconstruct`, starts over the unmeasured
   variables), and returns a `History` whose points are all initial points. Every
   fsolve goes through `_find_root` (CasADi Jacobian, accepts residual `< tol` within
@@ -79,12 +79,12 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   iteration, the one behind its trial point, and `acquisitions`: one
   `AcquisitionSolution` per iteration, both empty for the baselines; `scenarios`,
   hybrid BO only, else None), pure data that loads without user code (ADR 0003).
-  `run_record(problem, experiment, rng, method, settings)` builds the text record
+  `run_record(problem, measure, rng, method, settings)` builds the text record
   from `_problem_record`, `_generator_record` and `_versions_record` (a study's
-  record reuses them); call it before the method draws. An experiment is recorded by
-  its docstring, else its name (`oracle_experiment` sets the docstring).
+  record reuses them); call it before the method draws. A measurement is recorded by
+  its docstring, else its name (`oracle_measure` sets the docstring).
 - `studies.py`: `StudySettings(n_runs, n_initial, n_iterations, seed)`, `Study(runs,
-  settings, name, record)`, `Method` (called as `method(problem, experiment,
+  settings, name, record)`, `Method` (called as `method(problem, measure,
   initial_points, n, rng=rng)`), `repeat` (run i from
   `default_rng(SeedSequence(seed).spawn(n_runs)[i])`, initial points then the method;
   catches `HybridBOError`, logs it and keeps `error.run`) and `study` (resolves a
@@ -136,7 +136,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   solution: the minimized objective at the trial point and, for hybrid BO, the
   scenario states `(S, M)`, `(S, P)`, which `_scenario_states` reads from the
   solution (or predicts, when the y_s are substituted).
-- `bo.py`: `optimization_loop(problem, experiment, initial_points, n_iterations,
+- `bo.py`: `optimization_loop(problem, measure, initial_points, n_iterations,
   trial_point, rng, record) -> Run` (evaluate initial points, then per iteration
   `trial_point(problem, history, rng) -> (u, surrogate, acquisition solution)` and
   evaluate u; a
@@ -148,7 +148,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   records.
 - `plots.py`: static figures, no widgets and no `rng`. `convergence(study, ax)` and
   `regret(study, optimum, ax)` draw `evaluations` (median and IQR per method over
-  evaluations, `_over_evaluations`). `iteration(run, problem, i, *, experiment, gp,
+  evaluations, `_over_evaluations`). `iteration(run, problem, i, *, measure, gp,
   scenarios, acquisition, settings) -> Figure` draws the state before trial point i
   over a 101-point grid of one-dimensional `u` (start bounds) plus the trial point,
   with one figure legend (`_figure_legend`). `_replay_settings` reads the acquisition

@@ -52,7 +52,7 @@ remove the marker when fixing the bug.
   map, data and shape conventions, surprising behavior and the testing rules.
   Load it before working on `src/`.
 - `hybrid-bo-examples`: the layout of an example script, how to define the
-  Problem and the experiment, method settings, saving runs and common mistakes.
+  Problem and the measurement, method settings, saving runs and common mistakes.
 - Both skills describe the *current* code; DESIGN.md describes the target.
 
 ## Conventions

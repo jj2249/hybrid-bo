@@ -34,7 +34,7 @@ from hybrid_bo.errors import (
     ReconstructionWarning,
     RootFindingError,
 )
-from hybrid_bo.evaluation import Experiment, oracle_experiment, oracle_optimum
+from hybrid_bo.evaluation import Measure, oracle_measure, oracle_optimum
 from hybrid_bo.history import History, incumbents, oracle_incumbents
 from hybrid_bo.problem import Problem, System, Var
 from hybrid_bo.run import Run

@@ -3,7 +3,7 @@
 An example script ends with a call that passes everything it defines:
 
     if __name__ == "__main__":
-        cli.main("illustrative_example", problem, experiment, methods, study_settings,
+        cli.main("illustrative_example", problem, measure, methods, study_settings,
                  optimum=optimum, true_curves=True)
 
 and the pixi tasks run the script as a module from this folder:
@@ -40,7 +40,7 @@ RESULTS_ROOT = Path(__file__).parent.parent / "results"
 def main(
     name: str,
     problem: hb.Problem,
-    experiment: hb.Experiment,
+    measure: hb.Measure,
     methods: Mapping[str, Method],
     study_settings: hb.StudySettings,
     *,
@@ -52,9 +52,9 @@ def main(
     as the command line (`argv`, default `sys.argv`) says.
 
     `name` names the study and its folder. `study_settings` are the defaults the
-    flags override. `optimum` is the stated oracle optimum of a test case, which
-    regret is measured from. `true_curves` draws the experiment's values over the
-    grid in the iteration figures, which only a cheap experiment (an oracle) can
+    flags override. `optimum` is the stated oracle optimum of a benchmark experiment, which
+    regret is measured from. `true_curves` draws the measurement's values over the
+    grid in the iteration figures, which only a cheap measurement (an oracle) can
     afford.
     """
     # The command: `plot [STUDY]`, else a run with every argument
@@ -76,9 +76,7 @@ def main(
             **{key: value for key, value in given.items() if value is not None},
         )
         chosen = {label: methods[label] for label in parsed.methods or methods}
-        study = hb.study(
-            chosen, problem, experiment, settings, name=name, optimum=optimum
-        )
+        study = hb.study(chosen, problem, measure, settings, name=name, optimum=optimum)
         study_id = parsed.name or datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
         study_dir = save_new(study, example_dir, study_id)
         for label in chosen:
@@ -101,7 +99,7 @@ def main(
     # Plot, also straight after a run with --plot
     if command == "plot" or parsed.plot:
         with plt.style.context(hb.plots.STYLE):
-            plot(name, problem, experiment if true_curves else None, study_dir)
+            plot(name, problem, measure if true_curves else None, study_dir)
 
 
 def _parsers(
@@ -168,13 +166,13 @@ def save_summary(study: hb.Study, study_dir: Path) -> None:
 def plot(
     name: str,
     problem: hb.Problem,
-    experiment: hb.Experiment | None,
+    measure: hb.Measure | None,
     study_dir: Path,
 ) -> None:
     """Saves the figures of the study in `study_dir` to its `figures/` folder:
     `convergence.png`, `regret.png` (when the study has an oracle optimum) and
     `<method>/run-000/iteration-00.png` for every iteration of every run, with the
-    true curves from `experiment` if given. A figure that can't be drawn is skipped
+    true curves from `measure` if given. A figure that can't be drawn is skipped
     with a message. Saves `summary.csv` too if the study has none (a study saved
     before the CLI wrote summaries).
 
@@ -206,7 +204,7 @@ def plot(
         run_dir = figures_dir / run.method / f"run-{run.index:03d}"
         for i in range(hb.history.n_iterations(run.history)):
             try:
-                figure = hb.plots.iteration(run, problem, i, experiment=experiment)
+                figure = hb.plots.iteration(run, problem, i, measure=measure)
             except (ValueError, TypeError, hb.HybridBOError) as error:
                 print(f"{run.method} run {run.index}: no iteration figures: {error}")
                 break

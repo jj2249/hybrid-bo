@@ -14,6 +14,10 @@ root-finding problem for the unmeasured states and computes `f`, so there is one
 root-finding path. In test cases the oracle simulation is the experiment, and it also
 returns the oracle values used for benchmarking.
 
+[ADR 0006](0006-an-experiment-is-what-a-user-writes.md) renames this experiment the
+**measurement** (`measure`, `oracle_measure`); "experiment" now names what a user
+writes. The split is unchanged.
+
 ## Considered Options
 
 - **`h_unknown` on the problem** (the code before the restructure): mixes the hidden

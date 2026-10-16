@@ -33,7 +33,7 @@ The illustrative example has one variable of each kind:
 - the objective ``f = (6x - 2)^2 sin(12x - 4)``, which depends on ``x`` only.
 
 The sensors measure ``y``. Nobody tells the optimizer that ``y = sin(u)``: in this
-test case an *oracle* knows it and plays the real system.
+benchmark experiment an *oracle* knows it and plays the real system.
 
 Why a hybrid model
 ------------------
@@ -72,17 +72,17 @@ list with one CasADi expression per equation. The
 .. literalinclude:: ../examples/illustrative_example.py
    :language: python
    :start-at: system = hb.System(
-   :end-before: # Test case:
+   :end-before: # Measurement:
 
-The *experiment* runs the system at a trial point and returns the measured variables.
-A real application passes a function that does this. A test case uses the *oracle
-simulation*, :py:func:`~hybrid_bo.evaluation.oracle_experiment`, which solves the
+The *measurement* runs the system at a trial point and returns the measured variables.
+A real application passes a function that does this. A benchmark experiment uses the
+*oracle simulation*, :py:func:`~hybrid_bo.evaluation.oracle_measure`, which solves the
 known equations with the oracle in place of the unknown equations, then reads the
 measured variables, optionally with noise.
 
 .. literalinclude:: ../examples/illustrative_example.py
    :language: python
-   :start-at: # Test case:
+   :start-at: # Measurement:
    :end-before: # Methods:
 
 What an iteration does
@@ -105,7 +105,7 @@ A *run* evaluates the *initial points*, then runs the *optimization loop*. Each
    scenarios: expected improvement over the *incumbent* (SAA-EI) or a lower
    confidence bound (SAA-LCB). The known equations are constraints of the acquisition
    problem, so it needs no root-finding. It is solved with IPOPT from several starts.
-3. **Run the experiment** at the trial point, which measures ``y``.
+3. **Run the measurement** at the trial point, which measures ``y``.
 4. **Solve the root-finding problem**: the known equations, for the states that were
    not measured, given ``u`` and the measured variables. Here that is
    ``x + exp(x) = y`` for ``x``. Then compute ``f``.
@@ -176,7 +176,7 @@ them.
 - ``run.scenarios`` holds hybrid BO's scenario draws and weights, the same in every
   iteration, and is ``None`` for the other methods.
 - ``run.record`` describes, as text, how the run was produced: the problem's
-  variables and equations, the experiment, the method and its settings, the seed and
+  variables and equations, the measurement, the method and its settings, the seed and
   the package and code versions.
 
 ``pixi run example illustrative_example`` runs every method and saves the study to
@@ -191,7 +191,7 @@ The plots read a finished study, so a saved one is plotted without running it ag
 over the evaluations with the interquartile range across runs shaded;
 :py:func:`~hybrid_bo.plots.regret` draws the same against the oracle optimum on a log
 scale, as in the paper. Both count evaluations, initial points included, since those
-are not free. The test case states the oracle optimum (``optimum`` above); a study
+are not free. The experiment states the oracle optimum (``optimum`` above); a study
 never computes it, since a search can miss it and a wrong value corrupts every regret.
 
 :py:func:`~hybrid_bo.plots.iteration` draws one iteration of one run: the state before

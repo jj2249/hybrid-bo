@@ -68,15 +68,15 @@ def _version(distribution: str) -> str:
         return "unknown"
 
 
-def _problem_record(problem: Problem, experiment: object) -> dict[str, str]:
-    """The problem's variables, structure and equations, and the experiment, as text.
+def _problem_record(problem: Problem, measure: object) -> dict[str, str]:
+    """The problem's variables, structure and equations, and the measurement, as text.
 
-    The experiment is described by its docstring when it has one (the oracle
+    The measurement is described by its docstring when it has one (the oracle
     simulation does), else by its name.
     """
     system = problem.system
     blocks = (system.x, system.y, system.u)
-    name = getattr(experiment, "__qualname__", type(experiment).__qualname__)
+    name = getattr(measure, "__qualname__", type(measure).__qualname__)
     return {
         "u": "; ".join(repr(var) for var in system.u),
         "x": "; ".join(repr(var) for var in system.x),
@@ -85,7 +85,7 @@ def _problem_record(problem: Problem, experiment: object) -> dict[str, str]:
         "measured": ", ".join(var.name for var in system.measured),
         "g": _as_text(system.g, *blocks),
         "f": _as_text(problem.f, *blocks),
-        "experiment": inspect.getdoc(experiment) or name,
+        "measure": inspect.getdoc(measure) or name,
     }
 
 
@@ -118,21 +118,21 @@ def _versions_record() -> dict[str, str]:
 
 def run_record(
     problem: Problem,
-    experiment: object,
+    measure: object,
     rng: np.random.Generator,
     method: str,
     settings: str,
 ) -> dict[str, str]:
     """How a run is produced, as text: the problem's variables, structure and
-    equations, the experiment, the method and its settings, the generator and the
+    equations, the measurement, the method and its settings, the generator and the
     package and code versions.
 
     Call it before the method draws anything, so the generator's state is the one
-    the run starts from. The experiment is described by its docstring when it has
+    the run starts from. The measurement is described by its docstring when it has
     one (the oracle simulation does), else by its name.
     """
     return (
-        _problem_record(problem, experiment)
+        _problem_record(problem, measure)
         | {"method": method, "settings": settings}
         | _generator_record(rng)
         | _versions_record()

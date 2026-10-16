@@ -288,9 +288,9 @@ system = hb.System(
     u=[u], x=[x], y=[y], g=lambda v: [v.x - v.y], h_inputs=[u], measured=[y]
 )
 problem = hb.Problem(system, f=lambda v: v.x**2)
-experiment = hb.oracle_experiment(system, lambda v: [v.u], noise_std=0.0)
+measure = hb.oracle_measure(system, lambda v: [v.u], noise_std=0.0)
 settings = hb.StudySettings(n_runs=1, n_initial=2, n_iterations=1, seed=0)
-study = hb.study({"lhs": hb.latin_hypercube_sampling}, problem, experiment, settings)
+study = hb.study({"lhs": hb.latin_hypercube_sampling}, problem, measure, settings)
 assert "polars" not in [name for name, module in sys.modules.items() if module]
 try:
     hb.evaluations(study)

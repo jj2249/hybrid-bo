@@ -22,7 +22,7 @@ from hybrid_bo.acquisition import (
     standard_acquisition,
 )
 from hybrid_bo.errors import HybridBOError
-from hybrid_bo.evaluation import Experiment, evaluate
+from hybrid_bo.evaluation import Measure, evaluate
 from hybrid_bo.gp import GP, FittedGP, _gp_record, default_gp, fit_gp
 from hybrid_bo.history import History, _concatenate, incumbents
 from hybrid_bo.problem import Problem, Var, _h_inputs
@@ -41,7 +41,7 @@ TrialPoint = Callable[
 
 def optimization_loop(
     problem: Problem,
-    experiment: Experiment,
+    measure: Measure,
     initial_points: np.ndarray,
     n_iterations: int,
     trial_point: TrialPoint,
@@ -66,10 +66,10 @@ def optimization_loop(
     surrogates: list[FittedGP] = []
     acquisitions: list[AcquisitionSolution] = []
     try:
-        history = evaluate(problem, experiment, initial_points, rng)
+        history = evaluate(problem, measure, initial_points, rng)
         for _ in range(n_iterations):
             u, surrogate, acquisition = trial_point(problem, history, rng)
-            later = evaluate(problem, experiment, u[np.newaxis], rng)
+            later = evaluate(problem, measure, u[np.newaxis], rng)
             history = _concatenate(history, later)
             surrogates.append(surrogate)
             acquisitions.append(acquisition)
@@ -143,7 +143,7 @@ class HybridBOSettings:
 
 def _method_record(
     problem: Problem,
-    experiment: Experiment,
+    measure: Measure,
     rng: np.random.Generator,
     method: str,
     n_iterations: int,
@@ -162,13 +162,13 @@ def _method_record(
             if f.name != "gp"
         ]
     )
-    record = run_record(problem, experiment, rng, method, settings_text)
+    record = run_record(problem, measure, rng, method, settings_text)
     return record | _gp_record(gp, [var.name for var in gp_inputs])
 
 
 def standard_bo(
     problem: Problem,
-    experiment: Experiment,
+    measure: Measure,
     initial_points: np.ndarray,
     n_iterations: int,
     settings: StandardBOSettings,
@@ -189,7 +189,7 @@ def standard_bo(
     u_vars = problem.system.u
     gp = default_gp(len(u_vars)) if settings.gp is None else settings.gp
     record = _method_record(
-        problem, experiment, rng, "standard_bo", n_iterations, settings, gp, u_vars
+        problem, measure, rng, "standard_bo", n_iterations, settings, gp, u_vars
     )
 
     def trial_point(
@@ -208,13 +208,13 @@ def standard_bo(
         return solution.w, fitted, AcquisitionSolution(solution.f)
 
     return optimization_loop(
-        problem, experiment, initial_points, n_iterations, trial_point, rng, record
+        problem, measure, initial_points, n_iterations, trial_point, rng, record
     )
 
 
 def hybrid_bo(
     problem: Problem,
-    experiment: Experiment,
+    measure: Measure,
     initial_points: np.ndarray,
     n_iterations: int,
     settings: HybridBOSettings,
@@ -239,7 +239,7 @@ def hybrid_bo(
     gp = default_gp(len(system.h_inputs)) if settings.gp is None else settings.gp
     record = _method_record(
         problem,
-        experiment,
+        measure,
         rng,
         "hybrid_bo",
         n_iterations,
@@ -285,7 +285,7 @@ def hybrid_bo(
 
     try:
         run = optimization_loop(
-            problem, experiment, initial_points, n_iterations, trial_point, rng, record
+            problem, measure, initial_points, n_iterations, trial_point, rng, record
         )
     except HybridBOError as error:
         if error.run is not None:

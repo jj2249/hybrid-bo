@@ -64,7 +64,7 @@ def run_method(method: str) -> dict[str, np.ndarray]:
     # As in the example: one generator per run, initial points drawn from it
     rng = np.random.default_rng(SEED).spawn(1)[0]
     u = initial_points(ex.system.u, ex.study_settings.n_initial, rng)
-    run = ex.methods[method](ex.problem, ex.experiment, u, N_ITERATIONS, rng=rng)
+    run = ex.methods[method](ex.problem, ex.measure, u, N_ITERATIONS, rng=rng)
     return as_baseline_columns(run)
 
 

@@ -71,9 +71,9 @@ The scalar `f(x, y, u)` to minimize.
 _Avoid_: cost, target
 
 **Oracle**:
-A known stand-in for the unknown equations, used only in test cases to play the part of
-the real system. Real applications have no oracle. An in silico simulation of a plant
-is not an oracle: to the library it is a real system, run by a custom experiment.
+A known stand-in for the unknown equations, used only in benchmark experiments to play
+the part of the real system. Real systems have no oracle. An in silico simulation of a
+plant is not an oracle: to the library it is a real system, run by a custom measurement.
 _Avoid_: ground truth, true system
 
 **Oracle values**:
@@ -87,10 +87,11 @@ _Avoid_: true values, noise-free values, no_noise
 The decision variables to evaluate next: the solution of the acquisition problem.
 _Avoid_: proposal, candidate, next point
 
-**Experiment**:
-In a real application, running the system at a trial point and reading its measured
-variables. The oracle simulation plays this part in test cases.
-_Avoid_: query, black box
+**Measurement** (`measure`):
+Running the system at given decision variables and reading its measured variables. One
+per evaluation, for initial points and trial points alike. The oracle simulation plays
+this part in benchmark experiments.
+_Avoid_: experiment, query, black box, trial
 
 **Evaluation**:
 Running the system at given decision variables and obtaining its states and objective.
@@ -101,22 +102,34 @@ The states the system's sensors read at each evaluation, as many as there are un
 states. Part of the system's description.
 
 **Oracle simulation**:
-The experiment in a test case: solving the known equations with the oracle in place of
-the unknown equations, then reading the measured variables, with optional noise.
+The measurement in a benchmark experiment: solving the known equations with the oracle
+in place of the unknown equations, then reading the measured variables, with optional
+noise.
 
 **Root-finding problem**:
 Solving the known equations for the states that were not measured, given the decision
-variables and the measured variables. Part of every evaluation, after the experiment.
+variables and the measured variables. Part of every evaluation, after the measurement.
 _Avoid_: re-solve, fixed-x evaluation
 
 ### Bayesian optimization
+
+**Experiment**:
+A problem, how it is measured, and the methods to compare, stated together so they can
+be run as studies: "the flash unit experiment". Each time it is run it gives a new study.
+_Avoid_: example, case, test case, application
+
+**Benchmark experiment**:
+An experiment whose unknown equations are known to us (the oracle) but hidden from the
+methods, so its studies can be scored: oracle incumbents, and regret if the oracle
+optimum is stated.
+_Avoid_: test case, toy problem
 
 **Run**:
 One complete optimization from the initial points to the end of the optimization loop.
 Runs are repeated with different seeds for statistics.
 
 **Study**:
-A collection of runs of one or more methods on one problem, where run i of every
+A collection of runs of an experiment's methods, where run i of every
 method starts from the same initial points. The unit that is saved, loaded and analyzed.
 _Avoid_: benchmark, experiment, results, batch
 
@@ -137,8 +150,8 @@ _Avoid_: incumbents_no_noise, true incumbent
 
 **Oracle optimum** (`f*`):
 The best objective value the oracle allows: the reference that regret is measured
-against. Test cases only; always stated by the test case, never computed by a study,
-since a search can miss it.
+against. Benchmark experiments only; always stated by the experiment, never computed by
+a study, since a search can miss it.
 _Avoid_: true optimum, global optimum
 
 **Regret**:

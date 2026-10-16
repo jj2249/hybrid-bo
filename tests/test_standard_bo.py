@@ -22,7 +22,7 @@ from hybrid_bo import (
     StandardBOSettings,
     incumbents,
     initial_points,
-    oracle_experiment,
+    oracle_measure,
     standard_bo,
 )
 from hybrid_bo.acquisition import AcquisitionSolution, standard_acquisition
@@ -31,9 +31,9 @@ from hybrid_bo.gp import FittedGP, default_gp, fit_gp, predict
 from hybrid_bo.run import run_record
 
 
-def illustrative_experiment(problem):
+def illustrative_measure(problem):
     """The oracle simulation of the illustrative example, without noise."""
-    return oracle_experiment(problem.system, oracle=lambda v: [cas.sin(v.u)])
+    return oracle_measure(problem.system, oracle=lambda v: [cas.sin(v.u)])
 
 
 def illustrative_run(problem, settings=None) -> Run:
@@ -42,7 +42,7 @@ def illustrative_run(problem, settings=None) -> Run:
     settings = StandardBOSettings() if settings is None else settings
     rng = np.random.default_rng(0)
     u = initial_points(problem.system.u, 2, rng)
-    return standard_bo(problem, illustrative_experiment(problem), u, 2, settings, rng)
+    return standard_bo(problem, illustrative_measure(problem), u, 2, settings, rng)
 
 
 def fitted_illustrative_gp():
@@ -212,11 +212,11 @@ def test_record_holds_the_settings_and_the_resolved_gp(illustrative_problem):
 
 def test_failed_evaluation_carries_the_partial_run(illustrative_problem):
     """When evaluating a trial point fails, the error carries the run so far."""
-    # An experiment whose third evaluation (the first trial point) measures NaN, so
+    # A measurement whose third evaluation (the first trial point) measures NaN, so
     # the root-finding problem has no root
     calls = []
 
-    def experiment(u, rng):
+    def measure(u, rng):
         calls.append(u)
         return np.sin(u) if len(calls) < 3 else np.array([np.nan])
 
@@ -224,7 +224,7 @@ def test_failed_evaluation_carries_the_partial_run(illustrative_problem):
     with pytest.raises(RootFindingError) as info:
         standard_bo(
             illustrative_problem,
-            experiment,
+            measure,
             np.array([[-0.5], [0.5]]),
             2,
             StandardBOSettings(),
@@ -281,7 +281,7 @@ def test_loop_evaluates_each_trial_point_after_the_initial_points(
 
     run = optimization_loop(
         problem,
-        illustrative_experiment(problem),
+        illustrative_measure(problem),
         np.array([[0.5]]),
         2,
         trial_point,
@@ -313,7 +313,7 @@ def test_failed_trial_point_carries_the_partial_run(illustrative_problem):
     with pytest.raises(NoSolutionError) as info:
         optimization_loop(
             problem,
-            illustrative_experiment(problem),
+            illustrative_measure(problem),
             np.array([[0.5], [-0.5]]),
             5,
             trial_point,
@@ -334,11 +334,11 @@ def test_failed_trial_point_carries_the_partial_run(illustrative_problem):
 def test_failed_initial_point_carries_the_points_before_it(illustrative_problem):
     """When an initial point fails, the partial run holds the initial points before
     it."""
-    # An experiment that fails (measures NaN) for u >= 1, the second initial point
+    # A measurement that fails (measures NaN) for u >= 1, the second initial point
     problem = illustrative_problem
     rng = np.random.default_rng(0)
 
-    def experiment(u, rng):
+    def measure(u, rng):
         return np.sin(u) if u[0] < 1.0 else np.array([np.nan])
 
     def trial_point(problem, history, rng):
@@ -347,7 +347,7 @@ def test_failed_initial_point_carries_the_points_before_it(illustrative_problem)
     with pytest.raises(RootFindingError) as info:
         optimization_loop(
             problem,
-            experiment,
+            measure,
             np.array([[0.5], [1.5]]),
             2,
             trial_point,

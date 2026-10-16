@@ -14,14 +14,14 @@ from dataclasses import dataclass, replace
 import numpy as np
 
 from hybrid_bo.errors import HybridBOError, OracleOptimumWarning
-from hybrid_bo.evaluation import Experiment
+from hybrid_bo.evaluation import Measure
 from hybrid_bo.problem import Problem
 from hybrid_bo.run import Run, _problem_record, _versions_record
 from hybrid_bo.sampling import initial_points
 
 _logger = logging.getLogger(__name__)
 
-# A method, called as `method(problem, experiment, initial_points, n, rng=rng)`, where
+# A method, called as `method(problem, measure, initial_points, n, rng=rng)`, where
 # n is the number of iterations (of design points for the baselines). Bind a BO
 # method's settings with `functools.partial(hb.hybrid_bo, settings=...)`
 Method = Callable[..., Run]
@@ -48,7 +48,7 @@ class Study:
     names its method (`run.method`) and its position among that method's runs
     (`run.index`), and run i of every method starts from the same initial points.
 
-    `record` holds, as text, what the runs share: the problem, the experiment, each
+    `record` holds, as text, what the runs share: the problem, the measurement, each
     method with its settings, the oracle optimum (if stated) and the versions. The
     seed is in `settings`.
     """
@@ -62,7 +62,7 @@ class Study:
 def repeat(
     method: Method,
     problem: Problem,
-    experiment: Experiment,
+    measure: Measure,
     settings: StudySettings,
 ) -> tuple[Run, ...]:
     """Runs `method` `settings.n_runs` times and returns the runs with their indices.
@@ -80,7 +80,7 @@ def repeat(
         rng = np.random.default_rng(child)
         u = initial_points(problem.system.u, settings.n_initial, rng)
         try:
-            run = method(problem, experiment, u, settings.n_iterations, rng=rng)
+            run = method(problem, measure, u, settings.n_iterations, rng=rng)
         except HybridBOError as error:
             _logger.warning("Run %d failed: %r", index, error)
             if error.run is None:
@@ -93,7 +93,7 @@ def repeat(
 def study(
     methods: Mapping[str, Method],
     problem: Problem,
-    experiment: Experiment,
+    measure: Measure,
     settings: StudySettings,
     name: str | None = None,
     optimum: float | None = None,
@@ -116,11 +116,11 @@ def study(
     # Every method's runs, labeled with their key
     runs: list[Run] = []
     for label, method in methods.items():
-        method_runs = repeat(method, problem, experiment, settings)
+        method_runs = repeat(method, problem, measure, settings)
         runs += [replace(run, method=label) for run in method_runs]
 
     # Each method with its settings, from the record of one of its runs
-    record = _problem_record(problem, experiment)
+    record = _problem_record(problem, measure)
     records = {run.method: run.record for run in runs}
     method_lines = []
     for label in methods:

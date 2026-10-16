@@ -83,13 +83,13 @@ system = hb.System(
 )
 problem = hb.Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x - 4))
 
-# Experiment: here an oracle plays the real system
-experiment = hb.oracle_experiment(system, oracle=lambda v: [cas.sin(v.u)])
+# Measurement: here an oracle plays the real system
+measure = hb.oracle_measure(system, oracle=lambda v: [cas.sin(v.u)])
 
 # Method
 rng = np.random.default_rng(0)
 initial_points = hb.initial_points(system.u, n=2, rng=rng)
-run = hb.hybrid_bo(problem, experiment, initial_points, 5, hb.HybridBOSettings(), rng)
+run = hb.hybrid_bo(problem, measure, initial_points, 5, hb.HybridBOSettings(), rng)
 print(run.history.f)
 ```
 
@@ -97,7 +97,7 @@ print(run.history.f)
   and `uniform_sampling`. Each returns a `Run`: the evaluated points (`run.history`),
   the fitted GPs, the acquisition problems' solutions and a record of how the run was
   produced. A `Run` is plain data, so it saves and loads without your code.
-- **Studies**: `hb.study(methods, problem, experiment, hb.StudySettings(n_runs,
+- **Studies**: `hb.study(methods, problem, measure, hb.StudySettings(n_runs,
   n_initial, n_iterations, seed), optimum=optimum)` runs every method `n_runs` times,
   run i of each from the same initial points, and records the oracle optimum you
   state (find it once with `hb.oracle_optimum`). The same seed gives the same study.
@@ -112,9 +112,9 @@ print(run.history.f)
   final values) and `hb.hyperparameters(study)` the fitted GP hyperparameters over the
   iterations. Polars is optional (in the `examples` and `dev` pixi environments; the
   `hybrid-bo[analysis]` extra once packaged).
-- **Experiments**: a real application passes a function `(u, rng) -> measured` that
-  returns the measured variables at `u`. `oracle_experiment` simulates one from known
-  unknown equations, for test cases.
+- **Measurements**: a real application passes a function `(u, rng) -> measured` that
+  returns the measured variables at `u`. `oracle_measure` simulates one from known
+  unknown equations, for benchmark experiments.
 - **Settings**: `HybridBOSettings` and `StandardBOSettings` choose the acquisition
   function (`EI()` or `LCB(std_factor)`), the GP (`hb.gp.default_gp` unless given; see
   `hb.gp.GP`, `hb.gp.Hyper` and `hb.kernels`), the number of scenarios and the solver
@@ -149,7 +149,7 @@ into its `figures/`: `convergence.png` (the median oracle incumbent of every met
 over the evaluations), `regret.png` (when the study has an oracle optimum) and
 `<method>/run-000/iteration-00.png` for every iteration of every run. In your own
 scripts, `hb.plots.convergence(study)`,
-`hb.plots.regret(study)` and `hb.plots.iteration(run, problem, i, experiment=...)`
+`hb.plots.regret(study)` and `hb.plots.iteration(run, problem, i, measure=...)`
 draw the same figures; they need matplotlib and Polars (in the `examples` and `dev`
 pixi environments). Figures use the repo's matplotlib style, `hb.plots.STYLE`
 (`src/hybrid_bo/hybrid_bo.mplstyle`).

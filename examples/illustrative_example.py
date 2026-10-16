@@ -33,13 +33,13 @@ system = hb.System(
 problem = hb.Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x - 4))
 
 
-# Test case: an oracle plays the real system
+# Measurement: an oracle plays the real system
 def oracle(v):
-    """The unknown equation y = h(u), known only to the test case."""
+    """The unknown equation y = h(u), hidden from the methods."""
     return [cas.sin(v.u)]
 
 
-experiment = hb.oracle_experiment(system, oracle, noise_std=0.0)
+measure = hb.oracle_measure(system, oracle, noise_std=0.0)
 
 # The oracle optimum, at u = -0.45: the study measures regret from it, the methods
 # never see it. Found once with
@@ -47,7 +47,7 @@ experiment = hb.oracle_experiment(system, oracle, noise_std=0.0)
 # checked: hybrid BO runs reach it, and none evaluates a point below it
 optimum = -50.4608044704652
 
-# Methods: each takes (problem, experiment, initial_points, n, rng), where n is the
+# Methods: each takes (problem, measure, initial_points, n, rng), where n is the
 # number of iterations, or of design points for the baselines. Hybrid BO substitutes
 # the GP prediction for the unknown states, as this example always has
 methods = {
@@ -64,13 +64,13 @@ methods = {
 # which the saved study keeps, so it can be run again exactly
 study_settings = hb.StudySettings(n_runs=10, n_initial=2, n_iterations=5, seed=None)
 
-# Run or plot from the command line. The oracle experiment is cheap, so the iteration
+# Run or plot from the command line. The oracle measurement is cheap, so the iteration
 # figures draw its true curves
 if __name__ == "__main__":
     cli.main(
         "illustrative_example",
         problem,
-        experiment,
+        measure,
         methods,
         study_settings,
         optimum=optimum,

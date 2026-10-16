@@ -11,7 +11,7 @@ class History:
     initial points.
 
     `x`, `y` and `f` are measured (the measured variables) and reconstructed (the
-    rest). The oracle values are for benchmarking and are None when the experiment
+    rest). The oracle values are for benchmarking and are None when the measurement
     has no oracle.
     """
 
@@ -68,7 +68,7 @@ def oracle_incumbents(history: History) -> np.ndarray:
     it. Raises `ValueError` when the history has no oracle values.
     """
     if history.f_oracle is None:
-        msg = "the benchmark metric needs oracle values; the experiment had no oracle"
+        msg = "the benchmark metric needs oracle values; the measurement had no oracle"
         raise ValueError(msg)
 
     # A point becomes the incumbent's point when it beats every earlier one

@@ -40,9 +40,10 @@ The code is hard to change for three reasons:
 - **Notation follows the paper** (arXiv 2603.11199, Problem 4): decision variables `u`,
   mechanistic states `x`, unknown states `y`, known equations `0 = g(x, y, u)`, unknown
   equations `y = h(x, u)`, scenario draws `z` (the paper's ξ).
-- **Problem, method and experiment are separate** ([ADR 0001](docs/adr/0001-problem-method-experiment-split.md)).
+- **Problem, method and measurement are separate** ([ADR 0001](docs/adr/0001-problem-method-experiment-split.md),
+  names from [ADR 0006](docs/adr/0006-an-experiment-is-what-a-user-writes.md)).
   The problem is a system plus an objective; the method owns the surrogate; the oracle
-  exists only in test cases.
+  exists only in benchmark experiments.
 - **Equations are callables traced by CasADi** ([ADR 0002](docs/adr/0002-equations-are-casadi-callables.md)).
 - **Runs are pure data** ([ADR 0003](docs/adr/0003-runs-are-pure-data.md)).
 - **SX and MX.** Library math uses only CasADi operations, so it works for both. The
@@ -58,7 +59,7 @@ The code is hard to change for three reasons:
 - **Iteration plots replay the acquisition problem**
   ([ADR 0005](docs/adr/0005-iteration-plots-replay-the-acquisition-problem.md)).
 - **A slim top level** (#52). `hb.*` holds what a typical script uses: `Var`, `System`,
-  `Problem`, `Experiment`, `oracle_experiment`, `initial_points`, the methods and their
+  `Problem`, `Measure`, `oracle_measure`, `initial_points`, the methods and their
   settings, `EI`, `LCB`, `StudySettings`, `Study`, `repeat`, `study`,
   `oracle_optimum`, `save`, `load`, `Run`, `History`, `incumbents`,
   `oracle_incumbents`, `evaluations`, `summary`, `hyperparameters`, the errors and
@@ -92,13 +93,13 @@ system = hb.System(
 problem = hb.Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x - 4))
 
 
-# Test case: an oracle plays the real system
+# Measurement: an oracle plays the real system
 def oracle(v):
-    """The unknown equation y = h(u), known only to the test case."""
+    """The unknown equation y = h(u), hidden from the methods."""
     return [cas.sin(v.u)]
 
 
-experiment = hb.oracle_experiment(system, oracle, noise_std=0.0)
+measure = hb.oracle_measure(system, oracle, noise_std=0.0)
 
 # Method: how we search
 settings = hb.HybridBOSettings(acquisition=hb.EI(), n_scenarios=25)  # default GP
@@ -108,7 +109,7 @@ methods = {"hybrid_bo": functools.partial(hb.hybrid_bo, settings=settings)}
 # Study: 10 runs, run i of every method from the same initial points; the same seed
 # gives the same study
 study_settings = hb.StudySettings(n_runs=10, n_initial=2, n_iterations=5, seed=0)
-study = hb.study(methods, problem, experiment, study_settings, optimum=-50.4608)
+study = hb.study(methods, problem, measure, study_settings, optimum=-50.4608)
 hb.save(study, "results/illustrative")
 ```
 
@@ -181,26 +182,26 @@ class OracleMeasurement:  # what the oracle simulation returns
     y: np.ndarray  # (P,)
 
 
-Experiment = Callable[
+Measure = Callable[
     [np.ndarray, np.random.Generator], np.ndarray | OracleMeasurement
 ]  # u (N,) -> measured (P,)
 
 
-def oracle_experiment(
+def oracle_measure(
     system,
     oracle: Callable,  # like g: lambda v: [cas.sin(v.u)], y = oracle(x, u)
     noise_std: float = 0.0,
     n_starts: int = 100,
     tol: float = 1e-10,
-) -> Experiment: ...
+) -> Measure: ...
 
 
 def evaluate(
-    problem, experiment, u: np.ndarray, rng, n_starts=100, tol=1e-10
+    problem, measure, u: np.ndarray, rng, n_starts=100, tol=1e-10
 ) -> History: ...  # u (n, N); the points are the History's initial points
 ```
 
-- An **experiment** returns the measured variables for one trial point. A real
+- A **measurement** returns the measured variables for one trial point. A real
   application supplies only this, as a plain array.
 - The **oracle simulation** solves `g` with `y = oracle(x, u)` for every state
   (root-finding with CasADi Jacobians), reads the measured variables and adds
@@ -208,11 +209,11 @@ def evaluate(
   `OracleMeasurement`.
 - **Oracle vs real system.** Being simulated doesn't make a system an oracle. An in
   silico simulation of a plant (a flowsheet simulator, say) is a real system to the
-  library: a custom experiment that returns only the measured variables, with no
-  oracle values and no disagreement check. An oracle is the test case stating the
+  library: a custom measurement that returns only the measured variables, with no
+  oracle values and no disagreement check. An oracle is the benchmark experiment stating the
   unknown equations in closed form, next to `g`, so the oracle values are known and a
   method can be scored against them. The method never sees the oracle either way. A
-  custom experiment that knows its oracle values can return an `OracleMeasurement`.
+  custom measurement that knows its oracle values can return an `OracleMeasurement`.
 - The library then always solves the **root-finding problem**: `g` for the unmeasured
   states given `u` and the measured variables, from Latin hypercube starts over the
   unmeasured variables' start bounds, then computes `f` (and `f` at the oracle values).
@@ -273,12 +274,12 @@ class Run:
 
 The **record** is built by the library (`run_record`, before the method draws
 anything), not the example: the variables with their bounds, `h_inputs`, `measured`,
-`g` and `f` as expression text, the experiment, the method and its settings, the GP
+`g` and `f` as expression text, the measurement, the method and its settings, the GP
 spec and kernel expression (from #28), the seed, spawn key and generator state, and the
 versions of `hybrid_bo` (with `git describe`), Python, CasADi, NumPy and SciPy. The
-experiment is recorded by its docstring, else its name; the oracle simulation's
+measurement is recorded by its docstring, else its name; the oracle simulation's
 docstring is the oracle as text with its noise and solver settings, so a custom
-experiment adds a description by writing a docstring.
+measurement adds a description by writing a docstring.
 
 A column is found by name with `system.column("x1")`.
 
@@ -485,7 +486,7 @@ TrialPoint = Callable[
 
 def optimization_loop(
     problem,
-    experiment,
+    measure,
     initial_points,
     n_iterations,
     trial_point: TrialPoint,
@@ -494,16 +495,14 @@ def optimization_loop(
 ) -> Run: ...
 
 
-def hybrid_bo(
-    problem, experiment, initial_points, n_iterations, settings, rng
-) -> Run: ...
+def hybrid_bo(problem, measure, initial_points, n_iterations, settings, rng) -> Run: ...
 def standard_bo(
-    problem, experiment, initial_points, n_iterations, settings, rng
+    problem, measure, initial_points, n_iterations, settings, rng
 ) -> Run: ...
 def latin_hypercube_sampling(
-    problem, experiment, initial_points, n_points, rng
+    problem, measure, initial_points, n_points, rng
 ) -> Run: ...  # done in #26, baselines.py
-def uniform_sampling(problem, experiment, initial_points, n_points, rng) -> Run: ...
+def uniform_sampling(problem, measure, initial_points, n_points, rng) -> Run: ...
 ```
 
 The baselines are named `*_sampling` because `hb.sampling.uniform` and
@@ -557,13 +556,13 @@ it. Polars and matplotlib are optional (imported on first use; the
   comes from the seed, so the same settings give the same study.
   `Study(runs: tuple[Run, ...], settings, name, record)` is a flat collection; its
   settings hold the seed actually used (a fresh one for seed None) and its record
-  holds the problem, experiment, methods, oracle optimum (`oracle_optimum`, when
+  holds the problem, measurement, methods, oracle optimum (`oracle_optimum`, when
   stated) and versions once.
-- **Running** (#53, done). `hb.repeat(method, problem, experiment, settings)` runs
+- **Running** (#53, done). `hb.repeat(method, problem, measure, settings)` runs
   one method `n_runs` times, run i from `SeedSequence(seed).spawn(n_runs)[i]`, logging
   failed runs and keeping them as far as they got. A `Method` is called as
-  `method(problem, experiment, initial_points, n, rng=rng)`.
-  `hb.study(methods, problem, experiment, settings, name=None, optimum=None)`
+  `method(problem, measure, initial_points, n, rng=rng)`.
+  `hb.study(methods, problem, measure, settings, name=None, optimum=None)`
   resolves the seed once and gives run i of every method the same
   generator, so the same initial points; each method's later draws come from its own
   copy. Studies take a seed, not an `rng`, so that the settings alone reproduce a
@@ -589,7 +588,7 @@ it. Polars and matplotlib are optional (imported on first use; the
   not free): `plots.convergence(study)` (median oracle incumbent, else incumbent, with
   an IQR band and a dotted line after the initial points), `plots.regret(study,
   optimum=None)` (the same on a log scale, as in the paper) and
-  `plots.iteration(run, problem, i, *, experiment=None, gp=True, scenarios=True,
+  `plots.iteration(run, problem, i, *, measure=None, gp=True, scenarios=True,
   acquisition=True, settings=None)`, one iteration per call, no widgets and no `rng`.
   The GP panel comes from the stored surrogate; the acquisition panels replay the
   method's acquisition problem with u fixed at each grid point, warm-started outwards
@@ -600,7 +599,7 @@ it. Polars and matplotlib are optional (imported on first use; the
   hybrid BO the solver and `unknown_states_as_variables`) must match the record.
 - **Entry point** (#51, done; revised in #65). An example script ends with an
   explicit call that passes everything it defines: `cli.main(name, problem,
-  experiment, methods, study_settings, optimum=..., true_curves=...)`.
+  measure, methods, study_settings, optimum=..., true_curves=...)`.
   `examples/cli.py` parses the flags (run by default, or `plot [STUDY]`), overrides
   the settings and calls `hb.study` and `hb.save`, or `hb.load` and `hb.plots`.
   `pixi run example <name> [flags]` is `python -m <name> [flags]` run from
@@ -625,7 +624,7 @@ in this order:
 1. initial points: `lhs` over the `u` start bounds (drawn by the caller);
 2. method setup: hybrid BO draws the scenarios (`rng.standard_normal((S, P))`); the
    baselines draw their whole design; standard BO draws nothing;
-3. each evaluation, initial points first: the experiment (oracle simulation: full-solve
+3. each evaluation, initial points first: the measurement (oracle simulation: full-solve
    starts, then noise), then the root-finding starts;
 4. each iteration: GP-fit starts, then acquisition starts, then the evaluation of the
    trial point as in 3.
@@ -712,7 +711,7 @@ The tickets, in a workable order:
 
 - **#24 Workflow** (docs): PR template and CLAUDE.md fit the engineering skills;
   this list. Blocked by nothing.
-- **#25 Evaluation**: experiments, `oracle_experiment`, root-finding, `evaluate`,
+- **#25 Evaluation**: measurements, `oracle_measure`, root-finding, `evaluate`,
   `History`, the `HybridBOError` family. *Done*; `tests/test_evaluation.py` checks it
   against the legacy evaluation bit for bit.
 - **#26 Baselines**: Latin hypercube and uniform as methods returning a `Run` and its
@@ -728,7 +727,7 @@ The tickets, in a workable order:
   regression test now runs on the new API.
 - **#30 Switch**: the illustrative example as one script on the new API; delete
   `legacy/`, `Config` and YAML; README and both skills describe the new API.
-  *Done*; `examples/illustrative_example.py` defines the problem, experiment and
+  *Done*; `examples/illustrative_example.py` defines the problem, measurement and
   `methods`, runs and saves every method when run directly, and is what the
   regression test runs. Tests that compared with the legacy code check closed forms
   instead. The plot callbacks go with it; plots return in #31.

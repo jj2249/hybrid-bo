@@ -16,9 +16,9 @@ Define a problem
 - :py:class:`~hybrid_bo.problem.System`: the variables (``u``, ``x``, ``y``), the known
   equations ``g``, the inputs of the unknown equations and the measured variables.
 - :py:class:`~hybrid_bo.problem.Problem`: a system and the objective ``f``.
-- :py:data:`~hybrid_bo.evaluation.Experiment`: a function ``(u, rng) -> measured``,
-  the real system. :py:func:`~hybrid_bo.evaluation.oracle_experiment` simulates one
-  from known unknown equations, for test cases.
+- :py:data:`~hybrid_bo.evaluation.Measure`: a function ``(u, rng) -> measured``,
+  the real system. :py:func:`~hybrid_bo.evaluation.oracle_measure` simulates one
+  from known unknown equations, for benchmark experiments.
 
 Run a method
 ------------
