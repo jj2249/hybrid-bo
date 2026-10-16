@@ -23,8 +23,9 @@ states and computes ``f``. A run evaluates its *initial points*, then one trial 
 per *iteration*. The values the summary and the figures report, after each evaluation:
 
 - ``incumbent``: the lowest ``f`` the run has measured so far.
-- ``oracle_incumbent`` (with an oracle): the true objective at the incumbent's point,
-  without measurement noise. This is the fair score of a method.
+- ``oracle_incumbent`` (with an oracle): the objective at the incumbent's point,
+  computed from the oracle values rather than the noisy measurement. This is the fair
+  score of a method.
 - ``regret`` (with an oracle optimum): the oracle incumbent minus the oracle optimum.
 
 The figures

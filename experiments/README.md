@@ -11,5 +11,6 @@ pixi run experiment <name> [--n-runs 3 --plot ...]   # run a study; --help lists
 pixi run plot <name> [STUDY]                         # plot the newest (or named) study
 ```
 
-To write your own, see Writing an experiment in the docs
-(`docs/writing_an_experiment.rst`; build them with `pixi run docs`).
+To write your own, see
+[Writing an experiment](../docs/writing_an_experiment.rst) (build the docs with
+`pixi run docs`).

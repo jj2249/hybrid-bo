@@ -17,8 +17,8 @@ be a valid Python module name (letters, digits and underscores).
 The problem
 -----------
 
-The library minimizes an objective over the *decision variables* ``u``, the inputs you
-choose. Once ``u`` is fixed the system settles at its *states*: the *mechanistic
+The library minimizes an objective over the *decision variables* ``u``, the values
+you choose. Once ``u`` is fixed the system settles at its *states*: the *mechanistic
 states* ``x``, set by *known equations* ``g`` you can write down, and the *unknown
 states* ``y``, set by *unknown equations* ``h`` you can't:
 
@@ -48,9 +48,9 @@ root-finding problem that recovers the unmeasured states after each measurement.
 What that means when you write the equations:
 
 - Arithmetic (``+``, ``*``, ``**``, ...) works as usual.
-- Use CasADi's functions: ``cas.exp``, ``cas.sin``, ``cas.log``, ``cas.sqrt``. Don't
-  use ``math``: ``math.exp(v.x)`` silently gives ``nan``. numpy functions work for some
-  operations, with a warning, and fail for others.
+- Use CasADi's functions: ``cas.exp``, not ``np.exp`` or ``math.exp`` (likewise
+  ``cas.sin``, ``cas.log``, ``cas.sqrt``). ``math.exp(v.x)`` silently gives ``nan``,
+  and numpy functions work for some operations, with a warning, and fail for others.
 - No Python ``if``, ``max`` or ``min`` on variables, since a symbol has no value to
   compare: use ``cas.if_else(v.x > 0, a, b)``, ``cas.fmax`` and ``cas.fmin``. Prefer
   smooth expressions, since the solver relies on derivatives.
@@ -97,8 +97,8 @@ decision variable, in the order of ``system.u``, and it returns an array with on
 entry per measured variable, in the order of ``system.measured``. ``rng`` is a numpy
 random generator, for any noise you add.
 
-A benchmark: an oracle
-~~~~~~~~~~~~~~~~~~~~~~
+A benchmark experiment: an oracle
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 To test a method you write the unknown equations in closed form, the *oracle*, and
 :py:func:`~hybrid_bo.evaluation.oracle_measure` simulates the system from ``g`` and
@@ -141,7 +141,7 @@ run, so say what it measures. Without an oracle the library knows only what was
 measured:
 
 - there is no oracle optimum, so no regret and no ``regret.png``;
-- the convergence figure shows the incumbent, the best ``f`` the run measured,
+- the convergence figure shows the incumbent, the lowest ``f`` the run measured,
   instead of the oracle incumbent, and the summary's oracle and regret columns are
   empty;
 - don't pass ``optimum`` or ``true_curves`` to the command line (below).
@@ -165,7 +165,9 @@ method takes the same arguments, so settings are bound with ``functools.partial`
   (:py:class:`~hybrid_bo.acquisition.EI`, the default, or
   :py:class:`~hybrid_bo.acquisition.LCB` with a ``std_factor``), the number of
   scenarios (``n_scenarios``), the solver starts (``n_starts``) and the GP (``gp``,
-  default :py:func:`~hybrid_bo.gp.default_gp`).
+  default :py:func:`~hybrid_bo.gp.default_gp`). ``unknown_states_as_variables=False``
+  (as above) makes the acquisition problem smaller; the default, ``True``, often
+  helps the solver.
 - :py:func:`~hybrid_bo.bo.standard_bo` with
   :py:class:`~hybrid_bo.bo.StandardBOSettings`: BO with a GP of the objective, as the
   usual comparison.

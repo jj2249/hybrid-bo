@@ -46,9 +46,10 @@ Look at the study
 -----------------
 
 When it finishes, the command prints a summary with one row per method: the median and
-interquartile range (IQR), over the runs, of the final ``incumbent`` (the best
-objective measured), ``oracle_incumbent`` (the true objective there) and ``regret``
-(how far that is above the true optimum). Lower is better.
+interquartile range (IQR), over the runs, of the final ``incumbent`` (the lowest
+objective measured), ``oracle_incumbent`` (the objective there without measurement
+noise) and ``regret`` (how far that is above the oracle optimum, the problem's
+minimum). Lower is better.
 
 The study is saved in ``results/illustrative_example/<study id>/``:
 
@@ -60,8 +61,9 @@ The study is saved in ``results/illustrative_example/<study id>/``:
    figures/            convergence.png, regret.png and one figure per iteration
 
 Open ``figures/regret.png``: the median regret of each method over the evaluations,
-with the interquartile range across runs shaded. Hybrid BO's median regret should drop
-to about zero within the five iterations, while the other methods stay well above it.
+with the interquartile range across runs shaded. Hybrid BO's median regret should fall
+by orders of magnitude within the five iterations (the axis is logarithmic), while
+the other methods stay well above it.
 To draw the figures again later, or for an older study:
 
 .. code-block:: bash

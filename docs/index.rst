@@ -13,7 +13,9 @@ explains the method; these pages explain how to use the library.
 - :doc:`reading_results`: the saved study, the summary, the figures, and the study in
   Python.
 
-The API reference covers every function.
+Import the package as ``import hybrid_bo as hb``: the top level holds what a typical
+experiment uses, the rest is in its module (``hb.gp.default_gp``). The
+:doc:`API reference <autoapi/index>` covers every function.
 
 .. toctree::
    :maxdepth: 2
