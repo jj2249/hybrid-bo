@@ -59,8 +59,8 @@ def illustrative_run(
     rng = np.random.default_rng(0)
     u = initial_points(ex.system.u, 2, rng)
     if settings is None:
-        return pickled(method(ex.problem, ex.experiment, u, 2, rng))
-    return pickled(method(ex.problem, ex.experiment, u, 2, settings, rng))
+        return pickled(method(ex.problem, ex.measure, u, 2, rng))
+    return pickled(method(ex.problem, ex.measure, u, 2, settings, rng))
 
 
 # A fixture is a value pytest builds once and passes to every test that names it as an
@@ -287,7 +287,7 @@ def test_hybrid_bo_figure_from_a_pickled_run(hybrid_run):
     acquisition function, the objective of the acquisition problem at each u with
     each scenario's states solving g, all with one legend for the figure."""
     # Act: iteration 1, with the oracle for the true curves
-    figure = plots.iteration(hybrid_run, ex.problem, 1, experiment=ex.experiment)
+    figure = plots.iteration(hybrid_run, ex.problem, 1, measure=ex.measure)
 
     # The title, three gridded panels, the figure's legend
     surrogate, scenarios, acquisition = figure.axes

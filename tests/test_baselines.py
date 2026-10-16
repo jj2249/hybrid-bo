@@ -19,7 +19,7 @@ from hybrid_bo import (
     Run,
     initial_points,
     latin_hypercube_sampling,
-    oracle_experiment,
+    oracle_measure,
     uniform_sampling,
 )
 
@@ -29,9 +29,9 @@ METHODS = [latin_hypercube_sampling, uniform_sampling]
 def illustrative_run(problem, method, rng=None) -> Run:
     """A run of `method` on the illustrative example: 2 initial points, then 3."""
     rng = np.random.default_rng(0) if rng is None else rng
-    experiment = oracle_experiment(problem.system, oracle=lambda v: [cas.sin(v.u)])
+    measure = oracle_measure(problem.system, oracle=lambda v: [cas.sin(v.u)])
     u = initial_points(problem.system.u, 2, rng)
-    return method(problem, experiment, u, 3, rng)
+    return method(problem, measure, u, 3, rng)
 
 
 class _DataOnlyUnpickler(pickle.Unpickler):
@@ -54,11 +54,11 @@ def test_initial_points_come_first(illustrative_problem, method):
     points, all inside the bounds of u."""
     rng = np.random.default_rng(0)
     u = initial_points(illustrative_problem.system.u, 2, rng)
-    experiment = oracle_experiment(
+    measure = oracle_measure(
         illustrative_problem.system, oracle=lambda v: [cas.sin(v.u)]
     )
 
-    run = method(illustrative_problem, experiment, u, 3, rng)
+    run = method(illustrative_problem, measure, u, 3, rng)
 
     assert run.history.n_initial == 2
     assert run.history.u.shape == (5, 1)
@@ -82,16 +82,16 @@ def test_run_pickles_without_the_code_that_produced_it(illustrative_problem, met
 
 
 def test_record_describes_the_problem_method_and_versions(illustrative_problem):
-    """The run's record holds, as strings, the equations, the experiment, the
+    """The run's record holds, as strings, the equations, the measurement, the
     variables, the method and its settings, and the package versions."""
     run = illustrative_run(illustrative_problem, latin_hypercube_sampling)
     record = run.record
 
-    # The problem and the experiment
+    # The problem and the measurement
     assert all(isinstance(value, str) for value in record.values())
     assert "exp(x)" in record["g"]
     assert "sin(((12*x)-4))" in record["f"]
-    assert "sin(u)" in record["experiment"]
+    assert "sin(u)" in record["measure"]
     assert "lower=-2.0" in record["u"]
     assert record["h_inputs"] == "u"
     assert record["measured"] == "y"
@@ -118,11 +118,11 @@ def test_record_holds_the_seed_and_spawn_key(illustrative_problem):
     assert record["spawn_key"] == "(2,)"
 
 
-def test_custom_experiment_is_recorded_by_docstring_or_name(illustrative_problem):
-    """A custom experiment is recorded by its docstring, or by its name when it has
+def test_custom_measure_is_recorded_by_docstring_or_name(illustrative_problem):
+    """A custom measurement is recorded by its docstring, or by its name when it has
     none."""
 
-    # Two experiments: `plant` has no docstring on purpose
+    # Two measurements: `plant` has no docstring on purpose
     def plant(u, rng):
         return np.sin(u)
 
@@ -134,16 +134,16 @@ def test_custom_experiment_is_recorded_by_docstring_or_name(illustrative_problem
     records = [
         latin_hypercube_sampling(
             illustrative_problem,
-            experiment,
+            measure,
             np.array([[0.5]]),
             1,
             np.random.default_rng(0),
         ).record
-        for experiment in (plant, described_plant)
+        for measure in (plant, described_plant)
     ]
 
-    assert records[0]["experiment"].endswith("plant")
-    assert records[1]["experiment"] == "Pilot plant, sensor on y."
+    assert records[0]["measure"].endswith("plant")
+    assert records[1]["measure"] == "Pilot plant, sensor on y."
 
 
 @pytest.mark.parametrize("method", METHODS)
@@ -153,7 +153,7 @@ def test_failed_evaluation_carries_the_partial_run(illustrative_problem, method)
     # root-finding problem has no root
     calls = []
 
-    def experiment(u, rng):
+    def measure(u, rng):
         calls.append(u)
         return np.array([0.5]) if len(calls) < 3 else np.array([np.nan])
 
@@ -162,7 +162,7 @@ def test_failed_evaluation_carries_the_partial_run(illustrative_problem, method)
     with pytest.raises(RootFindingError) as info:
         method(
             illustrative_problem,
-            experiment,
+            measure,
             np.array([[-0.5], [0.5]]),
             2,
             np.random.default_rng(0),

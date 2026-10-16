@@ -27,7 +27,7 @@ def run_cli(argv, true_curves=False):
     cli.main(
         "illustrative_example",
         ex.problem,
-        ex.experiment,
+        ex.measure,
         ex.methods,
         ex.study_settings,
         optimum=ex.optimum,

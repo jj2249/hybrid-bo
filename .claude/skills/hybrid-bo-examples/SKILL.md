@@ -1,6 +1,6 @@
 ---
 name: hybrid-bo-examples
-description: Use when writing, modifying or running an example under examples/. Covers the layout of an example script, how to define the Problem and the experiment, the method settings, saving runs, and common mistakes.
+description: Use when writing, modifying or running an example under examples/. Covers the layout of an example script, how to define the Problem and the measurement, the method settings, saving runs, and common mistakes.
 ---
 
 # Writing and running examples
@@ -17,11 +17,11 @@ An example is one module under `examples/`, importable as a top-level module (py
 and ty put `examples/` on the path). At module level it defines, in this order:
 
 1. **Problem**: `Var`s, `System`, `Problem` (below).
-2. **Experiment**: for a test case, a module-level `def oracle(v)`,
-   `oracle_experiment(system, oracle, noise_std)` and the stated oracle `optimum`;
+2. **Measurement**: for a benchmark experiment, a module-level `def oracle(v)`,
+   `oracle_measure(system, oracle, noise_std)` and the stated oracle `optimum`;
    otherwise a custom `(u (N,), rng) -> measured (P,)` function.
 3. **Methods**: `methods`, a dict from method label to a callable
-   `(problem, experiment, initial_points, n, rng) -> Run`. Bind settings with
+   `(problem, measure, initial_points, n, rng) -> Run`. Bind settings with
    `functools.partial(hb.hybrid_bo, settings=hb.HybridBOSettings(...))`; the
    baselines need no settings (`n` is their number of design points). The plots read
    a run's settings from its record.
@@ -36,7 +36,7 @@ and ty put `examples/` on the path). At module level it defines, in this order:
        cli.main(
            "illustrative_example",
            problem,
-           experiment,
+           measure,
            methods,
            study_settings,
            optimum=optimum,
@@ -47,17 +47,17 @@ and ty put `examples/` on the path). At module level it defines, in this order:
    The first argument names the study and its results folder; use the module's
    name. `optimum` is the stated oracle optimum, which only the study sees (regret);
    the methods never do. `true_curves=True` makes the iteration figures evaluate the
-   experiment over the grid, so set it only for a cheap experiment (an oracle).
+   measurement over the grid, so set it only for a cheap measurement (an oracle).
 
 Everything the command line uses is passed in that call (directly, or inside
-`problem` and `experiment`): nothing is read from the module by name. `cli.main` runs `hb.study(methods, problem, experiment, study_settings,
+`problem` and `measure`): nothing is read from the module by name. `cli.main` runs `hb.study(methods, problem, measure, study_settings,
 name=..., optimum=...)` and saves the study with `hb.save` to
 `results/<example>/<study id>/` (`study.json`, `runs/<method>/run-000.json`;
 git-ignored). The library never writes files on its own; saving is an explicit call.
 Importing the module runs nothing (the call is under `__main__`), so
-`tests/test_regression.py` reuses its `problem`, `experiment`, `methods` and
+`tests/test_regression.py` reuses its `problem`, `measure`, `methods` and
 `study_settings`, and `tests/conftest.py`'s `illustrative_problem` fixture is its `problem`. Changing the illustrative example's
-problem, experiment or settings therefore moves the regression baselines: that is a
+problem, measurement or settings therefore moves the regression baselines: that is a
 *logic* change.
 
 **Randomness.** Every draw of a study comes from `settings.seed`: the same settings
@@ -71,7 +71,7 @@ generator.
 **Failures.** A `HybridBOError` raised during a method carries the partial run as
 `error.run`; `hb.repeat` logs the error and keeps the partial run in the study.
 
-**Oracle optimum.** A test case states it as a module-level `optimum`, which
+**Oracle optimum.** A benchmark experiment states it as a module-level `optimum`, which
 `hb.study` records and regret is measured from. The study never computes it: a
 10-start search found a local minimum for the illustrative example (#62). Find it
 once with `hb.oracle_optimum(problem, oracle, rng, n_starts=200)`, check it, and say
@@ -135,6 +135,6 @@ one whose `study.json` was written last, saves `summary.csv` if the study has no
 (studies saved before summaries), and, in `hb.plots.STYLE`, saves into its
 `figures/` folder `convergence.png`, `regret.png` (with an oracle optimum) and
 `<method>/run-000/iteration-00.png` for every iteration of every run (with the
-experiment's true curves when the script passes `true_curves=True`). The iteration
+measurement's true curves when the script passes `true_curves=True`). The iteration
 figures need one decision variable and read the settings from the run's record (a
 custom GP needs `settings=`); otherwise `plot` prints why and skips that run's.

@@ -9,8 +9,8 @@ USER_FACING = {
     "Var",
     "System",
     "Problem",
-    "Experiment",
-    "oracle_experiment",
+    "Measure",
+    "oracle_measure",
     # Run a method
     "initial_points",
     "hybrid_bo",

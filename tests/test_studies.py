@@ -69,7 +69,7 @@ def illustrative_study() -> hb.Study:
     return hb.study(
         ex.methods,
         ex.problem,
-        ex.experiment,
+        ex.measure,
         SETTINGS,
         name="illustrative_example",
         optimum=ex.optimum,
@@ -90,7 +90,7 @@ def test_study_gives_the_runs_of_each_method_from_spawned_generators(
         assert [run.index for run in runs] == [0, 1]
         for run, rng in zip(runs, np.random.default_rng(0).spawn(2), strict=True):
             u = hb.initial_points(ex.system.u, SETTINGS.n_initial, rng)
-            expected = method(ex.problem, ex.experiment, u, 1, rng=rng)
+            expected = method(ex.problem, ex.measure, u, 1, rng=rng)
             assert_same(run.history, expected.history, f"{name} run {run.index}")
 
 
@@ -118,7 +118,7 @@ def test_study_records_the_problem_methods_and_stated_oracle_optimum(
     stated oracle optimum."""
     record = illustrative_study.record
     run_record = illustrative_study.runs[0].record
-    for key in ("u", "x", "y", "h_inputs", "measured", "g", "f", "experiment"):
+    for key in ("u", "x", "y", "h_inputs", "measured", "g", "f", "measure"):
         assert record[key] == run_record[key]
     assert "hybrid_bo: hybrid_bo(" in record["methods"]
     assert "uniform_sampling: uniform_sampling(n_points=1)" in record["methods"]
@@ -128,12 +128,12 @@ def test_study_records_the_problem_methods_and_stated_oracle_optimum(
 
 
 def test_without_a_stated_optimum_the_study_has_none(illustrative_problem):
-    """The study never computes the oracle optimum, even when the experiment has an
+    """The study never computes the oracle optimum, even when the measurement has an
     oracle."""
     methods = {"uniform": hb.uniform_sampling}
     settings = hb.StudySettings(n_runs=1, n_initial=1, n_iterations=1)
 
-    study = hb.study(methods, illustrative_problem, ex.experiment, settings)
+    study = hb.study(methods, illustrative_problem, ex.measure, settings)
 
     assert "oracle_optimum" not in study.record
 
@@ -147,13 +147,13 @@ def test_an_optimum_beaten_by_an_evaluated_point_warns(illustrative_problem):
 
     # `pytest.warns` fails unless the block warns with the category, matching `match`
     with pytest.warns(hb.OracleOptimumWarning, match="below the stated"):
-        hb.study(methods, illustrative_problem, ex.experiment, settings, optimum=100.0)
+        hb.study(methods, illustrative_problem, ex.measure, settings, optimum=100.0)
 
     # The warning turned into an error, so the test fails if it is raised
     with warnings.catch_warnings():
         warnings.simplefilter("error", hb.OracleOptimumWarning)
         hb.study(
-            methods, illustrative_problem, ex.experiment, settings, optimum=ex.optimum
+            methods, illustrative_problem, ex.measure, settings, optimum=ex.optimum
         )
 
 
@@ -170,7 +170,7 @@ def test_two_configurations_of_one_method_keep_their_labels(illustrative_problem
     study = hb.study(
         methods,
         illustrative_problem,
-        ex.experiment,
+        ex.measure,
         settings,
     )
 
@@ -184,11 +184,11 @@ def test_repeat_keeps_a_failed_run_as_far_as_it_got(illustrative_problem, caplog
 
     `caplog` is a pytest fixture that captures what the code logs.
     """
-    # An experiment that measures NaN, so the root-finding problem fails, for the
+    # A `measure` that returns NaN, so the root-finding problem fails, for the
     # second evaluation of each run
     calls = []
 
-    def experiment(u, rng):
+    def measure(u, rng):
         """y = sin(u), but NaN for the second evaluation of every run."""
         calls.append(u)
         return np.array([np.nan]) if len(calls) % 2 == 0 else np.sin(u)
@@ -198,7 +198,7 @@ def test_repeat_keeps_a_failed_run_as_far_as_it_got(illustrative_problem, caplog
     runs = hb.repeat(
         hb.uniform_sampling,
         illustrative_problem,
-        experiment,
+        measure,
         settings,
     )
 
@@ -215,8 +215,8 @@ def test_the_same_seed_gives_the_same_study(illustrative_problem):
     methods = {"uniform": hb.uniform_sampling}
     settings = hb.StudySettings(n_runs=2, n_initial=1, n_iterations=1)
 
-    first = hb.study(methods, illustrative_problem, ex.experiment, settings)
-    again = hb.study(methods, illustrative_problem, ex.experiment, first.settings)
+    first = hb.study(methods, illustrative_problem, ex.measure, settings)
+    again = hb.study(methods, illustrative_problem, ex.measure, first.settings)
 
     assert first.settings.seed is not None
     assert again.settings == first.settings
@@ -245,7 +245,7 @@ def test_oracle_optimum_solves_the_problem_with_the_oracle_in_place_of_h():
 
 
 def test_oracle_optimum_rejects_an_oracle_of_the_wrong_size(illustrative_problem):
-    """The oracle must give one value per unknown state, as for the experiment."""
+    """The oracle must give one value per unknown state, as for the measurement."""
     with pytest.raises(ValueError, match="one value per unknown state"):
         hb.oracle_optimum(
             illustrative_problem,

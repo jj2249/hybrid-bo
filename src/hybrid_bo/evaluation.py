@@ -1,25 +1,27 @@
-"""Evaluation: running experiments at trial points and reconstructing the states.
+"""Evaluation: running measurements at trial points and reconstructing the states.
 
-An experiment maps the decision variables to the measured variables (ADR 0001). After
-every experiment the library solves the root-finding problem, the known equations `g`
-for the unmeasured states, and computes the objective. The experiment can be:
+A measurement maps the decision variables to the measured variables (ADR 0001). After
+every measurement the library solves the root-finding problem, the known equations `g`
+for the unmeasured states, and computes the objective. The measurement can be:
 
 - **A real system**: the plant itself, or an in silico simulation that stands in for it
-  (e.g. a flowsheet simulator). You write the experiment as a function that runs it and
+  (e.g. a flowsheet simulator). You write the measurement as a function that runs it and
   returns only the measured variables as an array. The library sees nothing else, so
-  there are no oracle values and no check against them. This is what a real application
+  there are no oracle values and no check against them. This is all a real system
   supplies.
-- **The oracle simulation** (`oracle_experiment`), for test cases that benchmark a
-  method. You write the unknown equations in closed form, as the oracle, in the same
-  CasADi namespace as `g`, and the library simulates the system from `g` and the oracle
-  together. It returns an `OracleMeasurement`: the noisy measured variables, which are
-  all the method sees, plus the oracle values of every state, kept for benchmarking.
+- **The oracle simulation** (`oracle_measure`), for benchmark experiments, which
+  score a method. You write the unknown equations in closed form, as the oracle, in
+  the same CasADi namespace as `g`, and the library simulates the system from `g` and
+  the oracle together. It returns an `OracleMeasurement`: the noisy measured
+  variables, which are all the method sees, plus the oracle values of every state,
+  kept for benchmarking.
 
 The difference is not whether the system is simulated: an in silico simulation of a
 plant is a real system here, because the method doesn't know its unknown equations.
-What makes an oracle is that the test case states the unknown equations exactly, so the
-oracle values are known and results can be scored against them. A custom experiment
-that knows its oracle values can also return an `OracleMeasurement`.
+What makes an oracle is that the benchmark experiment states the unknown equations
+exactly, so the oracle values are known and results can be scored against them. A
+custom measurement that knows its oracle values can also return an
+`OracleMeasurement`.
 
 **Disagreement warnings.** With an oracle, `evaluate` checks that the reconstruction
 lies on the same root as the oracle values. Noise moves the measured variables, so the
@@ -60,7 +62,7 @@ class OracleMeasurement:
 # Runs the system at u (N,) and returns the measured variables (P,) in the order of
 # `system.measured`. A real system (the plant or an in silico simulation of it) returns
 # an array; the oracle simulation returns an OracleMeasurement.
-Experiment = Callable[[np.ndarray, np.random.Generator], np.ndarray | OracleMeasurement]
+Measure = Callable[[np.ndarray, np.random.Generator], np.ndarray | OracleMeasurement]
 
 
 def _states(system: System) -> tuple[Var, ...]:
@@ -109,26 +111,26 @@ def _find_root(
     raise RootFindingError(msg)
 
 
-def oracle_experiment(
+def oracle_measure(
     system: System,
     oracle: Callable[[Any], Any],
     noise_std: float = 0.0,
     n_starts: int = 100,
     tol: float = 1e-10,
-) -> Experiment:
-    """The oracle simulation as an experiment, for test cases that benchmark a method.
+) -> Measure:
+    """The oracle simulation as a measurement, for benchmark experiments.
 
     `oracle` is the unknown equations in closed form, a callable over the variables
     like `g` (`lambda v: [cas.sin(v.u)]`), giving y = oracle(x, u). The method never
-    sees it; only the experiment uses it. For a real system, including an in silico
-    simulation of a plant, write your own experiment instead (see the module docs). The experiment solves `g` and the
-    oracle together for every state, from `n_starts` Latin hypercube starts over the
-    start bounds, reads the measured variables and adds normal noise with std
-    `noise_std`. The noise is drawn even when `noise_std` is 0, so the draws don't
-    depend on it.
+    sees it; only the measurement uses it. For a real system, including an in silico
+    simulation of a plant, write your own measurement instead (see the module docs).
+    The measurement solves `g` and the oracle together for every state, from
+    `n_starts` Latin hypercube starts over the start bounds, reads the measured
+    variables and adds normal noise with std `noise_std`. The noise is drawn even when
+    `noise_std` is 0, so the draws don't depend on it.
 
     Raises `ValueError` if the oracle doesn't give one value per unknown state. The
-    experiment raises `RootFindingError` if no start gives a root.
+    measurement raises `RootFindingError` if no start gives a root.
     """
     oracle_function = _trace_oracle(system, oracle)
 
@@ -136,7 +138,7 @@ def oracle_experiment(
     states = _states(system)
     measured_columns = [states.index(var) for var in system.measured]
 
-    def experiment(u: np.ndarray, rng: np.random.Generator) -> OracleMeasurement:
+    def measure(u: np.ndarray, rng: np.random.Generator) -> OracleMeasurement:
         # Oracle values: g and the oracle together, for every state
         w = Symbolic.sym("w", len(states))
         x, y = w[: system.n_x], w[system.n_x :]
@@ -152,13 +154,13 @@ def oracle_experiment(
             y=root[system.n_x :],
         )
 
-    # The run's record describes an experiment by its docstring
+    # The run's record describes a measurement by its docstring
     oracle_text = _as_text(oracle_function, system.x, system.y, system.u)
-    experiment.__doc__ = (
+    measure.__doc__ = (
         f"oracle simulation: y = {oracle_text}, noise_std={noise_std}, "
         f"n_starts={n_starts}, tol={tol}"
     )
-    return experiment
+    return measure
 
 
 def _trace_oracle(system: System, oracle: Callable[[Any], Any]) -> cas.Function:
@@ -186,13 +188,13 @@ def oracle_optimum(
     """The oracle optimum: the lowest objective the oracle allows, min f(x, y, u)
     subject to g(x, y, u) = 0 and y = oracle(x, u), within the bounds.
 
-    `oracle` is written as for `oracle_experiment`. Solved like the acquisition
+    `oracle` is written as for `oracle_measure`. Solved like the acquisition
     problem: by `multistart` from `n_starts` Latin hypercube starts over the start
     bounds of u, x and y, so it is the best local optimum found, which can miss the
-    global one: use it to find a test case's optimum once, from many starts, and
-    state that value in the study. Raises `ValueError`
-    if the oracle doesn't give one value per unknown state, and `NoSolutionError` if
-    every start fails.
+    global one: use it to find a benchmark experiment's optimum once, from many
+    starts, and state that value in the study. Raises `ValueError` if the oracle
+    doesn't give one value per unknown state, and `NoSolutionError` if every start
+    fails.
     """
     # The variables w = (u, x, y), with g and the oracle as constraints
     system = problem.system
@@ -243,20 +245,20 @@ def _reconstruct(
 
 def _evaluate_point(
     system: System,
-    experiment: Experiment,
+    measure: Measure,
     u: np.ndarray,
     rng: np.random.Generator,
     n_starts: int,
     tol: float,
 ) -> tuple[np.ndarray, np.ndarray | None]:
-    """Runs the experiment at u (N,) and reconstructs the states.
+    """Runs the measurement at u (N,) and reconstructs the states.
 
     Returns the states (M + P,) and their oracle values (None without an oracle). Warns
     with `ReconstructionWarning` when the reconstruction is a different root from the
     one the oracle values lie on.
     """
-    # The experiment: the measured variables, and the oracle values in test cases
-    result = experiment(u, rng)
+    # The measurement: the measured variables, and the oracle values if known
+    result = measure(u, rng)
     oracle_measurement = result if isinstance(result, OracleMeasurement) else None
     measured = np.asarray(
         result if oracle_measurement is None else oracle_measurement.measured,
@@ -264,7 +266,7 @@ def _evaluate_point(
     )
     if measured.shape != (system.n_y,):
         msg = (
-            f"The experiment must return the {system.n_y} measured variables with "
+            f"The measurement must return the {system.n_y} measured variables with "
             f"shape ({system.n_y},), got shape {measured.shape}"
         )
         raise ValueError(msg)
@@ -327,7 +329,7 @@ def _history(
 
 def evaluate(
     problem: Problem,
-    experiment: Experiment,
+    measure: Measure,
     u: np.ndarray,
     rng: np.random.Generator,
     n_starts: int = 100,
@@ -335,13 +337,13 @@ def evaluate(
 ) -> History:
     """Evaluates each row of u (n, N) in turn and returns them as initial points.
 
-    Each evaluation runs the experiment, then solves the root-finding problem for the
+    Each evaluation runs the measurement, then solves the root-finding problem for the
     unmeasured states from `n_starts` Latin hypercube starts over their start bounds,
     then computes `f`. With an oracle, it also computes `f` at the oracle values and
     warns with `ReconstructionWarning` when the reconstruction is a different root
     from the one the oracle values lie on (see the module docs).
 
-    Raises `ValueError` if the experiment returns the wrong shape, and
+    Raises `ValueError` if the measurement returns the wrong shape, and
     `RootFindingError` (from the oracle simulation or the root-finding problem) with
     the points evaluated before it as `error.history`.
     """
@@ -350,7 +352,7 @@ def evaluate(
     for u_point in u:
         try:
             point, oracle_point = _evaluate_point(
-                problem.system, experiment, u_point, rng, n_starts, tol
+                problem.system, measure, u_point, rng, n_starts, tol
             )
         except HybridBOError as error:
             error.history = _history(problem, u[: len(states)], states, oracle_values)

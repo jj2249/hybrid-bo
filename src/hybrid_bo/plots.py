@@ -24,7 +24,7 @@ from hybrid_bo.acquisition import (
     standard_acquisition,
 )
 from hybrid_bo.bo import HybridBOSettings, StandardBOSettings
-from hybrid_bo.evaluation import Experiment, evaluate
+from hybrid_bo.evaluation import Measure, evaluate
 from hybrid_bo.gp import GP, _gp_record, default_gp, predict
 from hybrid_bo.history import n_iterations
 from hybrid_bo.problem import Problem, Symbolic
@@ -133,7 +133,7 @@ def iteration(
     problem: Problem,
     i: int,
     *,
-    experiment: Experiment | None = None,
+    measure: Measure | None = None,
     gp: bool = True,
     scenarios: bool = True,
     acquisition: bool = True,
@@ -155,16 +155,16 @@ def iteration(
       incumbent, with u fixed at each grid point, solved outwards from the stored
       solution; a failed solve leaves a gap.
 
-    The baselines (or every panel off) show the points with f. `experiment` adds the
+    The baselines (or every panel off) show the points with f. `measure` adds the
     true curves; it runs at every grid point (generator seeded with 0), so pass an
-    oracle experiment, never a real system.
+    oracle measurement, never a real system.
 
     The settings are read from the run's record. The record holds the GP as text, not
     its kernel function, so a run with a GP other than `default_gp` needs `settings`.
 
     Raises `ValueError` unless the problem has one decision variable (and, for hybrid
     BO's GP panel, h takes only u), if the settings or the default GP don't match the
-    record, or if `experiment` has no oracle; `TypeError` if the settings aren't the
+    record, or if `measure` has no oracle; `TypeError` if the settings aren't the
     run's method's; and `IndexError` if the run has no iteration `i`.
     """
     # The checks: one decision variable, the GP of y over u, the iteration
@@ -190,10 +190,10 @@ def iteration(
 
     # The true curves: the oracle values at every grid point
     y_true = f_true = None
-    if experiment is not None:
-        truth = evaluate(problem, experiment, u[:, None], np.random.default_rng(0))
+    if measure is not None:
+        truth = evaluate(problem, measure, u[:, None], np.random.default_rng(0))
         if truth.f_oracle is None or truth.y_oracle is None:
-            msg = "The true curves need an oracle experiment"
+            msg = "The true curves need an oracle measurement"
             raise ValueError(msg)
         y_true, f_true = truth.y_oracle[:, 0], truth.f_oracle
 

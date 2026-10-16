@@ -24,7 +24,7 @@ from hybrid_bo import (
     hybrid_bo,
     incumbents,
     initial_points,
-    oracle_experiment,
+    oracle_measure,
 )
 from hybrid_bo.acquisition import Scenarios, hybrid_acquisition, saa_scenarios
 from hybrid_bo.gp import FittedGP, default_gp, fit_gp, predict
@@ -77,8 +77,8 @@ def illustrative_run(problem, settings, seed=0) -> Run:
     """A hybrid BO run without noise: 2 initial points, 2 iterations."""
     rng = np.random.default_rng(seed)
     u = initial_points(problem.system.u, 2, rng)
-    experiment = oracle_experiment(problem.system, oracle=lambda v: [cas.sin(v.u)])
-    return hybrid_bo(problem, experiment, u, 2, settings, rng)
+    measure = oracle_measure(problem.system, oracle=lambda v: [cas.sin(v.u)])
+    return hybrid_bo(problem, measure, u, 2, settings, rng)
 
 
 # Scenarios
@@ -384,11 +384,11 @@ def test_failed_evaluation_carries_the_partial_run_with_its_scenarios(
 ):
     """When evaluating a trial point fails, the error carries the run so far, with
     the scenarios."""
-    # An experiment whose third evaluation (the first trial point) measures NaN, so
+    # A `measure` that returns NaN at its third evaluation (the first trial point), so
     # the root-finding problem has no root
     calls = []
 
-    def experiment(u, rng):
+    def measure(u, rng):
         """y = sin(u) for the first two calls, then NaN."""
         calls.append(u)
         return np.sin(u) if len(calls) < 3 else np.array([np.nan])
@@ -397,7 +397,7 @@ def test_failed_evaluation_carries_the_partial_run_with_its_scenarios(
     with pytest.raises(RootFindingError) as info:
         hybrid_bo(
             illustrative_problem,
-            experiment,
+            measure,
             np.array([[-0.5], [0.5]]),
             2,
             HybridBOSettings(n_scenarios=5),

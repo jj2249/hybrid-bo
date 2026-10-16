@@ -1,4 +1,4 @@
-"""Evaluation: experiments, the oracle simulation, the root-finding problem, History.
+"""Evaluation: measurements, the oracle simulation, the root-finding problem, History.
 
 pytest runs every function whose name starts with `test_`. A test argument named like
 a fixture in `conftest.py` (here `illustrative_problem`) is filled in by pytest with
@@ -19,17 +19,17 @@ from hybrid_bo import (
     System,
     Var,
     incumbents,
-    oracle_experiment,
     oracle_incumbents,
+    oracle_measure,
 )
 from hybrid_bo.evaluation import OracleMeasurement, evaluate
 from hybrid_bo.history import n_iterations
 
 
-def illustrative_experiment(problem: Problem, noise_std: float):
+def illustrative_measure(problem: Problem, noise_std: float):
     """The oracle simulation of the illustrative example, with Gaussian noise of
     `noise_std` on the measurement."""
-    return oracle_experiment(
+    return oracle_measure(
         problem.system, oracle=lambda v: [cas.sin(v.u)], noise_std=noise_std
     )
 
@@ -69,10 +69,10 @@ def test_noise_free_evaluation_matches_the_closed_form(illustrative_problem):
     illustrative example exactly."""
     # Trial points across the bounds of u
     u = np.array([-2.0, -0.5, 0.0, 1.0, 2.0])
-    experiment = illustrative_experiment(illustrative_problem, noise_std=0.0)
+    measure = illustrative_measure(illustrative_problem, noise_std=0.0)
 
     history = evaluate(
-        illustrative_problem, experiment, u[:, np.newaxis], np.random.default_rng(0)
+        illustrative_problem, measure, u[:, np.newaxis], np.random.default_rng(0)
     )
 
     # Measured, reconstructed and oracle values all match the closed form
@@ -95,10 +95,10 @@ def test_noise_is_the_first_stream_draw(illustrative_problem):
     """The measurement noise is the first draw from the evaluation's generator."""
     # The root-finding starts come from lhs, which spawns instead of consuming the
     # stream
-    experiment = illustrative_experiment(illustrative_problem, noise_std=0.1)
+    measure = illustrative_measure(illustrative_problem, noise_std=0.1)
 
     history = evaluate(
-        illustrative_problem, experiment, np.array([[-0.5]]), np.random.default_rng(0)
+        illustrative_problem, measure, np.array([[-0.5]]), np.random.default_rng(0)
     )
 
     noise = np.random.default_rng(0).normal(0.0, 0.1, size=1)
@@ -150,9 +150,9 @@ def test_root_finding_starts_cover_the_unmeasured_variables(monkeypatch):
     np.testing.assert_allclose(history.f, [0.75**2])
 
 
-def test_experiment_without_an_oracle_gives_no_oracle_values():
-    """An experiment that returns only the measurement gives reconstructed values and
-    no oracle values."""
+def test_measure_without_an_oracle_gives_no_oracle_values():
+    """A measurement that returns only the measured variables gives reconstructed
+    values and no oracle values."""
     problem = two_branch_problem()
 
     history = evaluate(
@@ -176,7 +176,7 @@ def test_disagreement_with_the_oracle_warns():
 
     # The oracle is on the negative branch; the reconstruction can only find the
     # positive one
-    def experiment(u, rng):
+    def measure(u, rng):
         return OracleMeasurement(
             measured=np.array([1.0]), x=np.array([-1.0]), y=np.array([1.0])
         )
@@ -186,7 +186,7 @@ def test_disagreement_with_the_oracle_warns():
     with pytest.warns(ReconstructionWarning, match="oracle"):
         history = evaluate(
             two_branch_problem(),
-            experiment,
+            measure,
             np.array([[0.0]]),
             np.random.default_rng(0),
         )
@@ -203,13 +203,13 @@ def test_noisy_reconstruction_on_the_oracle_branch_does_not_warn():
 
     # Noise moves the reconstruction away from the oracle values, but along the
     # same branch
-    def experiment(u, rng):
+    def measure(u, rng):
         return OracleMeasurement(
             measured=np.array([1.1]), x=np.array([1.0]), y=np.array([1.0])
         )
 
     history = evaluate(
-        two_branch_problem(), experiment, np.array([[0.0]]), np.random.default_rng(0)
+        two_branch_problem(), measure, np.array([[0.0]]), np.random.default_rng(0)
     )
 
     np.testing.assert_allclose(history.x, [[np.sqrt(1.1)]])
@@ -220,7 +220,7 @@ def test_failed_root_finding_raises_with_the_points_before():
     evaluated before."""
 
     # x**2 = -1 has no real root
-    def experiment(u, rng):
+    def measure(u, rng):
         return np.array([1.0]) if u[0] < 0 else np.array([-1.0])
 
     # `pytest.raises` fails the test unless the block raises that exception; `info`
@@ -228,7 +228,7 @@ def test_failed_root_finding_raises_with_the_points_before():
     with pytest.raises(RootFindingError) as info:
         evaluate(
             two_branch_problem(),
-            experiment,
+            measure,
             np.array([[-0.5], [0.5], [-0.5]]),
             np.random.default_rng(0),
             n_starts=5,
@@ -246,19 +246,17 @@ def test_failed_oracle_simulation_raises():
     history."""
     # y = -1 - x**2 and y = x**2 have no common real root
     problem = two_branch_problem()
-    experiment = oracle_experiment(
-        problem.system, oracle=lambda v: -1 - v.x**2, n_starts=5
-    )
+    measure = oracle_measure(problem.system, oracle=lambda v: -1 - v.x**2, n_starts=5)
 
     with pytest.raises(RootFindingError) as info:
-        evaluate(problem, experiment, np.array([[0.0]]), np.random.default_rng(0))
+        evaluate(problem, measure, np.array([[0.0]]), np.random.default_rng(0))
 
     assert info.value.history is not None
     assert info.value.history.u.shape == (0, 1)
 
 
-def test_experiment_returning_the_wrong_shape_raises():
-    """An experiment returning more values than there are measured variables raises."""
+def test_measure_returning_the_wrong_shape_raises():
+    """A measurement returning more values than there are measured variables raises."""
     with pytest.raises(ValueError, match="measured"):
         evaluate(
             two_branch_problem(),
@@ -271,7 +269,7 @@ def test_experiment_returning_the_wrong_shape_raises():
 def test_oracle_must_give_one_value_per_unknown_state():
     """An oracle with more expressions than unknown states is rejected."""
     with pytest.raises(ValueError, match="oracle"):
-        oracle_experiment(two_branch_problem().system, oracle=lambda v: [v.u, 2 * v.u])
+        oracle_measure(two_branch_problem().system, oracle=lambda v: [v.u, 2 * v.u])
 
 
 def history_of(f: list[float], f_oracle: list[float] | None = None) -> History:
@@ -325,9 +323,9 @@ def test_oracle_incumbents_without_noise_are_the_running_minimum_of_oracle_f(
     """Without noise the measured and oracle f agree, so the benchmark metric is the
     running minimum of the oracle f (the paper's convergence figures)."""
     u = np.array([[2.0], [-0.5], [1.0], [0.0], [-2.0], [0.4]])
-    experiment = illustrative_experiment(illustrative_problem, noise_std=0.0)
+    measure = illustrative_measure(illustrative_problem, noise_std=0.0)
 
-    history = evaluate(illustrative_problem, experiment, u, np.random.default_rng(0))
+    history = evaluate(illustrative_problem, measure, u, np.random.default_rng(0))
 
     assert history.f_oracle is not None
     np.testing.assert_allclose(
@@ -336,6 +334,6 @@ def test_oracle_incumbents_without_noise_are_the_running_minimum_of_oracle_f(
 
 
 def test_oracle_incumbents_need_oracle_values():
-    """A history from an experiment without an oracle has no benchmark metric."""
+    """A history from a measurement without an oracle has no benchmark metric."""
     with pytest.raises(ValueError, match="oracle"):
         oracle_incumbents(history_of([3.0, 1.0]))
