@@ -133,6 +133,22 @@ A collection of runs of an experiment's methods, where run i of every
 method starts from the same initial points. The unit that is saved, loaded and analyzed.
 _Avoid_: benchmark, experiment, results, batch
 
+**Artifact**:
+What a saved study leaves to say what it ran and how: the problem, the measurement,
+each method with its settings, the seed, the oracle optimum if stated, and the versions
+of the code and packages. One per study. It lists the study's runs but doesn't hold
+them.
+_Avoid_: record, metadata, manifest, provenance
+
+**Reproducible**:
+A study is reproducible when its artifact records a clean code version (every file
+committed, none changed or untracked) and running its experiment again at that version,
+with the same seed, gives the same runs within a tolerance. It covers the computation
+only: a measurement of a real system can't be repeated, so such a study can be
+reproduced only up to its measurements. A study run from an unclean tree is still
+saved, but it isn't reproducible.
+_Avoid_: replicable, deterministic
+
 **Iteration**:
 One step of the optimization loop.
 _Avoid_: run, step

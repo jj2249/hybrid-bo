@@ -1,7 +1,8 @@
 # Studies are saved as JSON
 
-A study is saved as a folder of JSON files: `study.json` for the study's settings and
-record, and one file per run (`runs/<method>/run-000.json`) holding its history, fitted
+A study is saved as a folder of JSON files: `artifact.json` for the study's settings
+and artifact (`study.json` with a `record` key before #85; `hb.load` reads both), and
+one file per run (`runs/<method>/run-000.json`) holding its history, fitted
 surrogates, scenarios, acquisition solutions and full record, with arrays as nested
 lists. `hb.save` and `hb.load` are library API; the library never calls them itself.
 JSON keeps saved results readable without the code that produced them (ADR 0003), is

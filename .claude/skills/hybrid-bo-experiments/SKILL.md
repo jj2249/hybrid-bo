@@ -9,7 +9,7 @@ Read `docs/writing_an_experiment.rst` first: it is the user guide (layout, CasAD
 rules, `Var`/`System`/`Problem`, oracle vs custom measurement, methods and settings,
 `cli.main`, running, common errors). `docs/reading_results.rst` covers the saved study,
 the figures and the Polars views. `experiments/illustrative_example.py` is the
-reference experiment. Use CONTEXT.md's terms. This file adds only what an agent needs
+reference experiment. Use GLOSSARY.md's terms. This file adds only what an agent needs
 on top.
 
 ## Layout contract
@@ -63,7 +63,7 @@ oracle objective is below it.
 
 ## Running
 
-    pixi run experiment <name> [--method M ...] [--n-runs 10] [--seed 0] [--n-iterations 5] [--name ID] [--plot]
+    pixi run experiment <name> [--method M ...] [--n-runs 10] [--seed 0] [--n-iterations 5] [--name ID] [--plot] [--require-clean]
     pixi run plot <name> [STUDY]
     pixi run experiment <name> plot [STUDY] [--results-root DIR]
 
@@ -73,5 +73,7 @@ No command lists every experiment, and a typo in the name fails with "No module 
 not `experiments/`. The study id is `--name`, else the UTC time to the second at the
 start, with `-2`, `-3`, ... appended if taken when saved (`hb.save` creates the folder,
 so parallel runs never share one). `plot` loads the study given, else the one whose
-`study.json` was written last, and saves `summary.csv` if the study has none (studies
-saved before summaries).
+artifact was written last (`artifact.json`, or `study.json` in older studies), and
+saves `summary.csv` if the study has none (studies saved before summaries). Running
+with uncommitted or untracked files warns that the study won't be reproducible;
+`--require-clean` refuses to run instead.

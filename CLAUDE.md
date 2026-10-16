@@ -6,7 +6,7 @@ Bayesian optimization for partially known systems using hybrid models
 `y = h(x, u)`, which a GP learns. The acquisition problem is solved over scenarios
 (sample-average approximation) using CasADi. Standard BO, Latin hypercube sampling
 and uniform sampling are included as baselines. The vocabulary is in
-[CONTEXT.md](CONTEXT.md); use its terms.
+[GLOSSARY.md](GLOSSARY.md); use its terms.
 
 Maintainers working on the library (issues, PRs) follow
 [CONTRIBUTING.md](CONTRIBUTING.md); read it before starting a ticket.

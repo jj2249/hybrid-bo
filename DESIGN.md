@@ -1,6 +1,6 @@
 # Design
 
-How the library is built and why. The vocabulary is in [CONTEXT.md](CONTEXT.md) and
+How the library is built and why. The vocabulary is in [GLOSSARY.md](GLOSSARY.md) and
 the decisions that are hard to reverse are in [docs/adr/](docs/adr/). A PR that
 changes the design updates this file in the same PR. The design came out of a
 rewrite of the original code (tag `pre-refactor`, called *legacy* below), which the
@@ -58,6 +58,12 @@ The original code was hard to change for three reasons:
   `hb.save`/`hb.load` write and read a study as JSON
   ([ADR 0004](docs/adr/0004-studies-are-saved-as-json.md)). Examples call them; the
   library never does.
+- **Reproducibility is recorded, not enforced** (#85). The code version in every run's
+  record and in the study's artifact is `-dirty` or `-untracked` when the tree isn't
+  clean, so the artifact says whether the study is reproducible. The library never
+  refuses to run on a tree that isn't clean: during development it almost never is,
+  and taking the decision from the caller would push people to commit junk or bypass
+  the check. The CLI warns instead, and `--require-clean` refuses for runs that matter.
 - **Iteration plots replay the acquisition problem**
   ([ADR 0005](docs/adr/0005-iteration-plots-replay-the-acquisition-problem.md)).
 - **A slim top level** (#52). `hb.*` holds what a typical script uses: `Var`, `System`,
@@ -568,8 +574,8 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   there), and keeps its full `record`.
   `StudySettings(n_runs, n_initial, n_iterations, seed=None)`; every draw of a study
   comes from the seed, so the same settings give the same study.
-  `Study(runs: tuple[Run, ...], settings, name, record)` is a flat collection; its
-  settings hold the seed actually used (a fresh one for seed None) and its record
+  `Study(runs: tuple[Run, ...], settings, name, artifact)` is a flat collection; its
+  settings hold the seed actually used (a fresh one for seed None) and its artifact
   holds the problem, measurement, methods, oracle optimum (`oracle_optimum`, when
   stated) and versions once.
 - **Running** (#53). `hb.repeat(method, problem, measure, settings)` runs
@@ -583,17 +589,17 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   study and the caller's generator is never advanced as a side effect. The oracle
   optimum is stated (`optimum`), never computed (#62): a multistart search can miss
   it, and a wrong optimum silently corrupts every regret. `hb.oracle_optimum(problem,
-  oracle, rng, n_starts)` helps find it once. The study records it and warns with
+  oracle, rng, n_starts)` helps find it once. The artifact records it, and the study warns with
   `OracleOptimumWarning` if an evaluated point's oracle objective is below it.
-- **Saving** (#53; `saving.py`). `hb.save(study, path)` writes `study.json`
-  (settings, name, record, the run files in order) and `runs/<method>/run-000.json`;
+- **Saving** (#53; `saving.py`). `hb.save(study, path)` writes `artifact.json`
+  (settings, name, artifact, the run files in order) and `runs/<method>/run-000.json`;
   `hb.load(path)` reads them back exactly. `save` refuses an existing folder.
 - **Views** (#54; `views.py`). `hb.evaluations(study, optimum=None)`: one row
   per evaluation (method, run, evaluation from 1, iteration from 1 or null for initial
   points, `u_<name>`/`x_<name>`/`y_<name>`, f, `x_oracle_<name>`/`y_oracle_<name>`/
   `f_oracle`, incumbent, oracle incumbent, regret, acquisition). Variables are named
-  from the study's record. Regret is the oracle incumbent minus `optimum`, else the
-  recorded oracle optimum, else null. `hb.summary(study)`: one row per method (runs,
+  from the study's artifact. Regret is the oracle incumbent minus `optimum`, else the
+  artifact's oracle optimum, else null. `hb.summary(study)`: one row per method (runs,
   failed runs against `n_runs`, median and IQR of the final incumbent, oracle
   incumbent and regret). `hb.hyperparameters(study)`: one row per run, iteration and
   hyperparameter entry. Polars is imported on first use; without it a view raises an
@@ -624,7 +630,7 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   with `getattr`; #65 dropped that because the experiment then didn't say what its names were for, and a
   typo silently changed the study. The cost is that no command lists every experiment.
   A relative `--results-root` is relative to where pixi was started (`INIT_CWD`).
-  Results go to `results/<name>/<study id>/{study.json, runs/, summary.csv,
+  Results go to `results/<name>/<study id>/{artifact.json, runs/, summary.csv,
   figures/}` at the repo root. Running prints `hb.summary` and saves it as
   `summary.csv`; `plot` takes the study saved last by default, writes under
   `figures/`, and saves `summary.csv` only if the study has none (older studies).

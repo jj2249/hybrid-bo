@@ -1,7 +1,7 @@
 ## Summary
 
 <!-- The smallest view that makes the change clear: a diff sketch of a file or call
-tree, pseudocode or Mermaid, next to a sentence or two. Use CONTEXT.md terms. -->
+tree, pseudocode or Mermaid, next to a sentence or two. Use GLOSSARY.md terms. -->
 
 ## Evidence
 

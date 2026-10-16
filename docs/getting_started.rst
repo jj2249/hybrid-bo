@@ -40,7 +40,9 @@ points. ``pixi run experiment illustrative_example --help`` lists the flags:
 - ``--n-runs``, ``--n-iterations`` and ``--seed`` override the experiment's study
   settings;
 - ``--name`` names the study (default the current UTC time);
-- ``--plot`` draws the figures straight after.
+- ``--plot`` draws the figures straight after;
+- ``--require-clean`` refuses to run with uncommitted or untracked files (without it,
+  they get a warning), since the study wouldn't be reproducible.
 
 Look at the study
 -----------------
@@ -55,7 +57,7 @@ The study is saved in ``results/illustrative_example/<study id>/``:
 
 .. code-block:: text
 
-   study.json          the settings and the record of the problem and methods
+   artifact.json       what the study ran and how: settings, problem, methods
    runs/<method>/      one JSON file per run: every evaluated point, the GPs, ...
    summary.csv         the summary table printed above
    figures/            convergence.png, regret.png and one figure per iteration

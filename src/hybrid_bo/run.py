@@ -43,21 +43,41 @@ class Run:
     scenarios: Scenarios | None = None
 
 
+def _git(path: Path, *args: str) -> str:
+    """What `git *args` prints, run in the folder `path`.
+
+    Raises `OSError` without git and `CalledProcessError` outside a git checkout.
+    """
+    result = subprocess.run(
+        ["git", *args], cwd=path, capture_output=True, text=True, check=True
+    )
+    return result.stdout
+
+
+def code_version(path: Path) -> str:
+    """The git commit of the checkout holding the folder `path`, marked `-dirty` if a
+    committed file has changed and `-untracked` if a file that isn't ignored was never
+    added, or "unknown" outside a git checkout. Only a version with neither mark is
+    clean (`is_clean`), so a study recording it can be reproduced."""
+    try:
+        described = _git(path, "describe", "--always", "--dirty").strip()
+        status = _git(path, "status", "--porcelain", "--untracked-files=normal")
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
+    has_untracked = any(line.startswith("??") for line in status.splitlines())
+    return f"{described}-untracked" if has_untracked else described
+
+
+def is_clean(version: str) -> bool:
+    """Whether the code version `version` (from `code_version`) pins the code: a
+    commit, with nothing changed or untracked."""
+    return version != "unknown" and not version.endswith(("-dirty", "-untracked"))
+
+
 @functools.cache
 def _code_version() -> str:
-    """The git commit of the package source (`git describe --always --dirty`), or
-    "unknown" outside a git checkout."""
-    try:
-        result = subprocess.run(
-            ["git", "describe", "--always", "--dirty"],
-            cwd=Path(__file__).parent,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except OSError:
-        return "unknown"
-    return result.stdout.strip() if result.returncode == 0 else "unknown"
+    """The code version of the package source (`code_version`), found once."""
+    return code_version(Path(__file__).parent)
 
 
 def _version(distribution: str) -> str:

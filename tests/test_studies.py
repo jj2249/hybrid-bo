@@ -111,18 +111,18 @@ def test_run_i_of_every_method_starts_from_the_same_initial_points(
     assert not np.array_equal(run_0.history.u, run_1.history.u)
 
 
-def test_study_records_the_problem_methods_and_stated_oracle_optimum(
+def test_artifact_holds_the_problem_methods_and_stated_oracle_optimum(
     illustrative_study,
 ):
-    """The study's record holds the problem, each method with its settings and the
+    """The study's artifact holds the problem, each method with its settings and the
     stated oracle optimum."""
-    record = illustrative_study.record
+    artifact = illustrative_study.artifact
     run_record = illustrative_study.runs[0].record
     for key in ("u", "x", "y", "h_inputs", "measured", "g", "f", "measure"):
-        assert record[key] == run_record[key]
-    assert "hybrid_bo: hybrid_bo(" in record["methods"]
-    assert "uniform_sampling: uniform_sampling(n_points=1)" in record["methods"]
-    assert record["oracle_optimum"] == repr(ex.optimum)
+        assert artifact[key] == run_record[key]
+    assert "hybrid_bo: hybrid_bo(" in artifact["methods"]
+    assert "uniform_sampling: uniform_sampling(n_points=1)" in artifact["methods"]
+    assert artifact["oracle_optimum"] == repr(ex.optimum)
     assert illustrative_study.name == "illustrative_example"
     assert illustrative_study.settings == SETTINGS
 
@@ -135,7 +135,7 @@ def test_without_a_stated_optimum_the_study_has_none(illustrative_problem):
 
     study = hb.study(methods, illustrative_problem, ex.measure, settings)
 
-    assert "oracle_optimum" not in study.record
+    assert "oracle_optimum" not in study.artifact
 
 
 def test_an_optimum_beaten_by_an_evaluated_point_warns(illustrative_problem):
@@ -172,7 +172,7 @@ def test_bare_bo_methods_record_their_default_settings(illustrative_problem):
     bare_study = hb.study(bare, illustrative_problem, ex.measure, settings)
     explicit_study = hb.study(explicit, illustrative_problem, ex.measure, settings)
 
-    assert bare_study.record["methods"] == explicit_study.record["methods"]
+    assert bare_study.artifact["methods"] == explicit_study.artifact["methods"]
 
 
 def test_two_configurations_of_one_method_keep_their_labels(illustrative_problem):
@@ -286,10 +286,26 @@ def test_load_after_save_gives_the_study_back(illustrative_study, tmp_path):
     loaded = hb.load(path)
 
     assert_same(loaded, illustrative_study)
-    assert (path / "study.json").is_file()
+    artifact = json.loads((path / "artifact.json").read_text())
+    assert artifact["artifact"] == illustrative_study.artifact
     assert (path / "runs" / "hybrid_bo" / "run-001.json").is_file()
     run_json = json.loads((path / "runs" / "standard_bo" / "run-000.json").read_text())
     assert run_json["method"] == "standard_bo"
+
+
+def test_load_reads_a_study_saved_before_artifacts(illustrative_study, tmp_path):
+    """A study saved before the artifact was named (`study.json` with a `record` key)
+    still loads, with its record as the artifact."""
+    # Save, then rewrite the artifact in the old format
+    path = hb.save(illustrative_study, tmp_path / "study")
+    data = json.loads((path / "artifact.json").read_text())
+    data["record"] = data.pop("artifact")
+    (path / "study.json").write_text(json.dumps(data))
+    (path / "artifact.json").unlink()
+
+    loaded = hb.load(path)
+
+    assert_same(loaded, illustrative_study)
 
 
 def test_save_and_load_keep_partial_runs_and_empty_arrays(tmp_path):
