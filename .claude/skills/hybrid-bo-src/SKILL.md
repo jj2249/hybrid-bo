@@ -51,9 +51,11 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   callables over a namespace `v` of symbols (`v.x`), traced once in `_trace` into
   `cas.Function`s with column-vector inputs in the paper's order `(x, y, u)`. All
   input checks live in the constructors and raise `ValueError` (`NotImplementedError`
-  for `P > 1`). `Symbolic` (default `cas.SX`) is the one place the symbol type is
-  chosen. `_h_inputs(system, u, x)` gives the `h_inputs` columns of numeric or
-  symbolic `u`, `x` (hybrid BO's GP training data and acquisition problem).
+  for `P > 1`). `Symbolic` (`cas.SX`) is the symbol type of all library math. It is
+  SX only: switching it to MX breaks the GP (`cas.chol` has no MX overload) and the
+  run record (DESIGN.md, Decisions). `_h_inputs(system, u, x)` gives the `h_inputs`
+  columns of numeric or symbolic `u`, `x` (hybrid BO's GP training data and
+  acquisition problem).
 - `sampling.py`: `lhs(lower, upper, n, rng)` and `uniform(...)` over a box, shape
   `(n, d)`; `initial_points(variables, n, rng)` is `lhs` over `Var` start bounds. Use
   them for any Latin hypercube or uniform draw.

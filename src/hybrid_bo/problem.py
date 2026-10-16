@@ -13,8 +13,8 @@ from typing import Any
 import casadi as cas
 import numpy as np
 
-# The one place the symbol type is chosen. Library math only uses CasADi operations,
-# so it works for SX and MX alike.
+# The symbol type of all library math. SX only: MX lacks `cas.chol`, prints the
+# equations in the run record as opaque calls, and the AMPL route needs SX (DESIGN.md).
 Symbolic = cas.SX
 
 

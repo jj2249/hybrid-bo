@@ -3,7 +3,7 @@
 Each kernel takes CasADi matrices X1 (n1, d) and X2 (n2, d) and returns (n1, n2). A
 lengthscale or scale is either a scalar, shared by every input, or a (d, 1) column with
 one entry per input (ARD), as a `Hyper` with `size=d` gives it. Kernels use only CasADi
-operations, so they work for SX, MX and DM alike:
+operations, so they take SX symbols and DM numbers alike:
 
     kernel=lambda h, X1, X2: h.outputscale * kernels.matern52(X1, X2, h.lengthscale)
 """
