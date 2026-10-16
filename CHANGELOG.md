@@ -13,6 +13,8 @@
   artifact says whether it is reproducible.
 - `pixi run experiment` warns when run with uncommitted or untracked files;
   `--require-clean` refuses to run instead.
+- Versioning and releases are documented in CONTRIBUTING.md: the version changes
+  only in a release PR, and merging that PR tags and publishes the release (#84).
 
 ## 0.2.0 (2026-10-16)
 

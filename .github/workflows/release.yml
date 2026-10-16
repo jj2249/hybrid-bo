@@ -1,0 +1,63 @@
+# Tags and publishes a release when a merged release PR sets a new version.
+# See "Versioning and releases" in CONTRIBUTING.md.
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+# One release run at a time, so two quick merges can't tag the same version twice
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The version in pyproject.toml, and whether its tag already exists
+      - name: Read the version
+        id: version
+        run: |
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin "refs/tags/v$version" > /dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "v$version is already tagged; nothing to release."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The notes: the CHANGELOG section headed "## X.Y.Z", up to the next "## "
+      - name: Extract the release notes
+        if: steps.version.outputs.exists == 'false'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          awk -v v="$VERSION" '
+            /^## / { inside = ($2 == v) }
+            inside && !/^## / { print }
+          ' CHANGELOG.md > notes.md
+          if ! grep -q "^## $VERSION\( \|$\)" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## $VERSION' section; not releasing v$VERSION."
+            exit 1
+          fi
+
+      # Annotated, so that `git describe` (the recorded code version) sees it
+      - name: Tag and publish
+        if: steps.version.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "$TAG"
+          git push origin "$TAG"
+          gh release create "$TAG" --verify-tag --title "$TAG" --notes-file notes.md
