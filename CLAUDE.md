@@ -8,7 +8,8 @@ Bayesian optimization for partially known systems using hybrid models
 and uniform sampling are included as baselines. The vocabulary is in
 [CONTEXT.md](CONTEXT.md); use its terms.
 
-Maintainers working on the library follow [CONTRIBUTING.md](CONTRIBUTING.md).
+Maintainers working on the library (issues, PRs, the roadmap) follow
+[CONTRIBUTING.md](CONTRIBUTING.md); read it before starting a ticket.
 
 ## Commands
 

@@ -17,8 +17,7 @@ The roadmap is in [ROADMAP.md](ROADMAP.md). Check it before starting work, and
 tick items off in the PR that completes them. The target API and the plan for
 each restructure PR are in [DESIGN.md](DESIGN.md), and the decisions behind it in
 [docs/adr/](docs/adr/). Read them before any restructure PR, and update DESIGN.md
-when a PR changes the design. When a PR changes behavior or contracts, update the
-relevant skill (`.claude/skills/`) in the same PR.
+when a PR changes the design.
 
 ## Workflow
 
@@ -41,6 +40,8 @@ relevant skill (`.claude/skills/`) in the same PR.
   results of existing code; adding new API that leaves existing behavior
   unchanged is not logic.
 - A PR that updates the regression baselines explains the JSON diff.
+- A PR that changes behavior or contracts updates the relevant skill
+  (`.claude/skills/`).
 - Keep docs concise. Sphinx autoapi already covers the API, so don't duplicate it.
 - When a style question comes up, ask, then record the answer under Conventions in
   CLAUDE.md.
