@@ -157,10 +157,28 @@ def test_an_optimum_beaten_by_an_evaluated_point_warns(illustrative_problem):
         )
 
 
+def test_bare_bo_methods_record_their_default_settings(illustrative_problem):
+    """A BO method passed without settings runs with the default settings, and the
+    study records it as it records the method given them explicitly."""
+    settings = hb.StudySettings(n_runs=1, n_initial=2, n_iterations=1, seed=0)
+    bare = {"hybrid_bo": hb.hybrid_bo, "standard_bo": hb.standard_bo}
+    explicit = {
+        "hybrid_bo": functools.partial(hb.hybrid_bo, settings=hb.HybridBOSettings()),
+        "standard_bo": functools.partial(
+            hb.standard_bo, settings=hb.StandardBOSettings()
+        ),
+    }
+
+    bare_study = hb.study(bare, illustrative_problem, ex.measure, settings)
+    explicit_study = hb.study(explicit, illustrative_problem, ex.measure, settings)
+
+    assert bare_study.record["methods"] == explicit_study.record["methods"]
+
+
 def test_two_configurations_of_one_method_keep_their_labels(illustrative_problem):
     """Each run carries the label it was run under, so one method can appear twice."""
     methods = {
-        "ei": functools.partial(hb.standard_bo, settings=hb.StandardBOSettings()),
+        "ei": hb.standard_bo,
         "lcb": functools.partial(
             hb.standard_bo, settings=hb.StandardBOSettings(acquisition=hb.LCB())
         ),

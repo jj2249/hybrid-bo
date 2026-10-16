@@ -85,6 +85,13 @@ extend-exclude = [".pixi"]
 [tool.ruff.lint]
 ignore = ["E501"]
 
+[tool.ruff.lint.flake8-bugbear]
+# Frozen settings, safe as argument defaults
+extend-immutable-calls = [
+  "hybrid_bo.bo.HybridBOSettings",
+  "hybrid_bo.bo.StandardBOSettings",
+]
+
 [tool.ruff.lint.isort]
 known-first-party = ["hybrid_bo"]
 

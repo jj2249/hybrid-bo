@@ -91,7 +91,7 @@ its own regression baseline on the new API. Scope is in the issues and DESIGN.md
 - [x] #68: rename Experiment to Measurement (`measure`, `oracle_measure`; ADR 0006)
 - [x] #69: `examples/` becomes `experiments/` (task, skill); drop flash_unit's old code
 - [x] #70: student docs: README as entry point, Writing an experiment, Reading results
-- [ ] #75: default settings for `hybrid_bo` and `standard_bo` (only require the
+- [x] #75: default settings for `hybrid_bo` and `standard_bo` (only require the
       minimum from users)
 
 ## Stage 6: merge

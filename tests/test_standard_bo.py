@@ -42,7 +42,8 @@ def illustrative_run(problem, settings=None) -> Run:
     settings = StandardBOSettings() if settings is None else settings
     rng = np.random.default_rng(0)
     u = initial_points(problem.system.u, 2, rng)
-    return standard_bo(problem, illustrative_measure(problem), u, 2, settings, rng)
+    measure = illustrative_measure(problem)
+    return standard_bo(problem, measure, u, 2, rng, settings=settings)
 
 
 def fitted_illustrative_gp():
@@ -210,6 +211,35 @@ def test_record_holds_the_settings_and_the_resolved_gp(illustrative_problem):
     assert record["mean"] == "0"
 
 
+def test_settings_default_to_the_default_settings(illustrative_problem):
+    """Without `settings`, a run records the same as one given the default settings
+    explicitly. Settings are keyword-only, so they can't be passed in `rng`'s place."""
+    # Initial points only (0 iterations): the record doesn't depend on the iterations
+    measure = illustrative_measure(illustrative_problem)
+    u = np.array([[-0.5], [0.5]])
+
+    default = standard_bo(illustrative_problem, measure, u, 0, np.random.default_rng(0))
+    explicit = standard_bo(
+        illustrative_problem,
+        measure,
+        u,
+        0,
+        np.random.default_rng(0),
+        settings=StandardBOSettings(),
+    )
+
+    assert default.record == explicit.record
+    with pytest.raises(TypeError):
+        standard_bo(
+            illustrative_problem,
+            measure,
+            u,
+            0,
+            np.random.default_rng(0),
+            StandardBOSettings(),  # ty: ignore[too-many-positional-arguments]
+        )
+
+
 def test_failed_evaluation_carries_the_partial_run(illustrative_problem):
     """When evaluating a trial point fails, the error carries the run so far."""
     # A `measure` that returns NaN at its third evaluation (the first trial point), so
@@ -227,7 +257,6 @@ def test_failed_evaluation_carries_the_partial_run(illustrative_problem):
             measure,
             np.array([[-0.5], [0.5]]),
             2,
-            StandardBOSettings(),
             np.random.default_rng(0),
         )
 

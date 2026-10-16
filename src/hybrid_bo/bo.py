@@ -171,8 +171,9 @@ def standard_bo(
     measure: Measure,
     initial_points: np.ndarray,
     n_iterations: int,
-    settings: StandardBOSettings,
     rng: np.random.Generator,
+    *,
+    settings: StandardBOSettings = StandardBOSettings(),
 ) -> Run:
     """Standard BO: a GP of the objective over the decision variables, u -> f, with
     the acquisition function computed analytically.
@@ -181,6 +182,7 @@ def standard_bo(
     measured objective so far, solves the acquisition problem by multistart from
     Latin hypercube starts over the start bounds of `u`, and evaluates the solution.
     Each iteration's acquisition solution holds the acquisition value only.
+    `settings` (keyword-only) defaults to `StandardBOSettings()`.
 
     Raises what `evaluate` and `multistart` raise; a `HybridBOError` carries the
     partial run as `error.run`.
@@ -217,8 +219,9 @@ def hybrid_bo(
     measure: Measure,
     initial_points: np.ndarray,
     n_iterations: int,
-    settings: HybridBOSettings,
     rng: np.random.Generator,
+    *,
+    settings: HybridBOSettings = HybridBOSettings(),
 ) -> Run:
     """Hybrid BO: a GP of the unknown states over the arguments of h, combined with
     the known equations in the acquisition problem (paper, Problems 8 and 9).
@@ -229,7 +232,8 @@ def hybrid_bo(
     solves `hybrid_acquisition` by multistart from Latin hypercube starts over the
     start bounds of its variables, and evaluates the decision variables of the
     solution. The run holds the scenarios, and each iteration's acquisition solution
-    holds the scenario states at its trial point.
+    holds the scenario states at its trial point. `settings` (keyword-only) defaults
+    to `HybridBOSettings()`.
 
     Raises what `evaluate` and `multistart` raise; a `HybridBOError` carries the
     partial run, with the scenarios, as `error.run`.

@@ -22,8 +22,9 @@ from hybrid_bo.sampling import initial_points
 _logger = logging.getLogger(__name__)
 
 # A method, called as `method(problem, measure, initial_points, n, rng=rng)`, where
-# n is the number of iterations (of design points for the baselines). Bind a BO
-# method's settings with `functools.partial(hb.hybrid_bo, settings=...)`
+# n is the number of iterations (of design points for the baselines). A BO method
+# runs with its default settings; bind others with
+# `functools.partial(hb.hybrid_bo, settings=...)`
 Method = Callable[..., Run]
 
 

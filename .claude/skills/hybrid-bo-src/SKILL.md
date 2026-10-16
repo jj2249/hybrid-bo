@@ -140,7 +140,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   trial_point, rng, record) -> Run` (evaluate initial points, then per iteration
   `trial_point(problem, history, rng) -> (u, surrogate, acquisition solution)` and
   evaluate u; a
-  `HybridBOError` gets the partial run as `error.run`), `StandardBOSettings` and
+  `HybridBOError` gets the partial run as `error.run`). `standard_bo` and
+  `hybrid_bo` take `rng` last positionally and `settings` keyword-only, defaulting to
+  `StandardBOSettings()` / `HybridBOSettings()`. `StandardBOSettings` and
   `standard_bo` (fit `u -> f`, `standard_acquisition`, `multistart` from `lhs` over
   the `u` start bounds), `HybridBOSettings` and `hybrid_bo` (record, then
   `saa_scenarios`, then the loop; fit `h_inputs -> y`, `hybrid_acquisition`; adds the

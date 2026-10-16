@@ -70,8 +70,6 @@ The code is hard to change for three reasons:
 ## Target example
 
 ```python
-import functools
-
 import casadi as cas
 import numpy as np
 
@@ -101,10 +99,9 @@ def oracle(v):
 
 measure = hb.oracle_measure(system, oracle, noise_std=0.0)
 
-# Method: how we search
-settings = hb.HybridBOSettings(acquisition=hb.EI(), n_scenarios=25)  # default GP
-
-methods = {"hybrid_bo": functools.partial(hb.hybrid_bo, settings=settings)}
+# Method: how we search, with the default settings; bind others with
+# functools.partial(hb.hybrid_bo, settings=hb.HybridBOSettings(...))
+methods = {"hybrid_bo": hb.hybrid_bo}
 
 # Study: 10 runs, run i of every method from the same initial points; the same seed
 # gives the same study
@@ -496,9 +493,23 @@ def optimization_loop(
 ) -> Run: ...
 
 
-def hybrid_bo(problem, measure, initial_points, n_iterations, settings, rng) -> Run: ...
+def hybrid_bo(
+    problem,
+    measure,
+    initial_points,
+    n_iterations,
+    rng,
+    *,
+    settings=HybridBOSettings(),
+) -> Run: ...
 def standard_bo(
-    problem, measure, initial_points, n_iterations, settings, rng
+    problem,
+    measure,
+    initial_points,
+    n_iterations,
+    rng,
+    *,
+    settings=StandardBOSettings(),
 ) -> Run: ...
 def latin_hypercube_sampling(
     problem, measure, initial_points, n_points, rng
