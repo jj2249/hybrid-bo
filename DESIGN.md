@@ -678,8 +678,8 @@ Not built now; the design leaves room for them.
 ## Restructure PRs
 
 Every PR keeps `tests/data/regression/` unchanged unless it is marked *logic*. Each PR
-updates `hybrid-bo-src`, `hybrid-bo-experiments`, the README and this file where its change
-affects them.
+updates `hybrid-bo-src`, `hybrid-bo-experiments`, the user docs (`docs/*.rst`) and this file
+where its change affects them.
 
 The old code was moved to `hybrid_bo/legacy/` and the new modules built at their
 final paths. New code never depended on old code (old code could call new helpers such

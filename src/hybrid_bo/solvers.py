@@ -21,8 +21,8 @@ _logger = logging.getLogger(__name__)
 class NLP:
     """min f(w) subject to g(w) = 0 and lower <= w <= upper.
 
-    `f` and `g` are `cas.Function`s of the column w; the bounds have shape (n,) and may
-    be infinite.
+    `f` and `g` are CasADi functions (`cas.Function`) of the column w; the bounds have
+    shape (n,) and may be infinite.
     """
 
     f: cas.Function
