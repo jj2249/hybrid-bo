@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.0 (2026-10-16)
+## 0.2.0 (2026-10-16)
 
 The first release after rewriting the original code (tag `pre-refactor`). The
 reasons for the rewrite are in [DESIGN.md](DESIGN.md).
