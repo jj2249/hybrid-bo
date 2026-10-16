@@ -96,7 +96,7 @@ its own regression baseline on the new API. Scope is in the issues and DESIGN.md
 
 ## Stage 6: merge
 - [x] #80: lean pixi environments: `default` is the library, `experiments` adds
-      matplotlib and Polars, `dev` has everything; `quality` is gone and the ty hook
+      matplotlib, Polars and the docs, `dev` has everything; `quality` is gone and the ty hook
       runs on commit
 - [ ] Merge `refactor/initial` into `main` (`main` stays frozen until then), then
       make `main` the GitHub default branch again

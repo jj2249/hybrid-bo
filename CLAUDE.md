@@ -14,7 +14,7 @@ Maintainers working on the library (issues, PRs, the roadmap) follow
 ## Commands
 
 Environments are managed with pixi: `default` is the library, `experiments` adds
-matplotlib and Polars, and `dev` includes everything.
+matplotlib, Polars and the docs, and `dev` includes everything.
 
 ```bash
 pixi install -e dev
@@ -34,7 +34,8 @@ illustrative_example ...`). The experiment ends with an explicit `cli.main(...)`
 call that passes everything it defines; `experiments/cli.py` parses the flags and
 runs or plots. The `experiment`, `plot` and `docs` tasks set a
 `default-environment`, so they need no `-e`. `experiment` passes every flag through;
-`plot` takes only the study id, so plot with other flags as `pixi run experiment illustrative_example plot [STUDY] [--results-root ...]`.
+`plot` takes only the study id, so plot with other flags as
+`pixi run experiment illustrative_example plot [STUDY] [--results-root ...]`.
 
 The git hook hardcodes the pixi Python path. If commits fail with "`pre-commit`
 not found" after a Python upgrade, re-run `pixi run -e dev setup`.

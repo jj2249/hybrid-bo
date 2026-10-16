@@ -31,14 +31,14 @@ python = ">=3.12,<3.15"
 [tool.pixi.pypi-dependencies]
 hybrid_bo = { path = ".", editable = true }
 
-[tool.pixi.feature.quality.dependencies]
+[tool.pixi.feature.dev.dependencies]
 ruff = ">=0.16.10,<0.17"
 ty = ">=0.0.85,<0.0.86"
 pre-commit = ">=4.6.2,<5"
 pytest = ">=9.1.1,<10"
 pytest-cov = ">=7.1.0,<8"
 
-[tool.pixi.feature.quality.tasks]
+[tool.pixi.feature.dev.tasks]
 lint = "ruff check --fix"
 format = "ruff format"
 typecheck = "ty check"
@@ -54,7 +54,7 @@ sphinx-autoapi = ">=3.8.1,<4"
 furo = ">=2025.12.19,<2026"
 
 [tool.pixi.feature.docs.tasks]
-docs = { cmd = "sphinx-build -b html docs docs/_build/html", default-environment = "dev", description = "Build the docs into docs/_build/html" }
+docs = { cmd = "sphinx-build -b html docs docs/_build/html", default-environment = "experiments", description = "Build the docs into docs/_build/html" }
 
 [tool.pixi.feature.experiments.dependencies]
 matplotlib = ">=3.11.2,<4"
@@ -70,11 +70,11 @@ plot = { cmd = "python -m {{ name }} plot {{ study }}", cwd = "experiments", def
 [tool.pixi.environments]
 # The library only
 default = { solve-group = "default" }
-# Writing and running experiments: the library plus matplotlib and Polars
-experiments = { features = ["experiments"], solve-group = "default" }
-# Working on the library: tests, lint, type check and docs. ty needs the experiments
-# features to resolve the matplotlib imports in experiments/
-dev = { features = ["quality", "docs", "experiments"], solve-group = "default" }
+# Writing and running experiments: the library, matplotlib, Polars and the docs
+experiments = { features = ["experiments", "docs"], solve-group = "default" }
+# Working on the library: adds tests, lint and type check. ty needs the experiments
+# feature to resolve the matplotlib imports in experiments/
+dev = { features = ["dev", "docs", "experiments"], solve-group = "default" }
 
 [tool.ruff]
 # Match the Python version used by your project.
