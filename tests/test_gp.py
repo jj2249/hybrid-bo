@@ -1,5 +1,5 @@
-"""GP prediction and log marginal likelihood vs numpy/scipy references, and what a fit
-finds and draws."""
+"""Fitted GP prediction and log marginal likelihood vs numpy/scipy references, and
+what a fit finds and draws."""
 
 from dataclasses import replace
 
@@ -10,13 +10,13 @@ from scipy.stats import multivariate_normal
 
 from hybrid_bo import kernels
 from hybrid_bo.gp import (
-    GP,
     FittedGP,
     Hyper,
+    PriorGP,
     Scaler,
     default_gp,
     fit_gp,
-    log_likelihood,
+    log_marginal_likelihood,
     predict,
 )
 from hybrid_bo.solvers import Ipopt
@@ -44,23 +44,24 @@ def matern52(X1, X2):
 # entry, which the fixture reads from `request.param`
 @pytest.fixture(params=["zero_mean", "constant_mean"])
 def model(request):
-    """A GP with known hyperparameters and identity scalers, so predictions are in
-    the units of the reference; and its prior mean as a function of X."""
+    """A prior GP and a fitted GP with known hyperparameters and identity scalers, so
+    predictions are in the units of the reference; and the prior mean as a function
+    of X."""
     hyperparameters = {
         "noise_std": np.array([NOISE_STD]),
         "outputscale": np.array([1.7]),
         "lengthscale": np.array([0.6, 0.9]),
     }
     # The default GP (noise-free) plus a noise hyperparameter
-    spec = default_gp(2)
-    gp = GP(
-        (NOISE, *spec.hyperparameters),
-        spec.kernel,
+    noise_free = default_gp(2)
+    gp = PriorGP(
+        (NOISE, *noise_free.hyperparameters),
+        noise_free.kernel,
     )
     # The constant-mean variant adds an offset hyperparameter
     prior_mean = np.zeros
     if request.param == "constant_mean":
-        gp = GP(
+        gp = PriorGP(
             (*gp.hyperparameters, Hyper("offset", 0.0, (-1.0, 1.0), log=False)),
             gp.kernel,
             mean=lambda h, X: h.offset * cas.SX.ones(X.shape[0], 1),
@@ -82,8 +83,9 @@ def model(request):
 
 
 def test_predict(model):
-    """The posterior mean and std match the closed-form GP posterior in numpy."""
-    # Reference: the posterior from the kernel matrices
+    """The fitted GP's mean and std match the closed-form conditional mean and std of
+    the noise-free output in numpy."""
+    # Reference: the conditional mean and covariance from the kernel matrices
     gp, fitted, prior_mean = model
     K = matern52(X_train, X_train) + (NOISE_STD**2 + JITTER) * np.eye(len(X_train))
     K_star = matern52(X_train, X_test)
@@ -130,17 +132,19 @@ def test_predict_undoes_the_scalers(model):
     np.testing.assert_allclose(std, expected_std / 4.0, rtol=RTOL, atol=ATOL)
 
 
-def test_log_likelihood(model):
+def test_log_marginal_likelihood(model):
     """The log marginal likelihood is scipy's multivariate normal log density of the
     training data."""
     gp, fitted, prior_mean = model
     K = matern52(X_train, X_train) + (NOISE_STD**2 + JITTER) * np.eye(len(X_train))
     ref = multivariate_normal(prior_mean(len(X_train)), K).logpdf(Y_train)
-    np.testing.assert_allclose(log_likelihood(gp, fitted), ref, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(
+        log_marginal_likelihood(gp, fitted), ref, rtol=RTOL, atol=ATOL
+    )
 
 
 def test_hyper_checks():
-    """Hyper and GP reject invalid arguments."""
+    """Hyper and PriorGP reject invalid arguments."""
     # `pytest.raises` fails the test unless the block raises that exception, with a
     # message matching `match`
     with pytest.raises(ValueError, match="positive"):
@@ -150,7 +154,7 @@ def test_hyper_checks():
     with pytest.raises(ValueError, match="identifier"):
         Hyper("noise std", 0.1, (0.01, 1.0))
     with pytest.raises(ValueError, match="repeat"):
-        GP((NOISE, NOISE), lambda h, X1, X2: kernels.constant(X1, X2))
+        PriorGP((NOISE, NOISE), lambda h, X1, X2: kernels.constant(X1, X2))
 
 
 # Fitting: the regression baselines pin the fitted hyperparameters of the
@@ -162,7 +166,7 @@ FIT_DATA = {
 }
 
 
-def test_fit_maximizes_the_likelihood():
+def test_fit_maximizes_the_log_marginal_likelihood():
     """The fitted hyperparameters are at least as likely as any point of a log-spaced
     grid over the bounds of the default GP."""
     X, Y = FIT_DATA["1d"]
@@ -172,7 +176,7 @@ def test_fit_maximizes_the_likelihood():
 
     # The likelihood at every grid point, on the same scaled training data
     grid = [
-        log_likelihood(
+        log_marginal_likelihood(
             gp,
             replace(
                 fitted,
@@ -185,7 +189,7 @@ def test_fit_maximizes_the_likelihood():
         for outputscale in np.geomspace(0.1, 10.0, 15)
         for lengthscale in np.geomspace(1e-3, 1e2, 15)
     ]
-    assert log_likelihood(gp, fitted) >= max(grid) - 1e-8
+    assert log_marginal_likelihood(gp, fitted) >= max(grid) - 1e-8
 
 
 @pytest.mark.parametrize("data", FIT_DATA, ids=list(FIT_DATA))

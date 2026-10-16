@@ -121,16 +121,19 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - `kernels.py`: kernels as plain functions of CasADi matrices (`matern12/32/52`,
   `squared_exponential`, `linear`, `constant`); a lengthscale or scale is a scalar or
   a `(d, 1)` column (ARD).
-- `gp.py`: `Hyper` (named, `size`, `log`), `GP` spec (hyperparameters in optimization
-  order, `kernel(h, X1, X2)`, `mean(h, X)`, `jitter`), `default_gp(n)` (noise-free
-  `outputscale`, unsquared, times Matern-5/2 with ARD), `Scaler` with
-  `minmax`/`standard`/`scale`/`unscale`, `FittedGP` (data only), `fit_gp`, `predict`
-  (numpy X -> arrays `(n,)`, symbolic X -> `(n, 1)` columns) and `log_likelihood`. The
+- `gp.py`: `Hyper` (named, `size`, `log`), `PriorGP`, the prior GP (hyperparameters
+  in optimization order, `kernel(h, X1, X2)`, `mean(h, X)`, `jitter`), `FittedGP`,
+  the fitted GP (data only), `default_gp(n)` (a noise-free `PriorGP`: `outputscale`,
+  unsquared, times Matern-5/2 with ARD), `Scaler` with
+  `minmax`/`standard`/`scale`/`unscale`, `fit_gp(gp, ...) -> FittedGP`,
+  `predict(gp, fitted, X)` (the noise-free conditional mean and std; numpy X ->
+  arrays `(n,)`, symbolic X -> `(n, 1)` columns) and `log_marginal_likelihood`, which
+  `fit_gp` maximizes. The `gp` fields and arguments hold a `PriorGP`. The
   hyperparameter named `noise_std`, if declared, is the noise:
   `K = k(X, X) + (noise_std**2 + jitter) I`; without it only `jitter` is added.
   Numeric data enter CasADi as `Symbolic` constants. Keep the `minmax` operation
   order: it reproduces the pre-refactor values bit for bit for [0, 1], which the
-  baselines depend on. `_gp_record` gives the GP as text for a run's record.
+  baselines depend on. `_gp_record` gives the prior GP as text for a run's record.
 - `acquisition.py`: `EI`, `LCB(std_factor)` and `standard_acquisition` (analytic EI
   or LCB over `u`; returns the `NLP` and the `u` start bounds). `_check_acquisition`
   is the one check of an acquisition function; every method's settings and builder

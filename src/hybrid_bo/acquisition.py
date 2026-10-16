@@ -13,7 +13,7 @@ from typing import Any
 import casadi as cas
 import numpy as np
 
-from hybrid_bo.gp import GP, FittedGP, predict
+from hybrid_bo.gp import FittedGP, PriorGP, predict
 from hybrid_bo.problem import Problem, Symbolic, _h_inputs
 from hybrid_bo.sampling import _start_bounds
 from hybrid_bo.solvers import NLP
@@ -67,7 +67,7 @@ def _expected_improvement(mean: Any, std: Any, incumbent: float) -> Any:
 
 def standard_acquisition(
     problem: Problem,
-    gp: GP,
+    gp: PriorGP,
     fitted: FittedGP,
     incumbent: float,
     acquisition: EI | LCB,
@@ -146,7 +146,7 @@ def saa_scenarios(n: int, n_y: int, rng: np.random.Generator) -> Scenarios:
 
 def hybrid_acquisition(
     problem: Problem,
-    gp: GP,
+    gp: PriorGP,
     fitted: FittedGP,
     scenarios: Scenarios,
     incumbent: float,
@@ -232,7 +232,7 @@ def hybrid_acquisition(
 
 def _scenario_states(
     problem: Problem,
-    gp: GP,
+    gp: PriorGP,
     fitted: FittedGP,
     scenarios: Scenarios,
     w: np.ndarray,

@@ -188,8 +188,9 @@ different settings:
        ),
    }
 
-The default GP assumes noise-free measurements. With noise, give the GP a
-hyperparameter named ``noise_std``: copy :py:func:`~hybrid_bo.gp.default_gp` and add
+The default GP assumes noise-free measurements. With noise, give the prior GP a
+hyperparameter named ``noise_std``: copy :py:func:`~hybrid_bo.gp.default_gp`, which
+returns a :py:class:`~hybrid_bo.gp.PriorGP`, and add
 ``hb.gp.Hyper("noise_std", ...)``, then pass it as ``HybridBOSettings(gp=...)``.
 
 The study and the command line

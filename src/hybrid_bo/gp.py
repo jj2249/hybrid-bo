@@ -1,14 +1,14 @@
-"""Gaussian processes: a GP spec, fitting its hyperparameters, and predicting.
+"""Gaussian processes: the prior GP, fitting it to data, and predicting.
 
-A `GP` is a spec: named hyperparameters (`Hyper`), and a kernel and a mean written as
-functions of them. `fit_gp` scales the training data, fits the hyperparameters by
-maximizing the log marginal likelihood and returns a `FittedGP`, which is data only
-(ADR 0003). `predict` gives the mean and standard deviation in original units, at
-numeric or symbolic points.
+A `PriorGP` is the prior: named hyperparameters (`Hyper`), and a kernel and a mean
+written as functions of them. `fit_gp` scales the training data, fits the
+hyperparameters by maximizing the log marginal likelihood and returns the fitted GP, a
+`FittedGP`, which is data only (ADR 0003). `predict` gives the fitted GP's noise-free
+mean and standard deviation in original units, at numeric or symbolic points.
 
-The hyperparameter named `noise_std`, if the GP declares one, is the standard deviation
-of the observation noise. Without it the GP interpolates the training data; only
-`jitter` is added to the diagonal.
+The hyperparameter named `noise_std`, if the prior GP declares one, is the standard
+deviation of the observation noise. Without it the fitted GP interpolates the training
+data; only `jitter` is added to the diagonal.
 """
 
 import keyword
@@ -79,9 +79,10 @@ def zero_mean(h: Any, X: Any) -> Any:
 
 
 @dataclass(frozen=True)
-class GP:
-    """A GP spec: the hyperparameters, in the order they are optimized, and the kernel
-    `(h, X1, X2) -> (n1, n2)` and mean `(h, X) -> (n, 1)` as functions of them.
+class PriorGP:
+    """A prior GP, before it sees any data: the hyperparameters, in the order they are
+    optimized, and the kernel `(h, X1, X2) -> (n1, n2)` and mean `(h, X) -> (n, 1)` as
+    functions of them.
 
     `jitter` is added to the diagonal of the training covariance, for a stable Cholesky
     factorization. Raises `ValueError` if a hyperparameter name repeats.
@@ -97,14 +98,33 @@ class GP:
         names = [hyper.name for hyper in self.hyperparameters]
         repeated = sorted({name for name in names if names.count(name) > 1})
         if repeated:
-            msg = f"GP hyperparameters must not repeat a name; repeated: {repeated}"
+            msg = (
+                f"PriorGP hyperparameters must not repeat a name; repeated: {repeated}"
+            )
             raise ValueError(msg)
 
 
-def default_gp(n_inputs: int) -> GP:
-    """A noise-free GP with an output scale times a Matern-5/2 kernel with one
+@dataclass(frozen=True)
+class FittedGP:
+    """A fitted GP, data only: a prior GP conditioned on its training data, at
+    hyperparameters fitted by maximizing the log marginal likelihood.
+
+    Holds the hyperparameter values by name, each of shape (size,), the scaled
+    training data, and the scalers that produced it. The prior GP itself isn't stored
+    (ADR 0003), so `predict` takes both.
+    """
+
+    hyperparameters: dict[str, np.ndarray]
+    X: np.ndarray  # (n, d), scaled
+    Y: np.ndarray  # (n,), scaled
+    x_scaler: "Scaler"
+    y_scaler: "Scaler"
+
+
+def default_gp(n_inputs: int) -> PriorGP:
+    """A noise-free prior GP with an output scale times a Matern-5/2 kernel with one
     lengthscale per input, and a zero mean."""
-    return GP(
+    return PriorGP(
         hyperparameters=(
             Hyper("outputscale", 1.0, bounds=(0.1, 10.0)),
             Hyper("lengthscale", 1.0, bounds=(1e-3, 1e2), size=n_inputs),
@@ -159,26 +179,14 @@ def unscale(scaler: Scaler, scaled: Any) -> Any:
     return (scaled - np.tile(scaler.intercept, (n, 1))) / np.tile(scaler.slope, (n, 1))
 
 
-@dataclass(frozen=True)
-class FittedGP:
-    """A fitted GP, data only: the hyperparameter values by name, each of shape
-    (size,), the scaled training data, and the scalers that produced it."""
-
-    hyperparameters: dict[str, np.ndarray]
-    X: np.ndarray  # (n, d), scaled
-    Y: np.ndarray  # (n,), scaled
-    x_scaler: Scaler
-    y_scaler: Scaler
-
-
 def _namespace(values: dict[str, Any]) -> SimpleNamespace:
     """The `h` passed to the kernel and mean, with each value (numeric or symbolic)
     as a CasADi column."""
     return SimpleNamespace(**{name: Symbolic(value) for name, value in values.items()})
 
 
-def _gp_record(gp: GP, input_names: Sequence[str]) -> dict[str, str]:
-    """The GP spec as text, for a run's record: its hyperparameters and jitter, and
+def _gp_record(gp: PriorGP, input_names: Sequence[str]) -> dict[str, str]:
+    """The prior GP as text, for a run's record: its hyperparameters and jitter, and
     its kernel and mean as expressions in the hyperparameters and the inputs (a
     primed input belongs to the kernel's second point)."""
     h = _namespace(
@@ -206,7 +214,7 @@ def _split(hypers: Sequence[Hyper], values: Any) -> dict[str, Any]:
     }
 
 
-def _training_cholesky(gp: GP, h: Any, X: Any) -> Any:
+def _training_cholesky(gp: PriorGP, h: Any, X: Any) -> Any:
     """The lower Cholesky factor of the training covariance, kernel plus noise
     variance plus jitter on the diagonal."""
     noise_variance = h.noise_std**2 if hasattr(h, "noise_std") else 0.0
@@ -214,7 +222,7 @@ def _training_cholesky(gp: GP, h: Any, X: Any) -> Any:
     return cas.chol(K).T  # CasADi returns the upper factor
 
 
-def _log_likelihood(gp: GP, h: Any, X: np.ndarray, Y: np.ndarray) -> Any:
+def _log_marginal_likelihood(gp: PriorGP, h: Any, X: np.ndarray, Y: np.ndarray) -> Any:
     """The log marginal likelihood of the data X (n, d), Y (n,) as a CasADi scalar in
     the hyperparameters `h`."""
     X_c, Y_c = Symbolic(X), Symbolic(Y)
@@ -228,21 +236,22 @@ def _log_likelihood(gp: GP, h: Any, X: np.ndarray, Y: np.ndarray) -> Any:
     )
 
 
-def log_likelihood(gp: GP, fitted: FittedGP) -> float:
-    """The log marginal likelihood of the fitted GP on its (scaled) training data."""
+def log_marginal_likelihood(gp: PriorGP, fitted: FittedGP) -> float:
+    """The log marginal likelihood of the prior GP `gp` at the fitted GP's
+    hyperparameters, on its (scaled) training data: the quantity `fit_gp` maximizes."""
     h = _namespace(fitted.hyperparameters)
-    return float(cas.evalf(_log_likelihood(gp, h, fitted.X, fitted.Y)))
+    return float(cas.evalf(_log_marginal_likelihood(gp, h, fitted.X, fitted.Y)))
 
 
 def fit_gp(
-    gp: GP,
+    gp: PriorGP,
     X: np.ndarray,
     Y: np.ndarray,
     rng: np.random.Generator,
     n_starts: int = 10,
     solver: Ipopt = Ipopt(),  # noqa: B008  (frozen, never mutated)
 ) -> FittedGP:
-    """Fits the GP to inputs X (n, d) and outputs Y (n,).
+    """Fits the prior GP to inputs X (n, d) and outputs Y (n,), giving the fitted GP.
 
     Scales the inputs onto [0, 1] (`minmax`) and the outputs to zero mean and unit
     variance (`standard`), then maximizes the log marginal likelihood over the
@@ -272,9 +281,9 @@ def fit_gp(
     w = Symbolic.sym("w", len(is_log))
     entries = [cas.exp(w[i]) if is_log[i] else w[i] for i in range(len(is_log))]
     h = _namespace(_split(hypers, cas.vertcat(*entries)))
-    objective = -_log_likelihood(gp, h, X_scaled, Y_scaled)
+    objective = -_log_marginal_likelihood(gp, h, X_scaled, Y_scaled)
     nlp = NLP(
-        cas.Function("negative_log_likelihood", [w], [objective]),
+        cas.Function("negative_log_marginal_likelihood", [w], [objective]),
         to_search_space(lower),
         to_search_space(upper),
     )
@@ -290,15 +299,19 @@ def fit_gp(
     return FittedGP(_split(hypers, values), X_scaled, Y_scaled, x_scaler, y_scaler)
 
 
-def predict(gp: GP, fitted: FittedGP, X: Any) -> tuple[Any, Any]:
-    """The mean and standard deviation of the fitted GP at the rows of X (n, d), in
-    original units.
+def predict(gp: PriorGP, fitted: FittedGP, X: Any) -> tuple[Any, Any]:
+    """The fitted GP's conditional mean and standard deviation at the rows of X (n, d),
+    in original units. They are noise-free: the standard deviation is of the latent
+    output, with no observation noise added.
 
-    For a numpy X, returns two arrays (n,). For a symbolic X (SX or MX; the posterior
-    itself is built in SX), returns two (n, 1) CasADi columns, for building acquisition
-    problems.
+    `gp` is the prior GP that `fitted` was fitted from.
+
+    For a numpy X, returns two arrays (n,). For a symbolic X (SX or MX; the conditional
+    mean and variance themselves are built in SX), returns two (n, 1) CasADi columns,
+    for building acquisition problems.
     """
-    # The posterior at symbols for X, with the hyperparameters and data as constants
+    # The conditional mean and variance at symbols for X, with the hyperparameters and
+    # data as constants
     h = _namespace(fitted.hyperparameters)
     X_train, Y_train = Symbolic(fitted.X), Symbolic(fitted.Y)
     X_symbols = Symbolic.sym("X", *X.shape)
