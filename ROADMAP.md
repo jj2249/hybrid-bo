@@ -80,13 +80,8 @@ its own regression baseline on the new API. Scope is in the issues and DESIGN.md
       from `hb.plots` are a follow-up)
 
 ## Stage 5: examples
-- [ ] Only require the minimum from users (defaults recorded in the run)
 - [x] Decide whether YAML is the right config format: no, examples are Python
       (DESIGN.md); YAML is deleted in #30
-- [ ] Skill: specify an example in markdown (equations, parameters, assumptions)
-- [ ] #42: port flash_unit from the `pre-refactor` tag (a custom `measure`), linked
-      from Writing an experiment
-- [ ] A short example in the style of DESIGN.md's target example, linked from the README
 - [x] #52: slim `hb.*` namespace and a Getting started docs page
 - [x] #53: `Study`, `StudySettings`, `hb.study`, JSON `hb.save`/`hb.load` (ADR 0004)
 - [x] #54: Polars views of a study
@@ -96,17 +91,17 @@ its own regression baseline on the new API. Scope is in the issues and DESIGN.md
 - [x] #68: rename Experiment to Measurement (`measure`, `oracle_measure`; ADR 0006)
 - [ ] #69: `examples/` becomes `experiments/` (task, skill); drop flash_unit's old code
 - [ ] #70: student docs: README as entry point, Writing an experiment, Reading results
+- [ ] #75: default settings for `hybrid_bo` and `standard_bo` (only require the
+      minimum from users)
 
-## Stage 6: publishing
+## Stage 6: merge
+- [ ] Lean pixi environments and tasks (`examples` and `dev` are currently identical)
 - [ ] Merge `refactor/initial` into `main` (`main` stays frozen until then), then
       make `main` the GitHub default branch again
       (`gh repo edit --default-branch main`)
-- [ ] README: fix the install section (it mentions `[dependency-groups]`, which
-      doesn't exist)
-- [ ] CI (lint, typecheck, tests)
-- [ ] Tidy pixi environments (`examples` and `dev` are currently identical)
-- [ ] Packaging and PyPI (with an `analysis` extra for Polars and matplotlib, which
-      the library imports on first use)
+
+Longer-term work is tracked as GitHub issues, not here: porting flash_unit (#42) and
+publishing to PyPI (#74).
 
 ## Known issues (fix only once a test covers them)
 Each entry says where it gets fixed. "Goes away" means the new code does not reproduce
