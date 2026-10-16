@@ -438,6 +438,20 @@ class Scenarios:
 def saa_scenarios(n: int, n_y: int, rng) -> Scenarios: ...  # z ~ N(0, I), w = 1/S
 
 
+@dataclass(frozen=True)
+class AcquisitionProblem:
+    nlp: NLP
+    start_bounds: tuple[np.ndarray, np.ndarray]  # (lower, upper), for lhs
+    n_u: int  # the variable order of w, read by _unpack
+    n_x: int = 0
+    n_scenarios: int = 0  # standard BO: w is u alone
+    unknown_states_as_variables: bool = False
+
+
+def _pack(u, x=None, y=None): ...  # numpy or CasADi
+def _unpack(problem: AcquisitionProblem, w) -> tuple[u, x, y | None]: ...
+
+
 def hybrid_acquisition(
     problem,
     gp,
@@ -446,13 +460,21 @@ def hybrid_acquisition(
     incumbent,
     acquisition,
     unknown_states_as_variables=True,
-) -> tuple[NLP, tuple[np.ndarray, np.ndarray]]: ...
+) -> AcquisitionProblem: ...
 def standard_acquisition(
     problem, gp, fitted, incumbent, acquisition
-) -> tuple[NLP, tuple[np.ndarray, np.ndarray]]: ...
+) -> AcquisitionProblem: ...
 ```
 
-Each returns the NLP and its start bounds `(lower, upper)`, for `lhs`.
+Each returns an `AcquisitionProblem`: the NLP, its start bounds and the order of its
+decision vector `w`.
+
+- **The acquisition problem owns its variable order.** `_pack` and `_unpack` are the
+  only code that knows it; the trial point, the scenario states read back from a
+  solution (`_scenario_states`), the iteration plots' replay and the tests all go
+  through them, so changing the order breaks nothing silently. `_pack` needs no
+  layout, so the builders use it for the symbols, the bounds and the start bounds
+  alike.
 
 - **Validation.** Every method checks its acquisition function the same way (one
   helper, called by the settings and by the builders): anything but an `EI` or `LCB`
@@ -468,12 +490,14 @@ Each returns the NLP and its start bounds `(lower, upper)`, for `lhs`.
   of the acquisition problem tied to the GP by an equality constraint (paper, Problem 8),
   which helps IPOPT; if False, the GP prediction is substituted wherever they appear.
 - The hybrid acquisition problem's variables are `u`, then the `x_s`, then the `y_s` (if
-  variables), each state with one entry per scenario; the trial point is the first N
-  entries. Every variable is boxed by its own bounds and started within its own start
+  variables), each state with one entry per scenario (`_pack`). Every variable is boxed by its own bounds and started within its own start
   bounds, and the GP's inputs are the columns of `h_inputs`. This avoids the two
   legacy `setup_acq_problem` bugs (`u` start bounds, number of GP inputs). With one
   mechanistic state, as in the illustrative example, the order matches legacy, so the
   Latin hypercube starts and the baseline are the same.
+- The scenarios' unknown states, mean + std * z_s, are computed in one place
+  (`_scenario_unknown_states`), symbolically for the scenario constraint and
+  numerically when the `y_s` are substituted and read back.
 - Hybrid BO only needs "mean and std of `y` at given inputs" from the surrogate, through
   `predict`, so other surrogates or hyperparameter samples can be paired with scenarios
   later.
