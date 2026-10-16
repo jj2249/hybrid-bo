@@ -7,14 +7,15 @@ scenarios of the GP's prediction of the unknown states (`hybrid_acquisition`; pa
 Problems 8 and 9).
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, assert_never
 
 import casadi as cas
 import numpy as np
 
 from hybrid_bo.gp import FittedGP, PriorGP, predict
-from hybrid_bo.problem import Problem, Symbolic, _h_inputs
+from hybrid_bo.problem import Problem, Symbolic, System, Var, _h_inputs
 from hybrid_bo.sampling import _start_bounds
 from hybrid_bo.solvers import NLP
 
@@ -65,15 +66,69 @@ def _expected_improvement(mean: Any, std: Any, incumbent: float) -> Any:
     return improvement * cdf + std * pdf
 
 
+@dataclass(frozen=True)
+class AcquisitionProblem:
+    """An acquisition problem: the NLP over the decision vector w, the start bounds
+    `(lower, upper)` of w for its multistart, and the order of w's variables.
+
+    w holds the N decision variables u, then, for hybrid BO, the S scenario copies of
+    the M mechanistic states x (S, M), then those of the unknown states y (S, P) if
+    they are variables. `_pack` and `_unpack` are the only code that knows this order.
+    The defaults are standard BO's, whose w is u alone.
+    """
+
+    nlp: NLP
+    start_bounds: tuple[np.ndarray, np.ndarray]
+    n_u: int
+    n_x: int = 0
+    n_scenarios: int = 0
+    unknown_states_as_variables: bool = False
+
+
+def _pack(u: Any, x: Any = None, y: Any = None) -> Any:
+    """The decision vector w of u (N,), the scenario states x (S, M) and, if they are
+    variables, y (S, P): numpy arrays give a numpy array, CasADi matrices a column.
+
+    The states are stacked column by column, so each state has its S scenario copies
+    in a row.
+    """
+    states = [block for block in (x, y) if block is not None]
+    if isinstance(u, np.ndarray):
+        return np.concatenate([u, *(block.ravel(order="F") for block in states)])
+    return cas.vertcat(u, *(cas.vec(block) for block in states))
+
+
+def _unpack(
+    problem: AcquisitionProblem, w: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
+    """The u (N,), x (S, M) and y (S, P) (None unless they are variables) held in a
+    numeric decision vector w of the acquisition problem; undoes `_pack`.
+
+    Raises `ValueError` if w has the wrong length for the problem.
+    """
+    # One column per state of each scenario; standard BO has no scenarios
+    w = np.asarray(w, dtype=float).ravel()
+    n_u, n_x, n_scenarios = problem.n_u, problem.n_x, problem.n_scenarios
+    n_states = (len(w) - n_u) // n_scenarios if n_scenarios else 0
+    n_y = n_states - n_x
+    fits = len(w) == n_u + n_scenarios * n_states and n_y >= 0
+    if not fits or (n_y > 0) != problem.unknown_states_as_variables:
+        msg = f"A decision vector of length {len(w)} doesn't fit this problem"
+        raise ValueError(msg)
+    states = w[n_u:].reshape((n_scenarios, n_states), order="F")
+    y = states[:, n_x:] if problem.unknown_states_as_variables else None
+    return w[:n_u], states[:, :n_x], y
+
+
 def standard_acquisition(
     problem: Problem,
     gp: PriorGP,
     fitted: FittedGP,
     incumbent: float,
     acquisition: EI | LCB,
-) -> tuple[NLP, tuple[np.ndarray, np.ndarray]]:
+) -> AcquisitionProblem:
     """The acquisition problem of standard BO, over the decision variables within
-    their bounds, and the start bounds for its multistart.
+    their bounds and started within their start bounds.
 
     The GP models u -> f directly; the acquisition function is computed analytically
     from its mean and std (minimizing -EI, or LCB). Raises `TypeError` unless
@@ -83,17 +138,20 @@ def standard_acquisition(
     u_vars = problem.system.u
     u = Symbolic.sym("u", len(u_vars))
     mean, std = predict(gp, fitted, u.T)
-    if isinstance(acquisition, LCB):
-        objective = mean - acquisition.std_factor * std
-    else:
-        objective = -_expected_improvement(mean, std, incumbent)
+    match acquisition:
+        case LCB(std_factor=std_factor):
+            objective = mean - std_factor * std
+        case EI():
+            objective = -_expected_improvement(mean, std, incumbent)
+        case _:
+            assert_never(acquisition)
 
     nlp = NLP(
-        cas.Function("acquisition", [u], [objective]),
+        cas.Function("acquisition", [_pack(u)], [objective]),
         np.array([var.lower for var in u_vars]),
         np.array([var.upper for var in u_vars]),
     )
-    return nlp, _start_bounds(u_vars)
+    return AcquisitionProblem(nlp, _start_bounds(u_vars), len(u_vars))
 
 
 @dataclass(frozen=True)
@@ -144,6 +202,29 @@ def saa_scenarios(n: int, n_y: int, rng: np.random.Generator) -> Scenarios:
     return Scenarios(rng.standard_normal((n, n_y)), np.full(n, 1 / n))
 
 
+def _scenario_unknown_states(
+    system: System,
+    gp: PriorGP,
+    fitted: FittedGP,
+    scenarios: Scenarios,
+    u: Any,
+    x: Any,
+) -> Any:
+    """The scenarios' unknown states (S, P): the GP's prediction at each scenario's
+    arguments of h, mean + std * z_s, for u (N,) and x (S, M) as numpy arrays, or u
+    (N, 1) and x (S, M) as CasADi matrices.
+    """
+    # One unknown state (P = 1), so the GP's mean and std match the one column of z
+    n_scenarios = len(scenarios.w)
+    if isinstance(x, np.ndarray):
+        inputs = np.column_stack(_h_inputs(system, np.tile(u, (n_scenarios, 1)), x))
+        mean, std = predict(gp, fitted, inputs)
+        return mean[:, np.newaxis] + std[:, np.newaxis] * scenarios.z
+    inputs = cas.horzcat(*_h_inputs(system, cas.repmat(u.T, n_scenarios, 1), x))
+    mean, std = predict(gp, fitted, inputs)
+    return mean + std * Symbolic(scenarios.z)
+
+
 def hybrid_acquisition(
     problem: Problem,
     gp: PriorGP,
@@ -152,9 +233,8 @@ def hybrid_acquisition(
     incumbent: float,
     acquisition: EI | LCB,
     unknown_states_as_variables: bool = True,
-) -> tuple[NLP, tuple[np.ndarray, np.ndarray]]:
-    """The acquisition problem of hybrid BO (paper, Problems 8 and 9), and the start
-    bounds for its multistart.
+) -> AcquisitionProblem:
+    """The acquisition problem of hybrid BO (paper, Problems 8 and 9).
 
     Each scenario s has its own copy x_s of the mechanistic states, and the known
     equations g(x_s, y_s, u) = 0 are constraints. Its unknown states y_s are the GP's
@@ -167,12 +247,10 @@ def hybrid_acquisition(
     min(f_s - incumbent, 0), or SAA-LCB, the weighted mean of the f_s minus
     `std_factor` times their weighted standard deviation.
 
-    The variables are u, then the x_s, then the y_s (if variables); the states are
-    ordered variable by variable, each with one entry per scenario. So the trial point
-    is the first N entries of the solution. Each variable is boxed by its bounds and
-    started within its start bounds. Raises `TypeError` unless `acquisition` is an
-    `EI` or an `LCB`, and `ValueError` unless the scenarios have one column per
-    unknown state.
+    The variables are u, the x_s and, if variables, the y_s, in `_pack`'s order. Each
+    variable is boxed by its bounds and started within its start bounds. Raises
+    `TypeError` unless `acquisition` is an `EI` or an `LCB`, and `ValueError` unless
+    the scenarios have one column per unknown state.
     """
     # The checks, and the symbols for u and each scenario's mechanistic states
     _check_acquisition(acquisition)
@@ -183,20 +261,20 @@ def hybrid_acquisition(
             f"got {scenarios.z.shape[1]}"
         )
         raise ValueError(msg)
-    n = len(scenarios.w)
+    n_scenarios = len(scenarios.w)
     u = Symbolic.sym("u", system.n_u)
-    x = Symbolic.sym("x", n, system.n_x)  # row s: the mechanistic states of scenario s
+    # Row s: the mechanistic states of scenario s
+    x = Symbolic.sym("x", n_scenarios, system.n_x)
 
-    # The scenarios of the unknown states: the GP at each scenario's arguments of h.
-    # One unknown state (P = 1), so the GP's (n, 1) columns match z
-    inputs = cas.horzcat(*_h_inputs(system, cas.repmat(u.T, n, 1), x))
-    mean, std = predict(gp, fitted, inputs)
-    predicted = mean + std * Symbolic(scenarios.z)
-    y = Symbolic.sym("y", n, system.n_y) if unknown_states_as_variables else predicted
+    # The scenarios of the unknown states: variables tied to the GP, or the GP itself
+    predicted = _scenario_unknown_states(system, gp, fitted, scenarios, u, x)
+    y = predicted
+    if unknown_states_as_variables:
+        y = Symbolic.sym("y", n_scenarios, system.n_y)
 
     # Each scenario: its known equations, its tie to the GP, and its objective
     constraints, f_parts = [], []
-    for s in range(n):
+    for s in range(n_scenarios):
         x_s, y_s = x[s, :].T, y[s, :].T
         constraints.append(system.g(x_s, y_s, u))
         if unknown_states_as_variables:
@@ -205,54 +283,56 @@ def hybrid_acquisition(
     f = cas.vertcat(*f_parts)
 
     # The acquisition function, a weighted average over the scenarios
-    weights = Symbolic(scenarios.w)
-    if isinstance(acquisition, LCB):
-        f_mean = weights.T @ f
-        f_variance = weights.T @ (f - f_mean) ** 2
-        objective = f_mean - acquisition.std_factor * cas.sqrt(f_variance)
-    else:
-        objective = weights.T @ cas.fmin(f - incumbent, 0)
+    match acquisition:
+        case LCB(std_factor=std_factor):
+            f_mean = Symbolic(scenarios.w).T @ f
+            f_variance = Symbolic(scenarios.w).T @ (f - f_mean) ** 2
+            objective = f_mean - std_factor * cas.sqrt(f_variance)
+        case EI():
+            objective = Symbolic(scenarios.w).T @ cas.fmin(f - incumbent, 0)
+        case _:
+            assert_never(acquisition)
 
-    # The variables, with each state once per scenario, and their bounds
-    states = [x, y] if unknown_states_as_variables else [x]
-    w = cas.vertcat(u, *(cas.vec(block) for block in states))
-    unknown = system.y if unknown_states_as_variables else ()
-    variables = (*system.u, *system.x, *unknown)
-    copies = [1] * system.n_u + [n] * (len(variables) - system.n_u)
-    start_lower, start_upper = _start_bounds(variables)
+    # The Var of each entry of w, each state once per scenario, for the bounds
+    def per_scenario(variables: Sequence[Var]) -> np.ndarray:
+        """The variables repeated in a row per scenario, (S, len(variables))."""
+        return np.tile(np.array(variables, dtype=object), (n_scenarios, 1))
 
+    unknown = per_scenario(system.y) if unknown_states_as_variables else None
+    variables = _pack(np.array(system.u, dtype=object), per_scenario(system.x), unknown)
+
+    w = _pack(u, x, y if unknown_states_as_variables else None)
     nlp = NLP(
         cas.Function("acquisition", [w], [objective]),
-        np.repeat([var.lower for var in variables], copies),
-        np.repeat([var.upper for var in variables], copies),
+        np.array([var.lower for var in variables]),
+        np.array([var.upper for var in variables]),
         cas.Function("g", [w], [cas.vertcat(*constraints)]),
     )
-    return nlp, (np.repeat(start_lower, copies), np.repeat(start_upper, copies))
+    return AcquisitionProblem(
+        nlp,
+        _start_bounds(variables),
+        system.n_u,
+        system.n_x,
+        n_scenarios,
+        unknown_states_as_variables,
+    )
 
 
 def _scenario_states(
-    problem: Problem,
+    system: System,
     gp: PriorGP,
     fitted: FittedGP,
     scenarios: Scenarios,
+    problem: AcquisitionProblem,
     w: np.ndarray,
-    unknown_states_as_variables: bool = True,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """The scenario states x (S, M) and y (S, P) at a point w of
-    `hybrid_acquisition`'s variables.
+    """The scenario states x (S, M) and y (S, P) at a point w of a hybrid acquisition
+    problem.
 
     The x_s are read from w. So are the y_s when they are variables; otherwise they
     are the GP's prediction at each scenario's arguments of h, mean + std * z_s.
     """
-    # w holds u, then each state's S copies in turn (column by column)
-    system = problem.system
-    n = len(scenarios.w)
-    u, states = w[: system.n_u], w[system.n_u :]
-    x = states[: n * system.n_x].reshape((n, system.n_x), order="F")
-    if unknown_states_as_variables:
-        return x, states[n * system.n_x :].reshape((n, system.n_y), order="F")
-
-    # One unknown state (P = 1), so the GP has one output
-    inputs = np.column_stack(_h_inputs(system, np.tile(u, (n, 1)), x))
-    mean, std = predict(gp, fitted, inputs)
-    return x, (mean + std * scenarios.z[:, 0])[:, np.newaxis]
+    u, x, y = _unpack(problem, w)
+    if y is None:
+        y = _scenario_unknown_states(system, gp, fitted, scenarios, u, x)
+    return x, y

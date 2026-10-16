@@ -19,7 +19,9 @@ import scipy
 from hybrid_bo.acquisition import (
     EI,
     LCB,
+    _pack,
     _scenario_states,
+    _unpack,
     hybrid_acquisition,
     standard_acquisition,
 )
@@ -206,7 +208,9 @@ def iteration(
     panels = [panel for panel, on in shown.items() if on] or ["points"]
     curve = f_scenarios = None
     if settings is not None and (shown["scenarios"] or shown["acquisition"]):
-        curve, f_scenarios = _replay(run, problem, i, settings, prior_gp, u)
+        curve, f_scenarios = _replay(
+            run, problem, i, settings, prior_gp, u[:, np.newaxis]
+        )
 
     import matplotlib.pyplot as plt
 
@@ -306,69 +310,74 @@ def _replay(
     prior_gp: PriorGP,
     u: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray | None]:
-    """Iteration i's acquisition function at each u (n_u,), which holds the trial
-    point, and for hybrid BO f under each scenario there (n_u, S), else None; NaN
-    where a solve failed. See `iteration` for how hybrid BO's is solved."""
+    """Iteration i's acquisition function at each row of u (n_points, N), which holds
+    the trial point, and for hybrid BO f under each scenario there (n_points, S), else
+    None; NaN where a solve failed. See `iteration` for how hybrid BO's is solved."""
     history, surrogate = run.history, run.surrogates[i]
     n = history.n_initial + i
     incumbent = float(history.f[:n].min())
 
     # Standard BO: its analytic acquisition function
     if isinstance(settings, StandardBOSettings):
-        nlp, _ = standard_acquisition(
+        nlp = standard_acquisition(
             problem, prior_gp, surrogate, incumbent, settings.acquisition
-        )
-        return np.array([nlp.f(value).full().item() for value in u]), None
+        ).nlp
+        return np.array([nlp.f(_pack(point)).full().item() for point in u]), None
 
-    # Hybrid BO: the acquisition problem with u as a parameter, the states as variables
+    # Hybrid BO: the acquisition problem with u fixed by its bounds
     assert run.scenarios is not None  # hybrid BO runs hold their scenarios
-    as_variables = settings.unknown_states_as_variables
-    nlp, _ = hybrid_acquisition(
+    acquisition_problem = hybrid_acquisition(
         problem,
         prior_gp,
         surrogate,
         run.scenarios,
         incumbent,
         settings.acquisition,
-        as_variables,
+        settings.unknown_states_as_variables,
     )
+    nlp = acquisition_problem.nlp
     assert nlp.g is not None  # hybrid BO's problem has the known equations
-    n_u = problem.system.n_u
-    fixed_u, states = Symbolic.sym("u", n_u), Symbolic.sym("w", len(nlp.lower) - n_u)
-    variables = cas.vertcat(fixed_u, states)
+    w = Symbolic.sym("w", len(nlp.lower))
     solver = cas.nlpsol(
         "replay",
         "ipopt",
-        {"x": states, "p": fixed_u, "f": nlp.f(variables), "g": nlp.g(variables)},
+        {"x": w, "f": nlp.f(w), "g": nlp.g(w)},
         settings.solver.plugin_options | {"ipopt": settings.solver.solver_options},
     )
-    bounds = {"lbx": nlp.lower[n_u:], "ubx": nlp.upper[n_u:], "lbg": 0, "ubg": 0}
+    _, x_lower, y_lower = _unpack(acquisition_problem, nlp.lower)
+    _, x_upper, y_upper = _unpack(acquisition_problem, nlp.upper)
 
     # The stored solution's states, the first start
     solution = run.acquisitions[i]
     assert solution.x is not None and solution.y is not None
-    blocks = [solution.x, solution.y] if as_variables else [solution.x]
-    stored = np.concatenate([block.ravel(order="F") for block in blocks])
+    y_stored = solution.y if settings.unknown_states_as_variables else None
 
     # Solve at each u outwards from the trial point, each from its neighbor's solution
     values = np.full(len(u), np.nan)
     f = np.full((len(u), len(run.scenarios.w)), np.nan)
-    at_trial = int(np.flatnonzero(u == history.u[n, 0])[0])
+    at_trial = int(np.flatnonzero(np.all(u == history.u[n], axis=1))[0])
     for indices in (range(at_trial, len(u)), range(at_trial, -1, -1)):
-        start = stored
+        x_start, y_start = solution.x, y_stored
         for k in indices:
-            result = solver(x0=start, p=u[k], **bounds)
+            result = solver(
+                x0=_pack(u[k], x_start, y_start),
+                lbx=_pack(u[k], x_lower, y_lower),
+                ubx=_pack(u[k], x_upper, y_upper),
+                lbg=0,
+                ubg=0,
+            )
             if not solver.stats()["success"]:
                 continue
-            start = result["x"].full().ravel()
+            w_k = result["x"].full().ravel()
+            _, x_start, y_start = _unpack(acquisition_problem, w_k)
             values[k] = float(result["f"])
             x, y = _scenario_states(
-                problem,
+                problem.system,
                 prior_gp,
                 surrogate,
                 run.scenarios,
-                np.concatenate([[u[k]], start]),
-                as_variables,
+                acquisition_problem,
+                w_k,
             )
             f[k] = [problem.f(*s, u[k]).full().item() for s in zip(x, y, strict=True)]
     return values, f

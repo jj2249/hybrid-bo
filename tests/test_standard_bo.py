@@ -25,7 +25,11 @@ from hybrid_bo import (
     oracle_measure,
     standard_bo,
 )
-from hybrid_bo.acquisition import AcquisitionSolution, standard_acquisition
+from hybrid_bo.acquisition import (
+    AcquisitionSolution,
+    _pack,
+    standard_acquisition,
+)
 from hybrid_bo.bo import optimization_loop
 from hybrid_bo.gp import FittedGP, default_gp, fit_gp, predict
 from hybrid_bo.run import run_record
@@ -56,7 +60,7 @@ def fitted_illustrative_gp():
 
 def acquisition_values(nlp, u):
     """The objective of the acquisition problem at each row of u (n, N), shape (n,)."""
-    return np.array([nlp.f(point).full().item() for point in u])
+    return np.array([nlp.f(_pack(point)).full().item() for point in u])
 
 
 def loop_record(problem, rng):
@@ -94,7 +98,7 @@ def test_ei_matches_the_closed_form(illustrative_problem):
     u = np.linspace(-2.0, 2.0, 7)[:, np.newaxis]
     incumbent = -1.2
 
-    nlp, _ = standard_acquisition(illustrative_problem, gp, fitted, incumbent, EI())
+    nlp = standard_acquisition(illustrative_problem, gp, fitted, incumbent, EI()).nlp
 
     # Reference: EI = (incumbent - mean) Phi(gamma) + std phi(gamma)
     mean, std = predict(gp, fitted, u)
@@ -113,7 +117,7 @@ def test_lcb_is_mean_minus_std_factor_times_std(illustrative_problem):
     gp, fitted = fitted_illustrative_gp()
     u = np.linspace(-2.0, 2.0, 7)[:, np.newaxis]
 
-    nlp, _ = standard_acquisition(illustrative_problem, gp, fitted, 0.0, LCB(2.0))
+    nlp = standard_acquisition(illustrative_problem, gp, fitted, 0.0, LCB(2.0)).nlp
 
     mean, std = predict(gp, fitted, u)
     np.testing.assert_allclose(acquisition_values(nlp, u), mean - 2.0 * std, rtol=1e-12)
@@ -124,10 +128,11 @@ def test_acquisition_problem_is_over_u_within_its_bounds(illustrative_problem):
     bounds, with no equality constraints; its starts come from their start bounds."""
     gp, fitted = fitted_illustrative_gp()
 
-    nlp, (lower, upper) = standard_acquisition(
+    acquisition_problem = standard_acquisition(
         illustrative_problem, gp, fitted, 0.0, EI()
     )
 
+    nlp, (lower, upper) = acquisition_problem.nlp, acquisition_problem.start_bounds
     np.testing.assert_array_equal(nlp.lower, [-2.0])
     np.testing.assert_array_equal(nlp.upper, [2.0])
     np.testing.assert_array_equal(lower, [-2.0])
@@ -285,7 +290,9 @@ def test_stored_acquisition_value_is_the_objective_at_the_trial_point(
     ):
         point = history.n_initial + i
         incumbent = float(incumbents(history)[point - 1])
-        nlp, _ = standard_acquisition(illustrative_problem, gp, fitted, incumbent, EI())
+        nlp = standard_acquisition(
+            illustrative_problem, gp, fitted, incumbent, EI()
+        ).nlp
         expected = acquisition_values(nlp, history.u[point : point + 1])[0]
         assert solution.value == pytest.approx(expected, abs=1e-12)
         assert solution.x is None and solution.y is None

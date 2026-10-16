@@ -37,7 +37,7 @@ from hybrid_bo import (
     plots,
     standard_bo,
 )
-from hybrid_bo.acquisition import hybrid_acquisition, standard_acquisition
+from hybrid_bo.acquisition import _pack, hybrid_acquisition, standard_acquisition
 from hybrid_bo.gp import default_gp, predict
 
 # The illustrative example's hybrid BO settings: the GP's prediction substituted for
@@ -314,7 +314,7 @@ def test_hybrid_bo_figure_from_a_pickled_run(hybrid_run):
     # The acquisition function: the acquisition problem's objective at (u, x_s)
     assert hybrid_run.scenarios is not None
     incumbent = hybrid_run.history.f[:3].min()
-    nlp, _ = hybrid_acquisition(
+    nlp = hybrid_acquisition(
         ex.problem,
         default_gp(1),
         hybrid_run.surrogates[1],
@@ -322,9 +322,9 @@ def test_hybrid_bo_figure_from_a_pickled_run(hybrid_run):
         incumbent,
         EI(),
         unknown_states_as_variables=False,
-    )
+    ).nlp
     expected = [
-        nlp.f(np.concatenate([[u_k], x_row])).full().item()
+        nlp.f(_pack(np.array([u_k]), x_row[:, np.newaxis])).full().item()
         for u_k, x_row in zip(u, x, strict=True)
     ]
     np.testing.assert_allclose(line(acquisition, "-EI"), expected, atol=1e-4)
@@ -347,8 +347,10 @@ def test_standard_bo_figure_from_a_pickled_run(standard_run):
 
     # The acquisition panel is the acquisition problem's objective
     incumbent = standard_run.history.f[:3].min()
-    nlp, _ = standard_acquisition(ex.problem, default_gp(1), surrogate, incumbent, EI())
-    expected = [nlp.f(u_k).full().item() for u_k in u]
+    nlp = standard_acquisition(
+        ex.problem, default_gp(1), surrogate, incumbent, EI()
+    ).nlp
+    expected = [nlp.f(_pack(np.array([u_k]))).full().item() for u_k in u]
     np.testing.assert_allclose(line(acquisition_ax, "-EI"), expected, rtol=1e-12)
     plt.close("all")
 

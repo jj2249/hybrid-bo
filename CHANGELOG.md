@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Breaking:** `hb.acquisition.standard_acquisition` and `hybrid_acquisition` return
+  an `AcquisitionProblem` (`.nlp`, `.start_bounds` and the order of the decision
+  vector) instead of the tuple `(nlp, (start lower, start upper))` (#93).
 - **Breaking:** the prior GP and the fitted GP are explicit. `hb.gp.GP` is renamed
   `hb.gp.PriorGP` (`FittedGP` keeps its name), and `hb.gp.log_likelihood` is renamed
   `hb.gp.log_marginal_likelihood`. There are no aliases for the old names (#91).

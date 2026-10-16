@@ -26,7 +26,13 @@ from hybrid_bo import (
     initial_points,
     oracle_measure,
 )
-from hybrid_bo.acquisition import Scenarios, hybrid_acquisition, saa_scenarios
+from hybrid_bo.acquisition import (
+    Scenarios,
+    _pack,
+    _unpack,
+    hybrid_acquisition,
+    saa_scenarios,
+)
 from hybrid_bo.gp import FittedGP, default_gp, fit_gp, predict
 
 # Three scenarios with unequal weights, so a plain mean would give other values
@@ -68,9 +74,10 @@ def scenario_values(gp, fitted, u, x, h_inputs):
 
 
 def variables_at(u, x, y, unknown_states_as_variables):
-    """The acquisition problem's variables: u, the x_s, then the y_s if variables."""
-    parts = [[u], x, y] if unknown_states_as_variables else [[u], x]
-    return np.concatenate(parts)
+    """The acquisition problem's decision vector at u (scalar) and the scenarios'
+    x and y (S,), with y only if the unknown states are variables."""
+    y = y[:, np.newaxis] if unknown_states_as_variables else None
+    return _pack(np.array([u]), x[:, np.newaxis], y)
 
 
 def illustrative_run(problem, settings, seed=0) -> Run:
@@ -128,9 +135,9 @@ def test_saa_ei_is_the_weighted_average_over_scenarios(
     # f_s is about 0.36, 0.62 and 2.13, so two scenarios improve on the incumbent
     u, x, incumbent = 0.3, np.array([-1.0, 0.0, 0.5]), 1.0
 
-    nlp, _ = hybrid_acquisition(
+    nlp = hybrid_acquisition(
         problem, gp, fitted, SCENARIOS, incumbent, EI(), unknown_states_as_variables
-    )
+    ).nlp
 
     y, f = scenario_values(gp, fitted, u, x, h_inputs)
     expected = SCENARIOS.w @ np.minimum(f - incumbent, 0)
@@ -148,9 +155,9 @@ def test_saa_lcb_is_the_weighted_mean_minus_std_factor_times_weighted_std(
     gp, fitted = fitted_gp(1)
     u, x = -0.7, np.array([-1.0, 0.0, 0.5])
 
-    nlp, _ = hybrid_acquisition(
+    nlp = hybrid_acquisition(
         problem, gp, fitted, SCENARIOS, 0.0, LCB(2.0), unknown_states_as_variables
-    )
+    ).nlp
 
     y, f = scenario_values(gp, fitted, u, x, ["u"])
     mean = SCENARIOS.w @ f
@@ -167,7 +174,7 @@ def test_known_equations_hold_per_scenario_and_tie_the_unknown_states_to_the_gp(
     u, x = 0.3, np.array([-1.0, 0.0, 0.5])
     y = np.array([0.1, -0.2, 0.4])
 
-    nlp, _ = hybrid_acquisition(problem, gp, fitted, SCENARIOS, 0.0, EI())
+    nlp = hybrid_acquisition(problem, gp, fitted, SCENARIOS, 0.0, EI()).nlp
     assert nlp.g is not None
     constraints = nlp.g(variables_at(u, x, y, True)).full().ravel()
 
@@ -184,9 +191,9 @@ def test_substituted_unknown_states_leave_only_the_known_equations():
     gp, fitted = fitted_gp(1)
     u, x = 0.3, np.array([-1.0, 0.0, 0.5])
 
-    nlp, _ = hybrid_acquisition(
+    nlp = hybrid_acquisition(
         problem, gp, fitted, SCENARIOS, 0.0, EI(), unknown_states_as_variables=False
-    )
+    ).nlp
     assert nlp.g is not None
     constraints = nlp.g(variables_at(u, x, None, False)).full().ravel()
 
@@ -206,9 +213,10 @@ def test_bounds_and_start_bounds_come_from_each_variable(unknown_states_as_varia
     )
     gp, fitted = fitted_gp(1)
 
-    nlp, (lower, upper) = hybrid_acquisition(
+    acquisition_problem = hybrid_acquisition(
         problem, gp, fitted, SCENARIOS, 0.0, EI(), unknown_states_as_variables
     )
+    nlp, (lower, upper) = acquisition_problem.nlp, acquisition_problem.start_bounds
 
     # u, then x three times, then y (unbounded) three times if variables
     n_y = 3 if unknown_states_as_variables else 0
@@ -217,6 +225,68 @@ def test_bounds_and_start_bounds_come_from_each_variable(unknown_states_as_varia
     np.testing.assert_array_equal(nlp.upper, [2.0] + [3.0] * 3 + [inf] * n_y)
     np.testing.assert_array_equal(lower, [-1.0] + [-2.5] * 3 + [-2.0] * n_y)
     np.testing.assert_array_equal(upper, [1.5] + [1.0] * 3 + [2.0] * n_y)
+
+
+@pytest.mark.parametrize("unknown_states_as_variables", [True, False])
+def test_unpack_undoes_pack(unknown_states_as_variables):
+    """Unpacking a packed decision vector of an acquisition problem with two decision
+    variables and two mechanistic states gives back u, x and y (None when the unknown
+    states are substituted)."""
+    # A system with two of each, and its acquisition problem
+    u1, u2 = Var("u1", -2.0, 2.0), Var("u2", -2.0, 2.0)
+    x1, x2 = Var("x1", start=(-2.0, 2.0)), Var("x2", start=(-2.0, 2.0))
+    y = Var("y", start=(-2.0, 2.0))
+    system = System(
+        u=[u1, u2],
+        x=[x1, x2],
+        y=[y],
+        g=lambda v: [v.x1 + cas.exp(v.x1) - v.y, v.x2 - v.u2],
+        h_inputs=[u1],
+        measured=[y],
+    )
+    problem = Problem(system, f=lambda v: v.x1**2 + v.x2 + v.y)
+    gp, fitted = fitted_gp(1)
+    acquisition_problem = hybrid_acquisition(
+        problem, gp, fitted, SCENARIOS, 0.0, EI(), unknown_states_as_variables
+    )
+
+    # Distinct values for every entry, packed then unpacked
+    u = np.array([1.0, 2.0])
+    x = np.arange(6.0).reshape(3, 2) + 10
+    y = np.arange(3.0).reshape(3, 1) + 20 if unknown_states_as_variables else None
+    w = _pack(u, x, y)
+    u_back, x_back, y_back = _unpack(acquisition_problem, w)
+
+    # One entry of w per variable of the problem, and the same values back
+    assert w.shape == acquisition_problem.nlp.lower.shape
+    np.testing.assert_array_equal(u_back, u)
+    np.testing.assert_array_equal(x_back, x)
+    if y is None:
+        assert y_back is None
+    else:
+        np.testing.assert_array_equal(y_back, y)
+
+
+@pytest.mark.parametrize("unknown_states_as_variables", [True, False])
+def test_unpack_rejects_a_decision_vector_of_the_wrong_length(
+    unknown_states_as_variables,
+):
+    """A decision vector one entry too long or too short doesn't fit the problem."""
+    gp, fitted = fitted_gp(1)
+    acquisition_problem = hybrid_acquisition(
+        problem_with(["u"]),
+        gp,
+        fitted,
+        SCENARIOS,
+        0.0,
+        EI(),
+        unknown_states_as_variables,
+    )
+    w = np.zeros(len(acquisition_problem.nlp.lower))
+
+    for wrong in (w[:-1], np.append(w, 0.0)):
+        with pytest.raises(ValueError, match="doesn't fit"):
+            _unpack(acquisition_problem, wrong)
 
 
 def test_acquisition_builder_rejects_anything_but_ei_or_lcb():
@@ -302,7 +372,7 @@ def test_stored_acquisition_solution_solves_the_acquisition_problem(
         point = history.n_initial + i
         u = history.u[point, 0]
         incumbent = float(incumbents(history)[point - 1])
-        nlp, _ = hybrid_acquisition(
+        nlp = hybrid_acquisition(
             illustrative_problem,
             gp,
             fitted,
@@ -310,7 +380,7 @@ def test_stored_acquisition_solution_solves_the_acquisition_problem(
             incumbent,
             EI(),
             unknown_states_as_variables,
-        )
+        ).nlp
         w = variables_at(
             u, solution.x[:, 0], solution.y[:, 0], unknown_states_as_variables
         )

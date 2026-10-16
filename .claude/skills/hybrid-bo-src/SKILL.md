@@ -135,16 +135,24 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   order: it reproduces the pre-refactor values bit for bit for [0, 1], which the
   baselines depend on. `_gp_record` gives the prior GP as text for a run's record.
 - `acquisition.py`: `EI`, `LCB(std_factor)` and `standard_acquisition` (analytic EI
-  or LCB over `u`; returns the `NLP` and the `u` start bounds). `_check_acquisition`
+  or LCB over `u`). Both builders return an `AcquisitionProblem` (`nlp`,
+  `start_bounds`, and the variable order: `n_u`, `n_x`, `n_scenarios`,
+  `unknown_states_as_variables`; the defaults are standard BO's, `w = u`).
+  `_pack(u, x, y)` (numpy or CasADi) and `_unpack(problem, w) -> (u, x, y | None)`
+  are the only code that knows the order of `w`: never slice or reshape `w`
+  elsewhere. `_check_acquisition`
   is the one check of an acquisition function; every method's settings and builder
   call it (`TypeError` unless an `EI` or `LCB` instance). `Scenarios` (`z (S, P)`,
   `w (S,)`, checked), `saa_scenarios(n, n_y, rng)` and `hybrid_acquisition` (variables
   `u`, then `vec` of the `(S, M)` x copies, then of the `(S, P)` y copies if variables;
   bounds and start bounds from each `Var`, repeated per scenario; `g` per scenario,
-  followed by its GP tie). `AcquisitionSolution(value, x, y)` is one iteration's
-  solution: the minimized objective at the trial point and, for hybrid BO, the
-  scenario states `(S, M)`, `(S, P)`, which `_scenario_states` reads from the
-  solution (or predicts, when the y_s are substituted).
+  followed by its GP tie). `_scenario_unknown_states` is the one GP scenario
+  prediction (mean + std * z_s), symbolic or numeric.
+  `AcquisitionSolution(value, x, y)` is one iteration's solution: the minimized
+  objective at the trial point and, for hybrid BO, the scenario states `(S, M)`,
+  `(S, P)`, which `_scenario_states(system, gp, fitted, scenarios,
+  acquisition_problem, w)` reads from the solution (or predicts, when the y_s are
+  substituted).
 - `bo.py`: `optimization_loop(problem, measure, initial_points, n_iterations,
   trial_point, rng, record) -> Run` (evaluate initial points, then per iteration
   `trial_point(problem, history, rng) -> (u, surrogate, acquisition solution)` and
@@ -167,7 +175,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   fields the replay uses (`_REPLAYED`) must appear in that text, so a custom solver
   or a non-default GP needs `settings`.
   `_replay`: standard BO evaluates `standard_acquisition`'s NLP; hybrid BO rebuilds
-  `hybrid_acquisition` and solves it with u as an `nlpsol` parameter, outwards from
+  `hybrid_acquisition` and solves it over all of `w` with u fixed by equal bounds
+  (built with `_pack`), outwards from
   the stored solution (NaN where a solve fails), then f per scenario at
   `_scenario_states`. Figures are drawn in `STYLE` (`hybrid_bo.mplstyle`).
   matplotlib and Polars are imported inside the functions.

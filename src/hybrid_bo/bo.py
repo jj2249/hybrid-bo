@@ -17,6 +17,7 @@ from hybrid_bo.acquisition import (
     AcquisitionSolution,
     _check_acquisition,
     _scenario_states,
+    _unpack,
     hybrid_acquisition,
     saa_scenarios,
     standard_acquisition,
@@ -202,12 +203,13 @@ def standard_bo(
             gp, history.u, history.f, rng, settings.n_starts_gp, settings.solver
         )
         incumbent = float(incumbents(history)[-1])
-        nlp, start_bounds = standard_acquisition(
+        acquisition_problem = standard_acquisition(
             problem, gp, fitted, incumbent, settings.acquisition
         )
-        starts = lhs(*start_bounds, settings.n_starts, rng)
-        solution = multistart(nlp, starts, settings.solver)
-        return solution.w, fitted, AcquisitionSolution(solution.f)
+        starts = lhs(*acquisition_problem.start_bounds, settings.n_starts, rng)
+        solution = multistart(acquisition_problem.nlp, starts, settings.solver)
+        u, _, _ = _unpack(acquisition_problem, solution.w)
+        return u, fitted, AcquisitionSolution(solution.f)
 
     return optimization_loop(
         problem, measure, initial_points, n_iterations, trial_point, rng, record
@@ -263,7 +265,7 @@ def hybrid_bo(
             gp, X, history.y[:, 0], rng, settings.n_starts_gp, settings.solver
         )
         incumbent = float(incumbents(history)[-1])
-        nlp, start_bounds = hybrid_acquisition(
+        acquisition_problem = hybrid_acquisition(
             problem,
             gp,
             fitted,
@@ -272,20 +274,15 @@ def hybrid_bo(
             settings.acquisition,
             settings.unknown_states_as_variables,
         )
-        starts = lhs(*start_bounds, settings.n_starts, rng)
-        solution = multistart(nlp, starts, settings.solver)
+        starts = lhs(*acquisition_problem.start_bounds, settings.n_starts, rng)
+        solution = multistart(acquisition_problem.nlp, starts, settings.solver)
 
         # The trial point, and the scenario states at the solution
+        u, _, _ = _unpack(acquisition_problem, solution.w)
         x, y = _scenario_states(
-            problem,
-            gp,
-            fitted,
-            scenarios,
-            solution.w,
-            settings.unknown_states_as_variables,
+            system, gp, fitted, scenarios, acquisition_problem, solution.w
         )
-        acquisition = AcquisitionSolution(solution.f, x, y)
-        return solution.w[: system.n_u], fitted, acquisition
+        return u, fitted, AcquisitionSolution(solution.f, x, y)
 
     try:
         run = optimization_loop(
