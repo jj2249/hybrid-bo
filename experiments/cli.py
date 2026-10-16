@@ -9,13 +9,15 @@ An experiment ends with a call that passes everything it defines:
 and the pixi tasks run the script as a module from this folder:
 
     pixi run experiment illustrative_example [--method hybrid_bo ...] [--n-runs 3]
-        [--seed 0] [--n-iterations 5] [--name lcb-vs-ei] [--plot]
+        [--seed 0] [--n-iterations 5] [--name lcb-vs-ei] [--plot] [--require-clean]
     pixi run plot illustrative_example [STUDY]
 
 Running saves the study with `hb.save` to `<results root>/<experiment>/<study id>/` (the
 results root defaults to `results/` at the repo root), where the study id is `--name`
 or the UTC time at the start, with `-2`, `-3`, ... appended if taken when the study is
-saved, and prints `hb.summary` of it and saves it as `summary.csv` there. `plot` loads
+saved, and prints `hb.summary` of it and saves it as `summary.csv` there. Running from
+a tree that isn't clean (uncommitted or untracked files) warns that the study won't be
+reproducible; `--require-clean` refuses to run instead. `plot` loads
 a study (default: the newest saved) with `hb.load` and saves its figures to its
 `figures/` folder.
 """
@@ -32,9 +34,12 @@ import matplotlib.pyplot as plt
 import polars as pl
 
 import hybrid_bo as hb
+from hybrid_bo.run import code_version, is_clean
+from hybrid_bo.saving import ARTIFACT_FILE, OLD_ARTIFACT_FILE
 from hybrid_bo.studies import Method
 
 RESULTS_ROOT = Path(__file__).parent.parent / "results"
+ARTIFACTS = (ARTIFACT_FILE, OLD_ARTIFACT_FILE)
 
 
 def main(
@@ -64,8 +69,19 @@ def main(
     parsed = parsers[command].parse_args(rest)
     experiment_dir = _from_init_cwd(parsed.results_root) / name
 
-    # Run: the experiment's settings, overridden by the flags given
+    # Run: a tree that isn't clean gives a study that isn't reproducible
     if command == "run":
+        version = code_version(Path(hb.__file__).parent)
+        if not is_clean(version):
+            if parsed.require_clean:
+                parsers["run"].error(f"the code version {version} isn't clean")
+            print(
+                f"warning: the code version {version} isn't clean (uncommitted or "
+                "untracked files), so this study won't be reproducible",
+                file=sys.stderr,
+            )
+
+        # The experiment's settings, overridden by the flags given
         given = {
             "n_runs": parsed.n_runs,
             "seed": parsed.seed,
@@ -86,14 +102,16 @@ def main(
 
     # Plot: the study given, else the one saved last
     else:
-        saved = list(experiment_dir.glob("*/study.json"))
+        saved = [
+            path for name in ARTIFACTS for path in experiment_dir.glob(f"*/{name}")
+        ]
         if parsed.study is not None:
             study_dir = experiment_dir / parsed.study
         elif saved:
             study_dir = max(saved, key=lambda path: path.stat().st_mtime).parent
         else:
             parsers["plot"].error(f"{experiment_dir} holds no study")
-        if not (study_dir / "study.json").exists():
+        if not any((study_dir / name).exists() for name in ARTIFACTS):
             parsers["plot"].error(f"{study_dir} holds no study")
 
     # Plot, also straight after a run with --plot
@@ -127,6 +145,11 @@ def _parsers(
     )
     run_parser.add_argument("--name", help="the study id; default: the UTC time")
     run_parser.add_argument("--plot", action="store_true", help="plot after running")
+    run_parser.add_argument(
+        "--require-clean",
+        action="store_true",
+        help="refuse to run with uncommitted or untracked files",
+    )
     run_parser.add_argument("--results-root", type=Path, default=RESULTS_ROOT)
 
     # Plotting, `pixi run plot <name>`

@@ -2,8 +2,9 @@
 starts from the same initial points.
 
 `repeat` runs one method `n_runs` times from generators spawned from one seed; `study`
-runs every method from the same seed and records the problem, the methods and the
-stated oracle optimum once. Save and load a study with `hb.save` and `hb.load`.
+runs every method from the same seed, and its artifact records the problem, the
+methods and the stated oracle optimum once. Save and load a study with `hb.save` and
+`hb.load`.
 """
 
 import logging
@@ -49,15 +50,15 @@ class Study:
     names its method (`run.method`) and its position among that method's runs
     (`run.index`), and run i of every method starts from the same initial points.
 
-    `record` holds, as text, what the runs share: the problem, the measurement, each
-    method with its settings, the oracle optimum (if stated) and the versions. The
-    seed is in `settings`.
+    `artifact` says, as text, what the study ran and how: the problem, the
+    measurement, each method with its settings, the oracle optimum (if stated) and
+    the versions. The seed is in `settings`.
     """
 
     runs: tuple[Run, ...]
     settings: StudySettings
     name: str | None
-    record: dict[str, str]
+    artifact: dict[str, str]
 
 
 def repeat(
@@ -107,7 +108,7 @@ def study(
     Seed None draws a fresh seed first, and the study's settings hold it, so the
     saved study can be run again exactly. `optimum` is the oracle optimum of a test
     case, which regret is measured from. It is stated, never computed, since a search
-    can miss it (`oracle_optimum` helps find it once); the study records it. Warns
+    can miss it (`oracle_optimum` helps find it once); the artifact records it. Warns
     with `OracleOptimumWarning` if an evaluated point's oracle objective is below it.
     """
     # One seed for every method; a fresh one is kept in the settings
@@ -121,7 +122,7 @@ def study(
         runs += [replace(run, method=label) for run in method_runs]
 
     # Each method with its settings, from the record of one of its runs
-    record = _problem_record(problem, measure)
+    artifact = _problem_record(problem, measure)
     records = {run.method: run.record for run in runs}
     method_lines = []
     for label in methods:
@@ -130,14 +131,14 @@ def study(
         else:
             text = "no runs"
         method_lines.append(f"{label}: {text}")
-    record["methods"] = "\n".join(method_lines)
+    artifact["methods"] = "\n".join(method_lines)
 
     # The stated oracle optimum, checked against the points the runs evaluated
     if optimum is not None:
-        record["oracle_optimum"] = repr(float(optimum))
+        artifact["oracle_optimum"] = repr(float(optimum))
         _check_optimum(runs, float(optimum))
 
-    return Study(tuple(runs), settings, name, record | _versions_record())
+    return Study(tuple(runs), settings, name, artifact | _versions_record())
 
 
 def _check_optimum(runs: list[Run], optimum: float) -> None:

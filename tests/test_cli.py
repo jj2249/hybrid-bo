@@ -55,7 +55,7 @@ def test_run_then_plot_the_newest_study(tmp_path):
     (study_dir,) = (tmp_path / "illustrative_example").iterdir()
     study = load(study_dir)
     assert study.name == "illustrative_example"
-    assert study.record["oracle_optimum"] == repr(ex.optimum)
+    assert study.artifact["oracle_optimum"] == repr(ex.optimum)
     runs = [run for run in study.runs if run.method == "standard_bo"]
     assert len(runs) == 2
     assert runs[0].record["seed"] == "0"
@@ -144,7 +144,9 @@ def test_a_relative_results_root_is_relative_to_where_pixi_started(
     )
 
     # Saved under the temporary folder, not experiments/
-    assert (tmp_path / "out" / "illustrative_example" / "here" / "study.json").exists()
+    assert (
+        tmp_path / "out" / "illustrative_example" / "here" / "artifact.json"
+    ).exists()
 
 
 def test_help_names_the_methods_and_the_plot_command(capsys):
@@ -159,6 +161,40 @@ def test_help_names_the_methods_and_the_plot_command(capsys):
     printed = " ".join(capsys.readouterr().out.split())
     assert ", ".join(ex.methods) in printed
     assert "pixi run plot illustrative_example" in printed
+
+
+def test_a_tree_that_is_not_clean_warns_but_still_runs(tmp_path, monkeypatch, capsys):
+    """Running from a tree with uncommitted or untracked files warns that the study
+    won't be reproducible, then runs and saves it anyway."""
+    # The code version git would give with an untracked file
+    monkeypatch.setattr(cli, "code_version", lambda path: "abc1234-untracked")
+
+    run_cli(
+        ["--method", "uniform_sampling", "--n-runs", "1", "--n-iterations", "1"]
+        + ["--results-root", str(tmp_path)]
+    )
+
+    assert "abc1234-untracked" in capsys.readouterr().err
+    assert len(list((tmp_path / "illustrative_example").iterdir())) == 1
+
+
+def test_require_clean_refuses_a_tree_that_is_not_clean(tmp_path, monkeypatch):
+    """`--require-clean` refuses to run from a tree that isn't clean, saving nothing,
+    and runs from a clean one."""
+    command = ["--method", "uniform_sampling", "--n-runs", "1", "--n-iterations", "1"]
+    command += ["--require-clean", "--results-root", str(tmp_path)]
+
+    # A changed file: a usage error, before anything runs
+    monkeypatch.setattr(cli, "code_version", lambda path: "abc1234-dirty")
+    with pytest.raises(SystemExit) as exit_info:
+        run_cli(command)
+    assert exit_info.value.code != 0
+    assert not (tmp_path / "illustrative_example").exists()
+
+    # A clean tree: the study runs and is saved
+    monkeypatch.setattr(cli, "code_version", lambda path: "abc1234")
+    run_cli(command)
+    assert (tmp_path / "illustrative_example").exists()
 
 
 def test_run_rejects_a_method_the_experiment_lacks(tmp_path):

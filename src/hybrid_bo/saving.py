@@ -1,9 +1,11 @@
 """Saving and loading a study as a folder of JSON files (ADR 0004).
 
-`save(study, path)` writes `path/study.json` (the settings, name, record and the list
-of run files) and one file per run, `path/runs/<method>/run-000.json`, holding every
-field of the run. Arrays are nested lists; float64 values round-trip exactly. The
-library never calls `save` itself.
+`save(study, path)` writes `path/artifact.json` (the study's name, settings and
+artifact, and the list of run files) and one file per run,
+`path/runs/<method>/run-000.json`, holding every field of the run. `load` also reads
+a study saved before the artifact was named: `study.json` with a `record` key. Arrays
+are nested lists; float64 values round-trip exactly. The library never calls `save`
+itself.
 """
 
 import dataclasses
@@ -17,6 +19,10 @@ import numpy as np
 
 from hybrid_bo.run import Run
 from hybrid_bo.studies import Study, StudySettings
+
+# The artifact's file, and its name in studies saved before the artifact was named
+ARTIFACT_FILE = "artifact.json"
+OLD_ARTIFACT_FILE = "study.json"
 
 
 def _encode(value: Any) -> Any:
@@ -95,24 +101,31 @@ def save(study: Study, path: str | Path) -> Path:
         raise ValueError(msg)
     path.mkdir(parents=True)
 
-    # One file per run, then the study's file, which lists them in order
+    # One file per run, then the artifact, which lists them in order
     for run, run_path in zip(study.runs, run_paths, strict=True):
         (path / run_path).parent.mkdir(parents=True, exist_ok=True)
         (path / run_path).write_text(json.dumps(_encode(run), indent=1) + "\n")
     study_data = {
         "name": study.name,
         "settings": _encode(study.settings),
-        "record": study.record,
+        "artifact": study.artifact,
         "runs": [run_path.as_posix() for run_path in run_paths],
     }
-    (path / "study.json").write_text(json.dumps(study_data, indent=1) + "\n")
+    (path / ARTIFACT_FILE).write_text(json.dumps(study_data, indent=1) + "\n")
     return path
 
 
 def load(path: str | Path) -> Study:
     """Reads the study saved in the folder `path` by `save`."""
+    # The artifact, else the older `study.json`, which named it `record`
     path = Path(path)
-    study_data = json.loads((path / "study.json").read_text())
+    if (path / ARTIFACT_FILE).exists():
+        study_data = json.loads((path / ARTIFACT_FILE).read_text())
+    else:
+        study_data = json.loads((path / OLD_ARTIFACT_FILE).read_text())
+        study_data["artifact"] = study_data.pop("record")
+
+    # The runs, in the order the artifact lists them
     runs = tuple(
         _decode(json.loads((path / run_path).read_text()), Run)
         for run_path in study_data["runs"]
@@ -121,5 +134,5 @@ def load(path: str | Path) -> Study:
         runs,
         _decode(study_data["settings"], StudySettings),
         study_data["name"],
-        study_data["record"],
+        study_data["artifact"],
     )

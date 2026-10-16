@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- A study's artifact (`Study.artifact`, saved as `artifact.json`) replaces
+  `Study.record` and `study.json`. `hb.load` still reads studies saved as
+  `study.json`.
+- The recorded code version ends in `-untracked` when files that aren't ignored were
+  never added to git, as it ends in `-dirty` for uncommitted changes, so a study's
+  artifact says whether it is reproducible.
+- `pixi run experiment` warns when run with uncommitted or untracked files;
+  `--require-clean` refuses to run instead.
+
 ## 0.2.0 (2026-10-16)
 
 The first release after rewriting the original code (tag `pre-refactor`). The

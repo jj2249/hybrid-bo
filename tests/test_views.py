@@ -17,8 +17,8 @@ from hybrid_bo.gp import FittedGP, Scaler
 
 OPTIMUM = -1.0
 
-# The variables as a study records them (`repr` of each `Var`)
-RECORD = {
+# The variables as a study's artifact holds them (`repr` of each `Var`)
+ARTIFACT = {
     "u": "Var(name='flow', lower=0.0, upper=1.0, start=(0.0, 1.0))",
     "x": "Var(name='a', lower=-inf, upper=inf, start=(0.0, 1.0)); "
     "Var(name='b', lower=-inf, upper=inf, start=(0.0, 1.0))",
@@ -84,7 +84,7 @@ RUNS = (
     baseline_run(0, [2.0, 3.0, 1.0, 4.0], [2.0, 3.0, 1.0, 4.0]),
     baseline_run(1, [2.0, 3.0], [2.0, 3.0]),
 )
-STUDY = hb.Study(RUNS, SETTINGS, name="by hand", record=RECORD)
+STUDY = hb.Study(RUNS, SETTINGS, name="by hand", artifact=ARTIFACT)
 
 
 def rows_of(frame: pl.DataFrame, method: str, run: int) -> pl.DataFrame:
@@ -165,8 +165,8 @@ def test_a_given_optimum_overrides_the_recorded_one():
 
 def test_regret_is_null_without_an_optimum():
     """A study without an oracle optimum and no `optimum` given has no regret."""
-    record = {key: value for key, value in RECORD.items() if key != "oracle_optimum"}
-    study = hb.Study(RUNS, SETTINGS, name=None, record=record)
+    artifact = {k: v for k, v in ARTIFACT.items() if k != "oracle_optimum"}
+    study = hb.Study(RUNS, SETTINGS, name=None, artifact=artifact)
 
     regret = hb.evaluations(study)["regret"]
 
@@ -177,7 +177,7 @@ def test_oracle_columns_are_null_without_oracle_values():
     """A run without oracle values has null oracle values, oracle incumbents and
     regret, with the same columns as a run that has them."""
     run = hb.Run(history([1.0, 0.0], None), record={}, method="lhs")
-    study = hb.Study((run,), SETTINGS, name=None, record=RECORD)
+    study = hb.Study((run,), SETTINGS, name=None, artifact=ARTIFACT)
 
     frame = hb.evaluations(study)
 
@@ -195,9 +195,9 @@ def test_acquisition_is_the_stored_value_at_each_iteration():
     assert rows_of(frame, "lhs", 0)["acquisition"].null_count() == 4
 
 
-def test_variables_are_numbered_when_the_record_has_no_names():
-    """Without recorded variables, the columns are numbered from 0."""
-    study = hb.Study(RUNS[:1], SETTINGS, name=None, record={})
+def test_variables_are_numbered_when_the_artifact_has_no_names():
+    """Without variables in the artifact, the columns are numbered from 0."""
+    study = hb.Study(RUNS[:1], SETTINGS, name=None, artifact={})
 
     columns = hb.evaluations(study).columns
 
@@ -232,7 +232,7 @@ def test_summary_has_one_row_per_method_with_medians_and_iqrs():
 def test_summary_counts_runs_that_left_nothing_as_failed():
     """A run that failed before evaluating anything is missing from the study; the
     summary counts it as failed against the settings' number of runs."""
-    study = hb.Study(RUNS[:1], SETTINGS, name=None, record=RECORD)
+    study = hb.Study(RUNS[:1], SETTINGS, name=None, artifact=ARTIFACT)
 
     summary = hb.summary(study)
 

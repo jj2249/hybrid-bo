@@ -105,18 +105,18 @@ def evaluations(study: Study, optimum: float | None = None) -> "pl.DataFrame":
     - `x_oracle_<name>`, `y_oracle_<name>` and `f_oracle`, null without an oracle;
     - `incumbent` (`hb.incumbents`), `oracle_incumbent` (`hb.oracle_incumbents`,
       null without an oracle) and `regret`: the oracle incumbent minus the oracle
-      optimum, which is `optimum` when given, else the study's recorded one, else
-      there is no regret (null);
+      optimum, which is `optimum` when given, else the one the study's artifact
+      records, else there is no regret (null);
     - `acquisition`: the acquisition problem's objective at the trial point (-EI
       for EI); null for initial points and the baselines.
 
-    Variables are named after the study's record, or numbered from 0 when it names
-    none. Raises `ImportError` without Polars.
+    Variables are named after the study's artifact, or numbered from 0 when it
+    names none. Raises `ImportError` without Polars.
     """
     pl = _polars()
-    if optimum is None and "oracle_optimum" in study.record:
-        optimum = float(study.record["oracle_optimum"])
-    frames = [_run_evaluations(run, study.record, optimum) for run in study.runs]
+    if optimum is None and "oracle_optimum" in study.artifact:
+        optimum = float(study.artifact["oracle_optimum"])
+    frames = [_run_evaluations(run, study.artifact, optimum) for run in study.runs]
     return pl.concat(frames) if frames else pl.DataFrame()
 
 

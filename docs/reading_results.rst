@@ -10,9 +10,12 @@ The study folder
 
 ``results/<experiment>/<study id>/`` holds:
 
-- ``study.json``: the study's settings (with the seed) and its record: the problem's
-  variables and equations, the measurement, each method with its settings, the oracle
-  optimum if stated, and the package and code versions.
+- ``artifact.json``: the study's settings (with the seed) and its artifact, which says
+  what it ran and how: the problem's variables and equations, the measurement, each
+  method with its settings, the oracle optimum if stated, and the package and code
+  versions. The code version ends in ``-dirty`` or ``-untracked`` when the study ran
+  with uncommitted or untracked files, and then the study isn't reproducible. Studies
+  saved before this was named have ``study.json`` instead, and still load.
 - ``runs/<method>/run-000.json``: one file per run.
 - ``summary.csv``: one row per method, the median and interquartile range (IQR) over
   its runs of the final values, and how many runs failed.
@@ -60,7 +63,7 @@ produced it:
    study = hb.load("results/illustrative_example/<study id>")
 
 A :py:class:`~hybrid_bo.studies.Study` holds ``runs``, ``settings``
-(:py:class:`~hybrid_bo.studies.StudySettings`), ``name`` and ``record``. Three
+(:py:class:`~hybrid_bo.studies.StudySettings`), ``name`` and ``artifact``. Three
 functions turn it into `Polars <https://pola.rs>`_ data frames:
 
 - :py:func:`~hybrid_bo.views.evaluations`: one row per evaluation of every run, with

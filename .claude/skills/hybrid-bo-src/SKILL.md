@@ -81,27 +81,31 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   hybrid BO only, else None), pure data that loads without user code (ADR 0003).
   `run_record(problem, measure, rng, method, settings)` builds the text record
   from `_problem_record`, `_generator_record` and `_versions_record` (a study's
-  record reuses them); call it before the method draws. A measurement is recorded by
+  artifact reuses them); call it before the method draws. `code_version(path)` is
+  `git describe --always --dirty` plus `-untracked` for untracked files that aren't
+  ignored, or `unknown`; `is_clean(version)` says whether it pins the code (the CLI
+  checks it before running). A measurement is recorded by
   its docstring, else its name (`oracle_measure` sets the docstring).
 - `studies.py`: `StudySettings(n_runs, n_initial, n_iterations, seed)`, `Study(runs,
-  settings, name, record)`, `Method` (called as `method(problem, measure,
+  settings, name, artifact)`, `Method` (called as `method(problem, measure,
   initial_points, n, rng=rng)`), `repeat` (run i from
   `default_rng(SeedSequence(seed).spawn(n_runs)[i])`, initial points then the method;
   catches `HybridBOError`, logs it and keeps `error.run`) and `study` (resolves a
   None seed to fresh entropy kept in its settings, then each method's `repeat` from
-  that seed; relabels runs with their key; records a stated `optimum` as
+  that seed; relabels runs with their key; its artifact records a stated `optimum` as
   `oracle_optimum`, never computes one, and warns with `OracleOptimumWarning` if an
   evaluated point's `f_oracle` is below it). Studies take a seed, not an
   `rng`: the settings alone reproduce a study.
-- `saving.py`: `save(study, path)` / `load(path)` (ADR 0004): `study.json` lists the
-  run files `runs/<method>/run-<index:03d>.json`. `_encode`/`_decode` convert any
+- `saving.py`: `save(study, path)` / `load(path)` (ADR 0004): `artifact.json` lists the
+  run files `runs/<method>/run-<index:03d>.json`; `load` also reads the older
+  `study.json` (with `record` for `artifact`). `_encode`/`_decode` convert any
   dataclass by its type hints; arrays are nested lists of floats (an empty one is
   `{"shape": ...}`). A new field on `Run` or its parts round-trips without changes if
   its type is one `_decode` handles. `save` refuses an existing folder.
 - `views.py`: `evaluations(study, optimum=None)`, `summary(study)` and
   `hyperparameters(study)`, Polars data frames (one row per evaluation, per method,
   per fitted hyperparameter entry); each docstring lists its columns. Variable
-  columns are named from the study's record (`_names` reads `Var(name='...')`).
+  columns are named from the study's artifact (`_names` reads `Var(name='...')`).
   Polars is imported inside the functions (`_polars`), so `import hybrid_bo` works
   without it; a missing Polars raises `ImportError` naming `hybrid-bo[analysis]`.
 - `baselines.py`: `latin_hypercube_sampling` and `uniform_sampling` draw the whole
@@ -226,7 +230,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - The unit tests (`test_kernels.py`, `test_gp.py`, `test_scalers.py`,
   `test_sampling.py`, `test_solvers.py`, `test_system.py`, `test_evaluation.py`,
   `test_baselines.py`, `test_standard_bo.py`, `test_hybrid_bo.py`,
-  `test_studies.py`, `test_views.py`) compare against
+  `test_studies.py`, `test_views.py`, `test_run.py`) compare against
   numpy/scipy references or closed forms. Add one when changing math.
 - Tests follow the comment rules in CLAUDE.md Conventions (docstrings, commented
   blocks, a note on the first use of each pytest feature); `test_standard_bo.py` is

@@ -63,7 +63,7 @@ oracle objective is below it.
 
 ## Running
 
-    pixi run experiment <name> [--method M ...] [--n-runs 10] [--seed 0] [--n-iterations 5] [--name ID] [--plot]
+    pixi run experiment <name> [--method M ...] [--n-runs 10] [--seed 0] [--n-iterations 5] [--name ID] [--plot] [--require-clean]
     pixi run plot <name> [STUDY]
     pixi run experiment <name> plot [STUDY] [--results-root DIR]
 
@@ -73,5 +73,7 @@ No command lists every experiment, and a typo in the name fails with "No module 
 not `experiments/`. The study id is `--name`, else the UTC time to the second at the
 start, with `-2`, `-3`, ... appended if taken when saved (`hb.save` creates the folder,
 so parallel runs never share one). `plot` loads the study given, else the one whose
-`study.json` was written last, and saves `summary.csv` if the study has none (studies
-saved before summaries).
+artifact was written last (`artifact.json`, or `study.json` in older studies), and
+saves `summary.csv` if the study has none (studies saved before summaries). Running
+with uncommitted or untracked files warns that the study won't be reproducible;
+`--require-clean` refuses to run instead.
