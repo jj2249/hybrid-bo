@@ -54,7 +54,7 @@ sphinx-autoapi = ">=3.8.1,<4"
 furo = ">=2025.12.19,<2026"
 
 [tool.pixi.feature.docs.tasks]
-docs = "sphinx-build -b html docs docs/_build/html"
+docs = { cmd = "sphinx-build -b html docs docs/_build/html", default-environment = "experiments", description = "Build the docs into docs/_build/html" }
 
 [tool.pixi.feature.experiments.dependencies]
 matplotlib = ">=3.11.2,<4"

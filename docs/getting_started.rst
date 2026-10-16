@@ -1,51 +1,82 @@
 Getting started
 ===============
 
-Import the package as ``hb``. Its top level holds what a typical script uses; the rest
-is in its module (``hb.gp.fit_gp``, ``hb.solvers.multistart``), and the
-:doc:`API reference <autoapi/index>` covers every function.
+This page runs the illustrative example of the paper and looks at what it produced.
+The next pages explain how to write your own experiment and how to read the results.
 
-.. code-block:: python
+Install
+-------
 
-   import hybrid_bo as hb
+The project is managed with `pixi <https://pixi.sh>`_, which installs Python, the
+library and every dependency into the project folder. Install pixi, then fork the
+repository on GitHub and clone your fork:
 
-Define a problem
+.. code-block:: bash
+
+   git clone https://github.com/<you>/hybrid-bo.git
+   cd hybrid-bo
+
+There is no separate install step: the first ``pixi run`` installs the environment it
+needs.
+
+Run the illustrative experiment
+-------------------------------
+
+An *experiment* is one Python file in ``experiments/``: a problem, how it is measured,
+and the methods to compare. ``experiments/illustrative_example.py`` is the
+illustrative example of the paper: one decision variable ``u``, the known equation
+``x + exp(x) = y`` and the unknown equation ``y = sin(u)``, which the methods have to
+learn. Run every method on it three times and plot the results:
+
+.. code-block:: bash
+
+   pixi run experiment illustrative_example --n-runs 3 --plot
+
+It takes about a minute. It runs a *study*: every method (hybrid BO, standard BO, Latin hypercube sampling and
+uniform sampling) ``n_runs`` times, run ``i`` of every method from the same initial
+points. ``pixi run experiment illustrative_example --help`` lists the flags:
+
+- ``--method NAME`` runs only that method (repeat it for several; default all);
+- ``--n-runs``, ``--n-iterations`` and ``--seed`` override the experiment's study
+  settings;
+- ``--name`` names the study (default the current UTC time);
+- ``--plot`` draws the figures straight after.
+
+Look at the study
+-----------------
+
+When it finishes, the command prints a summary with one row per method: the median and
+interquartile range (IQR), over the runs, of the final ``incumbent`` (the best
+objective measured), ``oracle_incumbent`` (the true objective there) and ``regret``
+(how far that is above the true optimum). Lower is better.
+
+The study is saved in ``results/illustrative_example/<study id>/``:
+
+.. code-block:: text
+
+   study.json          the settings and the record of the problem and methods
+   runs/<method>/      one JSON file per run: every evaluated point, the GPs, ...
+   summary.csv         the summary table printed above
+   figures/            convergence.png, regret.png and one figure per iteration
+
+Open ``figures/regret.png``: the median regret of each method over the evaluations,
+with the interquartile range across runs shaded. Hybrid BO's median regret should drop
+to about zero within the five iterations, while the other methods stay well above it.
+To draw the figures again later, or for an older study:
+
+.. code-block:: bash
+
+   pixi run plot illustrative_example            # the newest study
+   pixi run plot illustrative_example <study id>
+
+:doc:`reading_results` explains every file and figure, and how to load a study in
+Python.
+
+Build these docs
 ----------------
 
-- :py:class:`~hybrid_bo.problem.Var`: a variable with its bounds and start bounds.
-- :py:class:`~hybrid_bo.problem.System`: the variables (``u``, ``x``, ``y``), the known
-  equations ``g``, the inputs of the unknown equations and the measured variables.
-- :py:class:`~hybrid_bo.problem.Problem`: a system and the objective ``f``.
-- :py:data:`~hybrid_bo.evaluation.Measure`: a function ``(u, rng) -> measured``,
-  the real system. :py:func:`~hybrid_bo.evaluation.oracle_measure` simulates one
-  from known unknown equations, for benchmark experiments.
+.. code-block:: bash
 
-Run a method
-------------
+   pixi run docs
 
-- :py:func:`~hybrid_bo.sampling.initial_points`: the points every method starts from.
-- :py:func:`~hybrid_bo.bo.hybrid_bo` with
-  :py:class:`~hybrid_bo.bo.HybridBOSettings`, and :py:func:`~hybrid_bo.bo.standard_bo`
-  with :py:class:`~hybrid_bo.bo.StandardBOSettings`. The settings choose the
-  acquisition function, :py:class:`~hybrid_bo.acquisition.EI` or
-  :py:class:`~hybrid_bo.acquisition.LCB`.
-- The baselines :py:func:`~hybrid_bo.baselines.latin_hypercube_sampling` and
-  :py:func:`~hybrid_bo.baselines.uniform_sampling`.
-
-A method raises a :py:class:`~hybrid_bo.errors.HybridBOError` when it fails; the error
-carries the partial run.
-
-Look at the results
--------------------
-
-- :py:class:`~hybrid_bo.run.Run`: what a method returns, plain data.
-- :py:class:`~hybrid_bo.history.History`: every evaluated point (``run.history``).
-- :py:func:`~hybrid_bo.history.incumbents` and
-  :py:func:`~hybrid_bo.history.oracle_incumbents`: the best point after each
-  evaluation, and the oracle objective there (the benchmark metric).
-- :py:func:`~hybrid_bo.views.evaluations`, :py:func:`~hybrid_bo.views.summary` and
-  :py:func:`~hybrid_bo.views.hyperparameters`: Polars data frames of a study, one row
-  per evaluation, per method or per fitted hyperparameter (Polars is optional).
-- :py:mod:`hybrid_bo.plots`: convergence and per-iteration figures of finished runs.
-
-The :doc:`walkthrough` puts these together on the illustrative example.
+and open ``docs/_build/html/index.html``. Next, :doc:`writing_an_experiment`.
