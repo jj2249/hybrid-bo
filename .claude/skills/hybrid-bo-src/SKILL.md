@@ -5,7 +5,7 @@ description: Use when working on src/hybrid_bo. Covers what the library computes
 
 # Working on src/hybrid_bo
 
-The refactor goal and workflow are in CLAUDE.md, and open bugs are in ROADMAP.md
+The refactor goal and workflow are in CONTRIBUTING.md, and open bugs are in ROADMAP.md
 under Known issues. This skill covers what the **current** code computes and the
 contracts between its parts; DESIGN.md holds the target API and the reasons. The
 code uses CONTEXT.md's terms; use them in PRs, tests and comments too.

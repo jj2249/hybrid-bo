@@ -4,7 +4,7 @@ Each item should become one small PR into `refactor/initial`. Tick items off in
 the PR that completes them. `main` stays frozen until every stage is done.
 
 The aim throughout is code that is easier to read, change and extend, so the
-library can scale (see the goal in CLAUDE.md). `examples/flash_unit` is out of scope.
+library can scale (see the goal in CONTRIBUTING.md). `examples/flash_unit` is out of scope.
 The target API and the plan for each restructure PR are in [DESIGN.md](DESIGN.md).
 
 Keep the README up to date: any PR that changes usage, the public API or
