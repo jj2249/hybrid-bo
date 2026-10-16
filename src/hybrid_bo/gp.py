@@ -310,7 +310,8 @@ def predict(gp: PriorGP, fitted: FittedGP, X: Any) -> tuple[Any, Any]:
     mean and variance themselves are built in SX), returns two (n, 1) CasADi columns,
     for building acquisition problems.
     """
-    # The conditional mean and variance at symbols for X, with the hyperparameters and data as constants
+    # The conditional mean and variance at symbols for X, with the hyperparameters and
+    # data as constants
     h = _namespace(fitted.hyperparameters)
     X_train, Y_train = Symbolic(fitted.X), Symbolic(fitted.Y)
     X_symbols = Symbolic.sym("X", *X.shape)

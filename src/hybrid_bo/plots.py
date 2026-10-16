@@ -255,9 +255,9 @@ def _replay_settings(
     problem: Problem,
     settings: StandardBOSettings | HybridBOSettings | None,
 ) -> tuple[StandardBOSettings | HybridBOSettings | None, PriorGP]:
-    """The settings a run is replayed with and its GP: `settings` if given, else the
-    record's acquisition function and `unknown_states_as_variables` with `default_gp`.
-    None and `default_gp` for the baselines.
+    """The settings a run is replayed with and its prior GP: `settings` if given, else
+    the record's acquisition function and `unknown_states_as_variables` with
+    `default_gp`. None and `default_gp` for the baselines.
 
     Raises `TypeError` if `settings` aren't the run's method's, and `ValueError` if
     the fields the replay uses, or the GP, don't match the record.
@@ -289,7 +289,7 @@ def _replay_settings(
         msg = f"The settings don't match the run's record ({recorded}); pass them"
         raise ValueError(msg)
 
-    # The GP, whose text must be the recorded one
+    # The prior GP, whose text must be the recorded one
     prior_gp = default_gp(len(gp_inputs)) if settings.gp is None else settings.gp
     gp_text = _gp_record(prior_gp, [var.name for var in gp_inputs])
     if any(run.record.get(key) != text for key, text in gp_text.items()):

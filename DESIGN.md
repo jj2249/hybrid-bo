@@ -359,9 +359,8 @@ class FittedGP:  # the fitted GP, data only (ADR 0003)
     y_scaler: Scaler
 
 
-def default_gp(
-    n_inputs: int,
-) -> PriorGP: ...  # noise-free outputscale * Matern-5/2, ARD
+# noise-free outputscale * Matern-5/2, ARD
+def default_gp(n_inputs: int) -> PriorGP: ...
 
 
 @dataclass(frozen=True)
@@ -702,9 +701,9 @@ scipy behavior.
 Not built now; the design leaves room for them.
 
 - **Bayesian hyperparameters.** MAP: an optional `prior` on `Hyper`, added to the
-  negative log likelihood. Sampling: a `log_posterior(gp, X, Y)` seam returning a
-  `cas.Function` with its gradient over the log-space hyperparameters, usable by slice
-  sampling or NUTS (pymc through a custom op, or a standalone sampler). Each scenario
+  negative log marginal likelihood. Sampling: a `log_posterior(gp, X, Y)` seam
+  returning a `cas.Function` with its gradient over the log-space hyperparameters,
+  usable by slice sampling or NUTS (pymc through a custom op, or a standalone sampler). Each scenario
   then pairs a hyperparameter sample with its `z`. Suggested order: MAP, slice sampling,
   NUTS if the dimension grows.
 - **Alternatives to SAA.** Sigma points or cubature produce a different `Scenarios`

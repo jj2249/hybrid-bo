@@ -151,9 +151,9 @@ def _method_record(
     gp: PriorGP,
     gp_inputs: Sequence[Var],
 ) -> dict[str, str]:
-    """The record of a BO run: `run_record` with the settings except the GP, which is
-    recorded as text in its own entries (its repr would only name the kernel's
-    function), over the names of its inputs."""
+    """The record of a BO run: `run_record` with the settings except the prior GP,
+    which is recorded as text in its own entries (its repr would only name the
+    kernel's function), over the names of its inputs."""
     settings_text = ", ".join(
         [f"n_iterations={n_iterations}"]
         + [

@@ -53,10 +53,10 @@ def model(request):
         "lengthscale": np.array([0.6, 0.9]),
     }
     # The default GP (noise-free) plus a noise hyperparameter
-    default = default_gp(2)
+    noise_free = default_gp(2)
     gp = PriorGP(
-        (NOISE, *default.hyperparameters),
-        default.kernel,
+        (NOISE, *noise_free.hyperparameters),
+        noise_free.kernel,
     )
     # The constant-mean variant adds an offset hyperparameter
     prior_mean = np.zeros
@@ -83,8 +83,9 @@ def model(request):
 
 
 def test_predict(model):
-    """The posterior mean and std match the closed-form GP posterior in numpy."""
-    # Reference: the posterior from the kernel matrices
+    """The fitted GP's mean and std match the closed-form conditional mean and std of
+    the noise-free output in numpy."""
+    # Reference: the conditional mean and covariance from the kernel matrices
     gp, fitted, prior_mean = model
     K = matern52(X_train, X_train) + (NOISE_STD**2 + JITTER) * np.eye(len(X_train))
     K_star = matern52(X_train, X_test)
