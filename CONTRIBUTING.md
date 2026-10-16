@@ -59,22 +59,22 @@ While the version is 0.x, a release is:
 - a **patch** bump (0.2.1) otherwise: fixes that don't change results, docs, and
   new API that leaves existing behavior unchanged.
 
-1.0.0 is a deliberate statement that the API is stable, after which breaking
-changes need a major bump. It doesn't depend on publishing to PyPI.
+1.0.0 is a deliberate statement that the API is stable. It doesn't wait for PyPI:
+0.x versions can be published there.
 
-Cut a release when it's useful, and before running studies that will be shared, so
-their artifacts record a clean `vX.Y.Z`. The release PR, which an agent can prepare:
+The maintainer decides when to release, and should release before running studies
+that will be shared, so their artifacts record a clean `vX.Y.Z`. The release PR,
+which an agent can prepare:
 
 1. Sets `version` to the new version, chosen by the markers above.
 2. Renames `## Unreleased` in CHANGELOG.md to `## X.Y.Z (YYYY-MM-DD)` and adds an
    empty `## Unreleased` above it.
 
-Merging the release PR approves the release, and closing it rejects it. On the merge,
-the release workflow (`.github/workflows/release.yml`) creates the annotated tag
-`vX.Y.Z` and a GitHub release whose notes are that CHANGELOG section. It does
-nothing if the tag exists, and fails without tagging if the section is missing.
-Tags must be annotated: `git describe`, which records the code version, ignores
-lightweight tags.
+Merging the release PR approves the release, and closing it rejects it; nobody runs
+tag or release commands. On the merge, the release workflow
+(`.github/workflows/release.yml`) tags `vX.Y.Z` and publishes that CHANGELOG
+section as the GitHub release. Tags must be annotated: `git describe`, which
+records the code version, ignores lightweight tags.
 
 ## Agent skills
 
