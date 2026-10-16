@@ -6,7 +6,7 @@ How the engineering skills should consume this repo's domain documentation when 
 
 - **`CONTEXT.md`** at the repo root: the domain glossary.
 - **`docs/adr/`**: read ADRs that touch the area you're about to work in.
-- **`DESIGN.md`** and **`ROADMAP.md`**: the target API, the plan for each restructure PR, and the refactor roadmap.
+- **`DESIGN.md`**: the design of the library and the reasons for it.
 
 If `CONTEXT.md` or `docs/adr/` don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
 

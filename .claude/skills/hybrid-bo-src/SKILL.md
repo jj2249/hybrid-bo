@@ -5,9 +5,9 @@ description: Use when working on src/hybrid_bo. Covers what the library computes
 
 # Working on src/hybrid_bo
 
-The refactor goal and workflow are in CONTRIBUTING.md, and open bugs are in ROADMAP.md
-under Known issues. This skill covers what the **current** code computes and the
-contracts between its parts; DESIGN.md holds the target API and the reasons. The
+The workflow is in CONTRIBUTING.md, and open bugs are GitHub issues labeled `bug`.
+This skill covers what the code computes and the contracts between its parts;
+DESIGN.md holds the design and the reasons. The
 code uses CONTEXT.md's terms; use them in PRs, tests and comments too.
 
 ## What the code computes ([arXiv 2603.11199](https://arxiv.org/abs/2603.11199))
@@ -231,5 +231,5 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - Tests follow the comment rules in CLAUDE.md Conventions (docstrings, commented
   blocks, a note on the first use of each pytest feature); `test_standard_bo.py` is
   the example.
-- A known bug gets a `pytest.mark.xfail(strict=True)` test and a ROADMAP
-  Known issues entry. The PR that fixes it removes the marker.
+- A known bug gets a `pytest.mark.xfail(strict=True)` test and a GitHub issue
+  labeled `bug`. The PR that fixes it removes the marker.
