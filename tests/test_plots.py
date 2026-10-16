@@ -60,7 +60,7 @@ def illustrative_run(
     u = initial_points(ex.system.u, 2, rng)
     if settings is None:
         return pickled(method(ex.problem, ex.measure, u, 2, rng))
-    return pickled(method(ex.problem, ex.measure, u, 2, settings, rng))
+    return pickled(method(ex.problem, ex.measure, u, 2, rng, settings=settings))
 
 
 # A fixture is a value pytest builds once and passes to every test that names it as an

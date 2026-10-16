@@ -78,7 +78,7 @@ def illustrative_run(problem, settings, seed=0) -> Run:
     rng = np.random.default_rng(seed)
     u = initial_points(problem.system.u, 2, rng)
     measure = oracle_measure(problem.system, oracle=lambda v: [cas.sin(v.u)])
-    return hybrid_bo(problem, measure, u, 2, settings, rng)
+    return hybrid_bo(problem, measure, u, 2, rng, settings=settings)
 
 
 # Scenarios
@@ -354,6 +354,37 @@ def test_record_holds_the_settings_and_the_gp_over_the_arguments_of_h(
     assert "u" in record["kernel"]
 
 
+def test_settings_default_to_the_default_settings(illustrative_problem):
+    """Without `settings`, a run records the same as one given the default settings
+    explicitly. Settings are keyword-only, so they can't be passed in `rng`'s place."""
+    # Initial points only (0 iterations): the record doesn't depend on the iterations
+    measure = oracle_measure(
+        illustrative_problem.system, oracle=lambda v: [cas.sin(v.u)]
+    )
+    u = np.array([[-0.5], [0.5]])
+
+    default = hybrid_bo(illustrative_problem, measure, u, 0, np.random.default_rng(0))
+    explicit = hybrid_bo(
+        illustrative_problem,
+        measure,
+        u,
+        0,
+        np.random.default_rng(0),
+        settings=HybridBOSettings(),
+    )
+
+    assert default.record == explicit.record
+    with pytest.raises(TypeError):
+        hybrid_bo(
+            illustrative_problem,
+            measure,
+            u,
+            0,
+            np.random.default_rng(0),
+            HybridBOSettings(),  # ty: ignore[too-many-positional-arguments]
+        )
+
+
 def test_run_pickles_without_the_code_that_produced_it(illustrative_problem):
     """A hybrid BO run, its GPs and scenarios included, loads from a pickle without
     user code."""
@@ -400,8 +431,8 @@ def test_failed_evaluation_carries_the_partial_run_with_its_scenarios(
             measure,
             np.array([[-0.5], [0.5]]),
             2,
-            HybridBOSettings(n_scenarios=5),
             np.random.default_rng(0),
+            settings=HybridBOSettings(n_scenarios=5),
         )
 
     run = info.value.run

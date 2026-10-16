@@ -153,7 +153,8 @@ Methods and settings
 --------------------
 
 A *method* is how the problem is solved. ``methods`` maps a label to a method; every
-method takes the same arguments, so settings are bound with ``functools.partial``:
+method takes the same arguments. A BO method runs with its default settings unless
+they are bound with ``functools.partial``:
 
 .. literalinclude:: ../experiments/illustrative_example.py
    :language: python
@@ -181,7 +182,7 @@ different settings:
 .. code-block:: python
 
    methods = {
-       "hybrid_bo_ei": functools.partial(hb.hybrid_bo, settings=hb.HybridBOSettings()),
+       "hybrid_bo_ei": hb.hybrid_bo,
        "hybrid_bo_lcb": functools.partial(
            hb.hybrid_bo, settings=hb.HybridBOSettings(acquisition=hb.LCB(2.0))
        ),
@@ -249,7 +250,7 @@ or run one method once, from initial points drawn with
 
    rng = np.random.default_rng(0)
    u0 = hb.initial_points(system.u, n=2, rng=rng)
-   run = hb.hybrid_bo(problem, measure, u0, 5, hb.HybridBOSettings(), rng)
+   run = hb.hybrid_bo(problem, measure, u0, 5, rng)
 
 When something goes wrong
 -------------------------

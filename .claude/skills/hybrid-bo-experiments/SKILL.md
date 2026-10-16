@@ -28,6 +28,9 @@ a benchmark), `methods`, `study_settings`, then a `__main__` block calling `cli.
   baselines: that is a *logic* change.
 - A custom measurement is `(u (N,), rng) -> measured (P,)`; its docstring (else its
   name) is its record.
+- A BO method with its default settings goes into `methods` bare (`hb.standard_bo`);
+  bind other settings with `functools.partial(hb.hybrid_bo, settings=...)`.
+  `settings` is keyword-only, after `rng`.
 
 ## Randomness
 

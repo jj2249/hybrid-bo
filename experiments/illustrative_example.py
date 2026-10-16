@@ -55,7 +55,7 @@ methods = {
         hb.hybrid_bo,
         settings=hb.HybridBOSettings(unknown_states_as_variables=False),
     ),
-    "standard_bo": functools.partial(hb.standard_bo, settings=hb.StandardBOSettings()),
+    "standard_bo": hb.standard_bo,
     "latin_hypercube_sampling": hb.latin_hypercube_sampling,
     "uniform_sampling": hb.uniform_sampling,
 }

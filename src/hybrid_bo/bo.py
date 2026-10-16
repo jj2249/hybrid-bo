@@ -171,8 +171,9 @@ def standard_bo(
     measure: Measure,
     initial_points: np.ndarray,
     n_iterations: int,
-    settings: StandardBOSettings,
     rng: np.random.Generator,
+    *,
+    settings: StandardBOSettings = StandardBOSettings(),
 ) -> Run:
     """Standard BO: a GP of the objective over the decision variables, u -> f, with
     the acquisition function computed analytically.
@@ -217,8 +218,9 @@ def hybrid_bo(
     measure: Measure,
     initial_points: np.ndarray,
     n_iterations: int,
-    settings: HybridBOSettings,
     rng: np.random.Generator,
+    *,
+    settings: HybridBOSettings = HybridBOSettings(),
 ) -> Run:
     """Hybrid BO: a GP of the unknown states over the arguments of h, combined with
     the known equations in the acquisition problem (paper, Problems 8 and 9).
