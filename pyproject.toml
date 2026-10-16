@@ -54,7 +54,7 @@ sphinx-autoapi = ">=3.8.1,<4"
 furo = ">=2025.12.19,<2026"
 
 [tool.pixi.feature.docs.tasks]
-docs = { cmd = "sphinx-build -b html docs docs/_build/html", default-environment = "experiments", description = "Build the docs into docs/_build/html" }
+docs = { cmd = "sphinx-build -b html docs docs/_build/html", default-environment = "dev", description = "Build the docs into docs/_build/html" }
 
 [tool.pixi.feature.experiments.dependencies]
 matplotlib = ">=3.11.2,<4"
@@ -68,11 +68,13 @@ experiment = { cmd = "python -m", cwd = "experiments", default-environment = "ex
 plot = { cmd = "python -m {{ name }} plot {{ study }}", cwd = "experiments", default-environment = "experiments", args = ["name", { arg = "study", default = "" }], description = "Plot a saved study of an experiment (default: the newest)" }
 
 [tool.pixi.environments]
+# The library only
 default = { solve-group = "default" }
-experiments = { features = ["quality", "docs", "experiments"], solve-group = "default" }
+# Writing and running experiments: the library plus matplotlib and Polars
+experiments = { features = ["experiments"], solve-group = "default" }
+# Working on the library: tests, lint, type check and docs. ty needs the experiments
+# features to resolve the matplotlib imports in experiments/
 dev = { features = ["quality", "docs", "experiments"], solve-group = "default" }
-# experiments deps are needed so ty can resolve matplotlib imports in experiments/
-quality = { features = ["quality", "experiments"], solve-group = "default" }
 
 [tool.ruff]
 # Match the Python version used by your project.

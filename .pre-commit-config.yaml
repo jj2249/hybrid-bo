@@ -3,21 +3,19 @@ repos:
     hooks:
       - id: ruff-check
         name: Ruff lint
-        entry: pixi run -e quality lint
+        entry: pixi run -e dev lint
         language: system
         types: [python]
 
       - id: ruff-format
         name: Ruff format
-        entry: pixi run -e quality format
+        entry: pixi run -e dev format
         language: system
         types: [python]
 
       - id: ty
         name: ty type check
-        entry: pixi run -e quality typecheck
+        entry: pixi run -e dev typecheck
         language: system
+        types: [python]
         pass_filenames: false
-        # Manual until the existing type errors are fixed (ROADMAP stage 3/5):
-        # pre-commit run --hook-stage manual ty
-        stages: [manual]

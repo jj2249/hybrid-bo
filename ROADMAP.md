@@ -95,7 +95,9 @@ its own regression baseline on the new API. Scope is in the issues and DESIGN.md
       minimum from users)
 
 ## Stage 6: merge
-- [ ] Lean pixi environments and tasks (`experiments` and `dev` are currently identical)
+- [x] #80: lean pixi environments: `default` is the library, `experiments` adds
+      matplotlib and Polars, `dev` has everything; `quality` is gone and the ty hook
+      runs on commit
 - [ ] Merge `refactor/initial` into `main` (`main` stays frozen until then), then
       make `main` the GitHub default branch again
       (`gh repo edit --default-branch main`)
