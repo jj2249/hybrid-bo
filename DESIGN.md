@@ -48,9 +48,18 @@ The original code was hard to change for three reasons:
   exists only in benchmark experiments.
 - **Equations are callables traced by CasADi** ([ADR 0002](docs/adr/0002-equations-are-casadi-callables.md)).
 - **Runs are pure data** ([ADR 0003](docs/adr/0003-runs-are-pure-data.md)).
-- **SX and MX.** Library math uses only CasADi operations, so it works for both. The
-  symbol type is set in one place (default `SX`). `DM` appears only where a compiled
-  `cas.Function` is called, and is converted to numpy there.
+- **SX only.** Library math is built from `SX` symbols, set by the `Symbolic` alias.
+  MX does not work, for three reasons:
+  - `cas.chol` has no MX overload, so with `Symbolic` set to MX, GP fitting,
+    prediction and the log marginal likelihood fail.
+  - A study's artifact prints the known equations and the objective as text. Under MX
+    that text becomes an opaque `g(x, y, u){0}`.
+  - The AMPL route to a global solver (#87) accepts only SX expressions.
+
+  MX for the GP (or precomputing its terms) is #89, and MX for large systems is #90.
+  If a second symbol type is ever needed, it would be chosen per problem rather than
+  by a global toggle. `DM` appears only where a compiled `cas.Function` is called, and
+  is converted to numpy there.
 - **Legacy bugs were not rebuilt.** Where the new design made a known legacy bug
   impossible and the regression baselines did not move, the new code simply does not
   reproduce it.
@@ -125,7 +134,7 @@ All snippets are illustrative.
 ### Problem (`problem.py`, `sampling.py`)
 
 ```python
-Symbolic = cas.SX  # the one place the symbol type is chosen
+Symbolic = cas.SX  # the symbol type of all library math; SX only (see Decisions)
 
 
 @dataclass(frozen=True, init=False)
@@ -393,8 +402,9 @@ gp = hb.gp.GP(
   hyperparameters matched the legacy GP bit for bit, and its predictions to rounding
   (checked until #30; the regression baselines still pin the fit).
 - `predict` traces the posterior once as a `cas.Function` of X; a numpy X gives arrays
-  `(n,)`, a symbolic X (SX or MX) gives `(n, 1)` columns. The std is the square root of
-  the posterior variance, so callers need no covariance.
+  `(n,)`, a symbolic X (SX or MX; the posterior itself is built in SX) gives `(n, 1)`
+  columns. The std is the square root of the posterior variance, so callers need no
+  covariance.
 - This removes `Parameterized`, `JoinedParameters`, `k_variable`/`m_variable` and the
   name prefixing, and with them the legacy `LinearKernel` ARD bug. `minmax` uses the
   correct intercept (`lower - min * slope`), evaluated so that [0, 1] reproduces the
@@ -669,7 +679,7 @@ scipy behavior.
 
 | What | Why | Where to find it |
 |---|---|---|
-| `array_operations/` numpy branches and their `@overload` stubs | one CasADi path (SX or MX); numeric use goes through `cas.Function` | tag `pre-refactor` |
+| `array_operations/` numpy branches and their `@overload` stubs | one CasADi path (SX); numeric use goes through `cas.Function` | tag `pre-refactor` |
 | `SciPyLocalOptimizer` | never used; only offered as a commented-out alternative | tag `pre-refactor` |
 | `use_jacobian` (fsolve without the CasADi Jacobian) | every equation is CasADi-traceable ([ADR 0002](docs/adr/0002-equations-are-casadi-callables.md)) | tag `pre-refactor` |
 | `Problem.solve` (true optimum with `h` known) | called nowhere; would be a function on `multistart` | tag `pre-refactor` |

@@ -101,8 +101,9 @@ def test_predict(model):
 # `parametrize` runs the test once per entry of the list, each as its own test case
 @pytest.mark.parametrize("symbol_type", [cas.SX, cas.MX])
 def test_predict_symbolic_matches_numeric(model, symbol_type):
-    """Predicting at CasADi symbols (SX or MX) gives the same values as predicting at
-    the numbers."""
+    """Predicting at CasADi symbols gives the same values as predicting at the
+    numbers. The MX case checks only that a fitted GP can be evaluated at MX inputs:
+    the library math itself is SX only."""
     gp, fitted, _ = model
     X = symbol_type.sym("X", *X_test.shape)
     function = cas.Function("predict", [X], list(predict(gp, fitted, X)))

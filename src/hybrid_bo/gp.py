@@ -294,8 +294,9 @@ def predict(gp: GP, fitted: FittedGP, X: Any) -> tuple[Any, Any]:
     """The mean and standard deviation of the fitted GP at the rows of X (n, d), in
     original units.
 
-    For a numpy X, returns two arrays (n,). For a symbolic X (SX or MX), returns two
-    (n, 1) CasADi columns, for building acquisition problems.
+    For a numpy X, returns two arrays (n,). For a symbolic X (SX or MX; the posterior
+    itself is built in SX), returns two (n, 1) CasADi columns, for building acquisition
+    problems.
     """
     # The posterior at symbols for X, with the hyperparameters and data as constants
     h = _namespace(fitted.hyperparameters)
