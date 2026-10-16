@@ -59,9 +59,9 @@ def as_baseline_columns(run: Run) -> dict[str, np.ndarray]:
 
 
 def run_method(method: str) -> dict[str, np.ndarray]:
-    """Runs one run of a method as the example does and returns it under the
+    """Runs one run of a method as the experiment does and returns it under the
     `ResultsBO` keys."""
-    # As in the example: one generator per run, initial points drawn from it
+    # As in the experiment: one generator per run, initial points drawn from it
     rng = np.random.default_rng(SEED).spawn(1)[0]
     u = initial_points(ex.system.u, ex.study_settings.n_initial, rng)
     run = ex.methods[method](ex.problem, ex.measure, u, N_ITERATIONS, rng=rng)

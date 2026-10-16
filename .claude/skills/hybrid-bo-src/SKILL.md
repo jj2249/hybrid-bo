@@ -184,8 +184,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 
 ## Behavior to know
 
-- **Randomness is per run.** The caller passes one generator per run (the example
-  spawns them from one seed). A run uses only its own generator, in DESIGN.md's
+- **Randomness is per run.** The caller passes one generator per run (a study
+  spawns them from its seed). A run uses only its own generator, in DESIGN.md's
   "Order of random draws":
   1. initial points (caller): `lhs` over the `u` start bounds;
   2. method setup: hybrid BO draws the scenarios (`rng.standard_normal((S, P))`);

@@ -32,7 +32,7 @@ The code is hard to change for three reasons:
 6. **Errors raise** specific exceptions. Expected failures (one multistart start not
    converging) are logged without tracebacks.
 7. **Rows are points.** A point is `(n,)`, a set is `(n_points, n)`, `f` is `(n_points,)`.
-8. **Examples are short to write.** Defaults may be derived from other arguments when
+8. **Experiments are short to write.** Defaults may be derived from other arguments when
    the derivation is obvious and recorded in the run.
 
 ## Decisions
@@ -607,8 +607,8 @@ it. Polars and matplotlib are optional (imported on first use; the
   `pixi run experiment <name> [flags]` is `python -m <name> [flags]` run from
   `experiments/` (a task with no declared args, so flags pass through), and `pixi run
   plot <name> [study]` a templated task over `python -m <name> plot`. #51 had
-  `main.py` discover the experiment and read its names with `getattr`; #65
-  dropped that because the experiment then didn't say what its names were for, and a
+  the old `main.py` (removed in #65) discover the experiment and read its names
+  with `getattr`; #65 dropped that because the experiment then didn't say what its names were for, and a
   typo silently changed the study. The cost is that no command lists every experiment.
   A relative `--results-root` is relative to where pixi was started (`INIT_CWD`).
   Results go to `results/<name>/<study id>/{study.json, runs/, summary.csv,
@@ -620,7 +620,7 @@ it. Polars and matplotlib are optional (imported on first use; the
 
 ## Order of random draws
 
-Every draw in a run comes from that run's generator (the example spawns one per run),
+Every draw in a run comes from that run's generator (a study spawns one per run),
 in this order:
 
 1. initial points: `lhs` over the `u` start bounds (drawn by the caller);
@@ -695,7 +695,7 @@ behavior, so they are "new code" PRs, not *logic*.
 1. **R1 trimmed** (#17). *Done.* flash_unit excluded from ty (it targets the
    `pre-refactor` tag); `lhs(lower, upper, n, rng)`/`uniform(...)` in `sampling.py`
    (they stay array-based; PR 4 adds `initial_points` for `Var`s); `Problem.solve` and `use_jacobian` deleted;
-   `main.py` dispatches with `match`. Two hand-written LHS copies remain until
+   the old `main.py` (removed in #65) dispatches with `match`. Two hand-written LHS copies remain until
    their tickets: the fixed-x root-finding guesses (#25) and
    `MultiStartOptimizer.create_lhs_samples` (#27). The new evaluation uses `lhs`; the
   legacy copy stays until `legacy/` is deleted.
@@ -733,8 +733,8 @@ The tickets, in a workable order:
   `methods`, runs and saves every method when run directly, and is what the
   regression test runs. Tests that compared with the legacy code check closed forms
   instead. The plot callbacks go with it; plots return in #31.
-- **#31 Plots and CLI**: `hb.plots` (see Plots); `main.py` is the CLI (`run`
-  an example's methods, `plot` a results folder), and example modules only define
+- **#31 Plots and CLI**: `hb.plots` (see Plots); the old `main.py` (removed in #65) is the CLI
+  (`run` an experiment's methods, `plot` a results folder), and experiments only define
   things (a `settings` dict of the BO methods joins `methods`). *Done*.
 - **#32 Benchmark metric** (*logic*): the oracle objective at the believed best
   point. *Done*: `oracle_incumbents(history)`. Without noise it is the running
@@ -742,8 +742,8 @@ The tickets, in a workable order:
   baselines don't change.
 - **#52 Namespace**: `hb.*` holds only the user-facing names (see Decisions); a
   Getting started docs page. *Done*.
-- **#53 Study**: see Analysis. *Done*; `main.py` runs and saves a study, and
+- **#53 Study**: see Analysis. *Done*; the old `main.py` (removed in #65) runs and saves a study, and
   the experiments define their study settings.
 - **#54 Polars views**, then **#55 Plots**, then **#51 Entry point**: see Analysis.
-  *Done*. With #51 the separate dict of method settings in an example is gone (the
+  *Done*. With #51 the separate dict of method settings in an experiment is gone (the
   plots read them from the record).

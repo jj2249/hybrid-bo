@@ -98,7 +98,7 @@ A *run* evaluates the *initial points*, then runs the *optimization loop*. Each
    approximation* (SAA) represents by *scenarios*: scenario ``s`` takes
    ``y_s = mean(u) + std(u) * z_s``, where the *scenario draws* ``z_s`` are standard
    normal draws made once per run. (By default ``y_s`` is also a variable of the
-   acquisition problem, tied to this prediction by an equality constraint; the example
+   acquisition problem, tied to this prediction by an equality constraint; the experiment
    substitutes the prediction instead, with ``unknown_states_as_variables=False``.)
    Each scenario has its own mechanistic states ``x_s``, constrained by the known
    equations ``0 = g(x_s, y_s, u)``, and its own objective ``f_s``. The *acquisition function* is a weighted average over the
@@ -118,9 +118,9 @@ formulations (Problems 8 and 9) and the analysis.
 Running it and reading a run
 ----------------------------
 
-A *method* is how a problem is solved. The example compares hybrid BO with standard
+A *method* is how a problem is solved. The experiment compares hybrid BO with standard
 BO and two baselines that sample without a model, Latin hypercube and uniform
-sampling. Each method is a function with the same arguments, so the example keeps
+sampling. Each method is a function with the same arguments, so the experiment keeps
 them in a dictionary, with their settings bound by ``functools.partial``.
 
 .. literalinclude:: ../experiments/illustrative_example.py
@@ -147,13 +147,13 @@ keeps. The experiment ends by passing everything it defines to its command line,
    :language: python
    :start-at: # Run or plot
 
-which runs a study of the example's methods with its
+which runs a study of the experiment's methods with its
 :py:class:`~hybrid_bo.studies.StudySettings`, overridden by the flags, and saves it:
 
 .. literalinclude:: ../experiments/cli.py
    :language: python
    :start-at: study = hb.study(
-   :end-at: study_dir = save_new(study, example_dir, study_id)
+   :end-at: study_dir = save_new(study, experiment_dir, study_id)
    :dedent:
 
 A method returns a :py:class:`~hybrid_bo.run.Run`, which is plain data, so

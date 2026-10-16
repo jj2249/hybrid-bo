@@ -18,7 +18,7 @@ from hybrid_bo.sampling import lhs
 
 def test_illustrative_equations_take_x_y_u(illustrative_problem):
     """The traced g and f of the illustrative example take their inputs in the order
-    (x, y, u) and compute the example's equations."""
+    (x, y, u) and compute the experiment's equations."""
     problem = illustrative_problem
     rng = np.random.default_rng(0)
 

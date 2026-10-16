@@ -89,4 +89,4 @@ remove the marker when fixing the bug.
   what it does.
 - Defaults may be derived from other arguments when the derivation is obvious and
   recorded in the run (start bounds from finite bounds, GP size from its inputs);
-  otherwise arguments are explicit. Examples should be short to write.
+  otherwise arguments are explicit. Experiments should be short to write.

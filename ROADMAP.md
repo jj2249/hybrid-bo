@@ -53,7 +53,7 @@ earlier R1-R9.
       column per measured state; regenerate the baselines
 - [x] 0: design review: CONTEXT.md, ADRs 0001-0003, DESIGN.md rewritten, this list
 - [x] 1: R1 trimmed (#17): exclude flash_unit; `lhs`/`uniform` on arrays; delete
-      `Problem.solve`; remove `use_jacobian`; tidy `main.py`
+      `Problem.solve`; remove `use_jacobian`; tidy the old `main.py`
 - [x] 2 *logic*: draw order from DESIGN.md; always reconstruct after the experiment;
       regenerate the baselines
 - [x] 3: move the old code to `hybrid_bo/legacy/`
@@ -65,7 +65,7 @@ its own regression baseline on the new API. Scope is in the issues and DESIGN.md
 - [x] #24: workflow (PR template, CLAUDE.md, this list)
 - [x] #39: PR bodies in the `pr` skill format (template, CLAUDE.md)
 - [x] #25: evaluation (the ruff `TRY002`/`BLE001` ignores now cover only `legacy/`
-      and the examples; since #30 only flash_unit, deleted in #69)
+      and the examples folder; since #30 only flash_unit, which #69 deletes)
 - [x] #26: Latin hypercube and uniform baselines
 - [x] #27: solvers and GP (removes the `minmax` intercept, `LinearKernel` ARD and
       `create_lhs_samples` Known issues)
