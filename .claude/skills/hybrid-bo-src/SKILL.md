@@ -8,7 +8,7 @@ description: Use when working on src/hybrid_bo. Covers what the library computes
 The workflow is in CONTRIBUTING.md, and open bugs are GitHub issues labeled `bug`.
 This skill covers what the code computes and the contracts between its parts;
 DESIGN.md holds the design and the reasons. The
-code uses CONTEXT.md's terms; use them in PRs, tests and comments too.
+code uses GLOSSARY.md's terms; use them in PRs, tests and comments too.
 
 ## What the code computes ([arXiv 2603.11199](https://arxiv.org/abs/2603.11199))
 

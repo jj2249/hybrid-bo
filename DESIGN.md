@@ -1,6 +1,6 @@
 # Design
 
-How the library is built and why. The vocabulary is in [CONTEXT.md](CONTEXT.md) and
+How the library is built and why. The vocabulary is in [GLOSSARY.md](GLOSSARY.md) and
 the decisions that are hard to reverse are in [docs/adr/](docs/adr/). A PR that
 changes the design updates this file in the same PR. The design came out of a
 rewrite of the original code (tag `pre-refactor`, called *legacy* below), which the

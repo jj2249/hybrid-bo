@@ -9,7 +9,7 @@ Read `docs/writing_an_experiment.rst` first: it is the user guide (layout, CasAD
 rules, `Var`/`System`/`Problem`, oracle vs custom measurement, methods and settings,
 `cli.main`, running, common errors). `docs/reading_results.rst` covers the saved study,
 the figures and the Polars views. `experiments/illustrative_example.py` is the
-reference experiment. Use CONTEXT.md's terms. This file adds only what an agent needs
+reference experiment. Use GLOSSARY.md's terms. This file adds only what an agent needs
 on top.
 
 ## Layout contract
