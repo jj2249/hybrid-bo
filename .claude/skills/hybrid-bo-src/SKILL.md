@@ -53,7 +53,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   input checks live in the constructors and raise `ValueError` (`NotImplementedError`
   for `P > 1`). `Symbolic` (`cas.SX`) is the symbol type of all library math. It is
   SX only: switching it to MX breaks the GP (`cas.chol` has no MX overload) and the
-  run record (DESIGN.md, Decisions). `_h_inputs(system, u, x)` gives the `h_inputs`
+  artifact's equation text (DESIGN.md, Decisions). `_h_inputs(system, u, x)` gives the `h_inputs`
   columns of numeric or symbolic `u`, `x` (hybrid BO's GP training data and
   acquisition problem).
 - `sampling.py`: `lhs(lower, upper, n, rng)` and `uniform(...)` over a box, shape

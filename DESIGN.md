@@ -50,9 +50,9 @@ The original code was hard to change for three reasons:
 - **Runs are pure data** ([ADR 0003](docs/adr/0003-runs-are-pure-data.md)).
 - **SX only.** Library math is built from `SX` symbols, set by the `Symbolic` alias.
   MX does not work, for three reasons:
-  - `cas.chol` has no MX overload, so GP fitting, prediction and the log marginal
-    likelihood fail.
-  - The run record prints the known equations and the objective as text. Under MX
+  - `cas.chol` has no MX overload, so with `Symbolic` set to MX, GP fitting,
+    prediction and the log marginal likelihood fail.
+  - A study's artifact prints the known equations and the objective as text. Under MX
     that text becomes an opaque `g(x, y, u){0}`.
   - The AMPL route to a global solver (#87) accepts only SX expressions.
 
@@ -402,8 +402,9 @@ gp = hb.gp.GP(
   hyperparameters matched the legacy GP bit for bit, and its predictions to rounding
   (checked until #30; the regression baselines still pin the fit).
 - `predict` traces the posterior once as a `cas.Function` of X; a numpy X gives arrays
-  `(n,)`, a symbolic X (SX or MX) gives `(n, 1)` columns. The std is the square root of
-  the posterior variance, so callers need no covariance.
+  `(n,)`, a symbolic X (SX or MX; the posterior itself is built in SX) gives `(n, 1)`
+  columns. The std is the square root of the posterior variance, so callers need no
+  covariance.
 - This removes `Parameterized`, `JoinedParameters`, `k_variable`/`m_variable` and the
   name prefixing, and with them the legacy `LinearKernel` ARD bug. `minmax` uses the
   correct intercept (`lower - min * slope`), evaluated so that [0, 1] reproduces the
