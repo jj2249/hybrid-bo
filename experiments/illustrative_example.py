@@ -1,13 +1,13 @@
-"""The illustrative example of the paper, run with every method.
+"""The illustrative example of the paper as an experiment, run with every method.
 
 One decision variable u, one mechanistic state x and one unknown state y. The known
 equation is x + exp(x) = y; the unknown equation is y = sin(u), which only the oracle
 knows. Run it, then plot the newest study:
 
-    pixi run example illustrative_example [--n-runs 3 --plot ...]
+    pixi run experiment illustrative_example [--n-runs 3 --plot ...]
     pixi run plot illustrative_example
 
-`pixi run example illustrative_example --help` lists the flags.
+`pixi run experiment illustrative_example --help` lists the flags.
 """
 
 import functools
@@ -49,7 +49,7 @@ optimum = -50.4608044704652
 
 # Methods: each takes (problem, measure, initial_points, n, rng), where n is the
 # number of iterations, or of design points for the baselines. Hybrid BO substitutes
-# the GP prediction for the unknown states, as this example always has
+# the GP prediction for the unknown states, as this experiment always has
 methods = {
     "hybrid_bo": functools.partial(
         hb.hybrid_bo,

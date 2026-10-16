@@ -1,6 +1,6 @@
-"""The command line of an example: run its methods as a study, or plot a saved study.
+"""The command line of an experiment: run its methods as a study, or plot a saved study.
 
-An example script ends with a call that passes everything it defines:
+An experiment ends with a call that passes everything it defines:
 
     if __name__ == "__main__":
         cli.main("illustrative_example", problem, measure, methods, study_settings,
@@ -8,11 +8,11 @@ An example script ends with a call that passes everything it defines:
 
 and the pixi tasks run the script as a module from this folder:
 
-    pixi run example illustrative_example [--method hybrid_bo ...] [--n-runs 3]
+    pixi run experiment illustrative_example [--method hybrid_bo ...] [--n-runs 3]
         [--seed 0] [--n-iterations 5] [--name lcb-vs-ei] [--plot]
     pixi run plot illustrative_example [STUDY]
 
-Running saves the study with `hb.save` to `<results root>/<example>/<study id>/` (the
+Running saves the study with `hb.save` to `<results root>/<experiment>/<study id>/` (the
 results root defaults to `results/` at the repo root), where the study id is `--name`
 or the UTC time at the start, with `-2`, `-3`, ... appended if taken when the study is
 saved, and prints `hb.summary` of it and saves it as `summary.csv` there. `plot` loads
@@ -48,7 +48,7 @@ def main(
     true_curves: bool = False,
     argv: Sequence[str] | None = None,
 ) -> None:
-    """Runs the example's methods as a study and saves it, or plots a saved study,
+    """Runs the experiment's methods as a study and saves it, or plots a saved study,
     as the command line (`argv`, default `sys.argv`) says.
 
     `name` names the study and its folder. `study_settings` are the defaults the
@@ -62,9 +62,9 @@ def main(
     command, rest = ("plot", args[1:]) if args[:1] == ["plot"] else ("run", args)
     parsers = _parsers(name, methods)
     parsed = parsers[command].parse_args(rest)
-    example_dir = _from_init_cwd(parsed.results_root) / name
+    experiment_dir = _from_init_cwd(parsed.results_root) / name
 
-    # Run: the example's settings, overridden by the flags given
+    # Run: the experiment's settings, overridden by the flags given
     if command == "run":
         given = {
             "n_runs": parsed.n_runs,
@@ -78,7 +78,7 @@ def main(
         chosen = {label: methods[label] for label in parsed.methods or methods}
         study = hb.study(chosen, problem, measure, settings, name=name, optimum=optimum)
         study_id = parsed.name or datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-        study_dir = save_new(study, example_dir, study_id)
+        study_dir = save_new(study, experiment_dir, study_id)
         for label in chosen:
             n_saved = sum(run.method == label for run in study.runs)
             print(f"{label}: saved {n_saved} of {settings.n_runs} runs to {study_dir}")
@@ -86,13 +86,13 @@ def main(
 
     # Plot: the study given, else the one saved last
     else:
-        saved = list(example_dir.glob("*/study.json"))
+        saved = list(experiment_dir.glob("*/study.json"))
         if parsed.study is not None:
-            study_dir = example_dir / parsed.study
+            study_dir = experiment_dir / parsed.study
         elif saved:
             study_dir = max(saved, key=lambda path: path.stat().st_mtime).parent
         else:
-            parsers["plot"].error(f"{example_dir} holds no study")
+            parsers["plot"].error(f"{experiment_dir} holds no study")
         if not (study_dir / "study.json").exists():
             parsers["plot"].error(f"{study_dir} holds no study")
 
@@ -106,9 +106,9 @@ def _parsers(
     name: str, methods: Mapping[str, Method]
 ) -> dict[str, argparse.ArgumentParser]:
     """The parsers of the two commands, by name: `run` (the default) and `plot`."""
-    # Running, `pixi run example <name>`
+    # Running, `pixi run experiment <name>`
     run_parser = argparse.ArgumentParser(
-        prog=f"pixi run example {name}",
+        prog=f"pixi run experiment {name}",
         description=f"Run the methods of {name} as a study and save it.",
         epilog=f"To plot a saved study instead: pixi run plot {name} [STUDY]",
     )
@@ -120,9 +120,11 @@ def _parsers(
         metavar="METHOD",
         help=f"a method to run (repeatable): {', '.join(methods)}; default every one",
     )
-    run_parser.add_argument("--n-runs", type=int, help="default: the example's")
-    run_parser.add_argument("--seed", type=int, help="default: the example's")
-    run_parser.add_argument("--n-iterations", type=int, help="default: the example's")
+    run_parser.add_argument("--n-runs", type=int, help="default: the experiment's")
+    run_parser.add_argument("--seed", type=int, help="default: the experiment's")
+    run_parser.add_argument(
+        "--n-iterations", type=int, help="default: the experiment's"
+    )
     run_parser.add_argument("--name", help="the study id; default: the UTC time")
     run_parser.add_argument("--plot", action="store_true", help="plot after running")
     run_parser.add_argument("--results-root", type=Path, default=RESULTS_ROOT)
@@ -138,21 +140,21 @@ def _parsers(
 
 
 def _from_init_cwd(path: Path) -> Path:
-    """`path`, relative to the folder pixi was started from (pixi runs the example
-    from `examples/` and keeps the starting folder in `INIT_CWD`)."""
+    """`path`, relative to the folder pixi was started from (pixi runs the experiment
+    from `experiments/` and keeps the starting folder in `INIT_CWD`)."""
     return Path(os.environ.get("INIT_CWD", ".")) / path
 
 
-def save_new(study: hb.Study, example_dir: Path, study_id: str) -> Path:
-    """Saves `study` to the folder `study_id` in `example_dir`, with `-2`, `-3`, ...
+def save_new(study: hb.Study, experiment_dir: Path, study_id: str) -> Path:
+    """Saves `study` to the folder `study_id` in `experiment_dir`, with `-2`, `-3`, ...
     appended if it is taken, and returns the folder. `hb.save` creates the folder and
     refuses an existing one, so studies saved at once never share a folder."""
-    path, suffix = example_dir / study_id, 2
+    path, suffix = experiment_dir / study_id, 2
     while True:
         try:
             return hb.save(study, path)
         except FileExistsError:
-            path, suffix = example_dir / f"{study_id}-{suffix}", suffix + 1
+            path, suffix = experiment_dir / f"{study_id}-{suffix}", suffix + 1
 
 
 def save_summary(study: hb.Study, study_dir: Path) -> None:
@@ -176,7 +178,7 @@ def plot(
     with a message. Saves `summary.csv` too if the study has none (a study saved
     before the CLI wrote summaries).
 
-    Raises `ValueError` if the study was run on another example.
+    Raises `ValueError` if the study was run on another experiment.
     """
     study = hb.load(study_dir)
     if study.name != name:

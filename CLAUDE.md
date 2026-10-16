@@ -25,16 +25,16 @@ pixi run -e dev lint | format | typecheck
 pixi run -e dev docs         # sphinx API docs -> docs/_build/html
 pixi run -e dev setup        # install pre-commit hooks
 pixi run -e quality pre-commit run --hook-stage manual ty   # ty hook is manual for now
-pixi run example illustrative_example [--n-runs 3 --plot ...]   # every method; --help lists the flags
+pixi run experiment illustrative_example [--n-runs 3 --plot ...]   # every method; --help lists the flags
 pixi run plot illustrative_example [STUDY]   # figures of the newest (or named) study
 ```
 
-The pixi tasks run an example script as a module from `examples/` (`python -m
-illustrative_example ...`). The script ends with an explicit `cli.main(...)` call
-that passes everything it defines; `examples/cli.py` parses the flags and runs or
-plots. The tasks set `default-environment = "examples"`, so they need no `-e`.
-`example` passes every flag through; `plot` takes only the study id, so plot with
-other flags as `pixi run example illustrative_example plot [STUDY] [--results-root ...]`.
+The pixi tasks run an experiment as a module from `experiments/` (`python -m
+illustrative_example ...`). The experiment ends with an explicit `cli.main(...)`
+call that passes everything it defines; `experiments/cli.py` parses the flags and
+runs or plots. The tasks set `default-environment = "experiments"`, so they need no
+`-e`. `experiment` passes every flag through; `plot` takes only the study id, so plot with
+other flags as `pixi run experiment illustrative_example plot [STUDY] [--results-root ...]`.
 
 The git hook hardcodes the pixi Python path. If commits fail with "`pre-commit`
 not found" after a Python upgrade, re-run `pixi run -e quality setup`.
@@ -51,7 +51,7 @@ remove the marker when fixing the bug.
 - `hybrid-bo-src` (`.claude/skills/`): what the library computes, the module
   map, data and shape conventions, surprising behavior and the testing rules.
   Load it before working on `src/`.
-- `hybrid-bo-examples`: the layout of an example script, how to define the
+- `hybrid-bo-experiments`: the layout of an experiment, how to define the
   Problem and the measurement, method settings, saving runs and common mistakes.
 - Both skills describe the *current* code; DESIGN.md describes the target.
 

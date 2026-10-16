@@ -110,7 +110,7 @@ print(run.history.f)
   evaluation (the variables, incumbents, regret against the oracle optimum and the
   acquisition value), `hb.summary(study)` one row per method (median and IQR of the
   final values) and `hb.hyperparameters(study)` the fitted GP hyperparameters over the
-  iterations. Polars is optional (in the `examples` and `dev` pixi environments; the
+  iterations. Polars is optional (in the `experiments` and `dev` pixi environments; the
   `hybrid-bo[analysis]` extra once packaged).
 - **Measurements**: for a real system you pass a function `(u, rng) -> measured`
   that returns the measured variables at `u`. `oracle_measure` simulates one from known
@@ -120,29 +120,30 @@ print(run.history.f)
   `hb.gp.GP`, `hb.gp.Hyper` and `hb.kernels`), the number of scenarios and the solver
   starts.
 - **Plots**: `hb.plots` draws a finished study, so saved studies are plotted without
-  running them again (see Examples).
+  running them again (see Experiments).
 - **Errors** are `HybridBOError` subclasses; one raised during a method carries the
   partial run as `error.run`.
 
 **Important**: Currently, only one unknown equation is supported. For more information, see the [publication](https://arxiv.org/abs/2603.11199).
 
-## Examples
+## Experiments
 
-[`./examples/illustrative_example.py`](./examples/illustrative_example.py) defines the
-illustrative example of the [publication](https://arxiv.org/abs/2603.11199) and the
-methods to compare, and ends by passing them all to
-[`./examples/cli.py`](./examples/cli.py), which runs them as a study or plots saved
-studies. Two pixi tasks run the script:
+An experiment is a problem, how it is measured, and the methods to compare.
+[`./experiments/illustrative_example.py`](./experiments/illustrative_example.py)
+defines the illustrative example of the [publication](https://arxiv.org/abs/2603.11199)
+and the methods to compare, and ends by passing them all to
+[`./experiments/cli.py`](./experiments/cli.py), which runs them as a study or plots
+saved studies. Two pixi tasks run it:
 
 ```bash
-pixi run example illustrative_example --n-runs 10 --seed 0   # --help lists the flags
-pixi run plot illustrative_example                           # the newest study, or name one
+pixi run experiment illustrative_example --n-runs 10 --seed 0   # --help lists the flags
+pixi run plot illustrative_example                              # the newest study, or name one
 ```
 
-`example` takes `--method` (repeatable; default every method), `--n-runs`, `--seed`
-and `--n-iterations`, defaulting to the example's `study_settings`, plus `--name`
+`experiment` takes `--method` (repeatable; default every method), `--n-runs`, `--seed`
+and `--n-iterations`, defaulting to the experiment's `study_settings`, plus `--name`
 (the study id; default the UTC time) and `--plot` (plot straight after). A study is
-saved to `results/<example>/<study id>/` (`study.json`, `runs/`), with its
+saved to `results/<experiment>/<study id>/` (`study.json`, `runs/`), with its
 `hb.summary` table (median and IQR of the final values per method) printed and saved
 as `summary.csv`. `plot` writes
 into its `figures/`: `convergence.png` (the median oracle incumbent of every method
@@ -150,12 +151,9 @@ over the evaluations), `regret.png` (when the study has an oracle optimum) and
 `<method>/run-000/iteration-00.png` for every iteration of every run. In your own
 scripts, `hb.plots.convergence(study)`,
 `hb.plots.regret(study)` and `hb.plots.iteration(run, problem, i, measure=...)`
-draw the same figures; they need matplotlib and Polars (in the `examples` and `dev`
+draw the same figures; they need matplotlib and Polars (in the `experiments` and `dev`
 pixi environments). Figures use the repo's matplotlib style, `hb.plots.STYLE`
 (`src/hybrid_bo/hybrid_bo.mplstyle`).
-
-[`./examples/flash_unit/`](./examples/flash_unit/) still targets the old API (tag
-`pre-refactor`) until it is ported.
 
 ## Documentation
 

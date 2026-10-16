@@ -1,4 +1,4 @@
-# The repo's matplotlib style. hb.plots draws every figure with it, and the examples'
+# The repo's matplotlib style. hb.plots draws every figure with it, and the experiments'
 # CLI uses it for all its figures (plt.style.use(hb.plots.STYLE)). Set rcParams here,
 # not in plotting code.
 
