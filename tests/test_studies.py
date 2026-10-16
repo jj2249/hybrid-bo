@@ -178,7 +178,7 @@ def test_bare_bo_methods_record_their_default_settings(illustrative_problem):
 def test_two_configurations_of_one_method_keep_their_labels(illustrative_problem):
     """Each run carries the label it was run under, so one method can appear twice."""
     methods = {
-        "ei": functools.partial(hb.standard_bo, settings=hb.StandardBOSettings()),
+        "ei": hb.standard_bo,
         "lcb": functools.partial(
             hb.standard_bo, settings=hb.StandardBOSettings(acquisition=hb.LCB())
         ),

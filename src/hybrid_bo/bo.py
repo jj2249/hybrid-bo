@@ -182,6 +182,7 @@ def standard_bo(
     measured objective so far, solves the acquisition problem by multistart from
     Latin hypercube starts over the start bounds of `u`, and evaluates the solution.
     Each iteration's acquisition solution holds the acquisition value only.
+    `settings` (keyword-only) defaults to `StandardBOSettings()`.
 
     Raises what `evaluate` and `multistart` raise; a `HybridBOError` carries the
     partial run as `error.run`.
@@ -231,7 +232,8 @@ def hybrid_bo(
     solves `hybrid_acquisition` by multistart from Latin hypercube starts over the
     start bounds of its variables, and evaluates the decision variables of the
     solution. The run holds the scenarios, and each iteration's acquisition solution
-    holds the scenario states at its trial point.
+    holds the scenario states at its trial point. `settings` (keyword-only) defaults
+    to `HybridBOSettings()`.
 
     Raises what `evaluate` and `multistart` raise; a `HybridBOError` carries the
     partial run, with the scenarios, as `error.run`.
