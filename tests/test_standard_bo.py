@@ -25,7 +25,11 @@ from hybrid_bo import (
     oracle_measure,
     standard_bo,
 )
-from hybrid_bo.acquisition import AcquisitionSolution, standard_acquisition
+from hybrid_bo.acquisition import (
+    AcquisitionSolution,
+    _pack,
+    standard_acquisition,
+)
 from hybrid_bo.bo import optimization_loop
 from hybrid_bo.gp import FittedGP, default_gp, fit_gp, predict
 from hybrid_bo.run import run_record
@@ -56,7 +60,7 @@ def fitted_illustrative_gp():
 
 def acquisition_values(nlp, u):
     """The objective of the acquisition problem at each row of u (n, N), shape (n,)."""
-    return np.array([nlp.f(point).full().item() for point in u])
+    return np.array([nlp.f(_pack(point)).full().item() for point in u])
 
 
 def loop_record(problem, rng):

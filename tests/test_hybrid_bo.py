@@ -267,6 +267,28 @@ def test_unpack_undoes_pack(unknown_states_as_variables):
         np.testing.assert_array_equal(y_back, y)
 
 
+@pytest.mark.parametrize("unknown_states_as_variables", [True, False])
+def test_unpack_rejects_a_decision_vector_of_the_wrong_length(
+    unknown_states_as_variables,
+):
+    """A decision vector one entry too long or too short doesn't fit the problem."""
+    gp, fitted = fitted_gp(1)
+    acquisition_problem = hybrid_acquisition(
+        problem_with(["u"]),
+        gp,
+        fitted,
+        SCENARIOS,
+        0.0,
+        EI(),
+        unknown_states_as_variables,
+    )
+    w = np.zeros(len(acquisition_problem.nlp.lower))
+
+    for wrong in (w[:-1], np.append(w, 0.0)):
+        with pytest.raises(ValueError, match="doesn't fit"):
+            _unpack(acquisition_problem, wrong)
+
+
 def test_acquisition_builder_rejects_anything_but_ei_or_lcb():
     """The hybrid acquisition builder checks its acquisition function as the settings
     do."""

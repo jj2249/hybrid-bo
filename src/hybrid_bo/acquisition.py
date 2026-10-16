@@ -7,7 +7,7 @@ scenarios of the GP's prediction of the unknown states (`hybrid_acquisition`; pa
 Problems 8 and 9).
 """
 
-from collections.abc import Callable
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, assert_never
 
@@ -102,11 +102,19 @@ def _unpack(
     problem: AcquisitionProblem, w: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
     """The u (N,), x (S, M) and y (S, P) (None unless they are variables) held in a
-    numeric decision vector w of the acquisition problem; undoes `_pack`."""
+    numeric decision vector w of the acquisition problem; undoes `_pack`.
+
+    Raises `ValueError` if w has the wrong length for the problem.
+    """
+    # One column per state of each scenario; standard BO has no scenarios
     w = np.asarray(w, dtype=float).ravel()
     n_u, n_x, n_scenarios = problem.n_u, problem.n_x, problem.n_scenarios
-    # One column per state of each scenario; standard BO has no scenarios
     n_states = (len(w) - n_u) // n_scenarios if n_scenarios else 0
+    n_y = n_states - n_x
+    fits = len(w) == n_u + n_scenarios * n_states and n_y >= 0
+    if not fits or (n_y > 0) != problem.unknown_states_as_variables:
+        msg = f"A decision vector of length {len(w)} doesn't fit this problem"
+        raise ValueError(msg)
     states = w[n_u:].reshape((n_scenarios, n_states), order="F")
     y = states[:, n_x:] if problem.unknown_states_as_variables else None
     return w[:n_u], states[:, :n_x], y
@@ -240,9 +248,9 @@ def hybrid_acquisition(
     `std_factor` times their weighted standard deviation.
 
     The variables are u, the x_s and, if variables, the y_s, in `_pack`'s order. Each
-    variable is boxed by its bounds and started within its start bounds. Raises `TypeError` unless `acquisition` is an
-    `EI` or an `LCB`, and `ValueError` unless the scenarios have one column per
-    unknown state.
+    variable is boxed by its bounds and started within its start bounds. Raises
+    `TypeError` unless `acquisition` is an `EI` or an `LCB`, and `ValueError` unless
+    the scenarios have one column per unknown state.
     """
     # The checks, and the symbols for u and each scenario's mechanistic states
     _check_acquisition(acquisition)
@@ -285,28 +293,24 @@ def hybrid_acquisition(
         case _:
             assert_never(acquisition)
 
-    # The variables, and their bounds and start bounds: each state's once per scenario
-    states = [system.x, system.y] if unknown_states_as_variables else [system.x]
+    # The Var of each entry of w, each state once per scenario, for the bounds
+    def per_scenario(variables: Sequence[Var]) -> np.ndarray:
+        """The variables repeated in a row per scenario, (S, len(variables))."""
+        return np.tile(np.array(variables, dtype=object), (n_scenarios, 1))
 
-    def packed(bound: Callable[[Var], float]) -> np.ndarray:
-        """`bound` of every entry of w."""
-        u_part = np.array([bound(var) for var in system.u])
-        copies = (
-            np.tile([bound(var) for var in vs], (n_scenarios, 1)) for vs in states
-        )
-        return _pack(u_part, *copies)
+    unknown = per_scenario(system.y) if unknown_states_as_variables else None
+    variables = _pack(np.array(system.u, dtype=object), per_scenario(system.x), unknown)
 
     w = _pack(u, x, y if unknown_states_as_variables else None)
     nlp = NLP(
         cas.Function("acquisition", [w], [objective]),
-        packed(lambda var: var.lower),
-        packed(lambda var: var.upper),
+        np.array([var.lower for var in variables]),
+        np.array([var.upper for var in variables]),
         cas.Function("g", [w], [cas.vertcat(*constraints)]),
     )
-    start_bounds = (packed(lambda var: var.start[0]), packed(lambda var: var.start[1]))
     return AcquisitionProblem(
         nlp,
-        start_bounds,
+        _start_bounds(variables),
         system.n_u,
         system.n_x,
         n_scenarios,

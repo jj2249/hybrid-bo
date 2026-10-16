@@ -350,7 +350,7 @@ def test_standard_bo_figure_from_a_pickled_run(standard_run):
     nlp = standard_acquisition(
         ex.problem, default_gp(1), surrogate, incumbent, EI()
     ).nlp
-    expected = [nlp.f(u_k).full().item() for u_k in u]
+    expected = [nlp.f(_pack(np.array([u_k]))).full().item() for u_k in u]
     np.testing.assert_allclose(line(acquisition_ax, "-EI"), expected, rtol=1e-12)
     plt.close("all")
 

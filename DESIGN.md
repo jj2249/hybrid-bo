@@ -490,9 +490,10 @@ decision vector `w`.
   of the acquisition problem tied to the GP by an equality constraint (paper, Problem 8),
   which helps IPOPT; if False, the GP prediction is substituted wherever they appear.
 - The hybrid acquisition problem's variables are `u`, then the `x_s`, then the `y_s` (if
-  variables), each state with one entry per scenario (`_pack`). Every variable is boxed by its own bounds and started within its own start
-  bounds, and the GP's inputs are the columns of `h_inputs`. This avoids the two
-  legacy `setup_acq_problem` bugs (`u` start bounds, number of GP inputs). With one
+  variables), each state with one entry per scenario (`_pack`). Every variable is
+  boxed by its own bounds and started within its own start bounds, and the GP's
+  inputs are the columns of `h_inputs`. This avoids the two legacy
+  `setup_acq_problem` bugs (`u` start bounds, number of GP inputs). With one
   mechanistic state, as in the illustrative example, the order matches legacy, so the
   Latin hypercube starts and the baseline are the same.
 - The scenarios' unknown states, mean + std * z_s, are computed in one place

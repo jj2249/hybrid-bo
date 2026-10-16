@@ -147,11 +147,12 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `u`, then `vec` of the `(S, M)` x copies, then of the `(S, P)` y copies if variables;
   bounds and start bounds from each `Var`, repeated per scenario; `g` per scenario,
   followed by its GP tie). `_scenario_unknown_states` is the one GP scenario
-  prediction (mean + std * z_s), symbolic or numeric. `AcquisitionSolution(value, x, y)` is one iteration's
-  solution: the minimized objective at the trial point and, for hybrid BO, the
-  scenario states `(S, M)`, `(S, P)`, which `_scenario_states(system, gp, fitted,
-  scenarios, acquisition_problem, w)` reads from the solution (or predicts, when the
-  y_s are substituted).
+  prediction (mean + std * z_s), symbolic or numeric.
+  `AcquisitionSolution(value, x, y)` is one iteration's solution: the minimized
+  objective at the trial point and, for hybrid BO, the scenario states `(S, M)`,
+  `(S, P)`, which `_scenario_states(system, gp, fitted, scenarios,
+  acquisition_problem, w)` reads from the solution (or predicts, when the y_s are
+  substituted).
 - `bo.py`: `optimization_loop(problem, measure, initial_points, n_iterations,
   trial_point, rng, record) -> Run` (evaluate initial points, then per iteration
   `trial_point(problem, history, rng) -> (u, surrogate, acquisition solution)` and
