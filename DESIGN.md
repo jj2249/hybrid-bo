@@ -343,14 +343,25 @@ class Hyper:
 
 
 @dataclass(frozen=True)
-class GP:
+class PriorGP:  # the prior GP, before it sees any data
     hyperparameters: tuple[Hyper, ...]  # declaration order is the optimization order
     kernel: Callable  # (h, X1, X2) -> (n1, n2)
     mean: Callable = zero_mean  # (h, X) -> (n, 1)
     jitter: float = 1e-10
 
 
-def default_gp(n_inputs: int) -> GP: ...  # noise-free outputscale * Matern-5/2, ARD
+@dataclass(frozen=True)
+class FittedGP:  # the fitted GP, data only (ADR 0003)
+    hyperparameters: dict[str, np.ndarray]  # each (size,)
+    X: np.ndarray  # training inputs, scaled
+    Y: np.ndarray  # training outputs, scaled
+    x_scaler: Scaler
+    y_scaler: Scaler
+
+
+def default_gp(
+    n_inputs: int,
+) -> PriorGP: ...  # noise-free outputscale * Matern-5/2, ARD
 
 
 @dataclass(frozen=True)
@@ -359,26 +370,21 @@ class Scaler:  # scaled = slope * value + intercept, per column
     intercept: np.ndarray
 
 
-@dataclass(frozen=True)
-class FittedGP:  # data only (ADR 0003)
-    hyperparameters: dict[str, np.ndarray]  # each (size,)
-    X: np.ndarray  # training inputs, scaled
-    Y: np.ndarray  # training outputs, scaled
-    x_scaler: Scaler
-    y_scaler: Scaler
-
-
 def fit_gp(gp, X, Y, rng, n_starts=10, solver=Ipopt()) -> FittedGP: ...
-def predict(gp, fitted, X) -> tuple: ...  # (mean, std) in original units
-def log_likelihood(gp, fitted) -> float: ...  # on the scaled training data
+def predict(gp, fitted, X) -> tuple: ...  # noise-free (mean, std) in original units
+def log_marginal_likelihood(gp, fitted) -> float: ...  # on the scaled training data
 ```
+
+The prior GP and the fitted GP (CONTEXT.md) are separate types: `fit_gp` turns a
+`PriorGP` into a `FittedGP`, and `predict` takes both, since the fitted GP is data
+only and holds no kernel.
 
 Kernels are plain functions (`matern12/32/52`, `squared_exponential`, `linear`,
 `constant`) combined with arithmetic. The kernel and mean read the hyperparameters as
 `h.<name>`, a `(size, 1)` CasADi column:
 
 ```python
-gp = hb.gp.GP(
+gp = hb.gp.PriorGP(
     hyperparameters=(
         hb.gp.Hyper("noise_std", 1e-2, bounds=(1e-6, 1.0)),
         hb.gp.Hyper("outputscale", 1.0, bounds=(0.1, 10.0)),
@@ -389,7 +395,8 @@ gp = hb.gp.GP(
 ```
 
 - **Noise.** The hyperparameter named `noise_std`, if declared, is the observation
-  noise: `K = k(X, X) + (noise_std**2 + jitter) I`. Without it the GP interpolates.
+  noise: `K = k(X, X) + (noise_std**2 + jitter) I`. Without it the fitted GP
+  interpolates.
   `default_gp` is noise-free, because the illustrative example (legacy
   `noise_std.fix(0.0)`) is; add `noise_std` for noisy data.
 - **Output scale** multiplies the kernel unsquared, as legacy `OutputScaleKernel` did,
@@ -401,10 +408,11 @@ gp = hb.gp.GP(
   initial values and logs a warning. With the same data and generator its
   hyperparameters matched the legacy GP bit for bit, and its predictions to rounding
   (checked until #30; the regression baselines still pin the fit).
-- `predict` traces the posterior once as a `cas.Function` of X; a numpy X gives arrays
-  `(n,)`, a symbolic X (SX or MX; the posterior itself is built in SX) gives `(n, 1)`
-  columns. The std is the square root of the posterior variance, so callers need no
-  covariance.
+- `predict` traces the fitted GP's conditional mean and variance once as a
+  `cas.Function` of X; a numpy X gives arrays `(n,)`, a symbolic X (SX or MX; the
+  conditional mean and variance themselves are built in SX) gives `(n, 1)` columns.
+  Both are noise-free: the std is the square root of the variance of the latent
+  output, with no observation noise added, so callers need no covariance.
 - This removes `Parameterized`, `JoinedParameters`, `k_variable`/`m_variable` and the
   name prefixing, and with them the legacy `LinearKernel` ARD bug. `minmax` uses the
   correct intercept (`lower - min * slope`), evaluated so that [0, 1] reproduces the
@@ -476,7 +484,7 @@ Each returns the NLP and its start bounds `(lower, upper)`, for `lhs`.
 ```python
 @dataclass(frozen=True)
 class HybridBOSettings:
-    gp: GP | None = None  # None: default_gp(len(h_inputs))
+    gp: PriorGP | None = None  # None: default_gp(len(h_inputs))
     acquisition: EI | LCB = EI()
     n_scenarios: int = 25
     n_starts: int = 10  # acquisition multistart
@@ -487,7 +495,7 @@ class HybridBOSettings:
 
 @dataclass(frozen=True)
 class StandardBOSettings:
-    gp: GP | None = None  # None: default_gp(N)
+    gp: PriorGP | None = None  # None: default_gp(N)
     acquisition: EI | LCB = EI()
     n_starts: int = 10
     n_starts_gp: int = 10

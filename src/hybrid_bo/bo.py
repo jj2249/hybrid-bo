@@ -23,7 +23,7 @@ from hybrid_bo.acquisition import (
 )
 from hybrid_bo.errors import HybridBOError
 from hybrid_bo.evaluation import Measure, evaluate
-from hybrid_bo.gp import GP, FittedGP, _gp_record, default_gp, fit_gp
+from hybrid_bo.gp import FittedGP, PriorGP, _gp_record, default_gp, fit_gp
 from hybrid_bo.history import History, _concatenate, incumbents
 from hybrid_bo.problem import Problem, Var, _h_inputs
 from hybrid_bo.run import Run, run_record
@@ -104,7 +104,7 @@ class StandardBOSettings:
     Raises `TypeError` unless `acquisition` is an `EI` or an `LCB`.
     """
 
-    gp: GP | None = None
+    gp: PriorGP | None = None
     acquisition: EI | LCB = field(default_factory=EI)
     n_starts: int = 10
     n_starts_gp: int = 10
@@ -129,7 +129,7 @@ class HybridBOSettings:
     Raises `TypeError` unless `acquisition` is an `EI` or an `LCB`.
     """
 
-    gp: GP | None = None
+    gp: PriorGP | None = None
     acquisition: EI | LCB = field(default_factory=EI)
     n_scenarios: int = 25
     n_starts: int = 10
@@ -148,7 +148,7 @@ def _method_record(
     method: str,
     n_iterations: int,
     settings: StandardBOSettings | HybridBOSettings,
-    gp: GP,
+    gp: PriorGP,
     gp_inputs: Sequence[Var],
 ) -> dict[str, str]:
     """The record of a BO run: `run_record` with the settings except the GP, which is

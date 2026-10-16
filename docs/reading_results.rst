@@ -108,9 +108,9 @@ Each :py:class:`~hybrid_bo.run.Run` in ``study.runs`` is plain data:
   :py:func:`~hybrid_bo.history.incumbents` and
   :py:func:`~hybrid_bo.history.oracle_incumbents` give the incumbents after each
   evaluation.
-- ``run.surrogates``: the fitted GP of each iteration, and ``run.acquisitions``: the
-  acquisition problem's solution at each trial point. Both are empty for the
-  baselines.
+- ``run.surrogates``: the fitted GP (:py:class:`~hybrid_bo.gp.FittedGP`) of each
+  iteration, and ``run.acquisitions``: the acquisition problem's solution at each
+  trial point. Both are empty for the baselines.
 - ``run.scenarios``: hybrid BO's scenario draws and weights.
 - ``run.record``: how the run was produced, as text, including its seed.
 

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Breaking:** the prior GP and the fitted GP are explicit. `hb.gp.GP` is renamed
+  `hb.gp.PriorGP` (`FittedGP` keeps its name), and `hb.gp.log_likelihood` is renamed
+  `hb.gp.log_marginal_likelihood`. There are no aliases for the old names (#91).
 - A study's artifact (`Study.artifact`, saved as `artifact.json`) replaces
   `Study.record` and `study.json`. `hb.load` still reads studies saved as
   `study.json`.

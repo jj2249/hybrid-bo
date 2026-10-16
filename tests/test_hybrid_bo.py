@@ -350,7 +350,7 @@ def test_record_holds_the_settings_and_the_gp_over_the_arguments_of_h(
     assert record["method"] == "hybrid_bo"
     assert "n_scenarios=5" in record["settings"]
     assert "unknown_states_as_variables=False" in record["settings"]
-    assert "GP(" not in record["settings"]
+    assert "PriorGP(" not in record["settings"]
     assert "u" in record["kernel"]
 
 

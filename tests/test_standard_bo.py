@@ -202,7 +202,7 @@ def test_record_holds_the_settings_and_the_resolved_gp(illustrative_problem):
     assert "n_iterations=2" in record["settings"]
     assert "acquisition=LCB(std_factor=2.0)" in record["settings"]
     assert "n_starts=10" in record["settings"]
-    assert "GP(" not in record["settings"]
+    assert "PriorGP(" not in record["settings"]
 
     # The GP: its hyperparameters, and its kernel and mean as expressions
     assert "Hyper(name='lengthscale'" in record["gp"]
