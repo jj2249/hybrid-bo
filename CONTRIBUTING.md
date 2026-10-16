@@ -11,7 +11,6 @@ advanced constructs are fine when they make things clearer at the point of use,
 e.g. grouping related arguments (`f(x, x_bounds)` instead of
 `f(x, x_lower, x_upper)`). Avoid complexity that doesn't serve that, such as
 abstractions with a single use or boilerplate from static languages.
-The `flash_unit` example is out of scope for the refactor; leave it alone.
 
 The roadmap is in [ROADMAP.md](ROADMAP.md). Check it before starting work, and
 tick items off in the PR that completes them. The target API and the plan for

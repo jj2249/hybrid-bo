@@ -33,5 +33,5 @@ def update_baselines(request):
 
 @pytest.fixture
 def illustrative_problem() -> Problem:
-    """The problem of the illustrative example (examples/illustrative_example.py)."""
+    """The problem of the illustrative example (experiments/illustrative_example.py)."""
     return illustrative_example.problem

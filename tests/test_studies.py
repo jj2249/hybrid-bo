@@ -83,7 +83,7 @@ def test_study_gives_the_runs_of_each_method_from_spawned_generators(
     illustrative_study,
 ):
     """Run i of every method is the run the method gives with the ith generator
-    spawned from the seed, initial points drawn from it, as the examples' CLI ran
+    spawned from the seed, initial points drawn from it, as the experiments' CLI ran
     them before studies."""
     for name, method in ex.methods.items():
         runs = [run for run in illustrative_study.runs if run.method == name]

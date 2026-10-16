@@ -24,9 +24,8 @@ docs/_templates/
 *.pkl
 
 
-# Studies saved by `pixi run example` (in examples/results/ before #51)
+# Studies saved by `pixi run experiment`
 /results/
-examples/results/
 
 # Personal Claude Code settings (shared skills in .claude/skills are committed)
 .claude/settings.local.json

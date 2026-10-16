@@ -4,7 +4,7 @@ Walkthrough: the illustrative example
 This page teaches hybrid BO through the illustrative example of the paper,
 `Bayesian optimization for partially known systems using hybrid models
 <https://arxiv.org/abs/2603.11199>`_. The code shown is
-``examples/illustrative_example.py``; the page quotes it rather than copying it. The
+``experiments/illustrative_example.py``; the page quotes it rather than copying it. The
 API reference has the signatures.
 
 The problem class
@@ -58,7 +58,7 @@ Each variable is a :py:class:`~hybrid_bo.problem.Var` with its bounds. ``x`` and
 points (initial points, multistart starts, root-finding guesses) are drawn. ``u`` has
 finite bounds, which are its start bounds.
 
-.. literalinclude:: ../examples/illustrative_example.py
+.. literalinclude:: ../experiments/illustrative_example.py
    :language: python
    :start-at: u = hb.Var(
    :end-before: system = hb.System(
@@ -69,7 +69,7 @@ equations are functions of ``v``, which holds the variables by name, and return 
 list with one CasADi expression per equation. The
 :py:class:`~hybrid_bo.problem.Problem` adds the objective.
 
-.. literalinclude:: ../examples/illustrative_example.py
+.. literalinclude:: ../experiments/illustrative_example.py
    :language: python
    :start-at: system = hb.System(
    :end-before: # Measurement:
@@ -80,7 +80,7 @@ the *oracle simulation*, :py:func:`~hybrid_bo.evaluation.oracle_measure`, which
 solves the known equations with the oracle in place of the unknown equations, then
 reads the measured variables, optionally with noise.
 
-.. literalinclude:: ../examples/illustrative_example.py
+.. literalinclude:: ../experiments/illustrative_example.py
    :language: python
    :start-at: # Measurement:
    :end-before: # Methods:
@@ -98,7 +98,7 @@ A *run* evaluates the *initial points*, then runs the *optimization loop*. Each
    approximation* (SAA) represents by *scenarios*: scenario ``s`` takes
    ``y_s = mean(u) + std(u) * z_s``, where the *scenario draws* ``z_s`` are standard
    normal draws made once per run. (By default ``y_s`` is also a variable of the
-   acquisition problem, tied to this prediction by an equality constraint; the example
+   acquisition problem, tied to this prediction by an equality constraint; the experiment
    substitutes the prediction instead, with ``unknown_states_as_variables=False``.)
    Each scenario has its own mechanistic states ``x_s``, constrained by the known
    equations ``0 = g(x_s, y_s, u)``, and its own objective ``f_s``. The *acquisition function* is a weighted average over the
@@ -118,12 +118,12 @@ formulations (Problems 8 and 9) and the analysis.
 Running it and reading a run
 ----------------------------
 
-A *method* is how a problem is solved. The example compares hybrid BO with standard
+A *method* is how a problem is solved. The experiment compares hybrid BO with standard
 BO and two baselines that sample without a model, Latin hypercube and uniform
-sampling. Each method is a function with the same arguments, so the example keeps
+sampling. Each method is a function with the same arguments, so the experiment keeps
 them in a dictionary, with their settings bound by ``functools.partial``.
 
-.. literalinclude:: ../examples/illustrative_example.py
+.. literalinclude:: ../experiments/illustrative_example.py
    :language: python
    :start-at: # Methods:
    :end-before: # The study
@@ -135,25 +135,25 @@ generators spawned from one seed, the same ones for every method, so run ``i`` o
 each method starts from the same initial points, and the same seed gives the same
 study. A method that fails raises a
 :py:class:`~hybrid_bo.errors.HybridBOError` carrying the partial run, which the study
-keeps. The example ends by passing everything it defines to its command line,
-``examples/cli.py``:
+keeps. The experiment ends by passing everything it defines to its command line,
+``experiments/cli.py``:
 
-.. literalinclude:: ../examples/illustrative_example.py
+.. literalinclude:: ../experiments/illustrative_example.py
    :language: python
    :start-at: # The study
    :end-before: # Run or plot
 
-.. literalinclude:: ../examples/illustrative_example.py
+.. literalinclude:: ../experiments/illustrative_example.py
    :language: python
    :start-at: # Run or plot
 
-which runs a study of the example's methods with its
+which runs a study of the experiment's methods with its
 :py:class:`~hybrid_bo.studies.StudySettings`, overridden by the flags, and saves it:
 
-.. literalinclude:: ../examples/cli.py
+.. literalinclude:: ../experiments/cli.py
    :language: python
    :start-at: study = hb.study(
-   :end-at: study_dir = save_new(study, example_dir, study_id)
+   :end-at: study_dir = save_new(study, experiment_dir, study_id)
    :dedent:
 
 A method returns a :py:class:`~hybrid_bo.run.Run`, which is plain data, so
@@ -179,9 +179,9 @@ them.
   variables and equations, the measurement, the method and its settings, the seed and
   the package and code versions.
 
-``pixi run example illustrative_example`` runs every method and saves the study to
+``pixi run experiment illustrative_example`` runs every method and saves the study to
 ``results/illustrative_example/``; ``pixi run plot illustrative_example``
-draws the newest one (see ``examples/cli.py``).
+draws the newest one (see ``experiments/cli.py``).
 
 Plotting a study
 ----------------

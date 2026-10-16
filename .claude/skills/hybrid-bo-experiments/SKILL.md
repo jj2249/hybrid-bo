@@ -1,20 +1,19 @@
 ---
-name: hybrid-bo-examples
-description: Use when writing, modifying or running an example under examples/. Covers the layout of an example script, how to define the Problem and the measurement, the method settings, saving runs, and common mistakes.
+name: hybrid-bo-experiments
+description: Use when writing, modifying or running an experiment under experiments/. Covers the layout of an experiment, how to define the Problem and the measurement, the method settings, saving runs, and common mistakes.
 ---
 
-# Writing and running examples
+# Writing and running experiments
 
-`examples/illustrative_example.py` is the reference: one Python module, in the style of
-DESIGN.md's "Target example". `examples/flash_unit/` still targets the `pre-refactor`
-tag and is out of scope until its port (#42), so leave it alone. Use CONTEXT.md's terms
+`experiments/illustrative_example.py` is the reference: one Python module, in the
+style of DESIGN.md's "Target example". Use CONTEXT.md's terms
 (decision variables `u`, mechanistic states `x`, unknown states `y`, known equations
 `g`, oracle, scenarios).
 
-## Layout of an example script
+## Layout of an experiment
 
-An example is one module under `examples/`, importable as a top-level module (pytest
-and ty put `examples/` on the path). At module level it defines, in this order:
+An experiment is one module under `experiments/`, importable as a top-level module
+(pytest and ty put `experiments/` on the path). At module level it defines, in this order:
 
 1. **Problem**: `Var`s, `System`, `Problem` (below).
 2. **Measurement**: for a benchmark experiment, a module-level `def oracle(v)`,
@@ -29,7 +28,7 @@ and ty put `examples/` on the path). At module level it defines, in this order:
    hb.StudySettings(n_runs, n_initial, n_iterations, seed=None)` (`None` draws a
    fresh seed, which the saved study's settings keep).
 5. **The command line**: a `__main__` block that passes everything above to
-   `cli.main` (`import cli`, from `examples/cli.py`):
+   `cli.main` (`import cli`, from `experiments/cli.py`):
 
    ```python
    if __name__ == "__main__":
@@ -52,11 +51,11 @@ and ty put `examples/` on the path). At module level it defines, in this order:
 Everything the command line uses is passed in that call (directly, or inside
 `problem` and `measure`): nothing is read from the module by name. `cli.main` runs `hb.study(methods, problem, measure, study_settings,
 name=..., optimum=...)` and saves the study with `hb.save` to
-`results/<example>/<study id>/` (`study.json`, `runs/<method>/run-000.json`;
+`results/<experiment>/<study id>/` (`study.json`, `runs/<method>/run-000.json`;
 git-ignored). The library never writes files on its own; saving is an explicit call.
 Importing the module runs nothing (the call is under `__main__`), so
 `tests/test_regression.py` reuses its `problem`, `measure`, `methods` and
-`study_settings`, and `tests/conftest.py`'s `illustrative_problem` fixture is its `problem`. Changing the illustrative example's
+`study_settings`, and `tests/conftest.py`'s `illustrative_problem` fixture is its `problem`. Changing the illustrative experiment's
 problem, measurement or settings therefore moves the regression baselines: that is a
 *logic* change.
 
@@ -114,19 +113,19 @@ problem = hb.Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x -
 
 ## Running
 
-    pixi run example illustrative_example [--method hybrid_bo ...] [--n-runs 10] [--seed 0] [--n-iterations 5] [--name lcb-vs-ei] [--plot]
+    pixi run experiment illustrative_example [--method hybrid_bo ...] [--n-runs 10] [--seed 0] [--n-iterations 5] [--name lcb-vs-ei] [--plot]
     pixi run plot illustrative_example [STUDY]
-    pixi run example illustrative_example --help   # the flags and the methods
-    pixi run example illustrative_example plot [STUDY] [--results-root DIR]
+    pixi run experiment illustrative_example --help   # the flags and the methods
+    pixi run experiment illustrative_example plot [STUDY] [--results-root DIR]
 
-The pixi tasks run the example script as a module from `examples/`, in the
-`examples` environment: `example` is `python -m <name>` and passes every flag
+The pixi tasks run the experiment as a module from `experiments/`, in the
+`experiments` environment: `experiment` is `python -m <name>` and passes every flag
 through; `plot` is `python -m <name> plot [STUDY]` and takes nothing else, so plot
-with other flags through `example` (last line above). No command lists every
-example, and a typo in the name fails with "No module named ...". A relative
+with other flags through `experiment` (last line above). No command lists every
+experiment, and a typo in the name fails with "No module named ...". A relative
 `--results-root` is relative to where pixi was started (`INIT_CWD`), not
-`examples/`. Running (the default command) runs a study from the seed (see Randomness), with
-the methods given and the example's `study_settings` overridden by the flags given,
+`experiments/`. Running (the default command) runs a study from the seed (see Randomness), with
+the methods given and the experiment's `study_settings` overridden by the flags given,
 and saves it to `<study id>`: `--name`, else the UTC time to the second at the start,
 with `-2`, `-3`, ... appended if taken when it is saved (`hb.save` creates the
 folder, so parallel runs never share one), then prints `hb.summary(study)` and saves

@@ -1,5 +1,5 @@
-"""The command line of the examples (examples/cli.py, behind `pixi run example` and
-`pixi run plot`): running studies and plotting them."""
+"""The command line of the experiments (experiments/cli.py, behind `pixi run experiment`
+and `pixi run plot`): running studies and plotting them."""
 
 import subprocess
 import sys
@@ -19,7 +19,7 @@ def summary_of(study):
     return pl.read_csv(summary(study).write_csv().encode())
 
 
-EXAMPLES_DIR = Path(__file__).parent.parent / "examples"
+EXPERIMENTS_DIR = Path(__file__).parent.parent / "experiments"
 
 
 def run_cli(argv, true_curves=False):
@@ -37,7 +37,7 @@ def run_cli(argv, true_curves=False):
 
 
 def test_run_then_plot_the_newest_study(tmp_path):
-    """Running saves a study of the chosen methods, seeded like the example; `plot`
+    """Running saves a study of the chosen methods, seeded like the experiment; `plot`
     then finds the newest study and saves its figures under `figures/` from the saved
     study alone.
 
@@ -104,10 +104,10 @@ def test_a_named_study_gets_a_suffix_when_taken_and_plot_flag_plots(tmp_path):
     run_cli([*command, "--plot"])
 
     # Two studies, only the second with figures
-    example_dir = tmp_path / "illustrative_example"
-    assert sorted(path.name for path in example_dir.iterdir()) == ["demo", "demo-2"]
-    assert not (example_dir / "demo" / "figures").exists()
-    assert (example_dir / "demo-2" / "figures" / "convergence.png").exists()
+    experiment_dir = tmp_path / "illustrative_example"
+    assert sorted(path.name for path in experiment_dir.iterdir()) == ["demo", "demo-2"]
+    assert not (experiment_dir / "demo" / "figures").exists()
+    assert (experiment_dir / "demo-2" / "figures" / "convergence.png").exists()
 
 
 def test_plot_takes_the_study_saved_last(tmp_path):
@@ -121,15 +121,15 @@ def test_plot_takes_the_study_saved_last(tmp_path):
 
     run_cli(["plot", "--results-root", str(tmp_path)])
 
-    example_dir = tmp_path / "illustrative_example"
-    assert (example_dir / "alpha" / "figures").exists()
-    assert not (example_dir / "zeta" / "figures").exists()
+    experiment_dir = tmp_path / "illustrative_example"
+    assert (experiment_dir / "alpha" / "figures").exists()
+    assert not (experiment_dir / "zeta" / "figures").exists()
 
 
 def test_a_relative_results_root_is_relative_to_where_pixi_started(
     tmp_path, monkeypatch
 ):
-    """Pixi runs the example from `examples/` and keeps the folder it was started
+    """Pixi runs the experiment from `experiments/` and keeps the folder it was started
     from in `INIT_CWD`; a relative `--results-root` is relative to that folder.
 
     `monkeypatch` is a pytest fixture that sets environment variables for this test
@@ -143,12 +143,12 @@ def test_a_relative_results_root_is_relative_to_where_pixi_started(
         + ["--name", "here", "--results-root", "out"]
     )
 
-    # Saved under the temporary folder, not examples/
+    # Saved under the temporary folder, not experiments/
     assert (tmp_path / "out" / "illustrative_example" / "here" / "study.json").exists()
 
 
 def test_help_names_the_methods_and_the_plot_command(capsys):
-    """`--help` names every method of the example and how to plot.
+    """`--help` names every method of the experiment and how to plot.
 
     `capsys` is a pytest fixture that captures what the test prints.
     """
@@ -161,7 +161,7 @@ def test_help_names_the_methods_and_the_plot_command(capsys):
     assert "pixi run plot illustrative_example" in printed
 
 
-def test_run_rejects_a_method_the_example_lacks(tmp_path):
+def test_run_rejects_a_method_the_experiment_lacks(tmp_path):
     """An unknown method name is a usage error, before anything runs."""
     with pytest.raises(SystemExit):
         run_cli(["--method", "nope", "--results-root", str(tmp_path)])
@@ -169,21 +169,21 @@ def test_run_rejects_a_method_the_example_lacks(tmp_path):
 
 
 def test_plot_without_a_study_is_a_usage_error(tmp_path):
-    """Plotting an example that has no saved study is a usage error."""
+    """Plotting an experiment that has no saved study is a usage error."""
     with pytest.raises(SystemExit):
         run_cli(["plot", "--results-root", str(tmp_path)])
 
 
-def test_the_example_runs_as_a_module_from_the_examples_folder():
-    """`pixi run example illustrative_example --help` is `python -m
-    illustrative_example --help` in `examples/`: the script's own `cli.main` call
+def test_the_experiment_runs_as_a_module_from_the_experiments_folder():
+    """`pixi run experiment illustrative_example --help` is `python -m
+    illustrative_example --help` in `experiments/`: the script's own `cli.main` call
     answers it."""
     result = subprocess.run(
         [sys.executable, "-m", "illustrative_example", "--help"],
-        cwd=EXAMPLES_DIR,
+        cwd=EXPERIMENTS_DIR,
         capture_output=True,
         text=True,
         check=True,
     )
 
-    assert "pixi run example illustrative_example" in result.stdout
+    assert "pixi run experiment illustrative_example" in result.stdout
