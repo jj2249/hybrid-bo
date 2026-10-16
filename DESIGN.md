@@ -1,24 +1,26 @@
-# Design: target API
+# Design
 
-This is where the restructure is heading. The vocabulary is in [CONTEXT.md](CONTEXT.md)
-and the decisions that are hard to reverse are in [docs/adr/](docs/adr/).
-[ROADMAP.md](ROADMAP.md) lists the PRs. Each PR may refine names or signatures; when one
-does, it updates this file in the same PR.
+How the library is built and why. The vocabulary is in [CONTEXT.md](CONTEXT.md) and
+the decisions that are hard to reverse are in [docs/adr/](docs/adr/). A PR that
+changes the design updates this file in the same PR. The design came out of a
+rewrite of the original code (tag `pre-refactor`, called *legacy* below), which the
+new code reproduced bit for bit where the regression baselines cover it. Issue
+numbers refer to the PRs that introduced or changed a part.
 
 All spelling is American, in code and in prose.
 
 ## Why
 
-The code is hard to change for three reasons:
+The original code was hard to change for three reasons:
 
-1. **Duplication.** The four routines in `routines/` are near-copies of one loop.
-2. **Ungrouped, index-based data.** Related values travel as separate arrays (`u`, `x`,
+1. **Duplication.** The four routines in `routines/` were near-copies of one loop.
+2. **Ungrouped, index-based data.** Related values traveled as separate arrays (`u`, `x`,
    `x_no_noise`, `f`, `incumbents`, ... in `_initial`, `_bo` and `_complete` versions),
-   and the structure of the problem lives in index lists in `config.yaml`
-   (`indices_x_output_gp: [1]` is the only thing that says `x[1]` is really `y`).
-3. **Stateful objects.** You configure an object, call methods in the right order and
-   read results off its state (`set_XY_train` → `create_training_problem` →
-   `solve_training_problem`; `set_problem` → `solve()`), and `Config` is passed
+   and the structure of the problem lived in index lists in `config.yaml`
+   (`indices_x_output_gp: [1]` was the only thing that said `x[1]` is really `y`).
+3. **Stateful objects.** You configured an object, called methods in the right order
+   and read results off its state (`set_XY_train` → `create_training_problem` →
+   `solve_training_problem`; `set_problem` → `solve()`), and `Config` was passed
    everywhere.
 
 ## Principles
@@ -49,9 +51,9 @@ The code is hard to change for three reasons:
 - **SX and MX.** Library math uses only CasADi operations, so it works for both. The
   symbol type is set in one place (default `SX`). `DM` appears only where a compiled
   `cas.Function` is called, and is converted to numpy there.
-- **Known issues are not rebuilt.** Where the new design makes a Known issue impossible
-  and the regression baselines do not move, the new code simply does not reproduce it;
-  the PR says which Known issue it removes.
+- **Legacy bugs were not rebuilt.** Where the new design made a known legacy bug
+  impossible and the regression baselines did not move, the new code simply does not
+  reproduce it.
 - **Saving.** The library never writes files on its own; saving is an explicit call.
   `hb.save`/`hb.load` write and read a study as JSON
   ([ADR 0004](docs/adr/0004-studies-are-saved-as-json.md)). Examples call them; the
@@ -64,10 +66,10 @@ The code is hard to change for three reasons:
   `oracle_optimum`, `save`, `load`, `Run`, `History`, `incumbents`,
   `oracle_incumbents`, `evaluations`, `summary`, `hyperparameters`, the errors and
   `plots`. Everything else is reached through its module (`hb.gp.fit_gp`,
-  `hb.solvers.multistart`). A new name joins the top level only if the target example
+  `hb.solvers.multistart`). A new name joins the top level only if the example
   or a typical analysis script would use it.
 
-## Target example
+## Example
 
 ```python
 import casadi as cas
@@ -110,11 +112,11 @@ study = hb.study(methods, problem, measure, study_settings, optimum=-50.4608)
 hb.save(study, "results/illustrative")
 ```
 
-## Target API
+## API
 
 All snippets are illustrative.
 
-### Problem (PR 4, done; `problem.py`, `sampling.py`)
+### Problem (`problem.py`, `sampling.py`)
 
 ```python
 Symbolic = cas.SX  # the one place the symbol type is chosen
@@ -169,7 +171,7 @@ frozen dataclass, so membership checks use its equality; no CasADi `==` is invol
 `lhs(lower, upper, n, rng)` and `uniform(...)` stay the array primitives the library
 uses for starts; `initial_points` is the `Var` front end for experiments.
 
-### Evaluation (#25, done; `evaluation.py`, `history.py`, `errors.py`)
+### Evaluation (`evaluation.py`, `history.py`, `errors.py`)
 
 ```python
 @dataclass(frozen=True)
@@ -231,7 +233,7 @@ def evaluate(
   expected failure (Principle 6), so fsolve's convergence warnings are caught and
   nothing is printed; only `RootFindingError` reports that every start failed.
 
-### History and Run (#26: `Run` with `history`, `record` and `surrogates`; `run.py`)
+### History and Run (`run.py`)
 
 ```python
 @dataclass(frozen=True)
@@ -281,7 +283,7 @@ measurement adds a description by writing a docstring.
 
 A column is found by name with `system.column("x1")`.
 
-### Solvers (#27, done; `solvers.py`)
+### Solvers (`solvers.py`)
 
 ```python
 @dataclass(frozen=True)
@@ -313,7 +315,7 @@ with `lhs(...)`. `multistart` builds the problem with `cas.Opti`, bounds as
 constraints, as the legacy optimizer did, so IPOPT takes the same steps. A failed start
 is logged at debug level without a traceback.
 
-### GP (#27, done; `gp.py`, `kernels.py`)
+### GP (`gp.py`, `kernels.py`)
 
 ```python
 @dataclass(frozen=True)
@@ -388,11 +390,11 @@ gp = hb.gp.GP(
   `(n,)`, a symbolic X (SX or MX) gives `(n, 1)` columns. The std is the square root of
   the posterior variance, so callers need no covariance.
 - This removes `Parameterized`, `JoinedParameters`, `k_variable`/`m_variable` and the
-  name prefixing, and with them the `LinearKernel` ARD Known issue. `minmax` uses the
+  name prefixing, and with them the legacy `LinearKernel` ARD bug. `minmax` uses the
   correct intercept (`lower - min * slope`), evaluated so that [0, 1] reproduces the
   legacy values bit for bit.
 
-### Acquisition (#28: `EI`, `LCB`, `standard_acquisition`; #29: `Scenarios`, `hybrid_acquisition`; `acquisition.py`)
+### Acquisition (`acquisition.py`)
 
 ```python
 @dataclass(frozen=True)
@@ -431,13 +433,13 @@ Each returns the NLP and its start bounds `(lower, upper)`, for `lhs`.
 
 - **Validation.** Every method checks its acquisition function the same way (one
   helper, called by the settings and by the builders): anything but an `EI` or `LCB`
-  instance raises `TypeError`. This removes the `formulation_acq` Known issue.
+  instance raises `TypeError`. This avoids the legacy `formulation_acq` bug.
 - **Standard BO** computes EI and LCB analytically from the GP mean and std (EI adds
   1e-10 to the std in `gamma`, as legacy `ei_gp` did) and minimizes -EI or LCB over `u`
   within its bounds.
 - **Hybrid BO** computes them as weighted sample averages over the scenarios (SAA-EI,
   SAA-LCB; paper, Problems 8 and 9). Each scenario has its own `x_s` and `y_s`, with `g`
-  as constraints. SAA-LCB uses the weighted variance; `w = 1/S` reproduces today's
+  as constraints. SAA-LCB uses the weighted variance; `w = 1/S` reproduces the legacy
   `sample_variance` (`ddof=0`).
 - `unknown_states_as_variables`: if True, each scenario's unknown states are variables
   of the acquisition problem tied to the GP by an equality constraint (paper, Problem 8),
@@ -445,15 +447,15 @@ Each returns the NLP and its start bounds `(lower, upper)`, for `lhs`.
 - The hybrid acquisition problem's variables are `u`, then the `x_s`, then the `y_s` (if
   variables), each state with one entry per scenario; the trial point is the first N
   entries. Every variable is boxed by its own bounds and started within its own start
-  bounds, and the GP's inputs are the columns of `h_inputs`. This removes the two
-  `setup_acq_problem` Known issues (`u` start bounds, number of GP inputs). With one
+  bounds, and the GP's inputs are the columns of `h_inputs`. This avoids the two
+  legacy `setup_acq_problem` bugs (`u` start bounds, number of GP inputs). With one
   mechanistic state, as in the illustrative example, the order matches legacy, so the
   Latin hypercube starts and the baseline are the same.
 - Hybrid BO only needs "mean and std of `y` at given inputs" from the surrogate, through
   `predict`, so other surrogates or hyperparameter samples can be paired with scenarios
   later.
 
-### Methods and the optimization loop (#28: the loop and standard BO; #29: hybrid BO; `bo.py`)
+### Methods and the optimization loop (`bo.py`)
 
 ```python
 @dataclass(frozen=True)
@@ -513,7 +515,7 @@ def standard_bo(
 ) -> Run: ...
 def latin_hypercube_sampling(
     problem, measure, initial_points, n_points, rng
-) -> Run: ...  # done in #26, baselines.py
+) -> Run: ...  # baselines.py
 def uniform_sampling(problem, measure, initial_points, n_points, rng) -> Run: ...
 ```
 
@@ -554,13 +556,13 @@ subclasses (`ReconstructionWarning`) so they can be filtered.
 `hb.plots.STYLE` (`src/hybrid_bo/hybrid_bo.mplstyle`); put rcParams there, not in
 plotting code.
 
-### Analysis (#53, #54, #55)
+### Analysis (`studies.py`, `saving.py`, `views.py`, `plots.py`)
 
 The ArviZ-like layer: a `Study` is the data object; Polars views and static plots read
-it. Polars and matplotlib are optional (imported on first use; the
-`hybrid-bo[analysis]` extra once packaged).
+it. Polars and matplotlib are optional (imported on first use; they are in the
+`experiments` pixi environment).
 
-- **Data** (#53, done; `studies.py`). `Run` gains `method` (its label in the study),
+- **Data** (#53; `studies.py`). `Run` has `method` (its label in the study),
   `index` and `acquisitions`, one `AcquisitionSolution` per iteration (the
   acquisition value at the trial point and, for hybrid BO, the scenario states
   there), and keeps its full `record`.
@@ -570,7 +572,7 @@ it. Polars and matplotlib are optional (imported on first use; the
   settings hold the seed actually used (a fresh one for seed None) and its record
   holds the problem, measurement, methods, oracle optimum (`oracle_optimum`, when
   stated) and versions once.
-- **Running** (#53, done). `hb.repeat(method, problem, measure, settings)` runs
+- **Running** (#53). `hb.repeat(method, problem, measure, settings)` runs
   one method `n_runs` times, run i from `SeedSequence(seed).spawn(n_runs)[i]`, logging
   failed runs and keeping them as far as they got. A `Method` is called as
   `method(problem, measure, initial_points, n, rng=rng)`.
@@ -583,10 +585,10 @@ it. Polars and matplotlib are optional (imported on first use; the
   it, and a wrong optimum silently corrupts every regret. `hb.oracle_optimum(problem,
   oracle, rng, n_starts)` helps find it once. The study records it and warns with
   `OracleOptimumWarning` if an evaluated point's oracle objective is below it.
-- **Saving** (#53, done; `saving.py`). `hb.save(study, path)` writes `study.json`
+- **Saving** (#53; `saving.py`). `hb.save(study, path)` writes `study.json`
   (settings, name, record, the run files in order) and `runs/<method>/run-000.json`;
   `hb.load(path)` reads them back exactly. `save` refuses an existing folder.
-- **Views** (#54, done; `views.py`). `hb.evaluations(study, optimum=None)`: one row
+- **Views** (#54; `views.py`). `hb.evaluations(study, optimum=None)`: one row
   per evaluation (method, run, evaluation from 1, iteration from 1 or null for initial
   points, `u_<name>`/`x_<name>`/`y_<name>`, f, `x_oracle_<name>`/`y_oracle_<name>`/
   `f_oracle`, incumbent, oracle incumbent, regret, acquisition). Variables are named
@@ -596,7 +598,7 @@ it. Polars and matplotlib are optional (imported on first use; the
   incumbent and regret). `hb.hyperparameters(study)`: one row per run, iteration and
   hyperparameter entry. Polars is imported on first use; without it a view raises an
   `ImportError` naming the extra.
-- **Plots** (#55, done; `plots.py`), static, over **evaluations** (initial points are
+- **Plots** (#55; `plots.py`), static, over **evaluations** (initial points are
   not free): `plots.convergence(study)` (median oracle incumbent, else incumbent, with
   an IQR band and a dotted line after the initial points), `plots.regret(study,
   optimum=None)` (the same on a log scale, as in the paper) and
@@ -609,7 +611,7 @@ it. Polars and matplotlib are optional (imported on first use; the
   needed only for a GP other than `default_gp`, since the record holds the GP as text,
   not its kernel function. The fields the replay uses (acquisition function, and for
   hybrid BO the solver and `unknown_states_as_variables`) must match the record.
-- **Entry point** (#51, done; revised in #65; moved to `experiments/` in #69). An
+- **Entry point** (#51; revised in #65; moved to `experiments/` in #69). An
   experiment ends with an explicit call that passes everything it defines:
   `cli.main(name, problem, measure, methods, study_settings, optimum=...,
   true_curves=...)`.
@@ -685,76 +687,3 @@ Not built now; the design leaves room for them.
   (deterministic `z`, specific `w`); the acquisition builders already take weights.
 - **More than one unknown state (P > 1).** Shapes already allow it; the open modeling
   question is whether each unknown equation has its own arguments.
-
-## Restructure PRs
-
-Every PR keeps `tests/data/regression/` unchanged unless it is marked *logic*. Each PR
-updates `hybrid-bo-src`, `hybrid-bo-experiments`, the user docs (`docs/*.rst`) and this file
-where its change affects them.
-
-The old code was moved to `hybrid_bo/legacy/` and the new modules built at their
-final paths. New code never depended on old code (old code could call new helpers such
-as `lhs`), so no shims were needed and deleting `legacy/` (#30) touched nothing new.
-
-PRs 0-4 were planned layer by layer. After PR 4, the work is GitHub issues sliced
-by method: each method ticket ports its own regression test to the new API and
-reproduces its baseline from the draw-order PR exactly, so the new code is proven
-end to end one method at a time. Those tickets add API without changing existing
-behavior, so they are "new code" PRs, not *logic*.
-
-0. **Design** (docs): CONTEXT.md, ADRs, this file, ROADMAP.md, CLAUDE.md conventions.
-1. **R1 trimmed** (#17). *Done.* flash_unit excluded from ty (it targets the
-   `pre-refactor` tag); `lhs(lower, upper, n, rng)`/`uniform(...)` in `sampling.py`
-   (they stay array-based; PR 4 adds `initial_points` for `Var`s); `Problem.solve` and `use_jacobian` deleted;
-   the old `main.py` (removed in #65) dispatches with `match`. Two hand-written LHS copies remain until
-   their tickets: the fixed-x root-finding guesses (#25) and
-   `MultiStartOptimizer.create_lhs_samples` (#27). The new evaluation uses `lhs`; the
-  legacy copy stays until `legacy/` is deleted.
-2. **Draw order** (*logic*). *Done.* The old routines draw in the order above:
-   noise per evaluation (`noise_std` instead of a pre-drawn array), root-finding
-   always runs, `measurement_noise.pkl` dropped (it is `x - x_no_noise` on the
-   measured states). Baselines regenerated.
-3. **Legacy**. *Done.* The old code moved to `hybrid_bo/legacy/` (deleted in #30),
-   imported as `hybrid_bo.legacy`; the top-level `hybrid_bo` exported only the new
-   API. Legacy could import new code, never the reverse. Result pickles saved before this PR
-   (`hybrid_bo.results.ResultsBO`) need the old path to unpickle.
-4. **Problem** (#23): `Var`, `System`, `Problem`, `initial_points`. *Done.*
-
-The tickets, in a workable order:
-
-- **#24 Workflow** (docs): PR template and CLAUDE.md fit the engineering skills;
-  this list. Blocked by nothing.
-- **#25 Evaluation**: measurements, `oracle_measure`, root-finding, `evaluate`,
-  `History`, the `HybridBOError` family. *Done*; `tests/test_evaluation.py` checks it
-  against the legacy evaluation bit for bit.
-- **#26 Baselines**: Latin hypercube and uniform as methods returning a `Run` and its
-  record; their regression tests on the new API. *Done*; the regression test maps the
-  `Run` to the `ResultsBO` keys the baselines were recorded with.
-- **#27 Solvers and GP**: `NLP`, `Ipopt`, `multistart`; `Hyper`, kernel functions, `GP`,
-  `fit_gp`, `predict`, scalers, `default_gp`; port the kernel, GP and scaler tests.
-  *Done*; `tests/test_gp.py` checked the fit against the legacy GP until #30.
-- **#28 Standard BO**: `optimization_loop`, `EI`/`LCB`, `standard_bo`; its regression
-  test on the new API. *Done*; it reproduces the legacy baseline.
-- **#29 Hybrid BO**: `Scenarios`, the hybrid acquisition problem, `hybrid_bo`; its
-  regression test on the new API. *Done*; it reproduces the legacy baseline, and every
-  regression test now runs on the new API.
-- **#30 Switch**: the illustrative example as one script on the new API; delete
-  `legacy/`, `Config` and YAML; README and both skills describe the new API.
-  *Done*; `illustrative_example.py` defines the problem, measurement and
-  `methods`, runs and saves every method when run directly, and is what the
-  regression test runs. Tests that compared with the legacy code check closed forms
-  instead. The plot callbacks go with it; plots return in #31.
-- **#31 Plots and CLI**: `hb.plots` (see Plots); the old `main.py` (removed in #65) is the CLI
-  (`run` an experiment's methods, `plot` a results folder), and experiments only define
-  things (a `settings` dict of the BO methods joins `methods`). *Done*.
-- **#32 Benchmark metric** (*logic*): the oracle objective at the believed best
-  point. *Done*: `oracle_incumbents(history)`. Without noise it is the running
-  minimum of `f_oracle`, as in the paper's (noise-free) regret figures, so the
-  baselines don't change.
-- **#52 Namespace**: `hb.*` holds only the user-facing names (see Decisions); a
-  Getting started docs page. *Done*.
-- **#53 Study**: see Analysis. *Done*; the old `main.py` (removed in #65) runs and saves a study, and
-  the experiments define their study settings.
-- **#54 Polars views**, then **#55 Plots**, then **#51 Entry point**: see Analysis.
-  *Done*. With #51 the separate dict of method settings in an experiment is gone (the
-  plots read them from the record).

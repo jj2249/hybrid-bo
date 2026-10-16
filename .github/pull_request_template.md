@@ -7,7 +7,7 @@ tree, pseudocode or Mermaid, next to a sentence or two. Use CONTEXT.md terms. --
 
 <!-- Before and after, ideally the exact test that changes, as pseudocode. Then the
 checks: `pixi run -e dev check`, `pixi run -e dev test`, and the
-`/mattpocock-skills:code-review` findings since `refactor/initial` with what was
+`/mattpocock-skills:code-review` findings since `main` with what was
 done about each. Bug fixes: the confirmed root cause. -->
 
 - **Before:**

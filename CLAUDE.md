@@ -8,7 +8,7 @@ Bayesian optimization for partially known systems using hybrid models
 and uniform sampling are included as baselines. The vocabulary is in
 [CONTEXT.md](CONTEXT.md); use its terms.
 
-Maintainers working on the library (issues, PRs, the roadmap) follow
+Maintainers working on the library (issues, PRs) follow
 [CONTRIBUTING.md](CONTRIBUTING.md); read it before starting a ticket.
 
 ## Commands
@@ -44,8 +44,8 @@ not found" after a Python upgrade, re-run `pixi run -e dev setup`.
 (seed 0, 2 iterations) and compares the results with `tests/data/regression/*.json`.
 Only update the baselines when a change is meant to change behavior.
 The other test files check kernels, the GP, `Problem` and the scalers
-against numpy/scipy references. Known bugs are `xfail(strict=True)` tests:
-remove the marker when fixing the bug.
+against numpy/scipy references. Known bugs are `xfail(strict=True)` tests
+with a GitHub issue labeled `bug`: remove the marker when fixing the bug.
 
 ## Skills
 
@@ -54,7 +54,8 @@ remove the marker when fixing the bug.
   Load it before working on `src/`.
 - `hybrid-bo-experiments`: the layout of an experiment, how to define the
   Problem and the measurement, method settings, saving runs and common mistakes.
-- Both skills describe the *current* code; DESIGN.md describes the target.
+- Both skills describe what the code does; DESIGN.md describes the design and the
+  reasons for it.
 
 ## Conventions
 

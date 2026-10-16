@@ -31,6 +31,11 @@ then open `docs/_build/html/index.html`. Getting started explains what you just 
 Writing an experiment how to set up your own problem, and Reading results what the
 results mean.
 
+## Citing
+
+If you use Hybrid-BO in your work, please cite the paper,
+[arXiv:2603.11199](https://arxiv.org/abs/2603.11199).
+
 ## License
 
 This project is licensed under the MIT license.
