@@ -374,7 +374,7 @@ def predict(gp, fitted, X) -> tuple: ...  # noise-free (mean, std) in original u
 def log_marginal_likelihood(gp, fitted) -> float: ...  # on the scaled training data
 ```
 
-The prior GP and the fitted GP (CONTEXT.md) are separate types: `fit_gp` turns a
+The prior GP and the fitted GP (GLOSSARY.md) are separate types: `fit_gp` turns a
 `PriorGP` into a `FittedGP`, and `predict` takes both, since the fitted GP is data
 only and holds no kernel.
 
