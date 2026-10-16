@@ -37,10 +37,44 @@ DESIGN.md when a PR changes the design.
 - A PR that changes behavior or contracts updates the relevant skill
   (`.claude/skills/`).
 - A PR that changes usage, the public API or behavior updates the README and the
-  user docs (`docs/*.rst`), and adds a line to [CHANGELOG.md](CHANGELOG.md).
+  user docs (`docs/*.rst`), and adds a line to [CHANGELOG.md](CHANGELOG.md) under
+  `## Unreleased`. Start the line with `**Breaking:**` if it breaks the API, or
+  `**Changes results:**` if it is a logic change (see
+  [Versioning and releases](#versioning-and-releases)).
 - Keep docs concise. Sphinx autoapi already covers the API, so don't duplicate it.
 - When a style question comes up, ask, then record the answer under Conventions in
   CLAUDE.md.
+
+## Versioning and releases
+
+The version is `version` in `pyproject.toml`, and it changes only in a release PR;
+other PRs don't touch it. Between releases, a study's artifact records the code
+version as `vX.Y.Z-<n>-g<commit>`, which still pins the code.
+
+While the version is 0.x, a release is:
+
+- a **minor** bump (0.3.0) if `## Unreleased` has any `**Breaking:**` or
+  `**Changes results:**` line. A logic bug fix counts, so two studies with the same
+  minor version give comparable results;
+- a **patch** bump (0.2.1) otherwise: fixes that don't change results, docs, and
+  new API that leaves existing behavior unchanged.
+
+1.0.0 is a deliberate statement that the API is stable. It doesn't wait for PyPI:
+0.x versions can be published there.
+
+The maintainer decides when to release, and should release before running studies
+that will be shared, so their artifacts record a clean `vX.Y.Z`. The release PR,
+which an agent can prepare:
+
+1. Sets `version` to the new version, chosen by the markers above.
+2. Renames `## Unreleased` in CHANGELOG.md to `## X.Y.Z (YYYY-MM-DD)` and adds an
+   empty `## Unreleased` above it.
+
+Merging the release PR approves the release, and closing it rejects it; nobody runs
+tag or release commands. On the merge, the release workflow
+(`.github/workflows/release.yml`) tags `vX.Y.Z` and publishes that CHANGELOG
+section as the GitHub release. Tags must be annotated: `git describe`, which
+records the code version, ignores lightweight tags.
 
 ## Agent skills
 
