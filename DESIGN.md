@@ -3,8 +3,9 @@
 How the library is built and why. The vocabulary is in [CONTEXT.md](CONTEXT.md) and
 the decisions that are hard to reverse are in [docs/adr/](docs/adr/). A PR that
 changes the design updates this file in the same PR. The design came out of a
-refactor of the original code (tag `pre-refactor`); the issue numbers below are the
-PRs that built each part.
+rewrite of the original code (tag `pre-refactor`, called *legacy* below), which the
+new code reproduced bit for bit where the regression baselines cover it. Issue
+numbers refer to the PRs that introduced or changed a part.
 
 All spelling is American, in code and in prose.
 
@@ -50,9 +51,9 @@ The original code was hard to change for three reasons:
 - **SX and MX.** Library math uses only CasADi operations, so it works for both. The
   symbol type is set in one place (default `SX`). `DM` appears only where a compiled
   `cas.Function` is called, and is converted to numpy there.
-- **Known issues are not rebuilt.** Where the new design makes a Known issue impossible
-  and the regression baselines do not move, the new code simply does not reproduce it;
-  the PR says which Known issue it removes.
+- **Legacy bugs were not rebuilt.** Where the new design made a known legacy bug
+  impossible and the regression baselines did not move, the new code simply does not
+  reproduce it.
 - **Saving.** The library never writes files on its own; saving is an explicit call.
   `hb.save`/`hb.load` write and read a study as JSON
   ([ADR 0004](docs/adr/0004-studies-are-saved-as-json.md)). Examples call them; the
@@ -389,7 +390,7 @@ gp = hb.gp.GP(
   `(n,)`, a symbolic X (SX or MX) gives `(n, 1)` columns. The std is the square root of
   the posterior variance, so callers need no covariance.
 - This removes `Parameterized`, `JoinedParameters`, `k_variable`/`m_variable` and the
-  name prefixing, and with them the `LinearKernel` ARD Known issue. `minmax` uses the
+  name prefixing, and with them the legacy `LinearKernel` ARD bug. `minmax` uses the
   correct intercept (`lower - min * slope`), evaluated so that [0, 1] reproduces the
   legacy values bit for bit.
 
@@ -432,13 +433,13 @@ Each returns the NLP and its start bounds `(lower, upper)`, for `lhs`.
 
 - **Validation.** Every method checks its acquisition function the same way (one
   helper, called by the settings and by the builders): anything but an `EI` or `LCB`
-  instance raises `TypeError`. This removes the `formulation_acq` Known issue.
+  instance raises `TypeError`. This avoids the legacy `formulation_acq` bug.
 - **Standard BO** computes EI and LCB analytically from the GP mean and std (EI adds
   1e-10 to the std in `gamma`, as legacy `ei_gp` did) and minimizes -EI or LCB over `u`
   within its bounds.
 - **Hybrid BO** computes them as weighted sample averages over the scenarios (SAA-EI,
   SAA-LCB; paper, Problems 8 and 9). Each scenario has its own `x_s` and `y_s`, with `g`
-  as constraints. SAA-LCB uses the weighted variance; `w = 1/S` reproduces today's
+  as constraints. SAA-LCB uses the weighted variance; `w = 1/S` reproduces the legacy
   `sample_variance` (`ddof=0`).
 - `unknown_states_as_variables`: if True, each scenario's unknown states are variables
   of the acquisition problem tied to the GP by an equality constraint (paper, Problem 8),
@@ -446,8 +447,8 @@ Each returns the NLP and its start bounds `(lower, upper)`, for `lhs`.
 - The hybrid acquisition problem's variables are `u`, then the `x_s`, then the `y_s` (if
   variables), each state with one entry per scenario; the trial point is the first N
   entries. Every variable is boxed by its own bounds and started within its own start
-  bounds, and the GP's inputs are the columns of `h_inputs`. This removes the two
-  `setup_acq_problem` Known issues (`u` start bounds, number of GP inputs). With one
+  bounds, and the GP's inputs are the columns of `h_inputs`. This avoids the two
+  legacy `setup_acq_problem` bugs (`u` start bounds, number of GP inputs). With one
   mechanistic state, as in the illustrative example, the order matches legacy, so the
   Latin hypercube starts and the baseline are the same.
 - Hybrid BO only needs "mean and std of `y` at given inputs" from the surrogate, through
@@ -558,10 +559,10 @@ plotting code.
 ### Analysis (`studies.py`, `saving.py`, `views.py`, `plots.py`)
 
 The ArviZ-like layer: a `Study` is the data object; Polars views and static plots read
-it. Polars and matplotlib are optional (imported on first use; the
-`hybrid-bo[analysis]` extra once packaged).
+it. Polars and matplotlib are optional (imported on first use; they are in the
+`experiments` pixi environment).
 
-- **Data** (#53; `studies.py`). `Run` gains `method` (its label in the study),
+- **Data** (#53; `studies.py`). `Run` has `method` (its label in the study),
   `index` and `acquisitions`, one `AcquisitionSolution` per iteration (the
   acquisition value at the trial point and, for hybrid BO, the scenario states
   there), and keeps its full `record`.

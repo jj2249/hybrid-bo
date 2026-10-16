@@ -44,8 +44,8 @@ not found" after a Python upgrade, re-run `pixi run -e dev setup`.
 (seed 0, 2 iterations) and compares the results with `tests/data/regression/*.json`.
 Only update the baselines when a change is meant to change behavior.
 The other test files check kernels, the GP, `Problem` and the scalers
-against numpy/scipy references. Known bugs are `xfail(strict=True)` tests:
-remove the marker when fixing the bug.
+against numpy/scipy references. Known bugs are `xfail(strict=True)` tests
+with a GitHub issue labeled `bug`: remove the marker when fixing the bug.
 
 ## Skills
 
