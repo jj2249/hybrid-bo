@@ -99,7 +99,8 @@ def oracle(v):
 
 measure = hb.oracle_measure(system, oracle, noise_std=0.0)
 
-# Method: how we search, with the default settings; bind others with functools.partial(hb.hybrid_bo, settings=hb.HybridBOSettings(...))
+# Method: how we search, with the default settings; bind others with
+# functools.partial(hb.hybrid_bo, settings=hb.HybridBOSettings(...))
 methods = {"hybrid_bo": hb.hybrid_bo}
 
 # Study: 10 runs, run i of every method from the same initial points; the same seed
