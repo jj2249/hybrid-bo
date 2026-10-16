@@ -1,0 +1,266 @@
+Writing an experiment
+=====================
+
+An experiment is one Python file in ``experiments/``. It states a problem, how the
+system is measured, and the methods to compare, then hands them to the command line,
+which runs them as a study and plots it. This page builds one block by block, quoting
+``experiments/illustrative_example.py``. The quickest start is to copy that file,
+
+.. code-block:: bash
+
+   cp experiments/illustrative_example.py experiments/my_experiment.py
+
+change each block as described below, and run it with
+``pixi run experiment my_experiment``. The file name is the experiment's name; it must
+be a valid Python module name (letters, digits and underscores).
+
+The problem
+-----------
+
+The library minimizes an objective over the *decision variables* ``u``, the values
+you choose. Once ``u`` is fixed the system settles at its *states*: the *mechanistic
+states* ``x``, set by *known equations* ``g`` you can write down, and the *unknown
+states* ``y``, set by *unknown equations* ``h`` you can't:
+
+.. math::
+
+   \min_u \; f(x, y, u) \quad \text{s.t.} \quad
+   0 = g(x, y, u) \;\; \text{(known)}, \qquad
+   y = h(x, u) \;\; \text{(unknown)}
+
+A GP learns ``h`` from measurements. In the illustrative example, ``u`` is in
+``[-2, 2]``, the known equation is ``x + exp(x) = y``, the unknown one is
+``y = sin(u)`` and the objective is ``f = (6x - 2)^2 sin(12x - 4)``.
+
+Only one unknown state is supported for now.
+
+CasADi in two minutes
+---------------------
+
+You write ``g``, ``f`` (and, for a benchmark, the oracle) as Python functions of ``v``,
+which holds one variable per name: ``v.u``, ``v.x``, ``v.y``. The library calls each
+function once, with `CasADi <https://web.casadi.org/>`_ symbols rather than numbers, and
+keeps the expression it returns. From that expression CasADi computes exact
+derivatives, which the NLP solver (IPOPT) needs to solve the acquisition problem. The
+same ``g`` serves twice: as constraints of the acquisition problem, and as the
+root-finding problem that recovers the unmeasured states after each measurement.
+
+What that means when you write the equations:
+
+- Arithmetic (``+``, ``*``, ``**``, ...) works as usual.
+- Use CasADi's functions: ``cas.exp``, not ``np.exp`` or ``math.exp`` (likewise
+  ``cas.sin``, ``cas.log``, ``cas.sqrt``). ``math.exp(v.x)`` silently gives ``nan``,
+  and numpy functions work for some operations, with a warning, and fail for others.
+- No Python ``if``, ``max`` or ``min`` on variables, since a symbol has no value to
+  compare: use ``cas.if_else(v.x > 0, a, b)``, ``cas.fmax`` and ``cas.fmin``. Prefer
+  smooth expressions, since the solver relies on derivatives.
+- ``g`` returns a list with one expression per mechanistic state, each equal to zero at
+  the solution (``x + exp(x) = y`` becomes ``v.x + cas.exp(v.x) - v.y``). ``f``
+  returns one expression.
+
+Variables, system and problem
+-----------------------------
+
+Each variable is a :py:class:`~hybrid_bo.problem.Var`: a name (a valid Python
+identifier, read as ``v.<name>``), its *bounds*, and its *start bounds*, the finite
+box from which initial points and solver starting points are drawn. Bounds default to
+infinite; start bounds default to the bounds when both are finite, so an unbounded
+variable needs ``start``. Make start bounds a realistic range of the variable.
+
+.. literalinclude:: ../experiments/illustrative_example.py
+   :language: python
+   :start-at: u = hb.Var(
+   :end-before: system = hb.System(
+
+The :py:class:`~hybrid_bo.problem.System` lists the variables, the known equations
+``g``, the arguments of the unknown equations (``h_inputs``, from ``u`` and ``x``) and
+the ``measured`` variables, the states your sensors read (from ``x`` and ``y``). There
+must be as many measured variables as unknown states, so the root-finding problem can
+recover the rest. The :py:class:`~hybrid_bo.problem.Problem` adds the objective ``f``,
+which is minimized.
+
+.. literalinclude:: ../experiments/illustrative_example.py
+   :language: python
+   :start-at: system = hb.System(
+   :end-before: # Measurement:
+
+Both raise a ``ValueError`` straight away if the shapes don't fit (say ``g`` has more
+entries than there are mechanistic states).
+
+The measurement
+---------------
+
+The *measurement* runs the system at a trial point ``u`` and returns the measured
+variables. It is a function ``(u, rng) -> measured``
+(:py:data:`~hybrid_bo.evaluation.Measure`): ``u`` is an array with one entry per
+decision variable, in the order of ``system.u``, and it returns an array with one
+entry per measured variable, in the order of ``system.measured``. ``rng`` is a numpy
+random generator, for any noise you add.
+
+A benchmark experiment: an oracle
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To test a method you write the unknown equations in closed form, the *oracle*, and
+:py:func:`~hybrid_bo.evaluation.oracle_measure` simulates the system from ``g`` and
+the oracle together. The methods only see the measured variables, optionally with
+normal noise (``noise_std``); the study also keeps the true (*oracle*) values, so it can
+score the methods.
+
+.. literalinclude:: ../experiments/illustrative_example.py
+   :language: python
+   :start-at: # Measurement:
+   :end-before: # Methods:
+
+The *oracle optimum* is the true minimum of the problem, which the study measures
+regret from. State it: the study never searches for it, since a search can miss it.
+Find it once with :py:func:`~hybrid_bo.evaluation.oracle_optimum` (with many starts),
+check it, and paste the value as above. If a run later evaluates a point below it, the
+study warns with :py:class:`~hybrid_bo.errors.OracleOptimumWarning`.
+
+Your own system
+~~~~~~~~~~~~~~~
+
+For a system whose unknown equations you don't know, write the measurement yourself.
+Here a simulator stands in for the plant (any Python code: a flowsheet, an ODE solve,
+a call to another program):
+
+.. code-block:: python
+
+   import numpy as np
+
+   from my_lab import simulate_reactor  # your simulator
+
+
+   def measure(u, rng):
+       """The outlet concentration of the reactor simulation."""
+       result = simulate_reactor(temperature=u[0], residence_time=u[1])
+       return np.array([result.outlet_concentration])
+
+The docstring (else the function's name) is how the measurement is recorded with every
+run, so say what it measures. Without an oracle the library knows only what was
+measured:
+
+- there is no oracle optimum, so no regret and no ``regret.png``;
+- the convergence figure shows the incumbent, the lowest ``f`` the run measured,
+  instead of the oracle incumbent, and the summary's oracle and regret columns are
+  empty;
+- don't pass ``optimum`` or ``true_curves`` to the command line (below).
+
+The measurement is called once per evaluation, so its cost sets the cost of the
+study: ``n_runs * (n_initial + n_iterations)`` calls per method.
+
+Methods and settings
+--------------------
+
+A *method* is how the problem is solved. ``methods`` maps a label to a method; every
+method takes the same arguments. A BO method runs with its default settings unless
+they are bound with ``functools.partial``:
+
+.. literalinclude:: ../experiments/illustrative_example.py
+   :language: python
+   :start-at: # Methods:
+   :end-before: # The study
+
+- :py:func:`~hybrid_bo.bo.hybrid_bo` with
+  :py:class:`~hybrid_bo.bo.HybridBOSettings`: the acquisition function
+  (:py:class:`~hybrid_bo.acquisition.EI`, the default, or
+  :py:class:`~hybrid_bo.acquisition.LCB` with a ``std_factor``), the number of
+  scenarios (``n_scenarios``), the solver starts (``n_starts``) and the GP (``gp``,
+  default :py:func:`~hybrid_bo.gp.default_gp`). ``unknown_states_as_variables=False``
+  (as above) makes the acquisition problem smaller; the default, ``True``, often
+  helps the solver.
+- :py:func:`~hybrid_bo.bo.standard_bo` with
+  :py:class:`~hybrid_bo.bo.StandardBOSettings`: BO with a GP of the objective, as the
+  usual comparison.
+- :py:func:`~hybrid_bo.baselines.latin_hypercube_sampling` and
+  :py:func:`~hybrid_bo.baselines.uniform_sampling`, which sample without a model and
+  take no settings.
+
+The label names the method in the results, so one method can appear twice with
+different settings:
+
+.. code-block:: python
+
+   methods = {
+       "hybrid_bo_ei": hb.hybrid_bo,
+       "hybrid_bo_lcb": functools.partial(
+           hb.hybrid_bo, settings=hb.HybridBOSettings(acquisition=hb.LCB(2.0))
+       ),
+   }
+
+The default GP assumes noise-free measurements. With noise, give the GP a
+hyperparameter named ``noise_std``: copy :py:func:`~hybrid_bo.gp.default_gp` and add
+``hb.gp.Hyper("noise_std", ...)``, then pass it as ``HybridBOSettings(gp=...)``.
+
+The study and the command line
+------------------------------
+
+``study_settings`` (:py:class:`~hybrid_bo.studies.StudySettings`) are the study's
+defaults, which the command-line flags override: the number of runs of each method,
+initial points per run and iterations per run, and the seed. Every random draw comes
+from the seed, so the same seed gives the same study; ``None`` draws a fresh one, which
+the saved study keeps.
+
+.. literalinclude:: ../experiments/illustrative_example.py
+   :language: python
+   :start-at: # The study
+   :end-before: # Run or plot
+
+The file ends by passing everything it defines to ``experiments/cli.py``. The first
+argument is the experiment's name, which names its results folder:
+
+.. literalinclude:: ../experiments/illustrative_example.py
+   :language: python
+   :start-at: # Run or plot
+
+For your own system, leave out ``optimum`` and ``true_curves``:
+
+.. code-block:: python
+
+   if __name__ == "__main__":
+       cli.main("my_experiment", problem, measure, methods, study_settings)
+
+``true_curves=True`` draws the true curves in the iteration figures by running the
+measurement on a grid, so use it only with an oracle.
+
+Running
+-------
+
+.. code-block:: bash
+
+   pixi run experiment my_experiment --n-runs 1 --n-iterations 2   # a quick check first
+   pixi run experiment my_experiment --plot
+   pixi run plot my_experiment
+
+The study is saved in ``results/my_experiment/<study id>/``; :doc:`reading_results`
+explains what is in it. Results are git-ignored.
+
+The command line is a convenience. In a script or notebook, run the study and save it
+yourself (the library never writes files unless asked):
+
+.. code-block:: python
+
+   study = hb.study(methods, problem, measure, study_settings, optimum=optimum)
+   hb.save(study, "results/my_experiment/first-try")
+
+or run one method once, from initial points drawn with
+:py:func:`~hybrid_bo.sampling.initial_points`:
+
+.. code-block:: python
+
+   rng = np.random.default_rng(0)
+   u0 = hb.initial_points(system.u, n=2, rng=rng)
+   run = hb.hybrid_bo(problem, measure, u0, 5, rng)
+
+When something goes wrong
+-------------------------
+
+- **No module named my_experiment**: the name after ``experiment`` must match a file
+  in ``experiments/``, without ``.py``.
+- **A run fails** with a :py:class:`~hybrid_bo.errors.HybridBOError` (for example the
+  root-finding problem has no solution): the study logs it, keeps the run up to that
+  point, and goes on. Check the equations and the start bounds.
+- **ReconstructionWarning**: with an oracle, the measured variables don't pin the
+  states down to the oracle's values (``g`` has several roots). Narrow the start
+  bounds of the unmeasured states to the right branch, or measure other variables.
+- **nan in the results**: look for ``math`` functions in ``g`` or ``f``.

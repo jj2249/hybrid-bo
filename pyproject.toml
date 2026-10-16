@@ -4,11 +4,12 @@ authors = [
     { name = "Eike Cramer", email = "e.cramer@ucl.ac.uk" },
     { name = "Joel Paulson", email = "joel.paulson@wisc.edu" },
     { name = "Alexander Mitsos", email = "alexander.Mitsos@avt.rwth-aachen.de" },
+    { name = "Joseph Johnson", email = "joseph.johnson.26@ucl.ac.uk" },
 ]
-dependencies = ["casadi>=3.7.2,<4", "numpy>=2.4.1,<3", "scipy>=1.15"]
+dependencies = ["casadi>=3.8.1,<4", "numpy>=2.5.3,<3", "scipy>=1.18.1,<2"]
 name = "hybrid-bo"
 requires-python = ">= 3.12"
-version = "0.1.0"
+version = "0.2.0"
 description = "A package for performing hybrid Bayesian optimization"
 readme = "README.md"
 license = "MIT"
@@ -20,18 +21,100 @@ requires = ["hatchling"]
 
 [tool.pixi.workspace]
 channels = ["conda-forge"]
-platforms = ["win-64"]
+platforms = ["win-64", "osx-arm64", "linux-64"]
+
+[tool.pixi.dependencies]
+# conda-forge's Python 3.15 on Windows installs to lib/python/site-packages,
+# which ty can't find yet. Lift the cap once ty supports that layout.
+python = ">=3.12,<3.15"
 
 [tool.pixi.pypi-dependencies]
 hybrid_bo = { path = ".", editable = true }
 
-[tool.pixi.environments]
-default = { solve-group = "default" }
-docs = { features = ["docs"], solve-group = "default" }
-examples = { features = ["examples"], solve-group = "default" }
-dev = { features = ["dev"], solve-group = "default" }
+[tool.pixi.feature.dev.dependencies]
+ruff = ">=0.16.10,<0.17"
+ty = ">=0.0.85,<0.0.86"
+pre-commit = ">=4.6.2,<5"
+pytest = ">=9.1.1,<10"
+pytest-cov = ">=7.1.0,<8"
 
-[dependency-groups]
-docs = ["sphinx", "sphinx-autoapi", "furo"]
-examples = ["pyyaml", "matplotlib"]
-dev = [{ include-group = "docs" }, { include-group = "examples" }]
+[tool.pixi.feature.dev.tasks]
+lint = "ruff check --fix"
+format = "ruff format"
+typecheck = "ty check"
+test = "pytest"
+coverage = "pytest --cov=hybrid_bo --cov-report=term-missing"
+check = { depends-on = ["lint", "format", "typecheck"] }
+setup-hooks = "pre-commit install"
+setup = { depends-on = ["setup-hooks"] }
+
+[tool.pixi.feature.docs.dependencies]
+sphinx = ">=9.1.0,<10"
+sphinx-autoapi = ">=3.8.1,<4"
+furo = ">=2025.12.19,<2026"
+
+[tool.pixi.feature.docs.tasks]
+docs = { cmd = "sphinx-build -b html docs docs/_build/html", default-environment = "experiments", description = "Build the docs into docs/_build/html" }
+
+[tool.pixi.feature.experiments.dependencies]
+matplotlib = ">=3.11.2,<4"
+polars = ">=2.0.0,<3"
+
+# Each runs an experiment as a module from experiments/. `experiment` declares no args,
+# so the experiment's name and every flag pass through; see
+# `pixi run experiment illustrative_example --help`
+[tool.pixi.feature.experiments.tasks]
+experiment = { cmd = "python -m", cwd = "experiments", default-environment = "experiments", description = "Run an experiment as a study: pixi run experiment <name> [flags]" }
+plot = { cmd = "python -m {{ name }} plot {{ study }}", cwd = "experiments", default-environment = "experiments", args = ["name", { arg = "study", default = "" }], description = "Plot a saved study of an experiment (default: the newest)" }
+
+[tool.pixi.environments]
+# The library only
+default = { solve-group = "default" }
+# Writing and running experiments: the library, matplotlib, Polars and the docs
+experiments = { features = ["experiments", "docs"], solve-group = "default" }
+# Working on the library: adds tests, lint and type check. ty needs the experiments
+# feature to resolve the matplotlib imports in experiments/
+dev = { features = ["dev", "docs", "experiments"], solve-group = "default" }
+
+[tool.ruff]
+# Match the Python version used by your project.
+target-version = "py312"
+line-length = 88
+
+# Add to Ruff's default exclusions.
+extend-exclude = [".pixi"]
+
+[tool.ruff.lint]
+ignore = ["E501"]
+
+[tool.ruff.lint.flake8-bugbear]
+# Frozen settings, safe as argument defaults
+extend-immutable-calls = [
+  "hybrid_bo.bo.HybridBOSettings",
+  "hybrid_bo.bo.StandardBOSettings",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["hybrid_bo"]
+
+[tool.ruff.lint.per-file-ignores]
+# Re-exports define the public API
+"__init__.py" = ["F401"]
+
+[tool.ruff.format]
+# Use double quotes and standard Ruff formatting.
+quote-style = "double"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Experiments are imported as top-level modules, as `python -m` runs them from
+# experiments/
+pythonpath = ["experiments"]
+
+[tool.ty.environment]
+python-version = "3.12"
+# Mirrors pytest `pythonpath`: experiments are imported as top-level modules
+extra-paths = ["experiments"]
+
+[tool.ty.src]
+exclude = [".pixi"]

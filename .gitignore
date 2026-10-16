@@ -1,10 +1,13 @@
 # pixi environments
 .pixi/
 !.pixi/config.toml
+.ruff_cache
 
 # virtual environments
 .venv/
 venv/
+
+.claude/worktrees
 
 # VS Code
 .vscode/
@@ -20,3 +23,13 @@ docs/_templates/
 # Data files
 *.pkl
 
+
+# Studies saved by `pixi run experiment`
+/results/
+
+# Personal Claude Code settings (shared skills in .claude/skills are committed)
+.claude/settings.local.json
+
+# Coverage data
+.coverage
+htmlcov/

@@ -1,0 +1,193 @@
+# hybrid-bo
+
+Bayesian optimization of partially known systems: some equations of the system are
+known, the rest are unknown and learned by a Gaussian process, and the two together form
+a hybrid model that the optimizer plans with. Notation follows
+[arXiv 2603.11199](https://arxiv.org/abs/2603.11199), Problem 4.
+
+## Language
+
+### The problem
+
+**Problem**:
+A system together with an objective. The same problem is solved by different methods.
+_Avoid_: case, benchmark
+
+**System**:
+The physical process: its decision variables, states, known equations, the arguments
+of its unknown equations, and the bounds on each.
+_Avoid_: plant (except for a real one), model
+
+**Method**:
+How a problem is solved: hybrid BO, standard BO, or a baseline (Latin hypercube or
+uniform sampling). A BO method includes its choice of surrogate model.
+_Avoid_: strategy, routine, algorithm
+
+**Surrogate model**:
+A GP that stands in for an unknown part of the problem: the unknown equations in
+hybrid BO, the whole map from decision variables to objective in standard BO.
+_Avoid_: GP model, emulator
+
+**Hybrid model**:
+The known equations together with a surrogate model of the unknown equations.
+
+### Variables and equations
+
+**Decision variables** (`u`, dimension N):
+The variables the optimizer chooses.
+_Avoid_: inputs, controls, design variables
+
+**States**:
+The variables the system settles at once the decision variables are fixed: the
+mechanistic states and the unknown states together.
+_Avoid_: outputs, process variables, dependent variables
+
+**Mechanistic states** (`x`, dimension M):
+The states determined by the known equations.
+
+**Unknown states** (`y`, dimension P):
+The states determined by the unknown equations; the GP predicts them.
+_Avoid_: GP outputs, unknown variables
+
+**Known equations** (`g`, M equations):
+The equations `0 = g(x, y, u)` whose form is known.
+_Avoid_: h_known, mechanistic model
+
+**Unknown equations** (`h`, P equations):
+The equations `0 = h(x, y, u)` whose form is not known, written explicitly as
+`y = h(x, u)`; hybrid BO learns them with a GP.
+_Avoid_: h_unknown
+
+**Bounds**:
+The box a variable must stay in, possibly infinite. Bounds on decision variables are
+part of the problem statement, not a setting of the method.
+
+**Start bounds**:
+The finite box from which starting points are drawn: initial points, multistart
+starts and root-finding guesses. They default to the bounds when those are finite.
+
+**Objective** (`f`):
+The scalar `f(x, y, u)` to minimize.
+_Avoid_: cost, target
+
+**Oracle**:
+A known stand-in for the unknown equations, used only in benchmark experiments to play
+the part of the real system. Real systems have no oracle. An in silico simulation of a
+plant is not an oracle: to the library it is a real system, run by a custom measurement.
+_Avoid_: ground truth, true system
+
+**Oracle values**:
+The states and objective an evaluation would give with the oracle and no measurement
+noise; for benchmarking only.
+_Avoid_: true values, noise-free values, no_noise
+
+### Evaluation
+
+**Trial point**:
+The decision variables to evaluate next: the solution of the acquisition problem.
+_Avoid_: proposal, candidate, next point
+
+**Measurement** (`measure`):
+Running the system at given decision variables and reading its measured variables. One
+per evaluation, for initial points and trial points alike. The oracle simulation plays
+this part in benchmark experiments.
+_Avoid_: experiment, query, black box, trial
+
+**Evaluation**:
+Running the system at given decision variables and obtaining its states and objective.
+_Avoid_: simulation (except the oracle simulation), query
+
+**Measured variables**:
+The states the system's sensors read at each evaluation, as many as there are unknown
+states. Part of the system's description.
+
+**Oracle simulation**:
+The measurement in a benchmark experiment: solving the known equations with the oracle
+in place of the unknown equations, then reading the measured variables, with optional
+noise.
+
+**Root-finding problem**:
+Solving the known equations for the states that were not measured, given the decision
+variables and the measured variables. Part of every evaluation, after the measurement.
+_Avoid_: re-solve, fixed-x evaluation
+
+### Bayesian optimization
+
+**Experiment**:
+A problem, how it is measured, and the methods to compare, stated together so they can
+be run as studies: "the flash unit experiment". Each time it is run it gives a new study.
+_Avoid_: example, case, test case, application
+
+**Benchmark experiment**:
+An experiment whose unknown equations are known to us (the oracle) but hidden from the
+methods, so its studies can be scored: oracle incumbents, and regret if the oracle
+optimum is stated.
+_Avoid_: test case, toy problem
+
+**Run**:
+One complete optimization from the initial points to the end of the optimization loop.
+Runs are repeated with different seeds for statistics.
+
+**Study**:
+A collection of runs of an experiment's methods, where run i of every
+method starts from the same initial points. The unit that is saved, loaded and analyzed.
+_Avoid_: benchmark, experiment, results, batch
+
+**Iteration**:
+One step of the optimization loop.
+_Avoid_: run, step
+
+**Incumbent**:
+The best measured objective value so far. The point that measured it is the
+incumbent's point, the one the optimizer believes is best.
+_Avoid_: best value, current best
+
+**Oracle incumbent** (`oracle_incumbents`):
+The oracle objective at the incumbent's point: what acting on the run would give.
+The benchmark metric. Under noise it can be worse than the best oracle objective so far;
+without noise it equals it.
+_Avoid_: incumbents_no_noise, true incumbent
+
+**Oracle optimum** (`f*`):
+The best objective value the oracle allows: the reference that regret is measured
+against. Benchmark experiments only; always stated by the experiment, never computed by
+a study, since a search can miss it.
+_Avoid_: true optimum, global optimum
+
+**Regret**:
+The oracle incumbent minus the oracle optimum, after each evaluation. Counted over
+evaluations, not iterations, because initial points are not free.
+_Avoid_: simple regret, error
+
+**Initial points**:
+The decision variables evaluated before the optimization loop starts.
+_Avoid_: initial samples, initial design
+
+**Optimization loop** (`optimization_loop`):
+The sequence of iterations after the initial points; each iteration solves the
+acquisition problem and evaluates the result.
+_Avoid_: BO loop, routine
+
+**Acquisition problem**:
+The optimization problem solved each iteration; its solution is the next trial point.
+Its known equations are constraints, so it involves no root-finding.
+_Avoid_: acquisition optimization
+
+**Acquisition function**:
+The objective of the acquisition problem: expected improvement (EI) or lower confidence
+bound (LCB). Standard BO computes it analytically from the GP's mean and variance;
+hybrid BO computes it as a sample average over the scenarios (SAA-EI, SAA-LCB).
+_Avoid_: formulation_acq, acquisition formulation
+
+**Scenario**:
+One realization of the GP's prediction of the unknown states, with its own mechanistic
+states, in the sample-average approximation of the acquisition problem.
+_Avoid_: GP sample, posterior sample, sample
+
+**Scenario draws** (`z`, one per scenario):
+The standard normal draws that define the scenarios (the paper's ξ). Drawn once per run
+and the same in every iteration's acquisition problem.
+_Avoid_: xi, gaussian_standard_samples
+
+**Scenario weights** (`w`, one per scenario):
+The weight of each scenario in the acquisition function's average; `1/S` for SAA.
