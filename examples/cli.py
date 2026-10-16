@@ -52,8 +52,8 @@ def main(
     as the command line (`argv`, default `sys.argv`) says.
 
     `name` names the study and its folder. `study_settings` are the defaults the
-    flags override. `optimum` is the stated oracle optimum of a benchmark experiment, which
-    regret is measured from. `true_curves` draws the measurement's values over the
+    flags override. `optimum` is the stated oracle optimum of a benchmark experiment,
+    which regret is measured from. `true_curves` draws the measurement's values over the
     grid in the iteration figures, which only a cheap measurement (an oracle) can
     afford.
     """

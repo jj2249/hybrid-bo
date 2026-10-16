@@ -212,7 +212,7 @@ def test_record_holds_the_settings_and_the_resolved_gp(illustrative_problem):
 
 def test_failed_evaluation_carries_the_partial_run(illustrative_problem):
     """When evaluating a trial point fails, the error carries the run so far."""
-    # A measurement whose third evaluation (the first trial point) measures NaN, so
+    # A `measure` that returns NaN at its third evaluation (the first trial point), so
     # the root-finding problem has no root
     calls = []
 
@@ -334,7 +334,7 @@ def test_failed_trial_point_carries_the_partial_run(illustrative_problem):
 def test_failed_initial_point_carries_the_points_before_it(illustrative_problem):
     """When an initial point fails, the partial run holds the initial points before
     it."""
-    # A measurement that fails (measures NaN) for u >= 1, the second initial point
+    # A `measure` that returns NaN for u >= 1, the second initial point
     problem = illustrative_problem
     rng = np.random.default_rng(0)
 

@@ -184,7 +184,7 @@ def test_repeat_keeps_a_failed_run_as_far_as_it_got(illustrative_problem, caplog
 
     `caplog` is a pytest fixture that captures what the code logs.
     """
-    # A measurement that measures NaN, so the root-finding problem fails, for the
+    # A `measure` that returns NaN, so the root-finding problem fails, for the
     # second evaluation of each run
     calls = []
 

@@ -7,19 +7,21 @@ for the unmeasured states, and computes the objective. The measurement can be:
 - **A real system**: the plant itself, or an in silico simulation that stands in for it
   (e.g. a flowsheet simulator). You write the measurement as a function that runs it and
   returns only the measured variables as an array. The library sees nothing else, so
-  there are no oracle values and no check against them. This is what a real application
+  there are no oracle values and no check against them. This is all a real system
   supplies.
 - **The oracle simulation** (`oracle_measure`), for benchmark experiments, which
-  score a method. You write the unknown equations in closed form, as the oracle, in the same
-  CasADi namespace as `g`, and the library simulates the system from `g` and the oracle
-  together. It returns an `OracleMeasurement`: the noisy measured variables, which are
-  all the method sees, plus the oracle values of every state, kept for benchmarking.
+  score a method. You write the unknown equations in closed form, as the oracle, in
+  the same CasADi namespace as `g`, and the library simulates the system from `g` and
+  the oracle together. It returns an `OracleMeasurement`: the noisy measured
+  variables, which are all the method sees, plus the oracle values of every state,
+  kept for benchmarking.
 
 The difference is not whether the system is simulated: an in silico simulation of a
 plant is a real system here, because the method doesn't know its unknown equations.
 What makes an oracle is that the benchmark experiment states the unknown equations
-exactly, so the oracle values are known and results can be scored against them. A custom measurement
-that knows its oracle values can also return an `OracleMeasurement`.
+exactly, so the oracle values are known and results can be scored against them. A
+custom measurement that knows its oracle values can also return an
+`OracleMeasurement`.
 
 **Disagreement warnings.** With an oracle, `evaluate` checks that the reconstruction
 lies on the same root as the oracle values. Noise moves the measured variables, so the
@@ -121,11 +123,11 @@ def oracle_measure(
     `oracle` is the unknown equations in closed form, a callable over the variables
     like `g` (`lambda v: [cas.sin(v.u)]`), giving y = oracle(x, u). The method never
     sees it; only the measurement uses it. For a real system, including an in silico
-    simulation of a plant, write your own measurement instead (see the module docs). The
-    measurement solves `g` and the oracle together for every state, from `n_starts`
-    Latin hypercube starts over the start bounds, reads the measured variables and adds normal noise with std
-    `noise_std`. The noise is drawn even when `noise_std` is 0, so the draws don't
-    depend on it.
+    simulation of a plant, write your own measurement instead (see the module docs).
+    The measurement solves `g` and the oracle together for every state, from
+    `n_starts` Latin hypercube starts over the start bounds, reads the measured
+    variables and adds normal noise with std `noise_std`. The noise is drawn even when
+    `noise_std` is 0, so the draws don't depend on it.
 
     Raises `ValueError` if the oracle doesn't give one value per unknown state. The
     measurement raises `RootFindingError` if no start gives a root.
@@ -190,8 +192,9 @@ def oracle_optimum(
     problem: by `multistart` from `n_starts` Latin hypercube starts over the start
     bounds of u, x and y, so it is the best local optimum found, which can miss the
     global one: use it to find a benchmark experiment's optimum once, from many
-    starts, and state that value in the study. Raises `ValueError` if the oracle doesn't give one value per unknown state, and `NoSolutionError` if
-    every start fails.
+    starts, and state that value in the study. Raises `ValueError` if the oracle
+    doesn't give one value per unknown state, and `NoSolutionError` if every start
+    fails.
     """
     # The variables w = (u, x, y), with g and the oracle as constraints
     system = problem.system
@@ -254,7 +257,7 @@ def _evaluate_point(
     with `ReconstructionWarning` when the reconstruction is a different root from the
     one the oracle values lie on.
     """
-    # The measurement: the measured variables, and the oracle values in benchmark experiments
+    # The measurement: the measured variables, and the oracle values if known
     result = measure(u, rng)
     oracle_measurement = result if isinstance(result, OracleMeasurement) else None
     measured = np.asarray(

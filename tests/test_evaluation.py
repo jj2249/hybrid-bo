@@ -151,8 +151,8 @@ def test_root_finding_starts_cover_the_unmeasured_variables(monkeypatch):
 
 
 def test_measure_without_an_oracle_gives_no_oracle_values():
-    """A measurement that returns only the measured variables gives reconstructed values and
-    no oracle values."""
+    """A measurement that returns only the measured variables gives reconstructed
+    values and no oracle values."""
     problem = two_branch_problem()
 
     history = evaluate(

@@ -384,7 +384,7 @@ def test_failed_evaluation_carries_the_partial_run_with_its_scenarios(
 ):
     """When evaluating a trial point fails, the error carries the run so far, with
     the scenarios."""
-    # A measurement whose third evaluation (the first trial point) measures NaN, so
+    # A `measure` that returns NaN at its third evaluation (the first trial point), so
     # the root-finding problem has no root
     calls = []
 

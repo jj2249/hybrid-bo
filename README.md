@@ -112,8 +112,8 @@ print(run.history.f)
   final values) and `hb.hyperparameters(study)` the fitted GP hyperparameters over the
   iterations. Polars is optional (in the `examples` and `dev` pixi environments; the
   `hybrid-bo[analysis]` extra once packaged).
-- **Measurements**: a real application passes a function `(u, rng) -> measured` that
-  returns the measured variables at `u`. `oracle_measure` simulates one from known
+- **Measurements**: for a real system you pass a function `(u, rng) -> measured`
+  that returns the measured variables at `u`. `oracle_measure` simulates one from known
   unknown equations, for benchmark experiments.
 - **Settings**: `HybridBOSettings` and `StandardBOSettings` choose the acquisition
   function (`EI()` or `LCB(std_factor)`), the GP (`hb.gp.default_gp` unless given; see

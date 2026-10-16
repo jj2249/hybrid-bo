@@ -75,10 +75,10 @@ list with one CasADi expression per equation. The
    :end-before: # Measurement:
 
 The *measurement* runs the system at a trial point and returns the measured variables.
-A real application passes a function that does this. A benchmark experiment uses the
-*oracle simulation*, :py:func:`~hybrid_bo.evaluation.oracle_measure`, which solves the
-known equations with the oracle in place of the unknown equations, then reads the
-measured variables, optionally with noise.
+For a real system you pass a function that does this. A benchmark experiment uses
+the *oracle simulation*, :py:func:`~hybrid_bo.evaluation.oracle_measure`, which
+solves the known equations with the oracle in place of the unknown equations, then
+reads the measured variables, optionally with noise.
 
 .. literalinclude:: ../examples/illustrative_example.py
    :language: python

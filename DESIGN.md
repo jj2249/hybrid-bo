@@ -202,7 +202,7 @@ def evaluate(
 ```
 
 - A **measurement** returns the measured variables for one trial point. A real
-  application supplies only this, as a plain array.
+  system supplies only this, as a plain array.
 - The **oracle simulation** solves `g` with `y = oracle(x, u)` for every state
   (root-finding with CasADi Jacobians), reads the measured variables and adds
   `rng.normal(0, noise_std)`. Its full states are the **oracle values**, returned in an
@@ -210,10 +210,11 @@ def evaluate(
 - **Oracle vs real system.** Being simulated doesn't make a system an oracle. An in
   silico simulation of a plant (a flowsheet simulator, say) is a real system to the
   library: a custom measurement that returns only the measured variables, with no
-  oracle values and no disagreement check. An oracle is the benchmark experiment stating the
-  unknown equations in closed form, next to `g`, so the oracle values are known and a
-  method can be scored against them. The method never sees the oracle either way. A
-  custom measurement that knows its oracle values can return an `OracleMeasurement`.
+  oracle values and no disagreement check. An oracle is the benchmark experiment
+  stating the unknown equations in closed form, next to `g`, so the oracle values are
+  known and a method can be scored against them. The method never sees the oracle
+  either way. A custom measurement that knows its oracle values can return an
+  `OracleMeasurement`.
 - The library then always solves the **root-finding problem**: `g` for the unmeasured
   states given `u` and the measured variables, from Latin hypercube starts over the
   unmeasured variables' start bounds, then computes `f` (and `f` at the oracle values).
