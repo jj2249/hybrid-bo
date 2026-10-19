@@ -23,12 +23,13 @@ code uses GLOSSARY.md's terms; use them in PRs, tests and comments too.
 - **Hybrid BO** (`bo.py`, `acquisition.py`): the unknown equations are never used in
   the acquisition problem. A GP maps the `h_inputs` columns of `(u, x)` to `y` and is
   trained on the evaluated points. The acquisition problem is a sample-average
-  approximation:
-  - `n_scenarios` scenarios `mean + std * z_s`. The scenario draws `z_s` are drawn once
+  approximation, `SAA`, set by `HybridBOSettings.approximation` (`acquisition` says
+  what is computed, `approximation` how):
+  - `SAA.n_scenarios` scenarios `mean + std * z_s`. The scenario draws `z_s` are drawn once
     per run and reused in every iteration.
   - Each scenario has its own copy `x_s` of the mechanistic states, and
     `g(x_s, y_s, u) = 0` holds for every scenario.
-  - With `unknown_states_as_variables` (default True) the `y_s` are variables with the
+  - With `SAA.unknown_states_as_variables` (default True) the `y_s` are variables with the
     constraint `y_s = scenario s`. Otherwise the GP prediction is substituted directly
     (the illustrative example's setting).
   - Acquisition function: SAA-EI is `sum_s w_s min(f_s - incumbent, 0)`, minimized.
@@ -142,8 +143,12 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   are the only code that knows the order of `w`: never slice or reshape `w`
   elsewhere. `_check_acquisition`
   is the one check of an acquisition function; every method's settings and builder
-  call it (`TypeError` unless an `EI` or `LCB` instance). `Scenarios` (`z (S, P)`,
-  `w (S,)`, checked), `saa_scenarios(n, n_y, rng)` and `hybrid_acquisition` (variables
+  call it (`TypeError` unless an `EI` or `LCB` instance). `SAA(n_scenarios,
+  unknown_states_as_variables)` is hybrid BO's approximation, checked by
+  `_check_approximation(acquisition, approximation)` in `HybridBOSettings` and
+  `hybrid_acquisition` (`TypeError` unless an `SAA`). `Scenarios` (`z (S, P)`,
+  `w (S,)`, checked), `saa_scenarios(n, n_y, rng)` and `hybrid_acquisition(..., acquisition,
+  approximation)` (variables
   `u`, then `vec` of the `(S, M)` x copies, then of the `(S, P)` y copies if variables;
   bounds and start bounds from each `Var`, repeated per scenario; `g` per scenario,
   followed by its GP tie). `_scenario_unknown_states` is the one GP scenario
@@ -171,8 +176,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   scenarios, acquisition, settings) -> Figure` draws the state before trial point i
   over a 101-point grid of one-dimensional `u` (start bounds) plus the trial point,
   with one figure legend (`_figure_legend`). `_replay_settings` reads the acquisition
-  function and `unknown_states_as_variables` from the record's settings text; the
-  fields the replay uses (`_REPLAYED`) must appear in that text, so a custom solver
+  function and SAA's `unknown_states_as_variables` from the record's settings text;
+  the fields the replay uses (`_REPLAYED`, a dotted name for a field of a field)
+  must appear in that text, so a custom solver
   or a non-default GP needs `settings`.
   `_replay`: standard BO evaluates `standard_acquisition`'s NLP; hybrid BO rebuilds
   `hybrid_acquisition` and solves it over all of `w` with u fixed by equal bounds

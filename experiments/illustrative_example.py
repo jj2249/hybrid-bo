@@ -53,7 +53,9 @@ optimum = -50.4608044704652
 methods = {
     "hybrid_bo": functools.partial(
         hb.hybrid_bo,
-        settings=hb.HybridBOSettings(unknown_states_as_variables=False),
+        settings=hb.HybridBOSettings(
+            approximation=hb.SAA(unknown_states_as_variables=False)
+        ),
     ),
     "standard_bo": hb.standard_bo,
     "latin_hypercube_sampling": hb.latin_hypercube_sampling,

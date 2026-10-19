@@ -452,6 +452,12 @@ def _pack(u, x=None, y=None): ...  # numpy or CasADi
 def _unpack(problem: AcquisitionProblem, w) -> tuple[u, x, y | None]: ...
 
 
+@dataclass(frozen=True)
+class SAA:
+    n_scenarios: int = 25
+    unknown_states_as_variables: bool = True
+
+
 def hybrid_acquisition(
     problem,
     gp,
@@ -459,7 +465,7 @@ def hybrid_acquisition(
     scenarios,
     incumbent,
     acquisition,
-    unknown_states_as_variables=True,
+    approximation=SAA(),
 ) -> AcquisitionProblem: ...
 def standard_acquisition(
     problem, gp, fitted, incumbent, acquisition
@@ -478,7 +484,9 @@ decision vector `w`.
 
 - **Validation.** Every method checks its acquisition function the same way (one
   helper, called by the settings and by the builders): anything but an `EI` or `LCB`
-  instance raises `TypeError`. This avoids the legacy `formulation_acq` bug.
+  instance raises `TypeError`. This avoids the legacy `formulation_acq` bug. Hybrid
+  BO's approximation is checked the same way, by a second helper next to it, which
+  raises `TypeError` for anything but an approximation the library knows.
 - **Standard BO** computes EI and LCB analytically from the GP mean and std (EI adds
   1e-10 to the std in `gamma`, as legacy `ei_gp` did) and minimizes -EI or LCB over `u`
   within its bounds.
@@ -486,7 +494,14 @@ decision vector `w`.
   SAA-LCB; paper, Problems 8 and 9). Each scenario has its own `x_s` and `y_s`, with `g`
   as constraints. SAA-LCB uses the weighted variance; `w = 1/S` reproduces the legacy
   `sample_variance` (`ddof=0`).
-- `unknown_states_as_variables`: if True, each scenario's unknown states are variables
+- **The approximation is a setting of hybrid BO, not a method.** `acquisition`
+  (`EI | LCB`) says what is computed and `approximation` how; today `SAA` is the only
+  approximation, and linearization (Lin-EI) is to follow. The approximation decides
+  which scenarios the problem is built over and how its objective combines them; the
+  scenario machinery (`x_s` and `g` per scenario, the optional tie of `y_s` to the
+  GP, `_pack`/`_unpack`, `_scenario_states`) is shared. The settings that only make
+  sense for SAA (`n_scenarios`, `unknown_states_as_variables`) live on `SAA`.
+- `unknown_states_as_variables` (on `SAA`): if True, each scenario's unknown states are variables
   of the acquisition problem tied to the GP by an equality constraint (paper, Problem 8),
   which helps IPOPT; if False, the GP prediction is substituted wherever they appear.
 - The hybrid acquisition problem's variables are `u`, then the `x_s`, then the `y_s` (if
@@ -509,12 +524,11 @@ decision vector `w`.
 @dataclass(frozen=True)
 class HybridBOSettings:
     gp: PriorGP | None = None  # None: default_gp(len(h_inputs))
-    acquisition: EI | LCB = EI()
-    n_scenarios: int = 25
+    acquisition: EI | LCB = EI()  # what is computed
+    approximation: SAA = SAA()  # how it is computed
     n_starts: int = 10  # acquisition multistart
     n_starts_gp: int = 10
     solver: Ipopt = Ipopt()
-    unknown_states_as_variables: bool = True
 
 
 @dataclass(frozen=True)
@@ -573,7 +587,7 @@ The baselines are named `*_sampling` because `hb.sampling.uniform` and
 - `hybrid_bo` draws the scenarios from `rng`, then runs `optimization_loop` with a
   trial-point function that fits the GP on `(u, x)[h_inputs] -> y`, builds
   `hybrid_acquisition`, and solves it with `multistart`. The user never draws `z`.
-  With `unknown_states_as_variables=False` (the legacy illustrative setting) it
+  With `SAA(unknown_states_as_variables=False)` (the legacy illustrative setting) it
   reproduces the legacy illustrative baseline.
 - `standard_bo` fits on `u -> f` (measured), with the incumbent the best measured `f`,
   and solves `standard_acquisition` by `multistart` from `lhs` starts over the `u` start
@@ -658,7 +672,7 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   acquisition value. The settings are read from the run's record; `settings` is
   needed only for a GP other than `default_gp`, since the record holds the GP as text,
   not its kernel function. The fields the replay uses (acquisition function, and for
-  hybrid BO the solver and `unknown_states_as_variables`) must match the record.
+  hybrid BO the solver and SAA's `unknown_states_as_variables`) must match the record.
 - **Entry point** (#51; revised in #65; moved to `experiments/` in #69). An
   experiment ends with an explicit call that passes everything it defines:
   `cli.main(name, problem, measure, methods, study_settings, optimum=...,

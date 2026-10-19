@@ -14,8 +14,10 @@ import numpy as np
 from hybrid_bo.acquisition import (
     EI,
     LCB,
+    SAA,
     AcquisitionSolution,
     _check_acquisition,
+    _check_approximation,
     _scenario_states,
     _unpack,
     hybrid_acquisition,
@@ -118,28 +120,25 @@ class StandardBOSettings:
 @dataclass(frozen=True)
 class HybridBOSettings:
     """Settings of hybrid BO: the GP of the unknown states over the arguments of h
-    (None: `default_gp` over `h_inputs`), the acquisition function, the number of
-    scenarios, the number of multistart starts for the acquisition problem and for
-    fitting the GP, and the solver for both.
+    (None: `default_gp` over `h_inputs`), the acquisition function (what is
+    computed), its approximation (how it is computed, with its own settings), the
+    number of multistart starts for the acquisition problem and for fitting the GP,
+    and the solver for both.
 
-    `unknown_states_as_variables` (default True) makes each scenario's unknown states
-    variables of the acquisition problem, tied to the GP by an equality constraint
-    (paper, Problem 8), which helps IPOPT. With False, the GP's prediction is
-    substituted for them, so the problem is smaller.
-
-    Raises `TypeError` unless `acquisition` is an `EI` or an `LCB`.
+    Raises `TypeError` unless `acquisition` is an `EI` or an `LCB` and
+    `approximation` an `SAA`.
     """
 
     gp: PriorGP | None = None
     acquisition: EI | LCB = field(default_factory=EI)
-    n_scenarios: int = 25
+    approximation: SAA = field(default_factory=SAA)
     n_starts: int = 10
     n_starts_gp: int = 10
     solver: Ipopt = field(default_factory=Ipopt)
-    unknown_states_as_variables: bool = True
 
     def __post_init__(self) -> None:
         _check_acquisition(self.acquisition)
+        _check_approximation(self.acquisition, self.approximation)
 
 
 def _method_record(
@@ -228,14 +227,14 @@ def hybrid_bo(
     """Hybrid BO: a GP of the unknown states over the arguments of h, combined with
     the known equations in the acquisition problem (paper, Problems 8 and 9).
 
-    Draws the scenarios (SAA: `settings.n_scenarios` standard normal draws, equal
-    weights), the same in every iteration. Then evaluates the initial points (n, N),
-    and in each iteration fits the GP to the measured and reconstructed states so far,
-    solves `hybrid_acquisition` by multistart from Latin hypercube starts over the
-    start bounds of its variables, and evaluates the decision variables of the
-    solution. The run holds the scenarios, and each iteration's acquisition solution
-    holds the scenario states at its trial point. `settings` (keyword-only) defaults
-    to `HybridBOSettings()`.
+    Draws the scenarios (SAA: `settings.approximation.n_scenarios` standard normal
+    draws, equal weights), the same in every iteration. Then evaluates the initial
+    points (n, N), and in each iteration fits the GP to the measured and reconstructed
+    states so far, solves `hybrid_acquisition` by multistart from Latin hypercube
+    starts over the start bounds of its variables, and evaluates the decision
+    variables of the solution. The run holds the scenarios, and each iteration's
+    acquisition solution holds the scenario states at its trial point. `settings`
+    (keyword-only) defaults to `HybridBOSettings()`.
 
     Raises what `evaluate` and `multistart` raise; a `HybridBOError` carries the
     partial run, with the scenarios, as `error.run`.
@@ -253,7 +252,8 @@ def hybrid_bo(
         gp,
         system.h_inputs,
     )
-    scenarios = saa_scenarios(settings.n_scenarios, system.n_y, rng)
+    approximation = settings.approximation
+    scenarios = saa_scenarios(approximation.n_scenarios, system.n_y, rng)
 
     def trial_point(
         problem: Problem, history: History, rng: np.random.Generator
@@ -272,7 +272,7 @@ def hybrid_bo(
             scenarios,
             incumbent,
             settings.acquisition,
-            settings.unknown_states_as_variables,
+            approximation,
         )
         starts = lhs(*acquisition_problem.start_bounds, settings.n_starts, rng)
         solution = multistart(acquisition_problem.nlp, starts, settings.solver)

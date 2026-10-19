@@ -19,6 +19,7 @@ import scipy
 from hybrid_bo.acquisition import (
     EI,
     LCB,
+    SAA,
     _pack,
     _scenario_states,
     _unpack,
@@ -47,11 +48,11 @@ _N_GRID = 101  # grid points over u
 _CONFIDENCE = 0.9  # probability inside the confidence bands
 
 # Each BO method's settings type and the fields its replay uses, by the method in
-# the record
+# the record; a dotted name is a field of a field
 _REPLAYED = {
     "hybrid_bo": (
         HybridBOSettings,
-        ["acquisition", "unknown_states_as_variables", "solver"],
+        ["acquisition", "approximation.unknown_states_as_variables", "solver"],
     ),
     "standard_bo": (StandardBOSettings, ["acquisition"]),
 }
@@ -260,7 +261,7 @@ def _replay_settings(
     settings: StandardBOSettings | HybridBOSettings | None,
 ) -> tuple[StandardBOSettings | HybridBOSettings | None, PriorGP]:
     """The settings a run is replayed with and its prior GP: `settings` if given, else
-    the record's acquisition function and `unknown_states_as_variables` with
+    the record's acquisition function and SAA's `unknown_states_as_variables` with
     `default_gp`. None and `default_gp` for the baselines.
 
     Raises `TypeError` if `settings` aren't the run's method's, and `ValueError` if
@@ -278,17 +279,22 @@ def _replay_settings(
         return None, default_gp(len(gp_inputs))
 
     # The settings: given, else the defaults with the recorded acquisition function
-    # and unknown states
+    # and SAA
     recorded = run.record.get("settings", "")
     if settings is None:
         lcb = re.search(r"acquisition=LCB\(std_factor=([^)]*)\)", recorded)
         settings = expected(acquisition=EI() if lcb is None else LCB(float(lcb[1])))
         if isinstance(settings, HybridBOSettings):
+            n_scenarios = re.search(r"n_scenarios=(\d+)", recorded)
             as_variables = "unknown_states_as_variables=False" not in recorded
-            settings = replace(settings, unknown_states_as_variables=as_variables)
+            approximation = SAA(
+                SAA.n_scenarios if n_scenarios is None else int(n_scenarios[1]),
+                as_variables,
+            )
+            settings = replace(settings, approximation=approximation)
 
     # The fields the replay uses must be the recorded ones (a custom solver, say)
-    texts = [f"{name}={getattr(settings, name)!r}" for name in replayed]
+    texts = [_field_text(settings, name) for name in replayed]
     if any(text not in recorded for text in texts):
         msg = f"The settings don't match the run's record ({recorded}); pass them"
         raise ValueError(msg)
@@ -300,6 +306,15 @@ def _replay_settings(
         msg = "The run's GP isn't default_gp; pass the settings it was run with"
         raise ValueError(msg)
     return settings, prior_gp
+
+
+def _field_text(settings: StandardBOSettings | HybridBOSettings, name: str) -> str:
+    """The text `field=value` of a settings field as a record shows it; a dotted name
+    reads a field of a field and gives the last one's text."""
+    value: Any = settings
+    for part in name.split("."):
+        value = getattr(value, part)
+    return f"{name.split('.')[-1]}={value!r}"
 
 
 def _replay(
@@ -333,7 +348,7 @@ def _replay(
         run.scenarios,
         incumbent,
         settings.acquisition,
-        settings.unknown_states_as_variables,
+        settings.approximation,
     )
     nlp = acquisition_problem.nlp
     assert nlp.g is not None  # hybrid BO's problem has the known equations
@@ -350,7 +365,8 @@ def _replay(
     # The stored solution's states, the first start
     solution = run.acquisitions[i]
     assert solution.x is not None and solution.y is not None
-    y_stored = solution.y if settings.unknown_states_as_variables else None
+    as_variables = settings.approximation.unknown_states_as_variables
+    y_stored = solution.y if as_variables else None
 
     # Solve at each u outwards from the trial point, each from its neighbor's solution
     values = np.full(len(u), np.nan)

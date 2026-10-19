@@ -204,12 +204,26 @@ _Avoid_: acquisition optimization
 **Acquisition function**:
 The objective of the acquisition problem: expected improvement (EI) or lower confidence
 bound (LCB). Standard BO computes it analytically from the GP's mean and variance;
-hybrid BO computes it as a sample average over the scenarios (SAA-EI, SAA-LCB).
+hybrid BO computes it by an approximation. SAA-EI and Lin-EI are the same acquisition
+function under two approximations.
 _Avoid_: formulation_acq, acquisition formulation
+
+**Approximation**:
+How hybrid BO computes its acquisition function, which has no closed form under the
+hybrid model: the sample-average approximation or linearization. A setting of hybrid
+BO, not a method of its own, chosen apart from the acquisition function (though
+linearization gives EI only).
+_Avoid_: formulation, estimator
+
+**Sample-average approximation** (SAA):
+The approximation that averages the objective over drawn scenarios, each weighted
+`1/S`. Gives SAA-EI and SAA-LCB.
+_Avoid_: Monte Carlo approximation, sampling
 
 **Scenario**:
 One realization of the GP's prediction of the unknown states, with its own mechanistic
-states, in the sample-average approximation of the acquisition problem.
+states, in hybrid BO's acquisition problem: many drawn ones for the sample-average
+approximation, the nominal scenario alone for linearization.
 _Avoid_: GP sample, posterior sample, sample
 
 **Scenario draws** (`z`, one per scenario):
@@ -219,3 +233,21 @@ _Avoid_: xi, gaussian_standard_samples
 
 **Scenario weights** (`w`, one per scenario):
 The weight of each scenario in the acquisition function's average; `1/S` for SAA.
+
+**Nominal states** (`x̄`, `ȳ`):
+The states the hybrid model gives when the GP is replaced by its mean: the mechanistic
+states solve the known equations with the unknown states at the GP's mean there. They
+are not the expected states, since the known equations are nonlinear.
+_Avoid_: mean states, mean realization
+
+**Nominal scenario**:
+The scenario with zero scenario draws and weight 1, whose states are the nominal states:
+linearization's only scenario.
+_Avoid_: mean scenario, zero scenario
+
+**Linearization**:
+The approximation that expands the objective to first order in the scenario draws
+around the nominal states, accounting for how the mechanistic states move with the
+unknown states, so the objective is normal with a mean and standard deviation in closed
+form. Gives Lin-EI.
+_Avoid_: linear approximation, delta method, Taylor approximation

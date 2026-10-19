@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Breaking:** hybrid BO's acquisition approximation is a setting of its own,
+  `hb.SAA(n_scenarios, unknown_states_as_variables)`, and `n_scenarios` and
+  `unknown_states_as_variables` move from `HybridBOSettings` to it:
+  `HybridBOSettings(n_scenarios=5)` becomes
+  `HybridBOSettings(approximation=hb.SAA(n_scenarios=5))`.
+  `hb.acquisition.hybrid_acquisition` takes `approximation` in place of
+  `unknown_states_as_variables`. Results are unchanged (#98).
 - **Breaking:** `hb.acquisition.standard_acquisition` and `hybrid_acquisition` return
   an `AcquisitionProblem` (`.nlp`, `.start_bounds` and the order of the decision
   vector) instead of the tuple `(nlp, (start lower, start upper))` (#93).
