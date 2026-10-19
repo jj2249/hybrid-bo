@@ -171,6 +171,10 @@ they are bound with ``functools.partial``:
   of scenarios (``n_scenarios``) and ``unknown_states_as_variables``: ``False`` (as
   above) makes the acquisition problem smaller; the default, ``True``, often helps
   the solver.
+  :py:class:`~hybrid_bo.acquisition.Linearization` (Lin-EI, as
+  ``hybrid_bo_lin`` above) builds the acquisition problem from one scenario, the
+  nominal states, so it is smaller still; it gives EI only, and takes
+  ``unknown_states_as_variables`` too.
 - :py:func:`~hybrid_bo.bo.standard_bo` with
   :py:class:`~hybrid_bo.bo.StandardBOSettings`: BO with a GP of the objective, as the
   usual comparison.

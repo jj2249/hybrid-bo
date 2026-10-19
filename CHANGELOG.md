@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Lin-EI: `hb.Linearization()` as hybrid BO's approximation
+  (`HybridBOSettings(approximation=hb.Linearization())`) computes EI in closed form
+  from the objective linearized around the nominal states, over one scenario instead
+  of `n_scenarios`. It gives EI only; with `LCB` it raises `NotImplementedError`.
+  The illustrative example runs it as `hybrid_bo_lin` (#99).
 - **Breaking:** hybrid BO's acquisition approximation is a setting of its own,
   `hb.SAA(n_scenarios, unknown_states_as_variables)`, and `n_scenarios` and
   `unknown_states_as_variables` move from `HybridBOSettings` to it:

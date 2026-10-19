@@ -20,6 +20,7 @@ USER_FACING = {
     "EI",
     "LCB",
     "SAA",
+    "Linearization",
     "latin_hypercube_sampling",
     "uniform_sampling",
     # Run a study, and save and load it

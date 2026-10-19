@@ -8,6 +8,7 @@ iteration asks the trial-point function for the next trial point and evaluates i
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, fields, replace
+from typing import assert_never
 
 import numpy as np
 
@@ -16,11 +17,13 @@ from hybrid_bo.acquisition import (
     LCB,
     SAA,
     AcquisitionSolution,
+    Linearization,
     _check_acquisition,
     _check_approximation,
     _scenario_states,
     _unpack,
     hybrid_acquisition,
+    nominal_scenario,
     saa_scenarios,
     standard_acquisition,
 )
@@ -126,12 +129,13 @@ class HybridBOSettings:
     and the solver for both.
 
     Raises `TypeError` unless `acquisition` is an `EI` or an `LCB` and
-    `approximation` an `SAA`.
+    `approximation` an `SAA` or a `Linearization`, and `NotImplementedError` for
+    `LCB` with `Linearization`.
     """
 
     gp: PriorGP | None = None
     acquisition: EI | LCB = field(default_factory=EI)
-    approximation: SAA = field(default_factory=SAA)
+    approximation: SAA | Linearization = field(default_factory=SAA)
     n_starts: int = 10
     n_starts_gp: int = 10
     solver: Ipopt = field(default_factory=Ipopt)
@@ -228,7 +232,8 @@ def hybrid_bo(
     the known equations in the acquisition problem (paper, Problems 8 and 9).
 
     Draws the scenarios (SAA: `settings.approximation.n_scenarios` standard normal
-    draws, equal weights), the same in every iteration. Then evaluates the initial
+    draws, equal weights; linearization draws nothing and has the nominal scenario
+    alone), the same in every iteration. Then evaluates the initial
     points (n, N), and in each iteration fits the GP to the measured and reconstructed
     states so far, solves `hybrid_acquisition` by multistart from Latin hypercube
     starts over the start bounds of its variables, and evaluates the decision
@@ -252,8 +257,15 @@ def hybrid_bo(
         gp,
         system.h_inputs,
     )
+    # The scenarios: SAA draws them, linearization has the nominal scenario alone
     approximation = settings.approximation
-    scenarios = saa_scenarios(approximation.n_scenarios, system.n_y, rng)
+    match approximation:
+        case SAA(n_scenarios=n_scenarios):
+            scenarios = saa_scenarios(n_scenarios, system.n_y, rng)
+        case Linearization():
+            scenarios = nominal_scenario(system.n_y)
+        case _:
+            assert_never(approximation)
 
     def trial_point(
         problem: Problem, history: History, rng: np.random.Generator

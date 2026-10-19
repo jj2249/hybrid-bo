@@ -22,9 +22,9 @@ code uses GLOSSARY.md's terms; use them in PRs, tests and comments too.
   states given `u` and the measured variables.
 - **Hybrid BO** (`bo.py`, `acquisition.py`): the unknown equations are never used in
   the acquisition problem. A GP maps the `h_inputs` columns of `(u, x)` to `y` and is
-  trained on the evaluated points. The acquisition problem is a sample-average
-  approximation, `SAA`, set by `HybridBOSettings.approximation` (`acquisition` says
-  what is computed, `approximation` how):
+  trained on the evaluated points. `HybridBOSettings.approximation` sets how the
+  acquisition function is computed (`acquisition` says what): the sample-average
+  approximation `SAA`, or `Linearization` (below). With SAA:
   - `SAA.n_scenarios` scenarios `mean + std * z_s`. The scenario draws `z_s` are drawn once
     per run and reused in every iteration.
   - Each scenario has its own copy `x_s` of the mechanistic states, and
@@ -34,6 +34,12 @@ code uses GLOSSARY.md's terms; use them in PRs, tests and comments too.
     (the illustrative example's setting).
   - Acquisition function: SAA-EI is `sum_s w_s min(f_s - incumbent, 0)`, minimized.
     SAA-LCB is the weighted mean of `f_s` minus `std_factor` times the weighted std.
+  - With `Linearization` the problem has one scenario, the nominal scenario (`z = 0`,
+    weight 1), so `x̄` solves `g` with `ȳ` the GP's mean (or tied to it, by the same
+    flag). Lin-EI is analytic EI of `N(f(x̄, ȳ, u), s²)`, with `s² = a aᵀ` and `a` the row
+    **total** derivative `df/dz` by the implicit function theorem (`_sensitivity`;
+    DESIGN.md). The partial `f_y L` is wrong: it gives `s ≡ 0` on the illustrative
+    example. EI only: LCB raises `NotImplementedError`.
   - Solved with `multistart`. The trial point is the `u` part of the solution.
 - **Standard BO** (`bo.py`): a GP directly on `u -> f`, with analytic EI or LCB over
   `u` only.
@@ -146,7 +152,12 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   call it (`TypeError` unless an `EI` or `LCB` instance). `SAA(n_scenarios,
   unknown_states_as_variables)` is hybrid BO's approximation, checked by
   `_check_approximation(acquisition, approximation)` in `HybridBOSettings` and
-  `hybrid_acquisition` (`TypeError` unless an `SAA`). `Scenarios` (`z (S, P)`,
+  `hybrid_acquisition` (`TypeError` unless an `SAA` or a
+  `Linearization(unknown_states_as_variables)`, `NotImplementedError` for `LCB` with
+  `Linearization`). `nominal_scenario(n_y)` is linearization's one scenario, which
+  `hybrid_acquisition` requires with it (`ValueError` otherwise);
+  `_sensitivity(problem, gp, fitted)` is the `cas.Function` `(x, y, u) -> a (1, P)`.
+  `Scenarios` (`z (S, P)`,
   `w (S,)`, checked), `saa_scenarios(n, n_y, rng)` and `hybrid_acquisition(..., acquisition,
   approximation)` (variables
   `u`, then `vec` of the `(S, M)` x copies, then of the `(S, P)` y copies if variables;
@@ -167,7 +178,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `StandardBOSettings()` / `HybridBOSettings()`. `StandardBOSettings` and
   `standard_bo` (fit `u -> f`, `standard_acquisition`, `multistart` from `lhs` over
   the `u` start bounds), `HybridBOSettings` and `hybrid_bo` (record, then
-  `saa_scenarios`, then the loop; fit `h_inputs -> y`, `hybrid_acquisition`; adds the
+  `saa_scenarios` or `nominal_scenario`, then the loop; fit `h_inputs -> y`,
+  `hybrid_acquisition`; adds the
   scenarios to the run and to `error.run`). `_method_record` builds both methods'
   records.
 - `plots.py`: static figures, no widgets and no `rng`. `convergence(study, ax)` and
@@ -176,15 +188,17 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   scenarios, acquisition, settings) -> Figure` draws the state before trial point i
   over a 101-point grid of one-dimensional `u` (start bounds) plus the trial point,
   with one figure legend (`_figure_legend`). `_replay_settings` reads the acquisition
-  function and SAA's `unknown_states_as_variables` from the record's settings text;
-  the fields the replay uses (`_REPLAYED`, a dotted name for a field of a field)
-  must appear in that text, so a custom solver
+  function and the approximation (its kind and `unknown_states_as_variables`) from
+  the record's settings text; the fields the replay uses (`_REPLAYED`, a dotted name
+  for a field of a field) and the kind of approximation must appear in that text,
+  so a custom solver
   or a non-default GP needs `settings`.
   `_replay`: standard BO evaluates `standard_acquisition`'s NLP; hybrid BO rebuilds
   `hybrid_acquisition` and solves it over all of `w` with u fixed by equal bounds
   (built with `_pack`), outwards from
   the stored solution (NaN where a solve fails), then f per scenario at
-  `_scenario_states`. Figures are drawn in `STYLE` (`hybrid_bo.mplstyle`).
+  `_scenario_states`, and with linearization `s` from `_sensitivity` (the scenarios
+  panel draws nominal f ± s, `_nominal_band`). Figures are drawn in `STYLE` (`hybrid_bo.mplstyle`).
   matplotlib and Polars are imported inside the functions.
 - `errors.py`: `HybridBOError` (with `.history`, the points evaluated before the
   error, and `.run`, the partial run when raised in a method), `RootFindingError`,
@@ -214,7 +228,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   spawns them from its seed). A run uses only its own generator, in DESIGN.md's
   "Order of random draws":
   1. initial points (caller): `lhs` over the `u` start bounds;
-  2. method setup: hybrid BO draws the scenarios (`rng.standard_normal((S, P))`);
+  2. method setup: hybrid BO with SAA draws the scenarios
+     (`rng.standard_normal((S, P))`), with linearization nothing;
      the baselines draw their whole design; standard BO draws nothing;
   3. each evaluation: oracle `fsolve` starts, then the noise (even when `noise_std`
      is 0), then root-finding starts;
