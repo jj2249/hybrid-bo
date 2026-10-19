@@ -22,6 +22,7 @@ from matplotlib.lines import Line2D
 from hybrid_bo import (
     EI,
     LCB,
+    SAA,
     History,
     HybridBOSettings,
     Problem,
@@ -42,7 +43,7 @@ from hybrid_bo.gp import default_gp, predict
 
 # The illustrative example's hybrid BO settings: the GP's prediction substituted for
 # the unknown states
-HYBRID_SETTINGS = HybridBOSettings(unknown_states_as_variables=False)
+HYBRID_SETTINGS = HybridBOSettings(approximation=SAA(unknown_states_as_variables=False))
 
 
 def pickled(run: Run) -> Run:
@@ -321,7 +322,7 @@ def test_hybrid_bo_figure_from_a_pickled_run(hybrid_run):
         hybrid_run.scenarios,
         incumbent,
         EI(),
-        unknown_states_as_variables=False,
+        SAA(unknown_states_as_variables=False),
     ).nlp
     expected = [
         nlp.f(_pack(np.array([u_k]), x_row[:, np.newaxis])).full().item()

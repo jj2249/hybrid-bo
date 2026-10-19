@@ -15,6 +15,7 @@ import pytest
 from hybrid_bo import (
     EI,
     LCB,
+    SAA,
     HybridBOSettings,
     Problem,
     RootFindingError,
@@ -136,7 +137,13 @@ def test_saa_ei_is_the_weighted_average_over_scenarios(
     u, x, incumbent = 0.3, np.array([-1.0, 0.0, 0.5]), 1.0
 
     nlp = hybrid_acquisition(
-        problem, gp, fitted, SCENARIOS, incumbent, EI(), unknown_states_as_variables
+        problem,
+        gp,
+        fitted,
+        SCENARIOS,
+        incumbent,
+        EI(),
+        SAA(unknown_states_as_variables=unknown_states_as_variables),
     ).nlp
 
     y, f = scenario_values(gp, fitted, u, x, h_inputs)
@@ -156,7 +163,13 @@ def test_saa_lcb_is_the_weighted_mean_minus_std_factor_times_weighted_std(
     u, x = -0.7, np.array([-1.0, 0.0, 0.5])
 
     nlp = hybrid_acquisition(
-        problem, gp, fitted, SCENARIOS, 0.0, LCB(2.0), unknown_states_as_variables
+        problem,
+        gp,
+        fitted,
+        SCENARIOS,
+        0.0,
+        LCB(2.0),
+        SAA(unknown_states_as_variables=unknown_states_as_variables),
     ).nlp
 
     y, f = scenario_values(gp, fitted, u, x, ["u"])
@@ -192,7 +205,13 @@ def test_substituted_unknown_states_leave_only_the_known_equations():
     u, x = 0.3, np.array([-1.0, 0.0, 0.5])
 
     nlp = hybrid_acquisition(
-        problem, gp, fitted, SCENARIOS, 0.0, EI(), unknown_states_as_variables=False
+        problem,
+        gp,
+        fitted,
+        SCENARIOS,
+        0.0,
+        EI(),
+        SAA(unknown_states_as_variables=False),
     ).nlp
     assert nlp.g is not None
     constraints = nlp.g(variables_at(u, x, None, False)).full().ravel()
@@ -214,7 +233,13 @@ def test_bounds_and_start_bounds_come_from_each_variable(unknown_states_as_varia
     gp, fitted = fitted_gp(1)
 
     acquisition_problem = hybrid_acquisition(
-        problem, gp, fitted, SCENARIOS, 0.0, EI(), unknown_states_as_variables
+        problem,
+        gp,
+        fitted,
+        SCENARIOS,
+        0.0,
+        EI(),
+        SAA(unknown_states_as_variables=unknown_states_as_variables),
     )
     nlp, (lower, upper) = acquisition_problem.nlp, acquisition_problem.start_bounds
 
@@ -247,7 +272,13 @@ def test_unpack_undoes_pack(unknown_states_as_variables):
     problem = Problem(system, f=lambda v: v.x1**2 + v.x2 + v.y)
     gp, fitted = fitted_gp(1)
     acquisition_problem = hybrid_acquisition(
-        problem, gp, fitted, SCENARIOS, 0.0, EI(), unknown_states_as_variables
+        problem,
+        gp,
+        fitted,
+        SCENARIOS,
+        0.0,
+        EI(),
+        SAA(unknown_states_as_variables=unknown_states_as_variables),
     )
 
     # Distinct values for every entry, packed then unpacked
@@ -280,7 +311,7 @@ def test_unpack_rejects_a_decision_vector_of_the_wrong_length(
         SCENARIOS,
         0.0,
         EI(),
-        unknown_states_as_variables,
+        SAA(unknown_states_as_variables=unknown_states_as_variables),
     )
     w = np.zeros(len(acquisition_problem.nlp.lower))
 
@@ -315,6 +346,28 @@ def test_settings_reject_anything_but_ei_or_lcb(acquisition):
         HybridBOSettings(acquisition=acquisition)
 
 
+def test_settings_reject_an_unknown_approximation():
+    """The settings accept only an approximation the library knows, such as SAA()."""
+    with pytest.raises(TypeError, match=r"SAA\("):
+        HybridBOSettings(approximation=object())  # ty: ignore[invalid-argument-type]
+
+
+def test_acquisition_builder_rejects_an_unknown_approximation():
+    """The hybrid acquisition builder checks its approximation as the settings do."""
+    gp, fitted = fitted_gp(1)
+
+    with pytest.raises(TypeError, match=r"SAA\("):
+        hybrid_acquisition(
+            problem_with(["u"]),
+            gp,
+            fitted,
+            SCENARIOS,
+            0.0,
+            EI(),
+            object(),  # ty: ignore[invalid-argument-type]
+        )
+
+
 # Hybrid BO
 
 
@@ -324,7 +377,8 @@ def test_both_settings_solve_the_illustrative_example(
 ):
     """Hybrid BO runs on the illustrative example either way: one trial point per
     iteration within the bounds, one GP per iteration, and the scenarios it drew."""
-    settings = HybridBOSettings(unknown_states_as_variables=unknown_states_as_variables)
+    approximation = SAA(unknown_states_as_variables=unknown_states_as_variables)
+    settings = HybridBOSettings(approximation=approximation)
 
     run = illustrative_run(illustrative_problem, settings)
 
@@ -352,9 +406,10 @@ def test_stored_acquisition_solution_solves_the_acquisition_problem(
     """Each iteration stores the acquisition problem's objective at its solution, and
     the scenario states there: they satisfy the known equations, and the unknown
     states are the GP's scenarios at the trial point."""
-    settings = HybridBOSettings(
+    approximation = SAA(
         n_scenarios=5, unknown_states_as_variables=unknown_states_as_variables
     )
+    settings = HybridBOSettings(approximation=approximation)
 
     run = illustrative_run(illustrative_problem, settings)
 
@@ -379,7 +434,7 @@ def test_stored_acquisition_solution_solves_the_acquisition_problem(
             run.scenarios,
             incumbent,
             EI(),
-            unknown_states_as_variables,
+            SAA(unknown_states_as_variables=unknown_states_as_variables),
         ).nlp
         w = variables_at(
             u, solution.x[:, 0], solution.y[:, 0], unknown_states_as_variables
@@ -398,7 +453,7 @@ def test_gp_inputs_are_the_arguments_of_h():
     default GP has one lengthscale per argument."""
     problem = problem_with(["u", "x"])
 
-    run = illustrative_run(problem, HybridBOSettings(n_scenarios=5))
+    run = illustrative_run(problem, HybridBOSettings(approximation=SAA(n_scenarios=5)))
 
     # The fitted GP's inputs, unscaled, are the (u, x) of the points before it
     fitted = run.surrogates[-1]
@@ -413,13 +468,16 @@ def test_record_holds_the_settings_and_the_gp_over_the_arguments_of_h(
 ):
     """The record names the method and its settings, and the GP the run used, over
     the arguments of h."""
-    settings = HybridBOSettings(n_scenarios=5, unknown_states_as_variables=False)
+    approximation = SAA(n_scenarios=5, unknown_states_as_variables=False)
+    settings = HybridBOSettings(approximation=approximation)
 
     record = illustrative_run(illustrative_problem, settings).record
 
     assert record["method"] == "hybrid_bo"
-    assert "n_scenarios=5" in record["settings"]
-    assert "unknown_states_as_variables=False" in record["settings"]
+    assert (
+        "approximation=SAA(n_scenarios=5, unknown_states_as_variables=False)"
+        in record["settings"]
+    )
     assert "GP(" not in record["settings"]
     assert "u" in record["kernel"]
 
@@ -471,7 +529,9 @@ def test_run_pickles_without_the_code_that_produced_it(illustrative_problem):
                 raise pickle.UnpicklingError(msg)
             return super().find_class(module, name)
 
-    run = illustrative_run(illustrative_problem, HybridBOSettings(n_scenarios=5))
+    run = illustrative_run(
+        illustrative_problem, HybridBOSettings(approximation=SAA(n_scenarios=5))
+    )
 
     loaded = DataOnlyUnpickler(io.BytesIO(pickle.dumps(run))).load()
 
@@ -502,7 +562,7 @@ def test_failed_evaluation_carries_the_partial_run_with_its_scenarios(
             np.array([[-0.5], [0.5]]),
             2,
             np.random.default_rng(0),
-            settings=HybridBOSettings(n_scenarios=5),
+            settings=HybridBOSettings(approximation=SAA(n_scenarios=5)),
         )
 
     run = info.value.run

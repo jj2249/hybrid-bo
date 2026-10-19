@@ -2,9 +2,9 @@
 
 `EI` and `LCB` name the acquisition function; each method computes it its own way.
 Standard BO computes it analytically from the GP's mean and standard deviation
-(`standard_acquisition`). Hybrid BO computes it as a weighted sample average over
-scenarios of the GP's prediction of the unknown states (`hybrid_acquisition`; paper,
-Problems 8 and 9).
+(`standard_acquisition`). Hybrid BO approximates it as set by its approximation:
+`SAA`, a weighted sample average over scenarios of the GP's prediction of the unknown
+states (`hybrid_acquisition`; paper, Problems 8 and 9).
 """
 
 from collections.abc import Sequence
@@ -52,6 +52,34 @@ def _check_acquisition(acquisition: object) -> None:
         msg = (
             "The acquisition function must be EI() or LCB(std_factor), got "
             f"{acquisition!r}"
+        )
+        raise TypeError(msg)
+
+
+@dataclass(frozen=True)
+class SAA:
+    """The sample-average approximation of hybrid BO's acquisition function: the
+    number of scenarios, and whether each scenario's unknown states are variables of
+    the acquisition problem.
+
+    With `unknown_states_as_variables` (default True) they are variables tied to the
+    GP by an equality constraint (paper, Problem 8), which helps IPOPT. With False,
+    the GP's prediction is substituted for them, so the problem is smaller.
+    """
+
+    n_scenarios: int = 25
+    unknown_states_as_variables: bool = True
+
+
+def _check_approximation(acquisition: EI | LCB, approximation: object) -> None:
+    """Raises `TypeError` unless `approximation` is an `SAA`.
+
+    Hybrid BO's settings and acquisition builder check their approximation with this.
+    """
+    if not isinstance(approximation, SAA):
+        msg = (
+            "The approximation must be SAA(n_scenarios, unknown_states_as_variables), "
+            f"got {approximation!r}"
         )
         raise TypeError(msg)
 
@@ -232,16 +260,16 @@ def hybrid_acquisition(
     scenarios: Scenarios,
     incumbent: float,
     acquisition: EI | LCB,
-    unknown_states_as_variables: bool = True,
+    approximation: SAA = SAA(),
 ) -> AcquisitionProblem:
     """The acquisition problem of hybrid BO (paper, Problems 8 and 9).
 
     Each scenario s has its own copy x_s of the mechanistic states, and the known
     equations g(x_s, y_s, u) = 0 are constraints. Its unknown states y_s are the GP's
-    prediction at the scenario's arguments of h, mean + std * z_s. With
-    `unknown_states_as_variables` the y_s are variables too, tied to the prediction
-    by an equality constraint (Problem 8), which helps IPOPT; otherwise the prediction
-    is substituted for them.
+    prediction at the scenario's arguments of h, mean + std * z_s. With the
+    approximation's `unknown_states_as_variables` the y_s are variables too, tied to
+    the prediction by an equality constraint (Problem 8), which helps IPOPT; otherwise
+    the prediction is substituted for them.
 
     With f_s = f(x_s, y_s, u), the problem minimizes -SAA-EI, the weighted average of
     min(f_s - incumbent, 0), or SAA-LCB, the weighted mean of the f_s minus
@@ -249,11 +277,13 @@ def hybrid_acquisition(
 
     The variables are u, the x_s and, if variables, the y_s, in `_pack`'s order. Each
     variable is boxed by its bounds and started within its start bounds. Raises
-    `TypeError` unless `acquisition` is an `EI` or an `LCB`, and `ValueError` unless
-    the scenarios have one column per unknown state.
+    `TypeError` unless `acquisition` is an `EI` or an `LCB` and `approximation` an
+    `SAA`, and `ValueError` unless the scenarios have one column per unknown state.
     """
     # The checks, and the symbols for u and each scenario's mechanistic states
     _check_acquisition(acquisition)
+    _check_approximation(acquisition, approximation)
+    unknown_states_as_variables = approximation.unknown_states_as_variables
     system = problem.system
     if scenarios.z.shape[1] != system.n_y:
         msg = (

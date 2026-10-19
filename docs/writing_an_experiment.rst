@@ -164,11 +164,13 @@ they are bound with ``functools.partial``:
 - :py:func:`~hybrid_bo.bo.hybrid_bo` with
   :py:class:`~hybrid_bo.bo.HybridBOSettings`: the acquisition function
   (:py:class:`~hybrid_bo.acquisition.EI`, the default, or
-  :py:class:`~hybrid_bo.acquisition.LCB` with a ``std_factor``), the number of
-  scenarios (``n_scenarios``), the solver starts (``n_starts``) and the GP (``gp``,
-  default :py:func:`~hybrid_bo.gp.default_gp`). ``unknown_states_as_variables=False``
-  (as above) makes the acquisition problem smaller; the default, ``True``, often
-  helps the solver.
+  :py:class:`~hybrid_bo.acquisition.LCB` with a ``std_factor``), how it is
+  approximated (``approximation``, default
+  :py:class:`~hybrid_bo.acquisition.SAA`), the solver starts (``n_starts``) and the
+  GP (``gp``, default :py:func:`~hybrid_bo.gp.default_gp`). ``SAA`` takes the number
+  of scenarios (``n_scenarios``) and ``unknown_states_as_variables``: ``False`` (as
+  above) makes the acquisition problem smaller; the default, ``True``, often helps
+  the solver.
 - :py:func:`~hybrid_bo.bo.standard_bo` with
   :py:class:`~hybrid_bo.bo.StandardBOSettings`: BO with a GP of the objective, as the
   usual comparison.

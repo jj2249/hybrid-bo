@@ -90,6 +90,7 @@ ignore = ["E501"]
 [tool.ruff.lint.flake8-bugbear]
 # Frozen settings, safe as argument defaults
 extend-immutable-calls = [
+  "hybrid_bo.acquisition.SAA",
   "hybrid_bo.bo.HybridBOSettings",
   "hybrid_bo.bo.StandardBOSettings",
 ]
