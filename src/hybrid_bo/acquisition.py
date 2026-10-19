@@ -2,9 +2,10 @@
 
 `EI` and `LCB` name the acquisition function; each method computes it its own way.
 Standard BO computes it analytically from the GP's mean and standard deviation
-(`standard_acquisition`). Hybrid BO approximates it as set by its approximation:
-`SAA`, a weighted sample average over scenarios of the GP's prediction of the unknown
-states (`hybrid_acquisition`; paper, Problems 8 and 9).
+(`standard_acquisition`). Hybrid BO approximates it as set by its approximation
+(`hybrid_acquisition`): `SAA`, a weighted sample average over scenarios of the GP's
+prediction of the unknown states (paper, Problems 8 and 9), or `Linearization`, EI of
+the objective expanded to first order around the nominal states (Lin-EI).
 """
 
 from collections.abc import Sequence
@@ -71,17 +72,37 @@ class SAA:
     unknown_states_as_variables: bool = True
 
 
+@dataclass(frozen=True)
+class Linearization:
+    """The linearization of hybrid BO's acquisition function (Lin-EI): the objective
+    expanded to first order in the scenario draws around the nominal states, which
+    makes it normal, so EI has a closed form. It gives EI only.
+
+    `unknown_states_as_variables` means what it means for `SAA`, for the nominal
+    scenario's unknown states.
+    """
+
+    unknown_states_as_variables: bool = True
+
+
 def _check_approximation(acquisition: EI | LCB, approximation: object) -> None:
-    """Raises `TypeError` unless `approximation` is an `SAA`.
+    """Raises `TypeError` unless `approximation` is an `SAA` or a `Linearization`, and
+    `NotImplementedError` for `LCB` with `Linearization`.
 
     Hybrid BO's settings and acquisition builder check their approximation with this.
     """
-    if not isinstance(approximation, SAA):
+    if not isinstance(approximation, SAA | Linearization):
         msg = (
-            "The approximation must be SAA(n_scenarios, unknown_states_as_variables), "
-            f"got {approximation!r}"
+            "The approximation must be SAA(n_scenarios, unknown_states_as_variables) "
+            f"or Linearization(unknown_states_as_variables), got {approximation!r}"
         )
         raise TypeError(msg)
+    if isinstance(acquisition, LCB) and isinstance(approximation, Linearization):
+        msg = (
+            "LCB isn't implemented with Linearization: use EI() with Linearization, "
+            "or EI() or LCB() with SAA"
+        )
+        raise NotImplementedError(msg)
 
 
 def _expected_improvement(mean: Any, std: Any, incumbent: float) -> Any:
@@ -230,6 +251,12 @@ def saa_scenarios(n: int, n_y: int, rng: np.random.Generator) -> Scenarios:
     return Scenarios(rng.standard_normal((n, n_y)), np.full(n, 1 / n))
 
 
+def nominal_scenario(n_y: int) -> Scenarios:
+    """The nominal scenario, linearization's only scenario: zero scenario draws z
+    (1, n_y) and weight 1."""
+    return Scenarios(np.zeros((1, n_y)), np.ones(1))
+
+
 def _scenario_unknown_states(
     system: System,
     gp: PriorGP,
@@ -253,6 +280,31 @@ def _scenario_unknown_states(
     return mean + std * Symbolic(scenarios.z)
 
 
+def _sensitivity(problem: Problem, gp: PriorGP, fitted: FittedGP) -> cas.Function:
+    """The total derivative df/dz of the objective in the scenario draws at the
+    nominal scenario (z = 0), as a function of columns x (M, 1), y (P, 1) and u
+    (N, 1) to a row a (1, P).
+
+    The states move with the draws: y = mean(x, u) + L(x, u) z, and x with y through
+    g = 0. By the implicit function theorem, dx/dz = -(g_x + g_y mean_x)^-1 g_y L and
+    dy/dz = mean_x dx/dz + L, so a = f_x dx/dz + f_y dy/dz. L is the GP's std.
+    """
+    # Symbols for the point, and the GP's mean and std there
+    system = problem.system
+    x = Symbolic.sym("x", system.n_x)
+    y = Symbolic.sym("y", system.n_y)
+    u = Symbolic.sym("u", system.n_u)
+    mean, std = predict(gp, fitted, cas.horzcat(*_h_inputs(system, u.T, x.T)))
+
+    # How the states move with the draws, then the objective
+    g, f, L = system.g(x, y, u), problem.f(x, y, u), cas.diag(std)
+    mean_x, g_y = cas.jacobian(mean, x), cas.jacobian(g, y)
+    dx = -cas.solve(cas.jacobian(g, x) + g_y @ mean_x, g_y @ L)
+    dy = mean_x @ dx + L
+    a = cas.jacobian(f, x) @ dx + cas.jacobian(f, y) @ dy
+    return cas.Function("sensitivity", [x, y, u], [a])
+
+
 def hybrid_acquisition(
     problem: Problem,
     gp: PriorGP,
@@ -260,7 +312,7 @@ def hybrid_acquisition(
     scenarios: Scenarios,
     incumbent: float,
     acquisition: EI | LCB,
-    approximation: SAA = SAA(),
+    approximation: SAA | Linearization = SAA(),
 ) -> AcquisitionProblem:
     """The acquisition problem of hybrid BO (paper, Problems 8 and 9).
 
@@ -273,12 +325,17 @@ def hybrid_acquisition(
 
     With f_s = f(x_s, y_s, u), the problem minimizes -SAA-EI, the weighted average of
     min(f_s - incumbent, 0), or SAA-LCB, the weighted mean of the f_s minus
-    `std_factor` times their weighted standard deviation.
+    `std_factor` times their weighted standard deviation. With `Linearization`, the
+    scenarios must be the nominal scenario, whose states are the nominal states, and
+    the problem minimizes -Lin-EI: EI of the normal N(f, s^2), with s^2 = a a^T and
+    a = df/dz there (`_sensitivity`).
 
     The variables are u, the x_s and, if variables, the y_s, in `_pack`'s order. Each
     variable is boxed by its bounds and started within its start bounds. Raises
     `TypeError` unless `acquisition` is an `EI` or an `LCB` and `approximation` an
-    `SAA`, and `ValueError` unless the scenarios have one column per unknown state.
+    `SAA` or a `Linearization`, `NotImplementedError` for `LCB` with
+    `Linearization`, and `ValueError` unless the scenarios have one column per
+    unknown state, or with `Linearization`, unless they are the nominal scenario.
     """
     # The checks, and the symbols for u and each scenario's mechanistic states
     _check_acquisition(acquisition)
@@ -290,6 +347,10 @@ def hybrid_acquisition(
             f"The scenarios need one column of z per unknown state ({system.n_y}), "
             f"got {scenarios.z.shape[1]}"
         )
+        raise ValueError(msg)
+    is_nominal = len(scenarios.w) == 1 and not np.any(scenarios.z)
+    if isinstance(approximation, Linearization) and not is_nominal:
+        msg = "Linearization runs over the nominal scenario alone (nominal_scenario)"
         raise ValueError(msg)
     n_scenarios = len(scenarios.w)
     u = Symbolic.sym("u", system.n_u)
@@ -312,16 +373,24 @@ def hybrid_acquisition(
         f_parts.append(problem.f(x_s, y_s, u))
     f = cas.vertcat(*f_parts)
 
-    # The acquisition function, a weighted average over the scenarios
-    match acquisition:
-        case LCB(std_factor=std_factor):
-            f_mean = Symbolic(scenarios.w).T @ f
-            f_variance = Symbolic(scenarios.w).T @ (f - f_mean) ** 2
-            objective = f_mean - std_factor * cas.sqrt(f_variance)
-        case EI():
-            objective = Symbolic(scenarios.w).T @ cas.fmin(f - incumbent, 0)
+    # The acquisition function: a weighted average over the scenarios, or Lin-EI at
+    # the nominal scenario (EI only, as checked)
+    match approximation:
+        case Linearization():
+            a = _sensitivity(problem, gp, fitted)(x[0, :].T, y[0, :].T, u)
+            objective = -_expected_improvement(f[0], cas.sqrt(a @ a.T), incumbent)
+        case SAA():
+            match acquisition:
+                case LCB(std_factor=std_factor):
+                    f_mean = Symbolic(scenarios.w).T @ f
+                    f_variance = Symbolic(scenarios.w).T @ (f - f_mean) ** 2
+                    objective = f_mean - std_factor * cas.sqrt(f_variance)
+                case EI():
+                    objective = Symbolic(scenarios.w).T @ cas.fmin(f - incumbent, 0)
+                case _:
+                    assert_never(acquisition)
         case _:
-            assert_never(acquisition)
+            assert_never(approximation)
 
     # The Var of each entry of w, each state once per scenario, for the bounds
     def per_scenario(variables: Sequence[Var]) -> np.ndarray:

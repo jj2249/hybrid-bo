@@ -20,8 +20,10 @@ from hybrid_bo.acquisition import (
     EI,
     LCB,
     SAA,
+    Linearization,
     _pack,
     _scenario_states,
+    _sensitivity,
     _unpack,
     hybrid_acquisition,
     standard_acquisition,
@@ -151,7 +153,9 @@ def iteration(
 
     - `gp`: the stored surrogate's mean and band; of y for hybrid BO, of f for
       standard BO.
-    - `scenarios` (hybrid BO): f under the scenarios, their weighted mean and band.
+    - `scenarios` (hybrid BO): f under the scenarios, their weighted mean and band;
+      with linearization, f at the nominal states and the band f +- s, with s
+      recomputed from the stored surrogate.
     - `acquisition`: the minimized acquisition function (-EI or LCB) and the stored
       value at the trial point. Standard BO's is analytic. Hybrid BO's replays the
       acquisition problem (ADR 0005) from the stored surrogate, scenarios and
@@ -207,9 +211,9 @@ def iteration(
         "acquisition": acquisition and settings is not None,
     }
     panels = [panel for panel, on in shown.items() if on] or ["points"]
-    curve = f_scenarios = None
+    curve = f_scenarios = f_std = None
     if settings is not None and (shown["scenarios"] or shown["acquisition"]):
-        curve, f_scenarios = _replay(
+        curve, f_scenarios, f_std = _replay(
             run, problem, i, settings, prior_gp, u[:, np.newaxis]
         )
 
@@ -245,7 +249,10 @@ def iteration(
                 _band(ax, u, *predict(prior_gp, run.surrogates[i], u[:, None]))
             elif panel == "scenarios":
                 assert run.scenarios is not None and f_scenarios is not None
-                _scenario_band(ax, u, f_scenarios, run.scenarios.w)
+                if f_std is None:
+                    _scenario_band(ax, u, f_scenarios, run.scenarios.w)
+                else:
+                    _nominal_band(ax, u, f_scenarios[:, 0], f_std)
             if true is not None:
                 ax.plot(u, true, color="k", linestyle="--", label="true")
             _points(ax, history.u[:, 0], values, history.f, history.n_initial, n)
@@ -261,8 +268,8 @@ def _replay_settings(
     settings: StandardBOSettings | HybridBOSettings | None,
 ) -> tuple[StandardBOSettings | HybridBOSettings | None, PriorGP]:
     """The settings a run is replayed with and its prior GP: `settings` if given, else
-    the record's acquisition function and SAA's `unknown_states_as_variables` with
-    `default_gp`. None and `default_gp` for the baselines.
+    the record's acquisition function and approximation with `default_gp`. None and
+    `default_gp` for the baselines.
 
     Raises `TypeError` if `settings` aren't the run's method's, and `ValueError` if
     the fields the replay uses, or the GP, don't match the record.
@@ -279,22 +286,22 @@ def _replay_settings(
         return None, default_gp(len(gp_inputs))
 
     # The settings: given, else the defaults with the recorded acquisition function
-    # and SAA
+    # and approximation (SAA in records from before there was a choice)
     recorded = run.record.get("settings", "")
     if settings is None:
         lcb = re.search(r"acquisition=LCB\(std_factor=([^)]*)\)", recorded)
         settings = expected(acquisition=EI() if lcb is None else LCB(float(lcb[1])))
         if isinstance(settings, HybridBOSettings):
-            n_scenarios = re.search(r"n_scenarios=(\d+)", recorded)
             as_variables = "unknown_states_as_variables=False" not in recorded
-            approximation = SAA(
-                SAA.n_scenarios if n_scenarios is None else int(n_scenarios[1]),
-                as_variables,
+            settings = replace(
+                settings, approximation=_recorded_approximation(recorded, as_variables)
             )
-            settings = replace(settings, approximation=approximation)
 
-    # The fields the replay uses must be the recorded ones (a custom solver, say)
+    # The fields the replay uses must be the recorded ones (a custom solver, say),
+    # and so must the kind of approximation, in records that name it
     texts = [_field_text(settings, name) for name in replayed]
+    if isinstance(settings, HybridBOSettings) and "approximation=" in recorded:
+        texts.append(f"approximation={type(settings.approximation).__name__}(")
     if any(text not in recorded for text in texts):
         msg = f"The settings don't match the run's record ({recorded}); pass them"
         raise ValueError(msg)
@@ -306,6 +313,18 @@ def _replay_settings(
         msg = "The run's GP isn't default_gp; pass the settings it was run with"
         raise ValueError(msg)
     return settings, prior_gp
+
+
+def _recorded_approximation(
+    recorded: str, unknown_states_as_variables: bool
+) -> SAA | Linearization:
+    """The approximation a record's settings text names, with this flag: SAA (with
+    the recorded number of scenarios) unless it names linearization."""
+    if "approximation=Linearization(" in recorded:
+        return Linearization(unknown_states_as_variables)
+    n_scenarios = re.search(r"n_scenarios=(\d+)", recorded)
+    n = SAA.n_scenarios if n_scenarios is None else int(n_scenarios[1])
+    return SAA(n, unknown_states_as_variables)
 
 
 def _field_text(settings: StandardBOSettings | HybridBOSettings, name: str) -> str:
@@ -324,10 +343,11 @@ def _replay(
     settings: StandardBOSettings | HybridBOSettings,
     prior_gp: PriorGP,
     u: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray | None]:
+) -> tuple[np.ndarray, np.ndarray | None, np.ndarray | None]:
     """Iteration i's acquisition function at each row of u (n_points, N), which holds
-    the trial point, and for hybrid BO f under each scenario there (n_points, S), else
-    None; NaN where a solve failed. See `iteration` for how hybrid BO's is solved."""
+    the trial point; for hybrid BO f under each scenario there (n_points, S), else
+    None; and with linearization the std s of f there (n_points,), else None. NaN
+    where a solve failed. See `iteration` for how hybrid BO's is solved."""
     history, surrogate = run.history, run.surrogates[i]
     n = history.n_initial + i
     incumbent = float(history.f[:n].min())
@@ -337,7 +357,8 @@ def _replay(
         nlp = standard_acquisition(
             problem, prior_gp, surrogate, incumbent, settings.acquisition
         ).nlp
-        return np.array([nlp.f(_pack(point)).full().item() for point in u]), None
+        values = np.array([nlp.f(_pack(point)).full().item() for point in u])
+        return values, None, None
 
     # Hybrid BO: the acquisition problem with u fixed by its bounds
     assert run.scenarios is not None  # hybrid BO runs hold their scenarios
@@ -368,9 +389,15 @@ def _replay(
     as_variables = settings.approximation.unknown_states_as_variables
     y_stored = solution.y if as_variables else None
 
+    # Linearization's std of f, from the sensitivity at the nominal states
+    sensitivity = None
+    if isinstance(settings.approximation, Linearization):
+        sensitivity = _sensitivity(problem, prior_gp, surrogate)
+
     # Solve at each u outwards from the trial point, each from its neighbor's solution
     values = np.full(len(u), np.nan)
     f = np.full((len(u), len(run.scenarios.w)), np.nan)
+    f_std = np.full(len(u), np.nan)
     at_trial = int(np.flatnonzero(np.all(u == history.u[n], axis=1))[0])
     for indices in (range(at_trial, len(u)), range(at_trial, -1, -1)):
         x_start, y_start = solution.x, y_stored
@@ -396,7 +423,9 @@ def _replay(
                 w_k,
             )
             f[k] = [problem.f(*s, u[k]).full().item() for s in zip(x, y, strict=True)]
-    return values, f
+            if sensitivity is not None:
+                f_std[k] = np.linalg.norm(sensitivity(x[0], y[0], u[k]).full())
+    return values, f, None if sensitivity is None else f_std
 
 
 def _figure_legend(figure: "Figure", axes: list["Axes"]) -> None:
@@ -430,6 +459,13 @@ def _band(ax: "Axes", u: np.ndarray, mean: np.ndarray, std: np.ndarray) -> None:
     ax.fill_between(
         u, mean - half_width, mean + half_width, alpha=0.2, color="b", label=label
     )
+
+
+def _nominal_band(ax: "Axes", u: np.ndarray, f: np.ndarray, s: np.ndarray) -> None:
+    """Linearization's f at the nominal states over u and the band f +- s, its std;
+    NaN leaves gaps."""
+    ax.plot(u, f, color="b", label="nominal f")
+    ax.fill_between(u, f - s, f + s, alpha=0.2, color="b", label="nominal f ± s")
 
 
 def _scenario_band(ax: "Axes", u: np.ndarray, f: np.ndarray, w: np.ndarray) -> None:

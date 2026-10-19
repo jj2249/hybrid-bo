@@ -458,6 +458,11 @@ class SAA:
     unknown_states_as_variables: bool = True
 
 
+@dataclass(frozen=True)
+class Linearization:  # Lin-EI, over the nominal scenario
+    unknown_states_as_variables: bool = True
+
+
 def hybrid_acquisition(
     problem,
     gp,
@@ -465,7 +470,7 @@ def hybrid_acquisition(
     scenarios,
     incumbent,
     acquisition,
-    approximation=SAA(),
+    approximation=SAA(),  # SAA | Linearization
 ) -> AcquisitionProblem: ...
 def standard_acquisition(
     problem, gp, fitted, incumbent, acquisition
@@ -486,22 +491,24 @@ decision vector `w`.
   helper, called by the settings and by the builders): anything but an `EI` or `LCB`
   instance raises `TypeError`. This avoids the legacy `formulation_acq` bug. Hybrid
   BO's approximation is checked the same way, by a second helper next to it, which
-  raises `TypeError` for anything but an approximation the library knows.
+  raises `TypeError` for anything but an approximation the library knows, and
+  `NotImplementedError` for a combination that isn't implemented (LCB with
+  linearization).
 - **Standard BO** computes EI and LCB analytically from the GP mean and std (EI adds
   1e-10 to the std in `gamma`, as legacy `ei_gp` did) and minimizes -EI or LCB over `u`
   within its bounds.
-- **Hybrid BO** computes them as weighted sample averages over the scenarios (SAA-EI,
+- **Hybrid BO** with SAA computes them as weighted sample averages over the scenarios (SAA-EI,
   SAA-LCB; paper, Problems 8 and 9). Each scenario has its own `x_s` and `y_s`, with `g`
   as constraints. SAA-LCB uses the weighted variance; `w = 1/S` reproduces the legacy
   `sample_variance` (`ddof=0`).
 - **The approximation is a setting of hybrid BO, not a method.** `acquisition`
-  (`EI | LCB`) says what is computed and `approximation` how; today `SAA` is the only
-  approximation, and linearization (Lin-EI) is to follow. The approximation decides
-  which scenarios the problem is built over and how its objective combines them; the
-  scenario machinery (`x_s` and `g` per scenario, the optional tie of `y_s` to the
-  GP, `_pack`/`_unpack`, `_scenario_states`) is shared. The settings that only make
-  sense for SAA (`n_scenarios`, `unknown_states_as_variables`) live on `SAA`.
-- `unknown_states_as_variables` (on `SAA`): if True, each scenario's unknown states are variables
+  (`EI | LCB`) says what is computed and `approximation` how: `SAA` or
+  `Linearization` (below). The approximation decides which scenarios the problem is
+  built over and how its objective combines them; the scenario machinery (`x_s` and
+  `g` per scenario, the optional tie of `y_s` to the GP, `_pack`/`_unpack`,
+  `_scenario_states`) is shared. Settings that only make sense for one approximation
+  live on it (`n_scenarios` on `SAA`).
+- `unknown_states_as_variables` (on `SAA` and `Linearization`): if True, each scenario's unknown states are variables
   of the acquisition problem tied to the GP by an equality constraint (paper, Problem 8),
   which helps IPOPT; if False, the GP prediction is substituted wherever they appear.
 - The hybrid acquisition problem's variables are `u`, then the `x_s`, then the `y_s` (if
@@ -518,6 +525,42 @@ decision vector `w`.
   `predict`, so other surrogates or hyperparameter samples can be paired with scenarios
   later.
 
+#### Linearization (Lin-EI)
+
+SAA-EI needs S copies of the mechanistic states in every acquisition problem.
+Linearization approximates EI from one scenario, the nominal scenario (`z = 0`,
+weight 1), built through the same scenario machinery: the variables are
+`(u, x̄[, ȳ])` and the constraints `g(x̄, ȳ, u) = 0` (plus the tie of `ȳ` to the GP's
+mean). It draws nothing from the generator.
+
+With the scenario draws `z ~ N(0, I)` (the paper's ξ), the states `x(u, z)` and
+`y(u, z)` solve `0 = g(x, y, u)` and `y = μ(x, u) + L(x, u) z`, with `L` the GP's std.
+Expanding `f` to first order in `z` around the nominal states makes it normal:
+
+- **Nominal states** `(x̄, ȳ)`: `0 = g(x̄, ȳ, u)`, `ȳ = μ(x̄, u)` (`z = 0`).
+- **Total sensitivity**, by the implicit function theorem at `z = 0`
+  (`_sensitivity`): `dx/dz = −(g_x + g_y μ_x)⁻¹ g_y L`, `dy/dz = μ_x dx/dz + L`, and
+  `aᵀ = df/dz = f_x dx/dz + f_y dy/dz`. The term in `dL/dx` vanishes at `z = 0`.
+- **Lin-EI** is the analytic EI of `N(f(x̄, ȳ, u), s²)` below the incumbent, with
+  `s² = aᵀa` (the same `_expected_improvement` as standard BO, with its epsilon).
+
+**The derivative must be the total one.** Both states are random: `x` moves with `y`
+through `g`, and through the GP when `x` is an argument of `h`. The partial
+derivative `f_y L` misses that. In the illustrative example (`g = x + eˣ − y`, `f` of
+`x` only, `h` of `u` only) it gives `s ≡ 0`, so Lin-EI would never explore, while the
+total one gives `s = |f_x| L / (1 + e^x̄)`.
+
+`s` is built symbolically in SX: `cas.jacobian` of `g`, `f` and the GP mean with
+respect to `x` and `y` at fresh symbols, one `cas.solve` (M×M) for `dx/dz`, then a
+`cas.Function` evaluated at the problem's `(x̄, ȳ, u)`, so it works whether `ȳ` is a
+variable or the substituted prediction. It is in matrix form, so P > 1 needs no
+rework.
+
+The expansion is first order only: with the second-order term `f` is a generalized
+χ², and the closed form no longer holds. Lin-LCB is not implemented. A run stores
+the nominal scenario as its scenarios, and each acquisition solution the nominal
+states as one-row `x (1, M)` and `y (1, P)`.
+
 ### Methods and the optimization loop (`bo.py`)
 
 ```python
@@ -525,7 +568,7 @@ decision vector `w`.
 class HybridBOSettings:
     gp: PriorGP | None = None  # None: default_gp(len(h_inputs))
     acquisition: EI | LCB = EI()  # what is computed
-    approximation: SAA = SAA()  # how it is computed
+    approximation: SAA | Linearization = SAA()  # how it is computed
     n_starts: int = 10  # acquisition multistart
     n_starts_gp: int = 10
     solver: Ipopt = Ipopt()
@@ -584,7 +627,8 @@ def uniform_sampling(problem, measure, initial_points, n_points, rng) -> Run: ..
 The baselines are named `*_sampling` because `hb.sampling.uniform` and
 `hb.sampling.lhs` are the sampling primitives.
 
-- `hybrid_bo` draws the scenarios from `rng`, then runs `optimization_loop` with a
+- `hybrid_bo` draws the scenarios from `rng` (SAA; linearization takes the nominal
+  scenario and draws nothing), then runs `optimization_loop` with a
   trial-point function that fits the GP on `(u, x)[h_inputs] -> y`, builds
   `hybrid_acquisition`, and solves it with `multistart`. The user never draws `z`.
   With `SAA(unknown_states_as_variables=False)` (the legacy illustrative setting) it
@@ -672,7 +716,10 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   acquisition value. The settings are read from the run's record; `settings` is
   needed only for a GP other than `default_gp`, since the record holds the GP as text,
   not its kernel function. The fields the replay uses (acquisition function, and for
-  hybrid BO the solver and SAA's `unknown_states_as_variables`) must match the record.
+  hybrid BO the solver, the kind of approximation and its
+  `unknown_states_as_variables`) must match the record. With linearization, the
+  scenarios panel shows the nominal f ± s, with `s` recomputed from the stored
+  surrogate, in place of the scenario band.
 - **Entry point** (#51; revised in #65; moved to `experiments/` in #69). An
   experiment ends with an explicit call that passes everything it defines:
   `cli.main(name, problem, measure, methods, study_settings, optimum=...,
@@ -747,5 +794,6 @@ Not built now; the design leaves room for them.
   NUTS if the dimension grows.
 - **Alternatives to SAA.** Sigma points or cubature produce a different `Scenarios`
   (deterministic `z`, specific `w`); the acquisition builders already take weights.
+  A moment-matched second-order linearization could be an option of `Linearization`.
 - **More than one unknown state (P > 1).** Shapes already allow it; the open modeling
   question is whether each unknown equation has its own arguments.

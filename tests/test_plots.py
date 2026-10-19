@@ -25,6 +25,7 @@ from hybrid_bo import (
     SAA,
     History,
     HybridBOSettings,
+    Linearization,
     Problem,
     Run,
     StandardBOSettings,
@@ -78,6 +79,14 @@ def hybrid_run() -> Run:
 def hybrid_lcb_run() -> Run:
     """A pickled hybrid BO run with LCB and the unknown states as variables."""
     return illustrative_run(hybrid_bo, HybridBOSettings(acquisition=LCB(2.0)))
+
+
+@pytest.fixture(scope="module")
+def hybrid_lin_run() -> Run:
+    """A pickled hybrid BO run with Lin-EI, the GP's prediction substituted for the
+    unknown states."""
+    approximation = Linearization(unknown_states_as_variables=False)
+    return illustrative_run(hybrid_bo, HybridBOSettings(approximation=approximation))
 
 
 @pytest.fixture(scope="module")
@@ -231,7 +240,8 @@ def test_regret_needs_an_oracle_and_an_optimum(f_oracle, record):
 
 # `parametrize` runs the test once per value in the list, each as its own test case
 @pytest.mark.parametrize(
-    "run_name", ["hybrid_run", "hybrid_lcb_run", "standard_run", "lhs_run"]
+    "run_name",
+    ["hybrid_run", "hybrid_lcb_run", "hybrid_lin_run", "standard_run", "lhs_run"],
 )
 def test_every_iteration_of_every_method_is_drawn(request, run_name, tmp_path):
     """Each iteration of a run of each method draws a figure that saves as a PNG.
@@ -247,7 +257,9 @@ def test_every_iteration_of_every_method_is_drawn(request, run_name, tmp_path):
     plt.close("all")
 
 
-@pytest.mark.parametrize("run_name", ["hybrid_run", "hybrid_lcb_run", "standard_run"])
+@pytest.mark.parametrize(
+    "run_name", ["hybrid_run", "hybrid_lcb_run", "hybrid_lin_run", "standard_run"]
+)
 @pytest.mark.parametrize("i", [0, 1])
 def test_replayed_acquisition_at_the_trial_point_is_the_stored_value(
     request, run_name, i
@@ -329,6 +341,33 @@ def test_hybrid_bo_figure_from_a_pickled_run(hybrid_run):
         for u_k, x_row in zip(u, x, strict=True)
     ]
     np.testing.assert_allclose(line(acquisition, "-EI"), expected, atol=1e-4)
+    plt.close("all")
+
+
+def test_lin_figure_draws_the_nominal_f_and_its_std(hybrid_lin_run):
+    """With Lin-EI, the scenarios panel draws f at the nominal states, x solving g
+    with y the GP's mean, and the band f +- s, with s recomputed from the stored
+    surrogate: on the illustrative system, s = |f_x| L / (1 + exp(x))."""
+    # Act: iteration 1, the scenarios panel alone
+    figure = plots.iteration(hybrid_lin_run, ex.problem, 1, gp=False, acquisition=False)
+    (ax,) = figure.axes
+
+    # The nominal f: x solves x + exp(x) = mean (to IPOPT's tolerance)
+    u = np.asarray(drawn_line(ax, "nominal f").get_xdata())
+    x = scenario_states(hybrid_lin_run, 1, u)[:, 0]
+    f = (6 * x - 2) ** 2 * np.sin(12 * x - 4)
+    np.testing.assert_allclose(line(ax, "nominal f"), f, atol=1e-4)
+
+    # The band: f +- s at each u
+    _, std = predict(default_gp(1), hybrid_lin_run.surrogates[1], u[:, np.newaxis])
+    f_x = 12 * (6 * x - 2) * np.sin(12 * x - 4)
+    f_x += 12 * (6 * x - 2) ** 2 * np.cos(12 * x - 4)
+    s = np.abs(f_x) * std / (1 + np.exp(x))
+    (shaded,) = [c for c in ax.collections if c.get_label() == "nominal f ± s"]
+    vertices = np.asarray(shaded.get_paths()[0].vertices)
+    for u_k, lower, upper in zip(u[::10], (f - s)[::10], (f + s)[::10], strict=True):
+        assert np.isclose(vertices, [u_k, lower], atol=1e-4).all(axis=1).any()
+        assert np.isclose(vertices, [u_k, upper], atol=1e-4).all(axis=1).any()
     plt.close("all")
 
 
@@ -440,11 +479,12 @@ def test_a_custom_solver_needs_the_settings(hybrid_run):
         ("standard_run", HybridBOSettings(), TypeError),
         ("lhs_run", StandardBOSettings(), TypeError),
         ("hybrid_run", HybridBOSettings(), ValueError),
+        ("hybrid_lin_run", HYBRID_SETTINGS, ValueError),
     ],
 )
 def test_settings_must_be_the_runs(request, run_name, settings, error):
-    """Settings must be the run's method's (else `TypeError`) and match its record
-    (else `ValueError`)."""
+    """Settings must be the run's method's (else `TypeError`) and match its record,
+    the kind of approximation included (else `ValueError`)."""
     run = request.getfixturevalue(run_name)
     with pytest.raises(error, match="settings"):
         plots.iteration(run, ex.problem, 0, settings=settings)

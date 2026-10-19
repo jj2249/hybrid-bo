@@ -11,12 +11,15 @@ import pickle
 import casadi as cas
 import numpy as np
 import pytest
+import scipy.optimize
+import scipy.stats
 
 from hybrid_bo import (
     EI,
     LCB,
     SAA,
     HybridBOSettings,
+    Linearization,
     Problem,
     RootFindingError,
     Run,
@@ -30,10 +33,13 @@ from hybrid_bo import (
 from hybrid_bo.acquisition import (
     Scenarios,
     _pack,
+    _sensitivity,
     _unpack,
     hybrid_acquisition,
+    nominal_scenario,
     saa_scenarios,
 )
+from hybrid_bo.evaluation import evaluate
 from hybrid_bo.gp import FittedGP, default_gp, fit_gp, predict
 
 # Three scenarios with unequal weights, so a plain mean would give other values
@@ -368,6 +374,138 @@ def test_acquisition_builder_rejects_an_unknown_approximation():
         )
 
 
+def test_lcb_with_linearization_is_not_implemented():
+    """Linearization gives EI only, so the settings and the acquisition builder
+    reject it with LCB, and name the combinations that work."""
+    gp, fitted = fitted_gp(1)
+
+    with pytest.raises(NotImplementedError, match=r"EI\(\) with Linearization"):
+        HybridBOSettings(acquisition=LCB(), approximation=Linearization())
+    with pytest.raises(NotImplementedError, match=r"EI\(\) with Linearization"):
+        hybrid_acquisition(
+            problem_with(["u"]),
+            gp,
+            fitted,
+            nominal_scenario(1),
+            0.0,
+            LCB(),
+            Linearization(),
+        )
+
+
+def test_linearization_needs_the_nominal_scenario():
+    """Linearization's acquisition problem is built over the nominal scenario alone,
+    so drawn scenarios are rejected."""
+    gp, fitted = fitted_gp(1)
+
+    with pytest.raises(ValueError, match="nominal scenario"):
+        hybrid_acquisition(
+            problem_with(["u"]), gp, fitted, SCENARIOS, 0.0, EI(), Linearization()
+        )
+
+
+def linear_problem():
+    """A problem whose linearization is exact: g = x - 2y + u and f = 3x + y are
+    linear, and h takes u only, so f = 7y - 3u is normal under the GP."""
+    u = Var("u", -2.0, 2.0)
+    x = Var("x", start=(-5.0, 5.0))
+    y = Var("y", start=(-3.0, 3.0))
+    system = System(
+        u=[u],
+        x=[x],
+        y=[y],
+        g=lambda v: [v.x - 2 * v.y + v.u],
+        h_inputs=[u],
+        measured=[y],
+    )
+    return Problem(system, f=lambda v: 3 * v.x + v.y)
+
+
+def linear_normal(gp, fitted, u):
+    """At u (scalar), the GP's mean and std of y, and the normal of the linear
+    problem's f = 7y - 3u: its mean and std."""
+    mean, std = predict(gp, fitted, np.array([[u]]))
+    return mean[0], std[0], 7 * mean[0] - 3 * u, 7 * std[0]
+
+
+def closed_form_ei(mean, std, incumbent):
+    """EI below the incumbent of a normal with this mean and std (scipy)."""
+    gamma = (incumbent - mean) / std
+    cdf, pdf = scipy.stats.norm.cdf(gamma), scipy.stats.norm.pdf(gamma)
+    return (incumbent - mean) * cdf + std * pdf
+
+
+@pytest.mark.parametrize("unknown_states_as_variables", [True, False])
+def test_lin_ei_is_exact_for_a_linear_problem(unknown_states_as_variables):
+    """With linear f and g and h of u only, f is normal, N(7 mean - 3u, (7 std)^2), so
+    Lin-EI at the nominal states is that normal's closed-form EI."""
+    # The normal of f at u, and an incumbent half a std below its mean
+    problem, (gp, fitted), u = linear_problem(), fitted_gp(1), 0.3
+    y_bar, _, f_mean, f_std = linear_normal(gp, fitted, u)
+    incumbent = f_mean - 0.5 * f_std
+
+    # Lin-EI's objective at the nominal states, x = 2y - u
+    approximation = Linearization(unknown_states_as_variables)
+    nlp = hybrid_acquisition(
+        problem, gp, fitted, nominal_scenario(1), incumbent, EI(), approximation
+    ).nlp
+    y = np.array([y_bar])
+    w = variables_at(u, 2 * y - u, y, unknown_states_as_variables)
+
+    expected = -closed_form_ei(f_mean, f_std, incumbent)
+    np.testing.assert_allclose(nlp.f(w).full().item(), expected, rtol=1e-8)
+
+
+def test_saa_ei_agrees_with_lin_ei_for_a_linear_problem():
+    """For the linear problem, SAA-EI over many scenarios agrees with the exact EI
+    that Lin-EI gives, within 4 Monte Carlo standard errors."""
+    # The normal of f at u, and 500 scenarios with each x_s solving g
+    problem, (gp, fitted), u = linear_problem(), fitted_gp(1), 0.3
+    y_mean, y_std, f_mean, f_std = linear_normal(gp, fitted, u)
+    incumbent = f_mean - 0.5 * f_std
+    scenarios = saa_scenarios(500, 1, np.random.default_rng(0))
+    y_s = y_mean + y_std * scenarios.z[:, 0]
+
+    # SAA-EI at those scenario states
+    nlp = hybrid_acquisition(
+        problem, gp, fitted, scenarios, incumbent, EI(), SAA(500, False)
+    ).nlp
+    saa_ei = -nlp.f(variables_at(u, 2 * y_s - u, None, False)).full().item()
+
+    improvement = np.maximum(incumbent - (7 * y_s - 3 * u), 0)
+    error = improvement.std() / np.sqrt(500)
+    assert abs(saa_ei - closed_form_ei(f_mean, f_std, incumbent)) < 4 * error
+
+
+@pytest.mark.parametrize("h_inputs", [["u"], ["x"], ["u", "x"]])
+def test_sensitivity_is_the_total_derivative_of_f_in_the_draws(h_inputs):
+    """df/dz at the nominal states matches central finite differences of a
+    scenario's f_s in its draw z, where x_s solves the known equation with y_s the
+    GP's scenario at its arguments of h, so x moves with y."""
+    problem, (gp, fitted), u = problem_with(h_inputs), fitted_gp(len(h_inputs)), 0.3
+
+    def scenario(z):
+        """The scenario states (x_s, y_s) of draw z: x_s solves x + exp(x) = y_s."""
+
+        def y_of(x):
+            """The GP's scenario mean + std * z at (u, x)."""
+            columns = {"u": u, "x": x}
+            inputs = np.array([[columns[name] for name in h_inputs]])
+            mean, std = predict(gp, fitted, inputs)
+            return mean[0] + std[0] * z
+
+        x = scipy.optimize.brentq(lambda x: x + np.exp(x) - y_of(x), -10.0, 5.0)
+        return x, y_of(x)
+
+    # The sensitivity at the nominal states (z = 0)
+    x_bar, y_bar = scenario(0.0)
+    a = _sensitivity(problem, gp, fitted)(x_bar, y_bar, u).full().item()
+
+    # Central differences of f_s = x_s^2 + y_s in z
+    f = [x**2 + y for x, y in (scenario(1e-5), scenario(-1e-5))]
+    assert a == pytest.approx((f[0] - f[1]) / 2e-5, rel=1e-6)
+
+
 # Hybrid BO
 
 
@@ -446,6 +584,79 @@ def test_stored_acquisition_solution_solves_the_acquisition_problem(
         np.testing.assert_allclose(x_s + np.exp(x_s), y_s, atol=1e-6)
         mean, std = predict(gp, fitted, np.full((5, 1), u))
         np.testing.assert_allclose(y_s, mean + std * run.scenarios.z[:, 0], atol=1e-6)
+
+
+@pytest.mark.parametrize("unknown_states_as_variables", [True, False])
+def test_linearization_runs_over_the_nominal_scenario(
+    illustrative_problem, unknown_states_as_variables
+):
+    """Hybrid BO with linearization holds the nominal scenario, and each iteration
+    stores the nominal states at its trial point, where x solves the known equation
+    with y the GP's mean, and the acquisition problem's objective there."""
+    approximation = Linearization(unknown_states_as_variables)
+    settings = HybridBOSettings(approximation=approximation)
+
+    run = illustrative_run(illustrative_problem, settings)
+
+    # The nominal scenario: zero draws, weight 1
+    history, gp = run.history, default_gp(1)
+    assert run.scenarios is not None
+    np.testing.assert_array_equal(run.scenarios.z, np.zeros((1, 1)))
+    np.testing.assert_array_equal(run.scenarios.w, np.ones(1))
+
+    # Per iteration: the nominal states, and the value at them
+    for i, (solution, fitted) in enumerate(
+        zip(run.acquisitions, run.surrogates, strict=True)
+    ):
+        assert solution.x is not None and solution.y is not None
+        assert solution.x.shape == (1, 1) and solution.y.shape == (1, 1)
+        point = history.n_initial + i
+        u, x, y = history.u[point, 0], solution.x[0, 0], solution.y[0, 0]
+        mean, _ = predict(gp, fitted, np.array([[u]]))
+        assert x + np.exp(x) == pytest.approx(y, abs=1e-6)
+        assert y == pytest.approx(mean[0], abs=1e-6)
+
+        incumbent = float(incumbents(history)[point - 1])
+        nlp = hybrid_acquisition(
+            illustrative_problem,
+            gp,
+            fitted,
+            run.scenarios,
+            incumbent,
+            EI(),
+            approximation,
+        ).nlp
+        w = variables_at(
+            u,
+            solution.x[:, 0],
+            solution.y[:, 0],
+            approximation.unknown_states_as_variables,
+        )
+        assert solution.value == pytest.approx(float(nlp.f(w)), abs=1e-12)
+
+
+def test_linearization_draws_nothing_from_the_generator(illustrative_problem):
+    """Linearization draws no scenarios: a run without iterations leaves the
+    generator where evaluating the initial points does, while SAA draws its
+    scenarios."""
+    # Initial points only (0 iterations), with each approximation
+    measure = oracle_measure(
+        illustrative_problem.system, oracle=lambda v: [cas.sin(v.u)]
+    )
+    u = np.array([[-0.5], [0.5]])
+    states = {}
+    for approximation in (Linearization(), SAA()):
+        rng = np.random.default_rng(0)
+        settings = HybridBOSettings(approximation=approximation)
+        hybrid_bo(illustrative_problem, measure, u, 0, rng, settings=settings)
+        states[type(approximation)] = rng.bit_generator.state
+
+    # The initial points' evaluation alone
+    rng = np.random.default_rng(0)
+    evaluate(illustrative_problem, measure, u, rng)
+
+    assert states[Linearization] == rng.bit_generator.state
+    assert states[SAA] != rng.bit_generator.state
 
 
 def test_gp_inputs_are_the_arguments_of_h():

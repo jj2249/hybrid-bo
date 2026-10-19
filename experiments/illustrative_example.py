@@ -49,12 +49,19 @@ optimum = -50.4608044704652
 
 # Methods: each takes (problem, measure, initial_points, n, rng), where n is the
 # number of iterations, or of design points for the baselines. Hybrid BO substitutes
-# the GP prediction for the unknown states, as this experiment always has
+# the GP prediction for the unknown states, as this experiment always has, with SAA-EI
+# and with Lin-EI
 methods = {
     "hybrid_bo": functools.partial(
         hb.hybrid_bo,
         settings=hb.HybridBOSettings(
             approximation=hb.SAA(unknown_states_as_variables=False)
+        ),
+    ),
+    "hybrid_bo_lin": functools.partial(
+        hb.hybrid_bo,
+        settings=hb.HybridBOSettings(
+            approximation=hb.Linearization(unknown_states_as_variables=False)
         ),
     ),
     "standard_bo": hb.standard_bo,

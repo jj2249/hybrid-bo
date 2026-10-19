@@ -24,7 +24,7 @@ from hybrid_bo import (
     studies,
     views,
 )
-from hybrid_bo.acquisition import EI, LCB, SAA
+from hybrid_bo.acquisition import EI, LCB, SAA, Linearization
 from hybrid_bo.baselines import latin_hypercube_sampling, uniform_sampling
 from hybrid_bo.bo import HybridBOSettings, StandardBOSettings, hybrid_bo, standard_bo
 from hybrid_bo.errors import (
