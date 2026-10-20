@@ -21,6 +21,7 @@ from hybrid_bo.acquisition import (
     LCB,
     SAA,
     Linearization,
+    SoftSAA,
     _pack,
     _scenario_states,
     _sensitivity,
@@ -160,7 +161,7 @@ def iteration(
       value at the trial point. Standard BO's is analytic. Hybrid BO's replays the
       acquisition problem (ADR 0005) from the stored surrogate, scenarios and
       incumbent, with u fixed at each grid point, solved outwards from the stored
-      solution; a failed solve leaves a gap.
+      solution; a failed solve leaves a gap. SoftSAA's -log EI is drawn as -EI.
 
     The baselines (or every panel off) show the points with f. `measure` adds the
     true curves; it runs at every grid point (generator seeded with 0), so pass an
@@ -229,12 +230,16 @@ def iteration(
         )
         figure.suptitle(f"{run.method}, iteration {i}")
         for panel, ax in zip(panels, axes[:, 0], strict=True):
-            # The acquisition function, and the stored value at the trial point
+            # The acquisition function, and the stored value at the trial point.
+            # SoftSAA minimizes -log EI, which is steep far from the incumbent and
+            # squashes the rest, so it is drawn as -EI like the other EI approximations
             if panel == "acquisition":
                 assert settings is not None and curve is not None
+                value = run.acquisitions[i].value
+                if _is_soft(settings):
+                    curve, value = -np.exp(-curve), -np.exp(-value)
                 label = "LCB" if isinstance(settings.acquisition, LCB) else "-EI"
                 ax.plot(u, curve, color="k", label=label)
-                value = run.acquisitions[i].value
                 ax.scatter(
                     trial, value, facecolors="none", edgecolors="r", label="trial point"
                 )
@@ -298,10 +303,13 @@ def _replay_settings(
             )
 
     # The fields the replay uses must be the recorded ones (a custom solver, say),
-    # and so must the kind of approximation, in records that name it
+    # and so must the kind of approximation, in records that name it, and SoftSAA's
+    # temperature
     texts = [_field_text(settings, name) for name in replayed]
     if isinstance(settings, HybridBOSettings) and "approximation=" in recorded:
         texts.append(f"approximation={type(settings.approximation).__name__}(")
+    if _is_soft(settings):
+        texts.append(_field_text(settings, "approximation.temperature"))
     if any(text not in recorded for text in texts):
         msg = f"The settings don't match the run's record ({recorded}); pass them"
         raise ValueError(msg)
@@ -317,14 +325,25 @@ def _replay_settings(
 
 def _recorded_approximation(
     recorded: str, unknown_states_as_variables: bool
-) -> SAA | Linearization:
-    """The approximation a record's settings text names, with this flag: SAA (with
-    the recorded number of scenarios) unless it names linearization."""
+) -> SAA | SoftSAA | Linearization:
+    """The approximation a record's settings text names, with this flag:
+    linearization, SoftSAA (with the recorded temperature and number of scenarios),
+    or else SAA (with the recorded number of scenarios)."""
     if "approximation=Linearization(" in recorded:
         return Linearization(unknown_states_as_variables)
     n_scenarios = re.search(r"n_scenarios=(\d+)", recorded)
     n = SAA.n_scenarios if n_scenarios is None else int(n_scenarios[1])
+    temperature = re.search(r"approximation=SoftSAA\(temperature=([^,)]*)", recorded)
+    if temperature is not None:
+        return SoftSAA(float(temperature[1]), n, unknown_states_as_variables)
     return SAA(n, unknown_states_as_variables)
+
+
+def _is_soft(settings: StandardBOSettings | HybridBOSettings) -> bool:
+    """Whether the settings are hybrid BO's with SoftSAA."""
+    return isinstance(settings, HybridBOSettings) and isinstance(
+        settings.approximation, SoftSAA
+    )
 
 
 def _field_text(settings: StandardBOSettings | HybridBOSettings, name: str) -> str:

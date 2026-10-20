@@ -175,6 +175,12 @@ they are bound with ``functools.partial``:
   ``hybrid_bo_lin`` above) builds the acquisition problem from one scenario, the
   nominal states, so it is smaller still; it gives EI only, and takes
   ``unknown_states_as_variables`` too.
+  :py:class:`~hybrid_bo.acquisition.SoftSAA` (SoftSAA-EI, as ``hybrid_bo_soft``
+  above) is SAA-EI with each scenario's improvement softened by a smooth maximum,
+  so the solver doesn't stall where no scenario improves. It takes a
+  ``temperature``, in units of the objective, with no default (smaller is closer to
+  SAA-EI), and ``SAA``'s settings; it gives EI only. Its stored acquisition value
+  is -log EI; the iteration plot draws it as -EI.
 - :py:func:`~hybrid_bo.bo.standard_bo` with
   :py:class:`~hybrid_bo.bo.StandardBOSettings`: BO with a GP of the objective, as the
   usual comparison.

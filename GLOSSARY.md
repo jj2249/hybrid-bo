@@ -210,21 +210,34 @@ _Avoid_: acquisition optimization
 **Acquisition function**:
 The objective of the acquisition problem: expected improvement (EI) or lower confidence
 bound (LCB). Standard BO computes it analytically from the GP's mean and variance;
-hybrid BO computes it by an approximation. SAA-EI and Lin-EI are the same acquisition
-function under two approximations.
+hybrid BO computes it by an approximation. SAA-EI, SoftSAA-EI and Lin-EI are the same
+acquisition function under three approximations.
 _Avoid_: formulation_acq, acquisition formulation
 
 **Approximation**:
 How hybrid BO computes its acquisition function, which has no closed form under the
-hybrid model: the sample-average approximation or linearization. A setting of hybrid
-BO, not a method of its own, chosen apart from the acquisition function (though
-linearization gives EI only).
+hybrid model: the sample-average approximation, the soft sample-average approximation
+or linearization. A setting of hybrid BO, not a method of its own, chosen apart from the
+acquisition function (though the soft sample-average approximation and linearization
+give EI only).
 _Avoid_: formulation, estimator
 
 **Sample-average approximation** (SAA):
 The approximation that averages the objective over drawn scenarios, each weighted
 `1/S`. Gives SAA-EI and SAA-LCB.
 _Avoid_: Monte Carlo approximation, sampling
+
+**Soft sample-average approximation** (SoftSAA):
+The sample-average approximation of EI with each scenario's improvement softened by a
+smooth maximum at a temperature, so the acquisition function has no flat regions or
+kinks. Gives SoftSAA-EI.
+_Avoid_: smoothed SAA, LogEI, soft EI, SAA-Soft-EI
+
+**Temperature** (`τ`):
+How far the soft sample-average approximation softens the maximum, in units of the
+objective; the smaller it is, the closer SoftSAA-EI comes to SAA-EI where that is
+positive.
+_Avoid_: smoothing, beta
 
 **Scenario**:
 One realization of the GP's prediction of the unknown states, with its own mechanistic
