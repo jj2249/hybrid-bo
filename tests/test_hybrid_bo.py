@@ -524,6 +524,7 @@ def test_lcb_with_soft_saa_is_rejected():
     the acquisition builder reject it with LCB."""
     gp, fitted = fitted_gp(1)
 
+    # The settings, then the acquisition builder
     with pytest.raises(ValueError, match=r"EI\(\) with SoftSAA"):
         HybridBOSettings(acquisition=LCB(), approximation=SoftSAA(1.0))
     with pytest.raises(ValueError, match=r"EI\(\) with SoftSAA"):
@@ -558,10 +559,11 @@ def test_soft_saa_ei_is_minus_log_the_weighted_smooth_improvement(
 ):
     """The SoftSAA acquisition problem minimizes -log sum_s w_s tau log(1 + exp(a_s /
     tau)), with a_s = incumbent - f_s."""
-    # f_s is about 0.36, 0.62 and 2.13, so the incumbent sits among them
+    # Setup: f_s is about 0.36, 0.62 and 2.13, so the incumbent sits among them
     temperature, incumbent = 0.5, 1.0
     soft, _, w, f = ei_problems(incumbent, temperature, unknown_states_as_variables)
 
+    # Check: the objective against numpy's
     a = incumbent - f
     smooth = temperature * np.log1p(np.exp(a / temperature))
     expected = -np.log(SCENARIOS.w @ smooth)
@@ -572,10 +574,12 @@ def test_soft_saa_ei_is_saa_ei_where_every_scenario_improves_by_far():
     """With the incumbent far above every f_s compared with the temperature, the
     smooth maximum is the maximum, so exp(-objective) is SAA-EI, which is positive
     there."""
-    # Setup: f_s is at most about 2.13, so every a_s is above 1.8, 180 tau
-    soft, saa, w, f = ei_problems(4.0, 0.01, False)
-    assert np.all(4.0 - f > 180 * 0.01)
+    # Setup: the incumbent 200 tau above the largest f_s at the point
+    temperature = 0.01
+    *_, f = ei_problems(0.0, temperature, False)
+    soft, saa, w, _ = ei_problems(f.max() + 200 * temperature, temperature, False)
 
+    # Check: SAA-EI is positive, and exp(-objective) is it
     saa_ei = -saa.nlp.f(w).full().item()
     assert saa_ei > 0
     np.testing.assert_allclose(np.exp(-soft.nlp.f(w).full().item()), saa_ei, rtol=1e-12)
@@ -610,10 +614,12 @@ def test_soft_saa_ei_is_finite_far_from_the_incumbent(incumbent):
     """At a_s / tau beyond -1000 or 1000, where exp(a_s / tau) underflows or
     overflows, the objective and its gradient are finite; far below, the objective
     matches the asymptote -log sum_s w_s tau exp(a_s / tau)."""
+    # Setup: a temperature small enough to put every a_s / tau beyond +-1000
     soft, _, w, f = ei_problems(incumbent, 0.002, False)
     a = (incumbent - f) / 0.002
     assert np.all(np.abs(a) > 1000)
 
+    # Check: the objective and its gradient are finite, and match the asymptote below
     value = soft.nlp.f(w).full().item()
     assert np.isfinite(value)
     assert np.all(np.isfinite(gradient(soft.nlp, w)))

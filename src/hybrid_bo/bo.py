@@ -233,8 +233,8 @@ def hybrid_bo(
     the known equations in the acquisition problem (paper, Problems 8 and 9).
 
     Draws the scenarios (SAA and SoftSAA: `settings.approximation.n_scenarios`
-    standard normal draws, equal weights; linearization draws nothing and has the nominal scenario
-    alone), the same in every iteration. Then evaluates the initial
+    standard normal draws, equal weights; linearization draws nothing and has the
+    nominal scenario alone), the same in every iteration. Then evaluates the initial
     points (n, N), and in each iteration fits the GP to the measured and reconstructed
     states so far, solves `hybrid_acquisition` by multistart from Latin hypercube
     starts over the start bounds of its variables, and evaluates the decision

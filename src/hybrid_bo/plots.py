@@ -304,9 +304,7 @@ def _replay_settings(
     texts = [_field_text(settings, name) for name in replayed]
     if isinstance(settings, HybridBOSettings) and "approximation=" in recorded:
         texts.append(f"approximation={type(settings.approximation).__name__}(")
-    if isinstance(settings, HybridBOSettings) and isinstance(
-        settings.approximation, SoftSAA
-    ):
+    if _is_soft(settings):
         texts.append(_field_text(settings, "approximation.temperature"))
     if any(text not in recorded for text in texts):
         msg = f"The settings don't match the run's record ({recorded}); pass them"
@@ -324,9 +322,9 @@ def _replay_settings(
 def _recorded_approximation(
     recorded: str, unknown_states_as_variables: bool
 ) -> SAA | SoftSAA | Linearization:
-    """The approximation a record's settings text names, with this flag: SAA (with
-    the recorded number of scenarios) unless it names linearization, or SoftSAA
-    (with the recorded temperature and number of scenarios)."""
+    """The approximation a record's settings text names, with this flag:
+    linearization, SoftSAA (with the recorded temperature and number of scenarios),
+    or else SAA (with the recorded number of scenarios)."""
     if "approximation=Linearization(" in recorded:
         return Linearization(unknown_states_as_variables)
     n_scenarios = re.search(r"n_scenarios=(\d+)", recorded)
@@ -341,10 +339,14 @@ def _acquisition_label(settings: StandardBOSettings | HybridBOSettings) -> str:
     """The acquisition problem's objective, as the acquisition panel names it."""
     if isinstance(settings.acquisition, LCB):
         return "LCB"
-    is_soft = isinstance(settings, HybridBOSettings) and isinstance(
+    return "-log EI" if _is_soft(settings) else "-EI"
+
+
+def _is_soft(settings: StandardBOSettings | HybridBOSettings) -> bool:
+    """Whether the settings are hybrid BO's with SoftSAA."""
+    return isinstance(settings, HybridBOSettings) and isinstance(
         settings.approximation, SoftSAA
     )
-    return "-log EI" if is_soft else "-EI"
 
 
 def _field_text(settings: StandardBOSettings | HybridBOSettings, name: str) -> str:

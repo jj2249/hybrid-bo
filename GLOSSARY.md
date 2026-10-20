@@ -224,7 +224,7 @@ _Avoid_: Monte Carlo approximation, sampling
 **Soft sample-average approximation** (SoftSAA):
 The sample-average approximation of EI with each scenario's improvement softened by a
 smooth maximum at a temperature, so the acquisition function has no flat regions or
-kinks; the acquisition problem minimizes its negative log. Gives SoftSAA-EI.
+kinks. Gives SoftSAA-EI.
 _Avoid_: smoothed SAA, LogEI, soft EI, SAA-Soft-EI
 
 **Temperature** (`τ`):

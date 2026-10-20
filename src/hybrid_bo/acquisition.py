@@ -23,7 +23,7 @@ from hybrid_bo.solvers import NLP
 # Added to the standard deviation in EI, so a zero std doesn't divide by zero
 _EI_STD_EPSILON = 1e-10
 
-# Below this a / tau, log log(1 + exp(a / tau)) is a / tau to double precision
+# Below this a / tau, log log(1 + exp(a / tau)) is a / tau within about 1e-13
 _LOG_SOFTPLUS_LINEAR_BELOW = -30.0
 
 
