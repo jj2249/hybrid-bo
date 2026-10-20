@@ -7,8 +7,8 @@ hyperparameters by maximizing the log marginal likelihood and returns the fitted
 mean and standard deviation in original units, at numeric or symbolic points.
 
 The hyperparameter named `noise_std`, if the prior GP declares one, is the standard
-deviation of the observation noise. Without it the fitted GP interpolates the training
-data; only `jitter` is added to the diagonal.
+deviation of the observation noise. Without it the fitted GP nearly interpolates the
+training data; only `jitter` is added to the diagonal.
 """
 
 import keyword
@@ -84,8 +84,9 @@ class PriorGP:
     optimized, and the kernel `(h, X1, X2) -> (n1, n2)` and mean `(h, X) -> (n, 1)` as
     functions of them.
 
-    `jitter` is added to the diagonal of the training covariance: a nugget that keeps
-    it well conditioned when inputs cluster, as they do once a run converges. Raises `ValueError` if a hyperparameter name repeats.
+    `jitter` is added to the diagonal of the training covariance, a nugget that keeps
+    it well conditioned when inputs cluster (DESIGN.md). Raises `ValueError` if a
+    hyperparameter name repeats.
     """
 
     hyperparameters: tuple[Hyper, ...]

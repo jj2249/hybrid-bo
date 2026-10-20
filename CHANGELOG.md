@@ -4,8 +4,8 @@
 
 - **Changes results:** `PriorGP.jitter` defaults to 1e-6 instead of 1e-10. With
   1e-10 the GP fit stalled once a run's inputs clustered (cond(K) about 1e11), so a
-  15-iteration hybrid BO run on the illustrative example took 230s; it now takes
-  11s. Fitted GPs, and so the BO methods' trial points, change (#107).
+  15-iteration hybrid BO run on the illustrative example took 160s; it now takes
+  4s. Fitted GPs, and so the BO methods' trial points, change (#107).
 - Lin-EI: `hb.Linearization()` as hybrid BO's approximation
   (`HybridBOSettings(approximation=hb.Linearization())`) computes EI in closed form
   from the objective linearized around the nominal states, over one scenario instead

@@ -40,9 +40,9 @@ the marginal likelihood. Its predictions are the conditional mean and standard
 deviation of the noise-free output.
 _Avoid_: trained GP, conditioned GP, posterior
 
-**Jitter** (`jitter`):
+**Jitter** or **nugget** (`jitter`):
 A small constant added to the diagonal of a GP's training covariance so it stays
-well conditioned, also called a nugget. It is a numerical safeguard, not observation
+well conditioned. It is a numerical safeguard, not observation
 noise, which a `noise_std` hyperparameter models.
 _Avoid_: epsilon
 

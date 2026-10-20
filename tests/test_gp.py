@@ -231,8 +231,10 @@ def test_fit_converges_on_clustered_inputs(caplog):
     converges: the jitter keeps the training covariance well conditioned (#107).
 
     With a jitter of 1e-10 these six points (iteration 5 of the illustrative example,
-    seed 0) gave cond(K) of about 1e11, and 7 of 10 starts ran to IPOPT's iteration
-    limit.
+    seed 0, inputs to four digits, outputs sin(u) as its noise-free oracle gives) gave
+    cond(K) of about 1e11, and 7 of 10 starts ran to IPOPT's iteration limit. A start
+    that hits the limit fails, so no failed start means every start converged; this
+    stands in for timing the fit, which would be flaky.
     """
     X = np.array([-1.8859, 1.3673, -1.9739, -1.591, -1.5762, -1.57])[:, None]
 

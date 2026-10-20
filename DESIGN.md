@@ -395,7 +395,7 @@ gp = hb.gp.PriorGP(
 
 - **Noise.** The hyperparameter named `noise_std`, if declared, is the observation
   noise: `K = k(X, X) + (noise_std**2 + jitter) I`. Without it the fitted GP
-  interpolates.
+  nearly interpolates (see **Jitter**).
   `default_gp` is noise-free, because the illustrative example (legacy
   `noise_std.fix(0.0)`) is; add `noise_std` for noisy data.
 - **Jitter** is 1e-6 (#107), a nugget in the sense of Gramacy & Lee (2012), "Cases
