@@ -53,7 +53,7 @@ def multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
     with the lowest objective.
 
     A start that fails is expected, so it is logged (at debug level, without a
-    traceback) and skipped; so is the number that failed and the time taken, under
+    traceback) and skipped; so are the number that failed and the time taken, under
     the name of `nlp.f`. Raises `NoSolutionError` if every start fails.
     """
     # The problem, with the bounds as constraints (as the pre-refactor optimizer had
@@ -67,7 +67,7 @@ def multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
     opti.subject_to(w <= nlp.upper[:, np.newaxis])
 
     # Solve from each start; a NaN objective never wins
-    clock = time.perf_counter()
+    started = time.perf_counter()
     best, f_best, n_failed = None, np.inf, 0
     for i, start in enumerate(starts):
         opti.set_initial(w, start)
@@ -86,7 +86,7 @@ def multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
         nlp.f.name(),
         n_failed,
         len(starts),
-        time.perf_counter() - clock,
+        time.perf_counter() - started,
     )
 
     if best is None:

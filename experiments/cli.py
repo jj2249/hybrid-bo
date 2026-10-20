@@ -31,6 +31,7 @@ import argparse
 import logging
 import os
 import sys
+import warnings
 from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import replace
@@ -49,6 +50,7 @@ RESULTS_ROOT = Path(__file__).parent.parent / "results"
 ARTIFACTS = (ARTIFACT_FILE, OLD_ARTIFACT_FILE)
 STUDY_LOG = "study.log"
 LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+CONSOLE_FORMAT = "%(levelname)s %(name)s: %(message)s"
 
 _logger = logging.getLogger(__name__)
 
@@ -83,18 +85,9 @@ def main(
     # Run: a tree that isn't clean gives a study that isn't reproducible
     if command == "run":
         version = code_version(Path(hb.__file__).parent)
-        if not is_clean(version) and parsed.require_clean:
+        clean = is_clean(version)
+        if not clean and parsed.require_clean:
             parsers["run"].error(f"the code version {version} isn't clean")
-
-        # Reserve the study id: a taken name is refused, a taken UTC time suffixed
-        default_id = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-        try:
-            study_id = reserve(
-                experiment_dir, parsed.name or default_id, suffix=not parsed.name
-            )
-        except FileExistsError as error:
-            parsers["run"].error(str(error))
-        log_path = experiment_dir / f"{study_id}.log"
 
         # The experiment's settings, overridden by the flags given
         given = {
@@ -108,11 +101,22 @@ def main(
         )
         chosen = {label: methods[label] for label in parsed.methods or methods}
 
+        # Reserve the study id: a taken name is refused, a taken UTC time suffixed
+        default_id = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+        try:
+            log_path = reserve(
+                experiment_dir,
+                parsed.name or default_id,
+                suffix_if_taken=not parsed.name,
+            )
+        except FileExistsError as error:
+            parsers["run"].error(str(error))
+
         # Run and save the study, logging to its study log; a study that doesn't
         # finish leaves the log where it is
         try:
             with study_log(log_path):
-                if not is_clean(version):
+                if not clean:
                     _logger.warning(
                         "The code version %s isn't clean (uncommitted or untracked "
                         "files), so this study won't be reproducible",
@@ -121,7 +125,7 @@ def main(
                 study = hb.study(
                     chosen, problem, measure, settings, name=name, optimum=optimum
                 )
-                study_dir = hb.save(study, experiment_dir / study_id)
+                study_dir = hb.save(study, log_path.with_suffix(""))
                 for label in chosen:
                     n_saved = sum(run.method == label for run in study.runs)
                     _logger.info(
@@ -205,13 +209,13 @@ def _from_init_cwd(path: Path) -> Path:
     return Path(os.environ.get("INIT_CWD", ".")) / path
 
 
-def reserve(experiment_dir: Path, study_id: str, *, suffix: bool) -> str:
+def reserve(experiment_dir: Path, study_id: str, *, suffix_if_taken: bool) -> Path:
     """Reserves a study id in `experiment_dir` by creating its study log,
-    `<study id>.log`, and returns the id. An id is taken if its log or its folder
-    exists; creating the log fails if it exists, so studies started at once never
-    share an id.
+    `<study id>.log`, and returns the log's path (the study folder is the path
+    without `.log`). An id is taken if its log or its folder exists; creating the
+    log fails if it exists, so studies started at once never share an id.
 
-    A taken id gets `-2`, `-3`, ... appended if `suffix`; otherwise raises
+    A taken id gets `-2`, `-3`, ... appended if `suffix_if_taken`; otherwise raises
     `FileExistsError` saying what holds it.
     """
     experiment_dir.mkdir(parents=True, exist_ok=True)
@@ -226,8 +230,8 @@ def reserve(experiment_dir: Path, study_id: str, *, suffix: bool) -> str:
             except FileExistsError:
                 holder = f"the log of a study that didn't finish, {log}"
             else:
-                return candidate
-        if not suffix:
+                return log
+        if not suffix_if_taken:
             msg = f"the study id {candidate} is taken by {holder}"
             raise FileExistsError(msg)
         candidate, n = f"{study_id}-{n}", n + 1
@@ -243,9 +247,13 @@ def study_log(path: Path) -> Generator[None]:
     file_handler.setFormatter(logging.Formatter(LOG_FORMAT))
     console = logging.StreamHandler()
     console.setLevel(logging.INFO)
-    console.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
+    console.setFormatter(logging.Formatter(CONSOLE_FORMAT))
+
+    # Attach them, saving what to put back: the levels, and whether warnings were
+    # logged already (logging's `showwarning` replaces the warnings module's)
     root, library = logging.getLogger(), logging.getLogger("hybrid_bo")
-    levels = root.level, library.level
+    root_level, library_level = root.level, library.level
+    captured = getattr(warnings.showwarning, "__module__", None) == "logging"
     root.addHandler(file_handler)
     root.addHandler(console)
     root.setLevel(logging.INFO)
@@ -255,9 +263,9 @@ def study_log(path: Path) -> Generator[None]:
     try:
         yield
     finally:
-        logging.captureWarnings(False)
-        root.setLevel(levels[0])
-        library.setLevel(levels[1])
+        logging.captureWarnings(captured)
+        root.setLevel(root_level)
+        library.setLevel(library_level)
         root.removeHandler(console)
         root.removeHandler(file_handler)
         file_handler.close()
