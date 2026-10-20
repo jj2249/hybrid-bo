@@ -553,8 +553,9 @@ SAA-EI stays the paper's and the two can be compared as settings of one study.
 - **EI only.** LCB has no maximum to soften, so `LCB` with `SoftSAA` is a
   `ValueError`, not `NotImplementedError`.
 - **The stored value is −log SoftSAA-EI**, the objective the problem minimizes, as
-  for every approximation, so the iteration plots' replay passes through it; the
-  plot labels it `-log EI`.
+  for every approximation. The iteration plot draws it as −EI, `−exp(−value)`:
+  −log EI grows like `(f − incumbent)/τ` far from the incumbent, so on a linear axis
+  it squashes the regions that matter, and as −EI it reads like SAA-EI and Lin-EI.
 
 #### Linearization (Lin-EI)
 

@@ -179,8 +179,8 @@ they are bound with ``functools.partial``:
   above) is SAA-EI with each scenario's improvement softened by a smooth maximum,
   so the solver doesn't stall where no scenario improves. It takes a
   ``temperature``, in units of the objective, with no default (smaller is closer to
-  SAA-EI), and ``SAA``'s settings; it gives EI only. Its acquisition value is
-  -log EI.
+  SAA-EI), and ``SAA``'s settings; it gives EI only. Its stored acquisition value
+  is -log EI; the iteration plot draws it as -EI.
 - :py:func:`~hybrid_bo.bo.standard_bo` with
   :py:class:`~hybrid_bo.bo.StandardBOSettings`: BO with a GP of the objective, as the
   usual comparison.

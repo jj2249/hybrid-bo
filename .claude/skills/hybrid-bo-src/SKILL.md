@@ -39,7 +39,7 @@ code uses GLOSSARY.md's terms; use them in PRs, tests and comments too.
     `tau log(1 + exp(a_s / tau))`; the problem minimizes `-log` of the weighted
     average (SoftSAA-EI), a logsumexp of `_log_softplus`, so it is finite with a
     nonzero gradient where SAA-EI is flat. The stored acquisition value is that
-    `-log`. The temperature is required (positive, finite). EI only: LCB raises
+    `-log`; the iteration plot draws it as `-EI`, `-exp(-value)`. The temperature is required (positive, finite). EI only: LCB raises
     `ValueError`.
   - With `Linearization` the problem has one scenario, the nominal scenario (`z = 0`,
     weight 1), so `x̄` solves `g` with `ȳ` the GP's mean (or tied to it, by the same

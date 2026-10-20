@@ -282,18 +282,20 @@ def test_replayed_acquisition_at_the_trial_point_is_the_stored_value(
 ):
     """The acquisition curve, replayed from the stored surrogate (and for hybrid BO
     the scenarios and the stored solution), passes through the acquisition value
-    the run stored at its trial point."""
+    the run stored at its trial point. SoftSAA stores -log EI and is drawn as -EI,
+    -exp(-value), so it reads like the other EI approximations."""
     # Act: the figure with the acquisition panel alone
     run = request.getfixturevalue(run_name)
     figure = plots.iteration(run, ex.problem, i, gp=False, scenarios=False)
 
     # Check: the curve at the trial point
     (ax,) = figure.axes
-    names = {"hybrid_lcb_run": "LCB", "hybrid_soft_run": "-log EI"}
-    curve = drawn_line(ax, names.get(run_name, "-EI"))
+    curve = drawn_line(ax, "LCB" if run_name == "hybrid_lcb_run" else "-EI")
     trial = run.history.u[run.history.n_initial + i, 0]
     (at_trial,) = np.flatnonzero(np.asarray(curve.get_xdata()) == trial)
     stored = run.acquisitions[i].value
+    if run_name == "hybrid_soft_run":
+        stored = -np.exp(-stored)
     replayed = np.asarray(curve.get_ydata())[at_trial]
     np.testing.assert_allclose(replayed, stored, rtol=1e-8)
     plt.close("all")

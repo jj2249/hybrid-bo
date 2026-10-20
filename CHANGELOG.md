@@ -6,7 +6,8 @@
   (`HybridBOSettings(approximation=hb.SoftSAA(1.0))`) is SAA-EI with each scenario's
   improvement softened by a smooth maximum at the temperature, in units of the
   objective, so the acquisition problem has no flat regions or kinks; it minimizes
-  -log SoftSAA-EI, which runs store as their acquisition value. It takes
+  -log SoftSAA-EI, which runs store as their acquisition value (the iteration plot
+  draws it as -EI). It takes
   `n_scenarios` and `unknown_states_as_variables` like `SAA` and gives EI only; with
   `LCB` it raises `ValueError`. The illustrative example runs it as
   `hybrid_bo_soft` (#103).

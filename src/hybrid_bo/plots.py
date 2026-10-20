@@ -161,7 +161,7 @@ def iteration(
       value at the trial point. Standard BO's is analytic. Hybrid BO's replays the
       acquisition problem (ADR 0005) from the stored surrogate, scenarios and
       incumbent, with u fixed at each grid point, solved outwards from the stored
-      solution; a failed solve leaves a gap.
+      solution; a failed solve leaves a gap. SoftSAA's -log EI is drawn as -EI.
 
     The baselines (or every panel off) show the points with f. `measure` adds the
     true curves; it runs at every grid point (generator seeded with 0), so pass an
@@ -230,12 +230,16 @@ def iteration(
         )
         figure.suptitle(f"{run.method}, iteration {i}")
         for panel, ax in zip(panels, axes[:, 0], strict=True):
-            # The acquisition function, and the stored value at the trial point
+            # The acquisition function, and the stored value at the trial point.
+            # SoftSAA minimizes -log EI, which is steep far from the incumbent and
+            # squashes the rest, so it is drawn as -EI like the other EI approximations
             if panel == "acquisition":
                 assert settings is not None and curve is not None
-                label = _acquisition_label(settings)
-                ax.plot(u, curve, color="k", label=label)
                 value = run.acquisitions[i].value
+                if _is_soft(settings):
+                    curve, value = -np.exp(-curve), -np.exp(-value)
+                label = "LCB" if isinstance(settings.acquisition, LCB) else "-EI"
+                ax.plot(u, curve, color="k", label=label)
                 ax.scatter(
                     trial, value, facecolors="none", edgecolors="r", label="trial point"
                 )
@@ -333,13 +337,6 @@ def _recorded_approximation(
     if temperature is not None:
         return SoftSAA(float(temperature[1]), n, unknown_states_as_variables)
     return SAA(n, unknown_states_as_variables)
-
-
-def _acquisition_label(settings: StandardBOSettings | HybridBOSettings) -> str:
-    """The acquisition problem's objective, as the acquisition panel names it."""
-    if isinstance(settings.acquisition, LCB):
-        return "LCB"
-    return "-log EI" if _is_soft(settings) else "-EI"
 
 
 def _is_soft(settings: StandardBOSettings | HybridBOSettings) -> bool:
