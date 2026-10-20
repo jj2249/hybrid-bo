@@ -243,3 +243,40 @@ def test_fit_converges_on_clustered_inputs(caplog):
         fit_gp(default_gp(1), X, np.sin(X[:, 0]), np.random.default_rng(0))
 
     assert "0 of 10 starts failed" in caplog.text
+
+
+def test_nearly_singular_covariance_is_warned_about(caplog):
+    """A fit whose training covariance is nearly singular at the fitted
+    hyperparameters (near-duplicate inputs and a tiny jitter) logs a warning giving
+    the condition number and the jitter.
+
+    The check runs at whichever hyperparameters the fit keeps, so a few iterations
+    from two starts are enough (a full fit on these data takes about 20s).
+    """
+    X = np.array([0.0, 0.5, 0.5 + 1e-9, 1.0])[:, None]
+    gp = replace(default_gp(1), jitter=1e-14)
+    few_iterations = Ipopt(solver_options={"print_level": 0, "max_iter": 10})
+
+    fit_gp(
+        gp,
+        X,
+        np.sin(X[:, 0]),
+        np.random.default_rng(0),
+        n_starts=2,
+        solver=few_iterations,
+    )
+
+    messages = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    conditioning = [message for message in messages if "condition number" in message]
+    assert len(conditioning) == 1
+    assert "1e-14" in conditioning[0]
+
+
+def test_well_conditioned_fit_is_not_warned_about(caplog):
+    """A fit with the default jitter on spread-out inputs logs no warning about the
+    condition number."""
+    X, Y = FIT_DATA["1d"]
+
+    fit_gp(default_gp(1), X, Y, np.random.default_rng(0))
+
+    assert "condition number" not in caplog.text

@@ -30,6 +30,9 @@ from hybrid_bo.solvers import NLP, Ipopt, multistart
 
 _logger = logging.getLogger(__name__)
 
+# Above this condition number of the fitted training covariance, `fit_gp` warns
+CONDITION_THRESHOLD = 1e10
+
 
 @dataclass(frozen=True)
 class Hyper:
@@ -216,12 +219,16 @@ def _split(hypers: Sequence[Hyper], values: Any) -> dict[str, Any]:
     }
 
 
-def _training_cholesky(gp: PriorGP, h: Any, X: Any) -> Any:
-    """The lower Cholesky factor of the training covariance, kernel plus noise
-    variance plus jitter on the diagonal."""
+def _training_covariance(gp: PriorGP, h: Any, X: Any) -> Any:
+    """The training covariance: kernel plus noise variance plus jitter on the
+    diagonal."""
     noise_variance = h.noise_std**2 if hasattr(h, "noise_std") else 0.0
-    K = gp.kernel(h, X, X) + (noise_variance + gp.jitter) * Symbolic.eye(X.shape[0])
-    return cas.chol(K).T  # CasADi returns the upper factor
+    return gp.kernel(h, X, X) + (noise_variance + gp.jitter) * Symbolic.eye(X.shape[0])
+
+
+def _training_cholesky(gp: PriorGP, h: Any, X: Any) -> Any:
+    """The lower Cholesky factor of the training covariance."""
+    return cas.chol(_training_covariance(gp, h, X)).T  # CasADi returns the upper factor
 
 
 def _log_marginal_likelihood(gp: PriorGP, h: Any, X: np.ndarray, Y: np.ndarray) -> Any:
@@ -259,7 +266,9 @@ def fit_gp(
     variance (`standard`), then maximizes the log marginal likelihood over the
     hyperparameters (log ones in log space) with `multistart`, from `n_starts` Latin
     hypercube starts over their bounds. If every start fails, it keeps the initial
-    values and logs a warning. Logs the time taken at debug level.
+    values and logs a warning. It also warns if the training covariance at the kept
+    hyperparameters has a condition number above `CONDITION_THRESHOLD`. Logs the
+    time taken at debug level.
     """
     # Scale the data
     start = time.perf_counter()
@@ -298,9 +307,20 @@ def fit_gp(
     except NoSolutionError:
         _logger.warning("Every GP fit failed; keeping the initial values")
         w_best = to_search_space(init)
-    values = np.where(is_log, np.exp(w_best), w_best)
+    values = _split(hypers, np.where(is_log, np.exp(w_best), w_best))
+
+    # Warn if the training covariance is nearly singular at those values
+    K = cas.evalf(_training_covariance(gp, _namespace(values), Symbolic(X_scaled)))
+    condition_number = np.linalg.cond(K.full())
+    if condition_number > CONDITION_THRESHOLD:
+        _logger.warning(
+            "The fitted GP's training covariance is nearly singular: condition "
+            "number %.3g with jitter %g",
+            condition_number,
+            gp.jitter,
+        )
     _logger.debug("Fitted the GP in %.2fs", time.perf_counter() - start)
-    return FittedGP(_split(hypers, values), X_scaled, Y_scaled, x_scaler, y_scaler)
+    return FittedGP(values, X_scaled, Y_scaled, x_scaler, y_scaler)
 
 
 def predict(gp: PriorGP, fitted: FittedGP, X: Any) -> tuple[Any, Any]:

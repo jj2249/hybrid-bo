@@ -54,7 +54,8 @@ def multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
 
     A start that fails is expected, so it is logged (at debug level, without a
     traceback) and skipped; so are the number that failed and the time taken, under
-    the name of `nlp.f`. Raises `NoSolutionError` if every start fails.
+    the name of `nlp.f`. Starts that ran IPOPT to its iteration limit are also
+    counted in one warning. Raises `NoSolutionError` if every start fails.
     """
     # The problem, with the bounds as constraints (as the pre-refactor optimizer had
     # them, so IPOPT takes the steps the regression baselines record)
@@ -68,7 +69,7 @@ def multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
 
     # Solve from each start; a NaN objective never wins
     started = time.perf_counter()
-    best, f_best, n_failed = None, np.inf, 0
+    best, f_best, n_failed, n_at_limit = None, np.inf, 0, 0
     for i, start in enumerate(starts):
         opti.set_initial(w, start)
         opti.solver("ipopt", solver.plugin_options, solver.solver_options)
@@ -77,6 +78,7 @@ def multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
         except RuntimeError as error:
             _logger.debug("Start %d of %d failed: %s", i + 1, len(starts), error)
             n_failed += 1
+            n_at_limit += opti.stats()["return_status"] == "Maximum_Iterations_Exceeded"
             continue
         f = float(solution.value(opti.f))
         if f < f_best:
@@ -88,6 +90,13 @@ def multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
         len(starts),
         time.perf_counter() - started,
     )
+    if n_at_limit:
+        _logger.warning(
+            "%s: %d of %d starts stopped at IPOPT's iteration limit",
+            nlp.f.name(),
+            n_at_limit,
+            len(starts),
+        )
 
     if best is None:
         msg = f"Every one of the {len(starts)} starts failed"
