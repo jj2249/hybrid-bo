@@ -84,14 +84,14 @@ class PriorGP:
     optimized, and the kernel `(h, X1, X2) -> (n1, n2)` and mean `(h, X) -> (n, 1)` as
     functions of them.
 
-    `jitter` is added to the diagonal of the training covariance, for a stable Cholesky
-    factorization. Raises `ValueError` if a hyperparameter name repeats.
+    `jitter` is added to the diagonal of the training covariance: a nugget that keeps
+    it well conditioned when inputs cluster, as they do once a run converges. Raises `ValueError` if a hyperparameter name repeats.
     """
 
     hyperparameters: tuple[Hyper, ...]
     kernel: Callable[[Any, Any, Any], Any]
     mean: Callable[[Any, Any], Any] = zero_mean
-    jitter: float = 1e-10
+    jitter: float = 1e-6
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "hyperparameters", tuple(self.hyperparameters))

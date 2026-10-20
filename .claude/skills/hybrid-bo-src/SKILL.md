@@ -138,6 +138,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `fit_gp` maximizes. The `gp` fields and arguments hold a `PriorGP`. The
   hyperparameter named `noise_std`, if declared, is the noise:
   `K = k(X, X) + (noise_std**2 + jitter) I`; without it only `jitter` is added.
+  The jitter defaults to 1e-6, a nugget: much smaller and the fit stalls once the
+  inputs cluster (#107, DESIGN.md).
   Numeric data enter CasADi as `Symbolic` constants. Keep the `minmax` operation
   order: it reproduces the pre-refactor values bit for bit for [0, 1], which the
   baselines depend on. `_gp_record` gives the prior GP as text for a run's record.

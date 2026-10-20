@@ -347,7 +347,7 @@ class PriorGP:  # the prior GP, before it sees any data
     hyperparameters: tuple[Hyper, ...]  # declaration order is the optimization order
     kernel: Callable  # (h, X1, X2) -> (n1, n2)
     mean: Callable = zero_mean  # (h, X) -> (n, 1)
-    jitter: float = 1e-10
+    jitter: float = 1e-6
 
 
 @dataclass(frozen=True)
@@ -398,6 +398,12 @@ gp = hb.gp.PriorGP(
   interpolates.
   `default_gp` is noise-free, because the illustrative example (legacy
   `noise_std.fix(0.0)`) is; add `noise_std` for noisy data.
+- **Jitter** is 1e-6 (#107), a nugget in the sense of Gramacy & Lee (2012), "Cases
+  for the nugget in modeling computer experiments". Once a run converges its inputs
+  cluster, and with legacy's 1e-10 the training covariance reached cond(K) of about
+  1e11: most GP-fit starts then ran to IPOPT's iteration limit, and `fit_gp` took
+  15-25s per iteration on the illustrative example. With 1e-6 the posterior std at
+  the data is about 1e-3 in scaled units, negligible for EI.
 - **Output scale** multiplies the kernel unsquared, as legacy `OutputScaleKernel` did,
   so `default_gp` fits the same hyperparameters as the legacy GP.
 - `fit_gp` fits the scalers (`minmax` onto [0, 1] for X, `standard` for Y), calls
