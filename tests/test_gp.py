@@ -1,6 +1,7 @@
 """Fitted GP prediction and log marginal likelihood vs numpy/scipy references, and
 what a fit finds and draws."""
 
+import logging
 from dataclasses import replace
 
 import casadi as cas
@@ -23,7 +24,7 @@ from hybrid_bo.solvers import Ipopt
 
 RTOL, ATOL = 1e-8, 1e-10
 NOISE_STD = 0.1
-JITTER = 1e-10  # always added to the diagonal
+JITTER = 1e-6  # always added to the diagonal
 
 rng = np.random.default_rng(0)
 X_train = rng.uniform(-1, 1, size=(6, 2))
@@ -223,3 +224,22 @@ def test_failed_fit_keeps_initial_values(caplog):
         {"outputscale": np.array([1.0]), "lengthscale": np.array([1.0])}
     )
     assert "initial values" in caplog.text
+
+
+def test_fit_converges_on_clustered_inputs(caplog):
+    """Every start of a fit converges when the inputs cluster, as they do once a run
+    converges: the jitter keeps the training covariance well conditioned (#107).
+
+    With a jitter of 1e-10 these six points (iteration 5 of the illustrative example,
+    seed 0, inputs to four digits, outputs sin(u) as its noise-free oracle gives) gave
+    cond(K) of about 1e11, and 7 of 10 starts ran to IPOPT's iteration limit. A start
+    that hits the limit fails, so no failed start means every start converged; this
+    stands in for timing the fit, which would be flaky.
+    """
+    X = np.array([-1.8859, 1.3673, -1.9739, -1.591, -1.5762, -1.57])[:, None]
+
+    # Record the solver's debug messages, which name every failed start
+    with caplog.at_level(logging.DEBUG, logger="hybrid_bo.solvers"):
+        fit_gp(default_gp(1), X, np.sin(X[:, 0]), np.random.default_rng(0))
+
+    assert "failed" not in caplog.text
