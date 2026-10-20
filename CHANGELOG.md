@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- SoftSAA-EI: `hb.SoftSAA(temperature)` as hybrid BO's approximation
+  (`HybridBOSettings(approximation=hb.SoftSAA(1.0))`) is SAA-EI with each scenario's
+  improvement softened by a smooth maximum at the temperature, in units of the
+  objective, so the acquisition problem has no flat regions or kinks; it minimizes
+  -log SoftSAA-EI, which runs store as their acquisition value. It takes
+  `n_scenarios` and `unknown_states_as_variables` like `SAA` and gives EI only; with
+  `LCB` it raises `ValueError`. The illustrative example runs it as
+  `hybrid_bo_soft` (#103).
 - Lin-EI: `hb.Linearization()` as hybrid BO's approximation
   (`HybridBOSettings(approximation=hb.Linearization())`) computes EI in closed form
   from the objective linearized around the nominal states, over one scenario instead

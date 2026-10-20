@@ -459,6 +459,13 @@ class SAA:
 
 
 @dataclass(frozen=True)
+class SoftSAA:  # SoftSAA-EI, SAA-EI with a smooth maximum
+    temperature: float  # in units of the objective, no default
+    n_scenarios: int = 25
+    unknown_states_as_variables: bool = True
+
+
+@dataclass(frozen=True)
 class Linearization:  # Lin-EI, over the nominal scenario
     unknown_states_as_variables: bool = True
 
@@ -470,7 +477,7 @@ def hybrid_acquisition(
     scenarios,
     incumbent,
     acquisition,
-    approximation=SAA(),  # SAA | Linearization
+    approximation=SAA(),  # SAA | SoftSAA | Linearization
 ) -> AcquisitionProblem: ...
 def standard_acquisition(
     problem, gp, fitted, incumbent, acquisition
@@ -491,9 +498,9 @@ decision vector `w`.
   helper, called by the settings and by the builders): anything but an `EI` or `LCB`
   instance raises `TypeError`. This avoids the legacy `formulation_acq` bug. Hybrid
   BO's approximation is checked the same way, by a second helper next to it, which
-  raises `TypeError` for anything but an approximation the library knows, and
+  raises `TypeError` for anything but an approximation the library knows,
   `NotImplementedError` for a combination that isn't implemented (LCB with
-  linearization).
+  linearization), and `ValueError` for one that has no meaning (LCB with SoftSAA).
 - **Standard BO** computes EI and LCB analytically from the GP mean and std (EI adds
   1e-10 to the std in `gamma`, as legacy `ei_gp` did) and minimizes -EI or LCB over `u`
   within its bounds.
@@ -502,13 +509,13 @@ decision vector `w`.
   as constraints. SAA-LCB uses the weighted variance; `w = 1/S` reproduces the legacy
   `sample_variance` (`ddof=0`).
 - **The approximation is a setting of hybrid BO, not a method.** `acquisition`
-  (`EI | LCB`) says what is computed and `approximation` how: `SAA` or
+  (`EI | LCB`) says what is computed and `approximation` how: `SAA`, `SoftSAA` or
   `Linearization` (below). The approximation decides which scenarios the problem is
   built over and how its objective combines them; the scenario machinery (`x_s` and
   `g` per scenario, the optional tie of `y_s` to the GP, `_pack`/`_unpack`,
   `_scenario_states`) is shared. Settings that only make sense for one approximation
   live on it (`n_scenarios` on `SAA`).
-- `unknown_states_as_variables` (on `SAA` and `Linearization`): if True, each scenario's unknown states are variables
+- `unknown_states_as_variables` (on every approximation): if True, each scenario's unknown states are variables
   of the acquisition problem tied to the GP by an equality constraint (paper, Problem 8),
   which helps IPOPT; if False, the GP prediction is substituted wherever they appear.
 - The hybrid acquisition problem's variables are `u`, then the `x_s`, then the `y_s` (if
@@ -524,6 +531,30 @@ decision vector `w`.
 - Hybrid BO only needs "mean and std of `y` at given inputs" from the surrogate, through
   `predict`, so other surrogates or hyperparameter samples can be paired with scenarios
   later.
+
+#### Soft SAA (SoftSAA-EI)
+
+SAA-EI averages `max(a_s, 0)` with `a_s = incumbent − f_s`, so its acquisition
+problem is flat (zero gradient) wherever no scenario improves on the incumbent and
+has a kink per scenario; IPOPT stalls in both (#63). Following LogEI (Ament et al.
+2023), `SoftSAA` replaces the maximum with the smooth maximum
+`sp_τ(a) = τ log(1 + e^{a/τ})` at the temperature `τ` and minimizes
+`−log Σ_s w_s sp_τ(a_s)`. It is a separate approximation, not an option of `SAA`, so
+SAA-EI stays the paper's and the two can be compared as settings of one study.
+
+- **Computed in logs.** The objective is a logsumexp over scenarios of
+  `log w_s + log τ + log log(1 + e^{a_s/τ})` (`_log_softplus`), which takes
+  `a/τ` below −30 as its own log (where `log(1 + e^t)` underflows) and
+  `t + log(1 + e^{−t})` above 0 (where `e^t` overflows), so the value and gradient
+  are finite for any `a/τ`. Far below the incumbent the gradient is that of a
+  softmax-weighted `−a_s/τ`, which points toward improvement.
+- **The temperature is explicit.** It is in units of the objective, so a default
+  would be wrong for most problems; it has none and is recorded in the run.
+- **EI only.** LCB has no maximum to soften, so `LCB` with `SoftSAA` is a
+  `ValueError`, not `NotImplementedError`.
+- **The stored value is −log SoftSAA-EI**, the objective the problem minimizes, as
+  for every approximation, so the iteration plots' replay passes through it; the
+  plot labels it `-log EI`.
 
 #### Linearization (Lin-EI)
 
@@ -568,7 +599,7 @@ states as one-row `x (1, M)` and `y (1, P)`.
 class HybridBOSettings:
     gp: PriorGP | None = None  # None: default_gp(len(h_inputs))
     acquisition: EI | LCB = EI()  # what is computed
-    approximation: SAA | Linearization = SAA()  # how it is computed
+    approximation: SAA | SoftSAA | Linearization = SAA()  # how it is computed
     n_starts: int = 10  # acquisition multistart
     n_starts_gp: int = 10
     solver: Ipopt = Ipopt()

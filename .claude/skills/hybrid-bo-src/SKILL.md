@@ -24,7 +24,7 @@ code uses GLOSSARY.md's terms; use them in PRs, tests and comments too.
   the acquisition problem. A GP maps the `h_inputs` columns of `(u, x)` to `y` and is
   trained on the evaluated points. `HybridBOSettings.approximation` sets how the
   acquisition function is computed (`acquisition` says what): the sample-average
-  approximation `SAA`, or `Linearization` (below). With SAA:
+  approximation `SAA`, `SoftSAA` or `Linearization` (below). With SAA:
   - `SAA.n_scenarios` scenarios `mean + std * z_s`. The scenario draws `z_s` are drawn once
     per run and reused in every iteration.
   - Each scenario has its own copy `x_s` of the mechanistic states, and
@@ -34,6 +34,13 @@ code uses GLOSSARY.md's terms; use them in PRs, tests and comments too.
     (the illustrative example's setting).
   - Acquisition function: SAA-EI is `sum_s w_s min(f_s - incumbent, 0)`, minimized.
     SAA-LCB is the weighted mean of `f_s` minus `std_factor` times the weighted std.
+  - `SoftSAA(temperature, n_scenarios, unknown_states_as_variables)` is SAA over
+    the same scenarios with `max(a_s, 0)`, `a_s = incumbent - f_s`, replaced by
+    `tau log(1 + exp(a_s / tau))`; the problem minimizes `-log` of the weighted
+    average (SoftSAA-EI), a logsumexp of `_log_softplus`, so it is finite with a
+    nonzero gradient where SAA-EI is flat. The stored acquisition value is that
+    `-log`. The temperature is required (positive, finite). EI only: LCB raises
+    `ValueError`.
   - With `Linearization` the problem has one scenario, the nominal scenario (`z = 0`,
     weight 1), so `x̄` solves `g` with `ȳ` the GP's mean (or tied to it, by the same
     flag). Lin-EI is analytic EI of `N(f(x̄, ȳ, u), s²)`, with `s² = a aᵀ` and `a` the row
@@ -153,8 +160,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   unknown_states_as_variables)` is hybrid BO's approximation, checked by
   `_check_approximation(acquisition, approximation)` in `HybridBOSettings` and
   `hybrid_acquisition` (`TypeError` unless an `SAA` or a
-  `Linearization(unknown_states_as_variables)`, `NotImplementedError` for `LCB` with
-  `Linearization`). `nominal_scenario(n_y)` is linearization's one scenario, which
+  `Linearization(unknown_states_as_variables)` or a `SoftSAA(temperature, ...)`,
+  `NotImplementedError` for `LCB` with `Linearization`, `ValueError` for `LCB` with
+  `SoftSAA`). `nominal_scenario(n_y)` is linearization's one scenario, which
   `hybrid_acquisition` requires with it (`ValueError` otherwise);
   `_sensitivity(problem, gp, fitted)` is the `cas.Function` `(x, y, u) -> a (1, P)`.
   `Scenarios` (`z (S, P)`,
@@ -188,9 +196,10 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   scenarios, acquisition, settings) -> Figure` draws the state before trial point i
   over a 101-point grid of one-dimensional `u` (start bounds) plus the trial point,
   with one figure legend (`_figure_legend`). `_replay_settings` reads the acquisition
-  function and the approximation (its kind and `unknown_states_as_variables`) from
-  the record's settings text; the fields the replay uses (`_REPLAYED`, a dotted name
-  for a field of a field) and the kind of approximation must appear in that text,
+  function and the approximation (its kind, `unknown_states_as_variables` and
+  SoftSAA's temperature) from the record's settings text; the fields the replay uses
+  (`_REPLAYED`, a dotted name for a field of a field), the kind of approximation and
+  SoftSAA's temperature must appear in that text,
   so a custom solver
   or a non-default GP needs `settings`.
   `_replay`: standard BO evaluates `standard_acquisition`'s NLP; hybrid BO rebuilds
@@ -228,7 +237,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   spawns them from its seed). A run uses only its own generator, in DESIGN.md's
   "Order of random draws":
   1. initial points (caller): `lhs` over the `u` start bounds;
-  2. method setup: hybrid BO with SAA draws the scenarios
+  2. method setup: hybrid BO with SAA or SoftSAA draws the scenarios
      (`rng.standard_normal((S, P))`), with linearization nothing;
      the baselines draw their whole design; standard BO draws nothing;
   3. each evaluation: oracle `fsolve` starts, then the noise (even when `noise_std`

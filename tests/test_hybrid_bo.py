@@ -12,6 +12,7 @@ import casadi as cas
 import numpy as np
 import pytest
 import scipy.optimize
+import scipy.special
 import scipy.stats
 
 from hybrid_bo import (
@@ -23,6 +24,7 @@ from hybrid_bo import (
     Problem,
     RootFindingError,
     Run,
+    SoftSAA,
     System,
     Var,
     hybrid_bo,
@@ -506,6 +508,120 @@ def test_sensitivity_is_the_total_derivative_of_f_in_the_draws(h_inputs):
     assert a == pytest.approx((f[0] - f[1]) / 2e-5, rel=1e-6)
 
 
+# The soft sample-average approximation
+
+
+@pytest.mark.parametrize("temperature", [0.0, -1.0, np.inf, np.nan])
+def test_soft_saa_needs_a_positive_finite_temperature(temperature):
+    """The temperature is in units of the objective, so it must be positive and
+    finite."""
+    with pytest.raises(ValueError, match="temperature"):
+        SoftSAA(temperature)
+
+
+def test_lcb_with_soft_saa_is_rejected():
+    """SoftSAA softens EI's improvement, which LCB doesn't have, so the settings and
+    the acquisition builder reject it with LCB."""
+    gp, fitted = fitted_gp(1)
+
+    with pytest.raises(ValueError, match=r"EI\(\) with SoftSAA"):
+        HybridBOSettings(acquisition=LCB(), approximation=SoftSAA(1.0))
+    with pytest.raises(ValueError, match=r"EI\(\) with SoftSAA"):
+        hybrid_acquisition(
+            problem_with(["u"]), gp, fitted, SCENARIOS, 0.0, LCB(), SoftSAA(1.0)
+        )
+
+
+def ei_problems(incumbent, temperature, unknown_states_as_variables):
+    """The SoftSAA and the SAA EI acquisition problems of the illustrative system with
+    h of u, over SCENARIOS, and the decision vector and f_s (S,) at u = 0.3 and x =
+    (-1, 0, 0.5)."""
+    problem = problem_with(["u"])
+    gp, fitted = fitted_gp(1)
+    u, x = 0.3, np.array([-1.0, 0.0, 0.5])
+
+    def build(approximation):
+        """The EI acquisition problem with this approximation."""
+        return hybrid_acquisition(
+            problem, gp, fitted, SCENARIOS, incumbent, EI(), approximation
+        )
+
+    y, f = scenario_values(gp, fitted, u, x, ["u"])
+    soft = build(SoftSAA(temperature, 3, unknown_states_as_variables))
+    saa = build(SAA(3, unknown_states_as_variables))
+    return soft, saa, variables_at(u, x, y, unknown_states_as_variables), f
+
+
+@pytest.mark.parametrize("unknown_states_as_variables", [True, False])
+def test_soft_saa_ei_is_minus_log_the_weighted_smooth_improvement(
+    unknown_states_as_variables,
+):
+    """The SoftSAA acquisition problem minimizes -log sum_s w_s tau log(1 + exp(a_s /
+    tau)), with a_s = incumbent - f_s."""
+    # f_s is about 0.36, 0.62 and 2.13, so the incumbent sits among them
+    temperature, incumbent = 0.5, 1.0
+    soft, _, w, f = ei_problems(incumbent, temperature, unknown_states_as_variables)
+
+    a = incumbent - f
+    smooth = temperature * np.log1p(np.exp(a / temperature))
+    expected = -np.log(SCENARIOS.w @ smooth)
+    np.testing.assert_allclose(soft.nlp.f(w).full().item(), expected, rtol=1e-10)
+
+
+def test_soft_saa_ei_is_saa_ei_where_every_scenario_improves_by_far():
+    """With the incumbent far above every f_s compared with the temperature, the
+    smooth maximum is the maximum, so exp(-objective) is SAA-EI, which is positive
+    there."""
+    # Setup: f_s is at most about 2.13, so every a_s is above 1.8, 180 tau
+    soft, saa, w, f = ei_problems(4.0, 0.01, False)
+    assert np.all(4.0 - f > 180 * 0.01)
+
+    saa_ei = -saa.nlp.f(w).full().item()
+    assert saa_ei > 0
+    np.testing.assert_allclose(np.exp(-soft.nlp.f(w).full().item()), saa_ei, rtol=1e-12)
+
+
+def gradient(nlp, w):
+    """The gradient of the acquisition problem's objective at w, (n,)."""
+    symbol = cas.SX.sym("w", len(w))
+    function = cas.Function("gradient", [symbol], [cas.gradient(nlp.f(symbol), symbol)])
+    return function(w).full().ravel()
+
+
+def test_soft_saa_ei_has_a_gradient_where_no_scenario_improves():
+    """With the incumbent below every f_s, SAA-EI is flat (zero, with zero gradient),
+    while SoftSAA-EI's objective stays finite with a finite, nonzero gradient in u."""
+    # Setup: f_s is at least about 0.36, so no scenario improves on -1
+    soft, saa, w, f = ei_problems(-1.0, 0.5, False)
+    assert np.all(f > -1.0)
+
+    # SAA-EI is flat there
+    assert saa.nlp.f(w).full().item() == 0
+    assert np.all(gradient(saa.nlp, w) == 0)
+
+    # SoftSAA-EI's objective and its gradient in u
+    assert np.isfinite(soft.nlp.f(w).full().item())
+    u_gradient, _, _ = _unpack(soft, gradient(soft.nlp, w))
+    assert np.all(np.isfinite(u_gradient)) and np.all(u_gradient != 0)
+
+
+@pytest.mark.parametrize("incumbent", [-3.0, 5.0])
+def test_soft_saa_ei_is_finite_far_from_the_incumbent(incumbent):
+    """At a_s / tau beyond -1000 or 1000, where exp(a_s / tau) underflows or
+    overflows, the objective and its gradient are finite; far below, the objective
+    matches the asymptote -log sum_s w_s tau exp(a_s / tau)."""
+    soft, _, w, f = ei_problems(incumbent, 0.002, False)
+    a = (incumbent - f) / 0.002
+    assert np.all(np.abs(a) > 1000)
+
+    value = soft.nlp.f(w).full().item()
+    assert np.isfinite(value)
+    assert np.all(np.isfinite(gradient(soft.nlp, w)))
+    if incumbent < 0:
+        expected = -(np.log(0.002) + scipy.special.logsumexp(a, b=SCENARIOS.w))
+        np.testing.assert_allclose(value, expected, rtol=1e-12)
+
+
 # Hybrid BO
 
 
@@ -530,6 +646,33 @@ def test_both_settings_solve_the_illustrative_example(
     assert all(isinstance(fitted, FittedGP) for fitted in run.surrogates)
 
     # The scenarios: drawn after the initial points, which take no stream draws
+    rng = np.random.default_rng(0)
+    initial_points(illustrative_problem.system.u, 2, rng)
+    assert run.scenarios is not None
+    np.testing.assert_array_equal(run.scenarios.z, rng.standard_normal((25, 1)))
+    np.testing.assert_array_equal(run.scenarios.w, np.full(25, 1 / 25))
+
+
+@pytest.mark.parametrize("unknown_states_as_variables", [True, False])
+def test_soft_saa_solves_the_illustrative_example(
+    illustrative_problem, unknown_states_as_variables
+):
+    """Hybrid BO runs with SoftSAA either way: trial points within the bounds, and
+    scenarios drawn as SAA draws them; the stored acquisition value is the minimized
+    -log SoftSAA-EI, finite."""
+    approximation = SoftSAA(
+        1.0, unknown_states_as_variables=unknown_states_as_variables
+    )
+    settings = HybridBOSettings(approximation=approximation)
+
+    run = illustrative_run(illustrative_problem, settings)
+
+    # The points and the acquisition values
+    assert run.history.u.shape == (4, 1)
+    assert np.all((-2.0 <= run.history.u) & (run.history.u <= 2.0))
+    assert all(np.isfinite(solution.value) for solution in run.acquisitions)
+
+    # The scenarios: the same draws as SAA's
     rng = np.random.default_rng(0)
     initial_points(illustrative_problem.system.u, 2, rng)
     assert run.scenarios is not None

@@ -28,6 +28,7 @@ from hybrid_bo import (
     Linearization,
     Problem,
     Run,
+    SoftSAA,
     StandardBOSettings,
     Study,
     StudySettings,
@@ -86,6 +87,14 @@ def hybrid_lin_run() -> Run:
     """A pickled hybrid BO run with Lin-EI, the GP's prediction substituted for the
     unknown states."""
     approximation = Linearization(unknown_states_as_variables=False)
+    return illustrative_run(hybrid_bo, HybridBOSettings(approximation=approximation))
+
+
+@pytest.fixture(scope="module")
+def hybrid_soft_run() -> Run:
+    """A pickled hybrid BO run with SoftSAA-EI at a temperature of 0.5, the GP's
+    prediction substituted for the unknown states."""
+    approximation = SoftSAA(0.5, n_scenarios=10, unknown_states_as_variables=False)
     return illustrative_run(hybrid_bo, HybridBOSettings(approximation=approximation))
 
 
@@ -258,7 +267,14 @@ def test_every_iteration_of_every_method_is_drawn(request, run_name, tmp_path):
 
 
 @pytest.mark.parametrize(
-    "run_name", ["hybrid_run", "hybrid_lcb_run", "hybrid_lin_run", "standard_run"]
+    "run_name",
+    [
+        "hybrid_run",
+        "hybrid_lcb_run",
+        "hybrid_lin_run",
+        "hybrid_soft_run",
+        "standard_run",
+    ],
 )
 @pytest.mark.parametrize("i", [0, 1])
 def test_replayed_acquisition_at_the_trial_point_is_the_stored_value(
@@ -273,8 +289,8 @@ def test_replayed_acquisition_at_the_trial_point_is_the_stored_value(
 
     # Check: the curve at the trial point
     (ax,) = figure.axes
-    name = "LCB" if run_name == "hybrid_lcb_run" else "-EI"
-    curve = drawn_line(ax, name)
+    names = {"hybrid_lcb_run": "LCB", "hybrid_soft_run": "-log EI"}
+    curve = drawn_line(ax, names.get(run_name, "-EI"))
     trial = run.history.u[run.history.n_initial + i, 0]
     (at_trial,) = np.flatnonzero(np.asarray(curve.get_xdata()) == trial)
     stored = run.acquisitions[i].value
@@ -480,11 +496,18 @@ def test_a_custom_solver_needs_the_settings(hybrid_run):
         ("lhs_run", StandardBOSettings(), TypeError),
         ("hybrid_run", HybridBOSettings(), ValueError),
         ("hybrid_lin_run", HYBRID_SETTINGS, ValueError),
+        ("hybrid_soft_run", HYBRID_SETTINGS, ValueError),
+        (
+            "hybrid_soft_run",
+            HybridBOSettings(approximation=SoftSAA(2.0, 10, False)),
+            ValueError,
+        ),
     ],
 )
 def test_settings_must_be_the_runs(request, run_name, settings, error):
     """Settings must be the run's method's (else `TypeError`) and match its record,
-    the kind of approximation included (else `ValueError`)."""
+    the kind of approximation and SoftSAA's temperature included (else
+    `ValueError`)."""
     run = request.getfixturevalue(run_name)
     with pytest.raises(error, match="settings"):
         plots.iteration(run, ex.problem, 0, settings=settings)

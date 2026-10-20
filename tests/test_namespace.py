@@ -20,6 +20,7 @@ USER_FACING = {
     "EI",
     "LCB",
     "SAA",
+    "SoftSAA",
     "Linearization",
     "latin_hypercube_sampling",
     "uniform_sampling",
