@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- A study logs its progress: `hb.study` each method, `hb.repeat` each run and the
+  optimization loop each iteration (with its time and the incumbent) at INFO, and
+  `fit_gp` and `multistart` their times at DEBUG. The library configures no handlers.
+  The experiment CLI shows INFO on the console and saves DEBUG and above, with every
+  warning, as the study log, `study.log` in the study's folder; a study that doesn't
+  finish leaves `<study id>.log` beside the study folders (#109).
+- **Breaking:** the experiment CLI reserves the study id before running, and refuses
+  a `--name` that is already taken instead of saving to `<name>-2` (#109).
 - **Changes results:** `PriorGP.jitter` defaults to 1e-6 instead of 1e-10. With
   1e-10 the GP fit stalled once a run's inputs clustered (cond(K) about 1e11), so a
   15-iteration hybrid BO run on the illustrative example took 160s; it now takes

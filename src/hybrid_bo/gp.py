@@ -13,6 +13,7 @@ training data; only `jitter` is added to the diagonal.
 
 import keyword
 import logging
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from types import SimpleNamespace
@@ -258,9 +259,10 @@ def fit_gp(
     variance (`standard`), then maximizes the log marginal likelihood over the
     hyperparameters (log ones in log space) with `multistart`, from `n_starts` Latin
     hypercube starts over their bounds. If every start fails, it keeps the initial
-    values and logs a warning.
+    values and logs a warning. Logs the time taken at debug level.
     """
     # Scale the data
+    start = time.perf_counter()
     x_scaler, y_scaler = minmax(X), standard(Y[:, np.newaxis])
     X_scaled, Y_scaled = scale(x_scaler, X), scale(y_scaler, Y[:, np.newaxis]).ravel()
     hypers = gp.hyperparameters
@@ -297,6 +299,7 @@ def fit_gp(
         _logger.warning("Every GP fit failed; keeping the initial values")
         w_best = to_search_space(init)
     values = np.where(is_log, np.exp(w_best), w_best)
+    _logger.debug("Fitted the GP in %.2fs", time.perf_counter() - start)
     return FittedGP(_split(hypers, values), X_scaled, Y_scaled, x_scaler, y_scaler)
 
 

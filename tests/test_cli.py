@@ -1,8 +1,11 @@
 """The command line of the experiments (experiments/cli.py, behind `pixi run experiment`
 and `pixi run plot`): running studies and plotting them."""
 
+import logging
 import subprocess
 import sys
+import warnings
+from datetime import datetime
 from pathlib import Path
 
 import cli
@@ -11,7 +14,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from hybrid_bo import initial_points, load, summary
+from hybrid_bo import initial_points, load, summary, uniform_sampling
 
 
 def summary_of(study):
@@ -92,22 +95,6 @@ def test_run_then_plot_the_newest_study(tmp_path):
         "uniform_sampling/run-000/iteration-00.png",
         "uniform_sampling/run-001/iteration-00.png",
     }
-
-
-def test_a_named_study_gets_a_suffix_when_taken_and_plot_flag_plots(tmp_path):
-    """`--name` names the study's folder; a name already taken gets `-2`, and
-    `--plot` saves the figures straight after the run."""
-    # Two runs under the same name, the second plotted
-    command = ["--method", "uniform_sampling", "--n-runs", "1", "--n-iterations", "1"]
-    command += ["--name", "demo", "--results-root", str(tmp_path)]
-    run_cli(command)
-    run_cli([*command, "--plot"])
-
-    # Two studies, only the second with figures
-    experiment_dir = tmp_path / "illustrative_example"
-    assert sorted(path.name for path in experiment_dir.iterdir()) == ["demo", "demo-2"]
-    assert not (experiment_dir / "demo" / "figures").exists()
-    assert (experiment_dir / "demo-2" / "figures" / "convergence.png").exists()
 
 
 def test_plot_takes_the_study_saved_last(tmp_path):
@@ -223,3 +210,185 @@ def test_the_experiment_runs_as_a_module_from_the_experiments_folder():
     )
 
     assert "pixi run experiment illustrative_example" in result.stdout
+
+
+def test_the_study_log_records_each_run_and_iteration(tmp_path, capsys):
+    """A study saves its study log, `study.log`, beside its artifact: each method,
+    run and iteration with its time and the incumbent at INFO, and the time of each
+    GP fit and multistart at DEBUG. The console shows the INFO records only."""
+    # One method, two runs of two iterations
+    run_cli(
+        ["--method", "standard_bo", "--n-runs", "2", "--n-iterations", "2"]
+        + ["--name", "logged", "--results-root", str(tmp_path)]
+    )
+
+    # The log was moved into the study's folder
+    experiment_dir = tmp_path / "illustrative_example"
+    assert not (experiment_dir / "logged.log").exists()
+    log = (experiment_dir / "logged" / "study.log").read_text()
+
+    # INFO: the method, each run, the initial points and each iteration
+    assert "INFO hybrid_bo.studies: Method standard_bo: 2 runs" in log
+    assert "Run 1 of 2 finished in" in log
+    assert "Run 2 of 2 finished in" in log
+    assert "standard_bo: evaluated 2 initial points in" in log
+    assert log.count("standard_bo iteration 1 of 2:") == 2
+    assert log.count("standard_bo iteration 2 of 2:") == 2
+    assert "incumbent" in log
+
+    # DEBUG: the GP fits and the multistarts, named by their NLP
+    assert "DEBUG hybrid_bo.gp: Fitted the GP in" in log
+    assert "DEBUG hybrid_bo.solvers: negative_log_marginal_likelihood:" in log
+
+    # The console shows the iterations but not the DEBUG records
+    console = capsys.readouterr().err
+    assert "standard_bo iteration 2 of 2:" in console
+    assert "Fitted the GP" not in console
+
+
+def test_a_taken_name_is_refused_before_running(tmp_path, capsys):
+    """`--name` names the study's folder. A name taken by a saved study, or by the
+    log of a study that didn't finish, is a usage error before anything runs, and
+    the message says which holds it."""
+    # One quick method into a temporary results root
+    command = ["--method", "uniform_sampling", "--n-runs", "1", "--n-iterations", "1"]
+    command += ["--results-root", str(tmp_path)]
+    experiment_dir = tmp_path / "illustrative_example"
+
+    # Taken by a saved study
+    run_cli([*command, "--name", "demo"])
+    capsys.readouterr()
+    with pytest.raises(SystemExit) as exit_info:
+        run_cli([*command, "--name", "demo"])
+    assert exit_info.value.code != 0
+    assert "taken by the saved study" in capsys.readouterr().err
+
+    # Taken by the log a crashed study left
+    (experiment_dir / "crashed.log").write_text("partial\n")
+    with pytest.raises(SystemExit):
+        run_cli([*command, "--name", "crashed"])
+    assert "a study that didn't finish" in capsys.readouterr().err
+
+    # Nothing else was saved, and the crashed study's log is untouched
+    assert sorted(path.name for path in experiment_dir.iterdir()) == [
+        "crashed.log",
+        "demo",
+    ]
+    assert (experiment_dir / "crashed.log").read_text() == "partial\n"
+
+
+def test_a_taken_default_id_gets_a_suffix(tmp_path, monkeypatch):
+    """Without `--name` the study id is the UTC time at the start; two studies
+    started in the same second get `<time>` and `<time>-2`."""
+
+    # A clock stopped at one second
+    class StoppedClock:
+        """Stands in for `datetime`: `now` is always the same time."""
+
+        @staticmethod
+        def now(tz):
+            """The stopped time."""
+            return datetime(2026, 10, 20, 13, 24, 7, tzinfo=tz)
+
+    monkeypatch.setattr(cli, "datetime", StoppedClock)
+
+    # Two studies without a name, in the same second
+    command = ["--method", "uniform_sampling", "--n-runs", "1", "--n-iterations", "1"]
+    command += ["--results-root", str(tmp_path)]
+    run_cli(command)
+    run_cli(command)
+
+    # The second got the suffix
+    experiment_dir = tmp_path / "illustrative_example"
+    assert sorted(path.name for path in experiment_dir.iterdir()) == [
+        "20261020-132407",
+        "20261020-132407-2",
+    ]
+
+
+def test_plot_flag_plots_straight_after_the_run(tmp_path):
+    """`--plot` saves the figures straight after the run."""
+    run_cli(
+        ["--method", "uniform_sampling", "--n-runs", "1", "--n-iterations", "1"]
+        + ["--name", "demo", "--plot", "--results-root", str(tmp_path)]
+    )
+
+    study_dir = tmp_path / "illustrative_example" / "demo"
+    assert (study_dir / "figures" / "convergence.png").exists()
+
+
+def test_warnings_reach_the_study_log(tmp_path):
+    """A warning raised during the study (`warnings.warn`) is in its study log."""
+
+    # Uniform sampling that warns first
+    def warning_sampling(*args, **kwargs):
+        """`hb.uniform_sampling`, after a warning."""
+        warnings.warn("a warning from the method", UserWarning, stacklevel=2)
+        return uniform_sampling(*args, **kwargs)
+
+    # A study of that method alone
+    cli.main(
+        "illustrative_example",
+        ex.problem,
+        ex.measure,
+        {"warning_sampling": warning_sampling},
+        ex.study_settings,
+        argv=["--n-runs", "1", "--n-iterations", "1", "--name", "warned"]
+        + ["--results-root", str(tmp_path)],
+    )
+
+    # The warning, logged through `py.warnings`
+    log = (tmp_path / "illustrative_example" / "warned" / "study.log").read_text()
+    assert "WARNING py.warnings:" in log
+    assert "a warning from the method" in log
+
+
+def test_a_study_that_does_not_finish_leaves_its_log(tmp_path, capsys):
+    """A study whose method raises an error the study doesn't catch saves nothing,
+    leaves its log beside the study folders with what it recorded, and prints the
+    log's path; the error propagates."""
+
+    # A method that fails outright
+    def failing(*args, **kwargs):
+        """Raises an error that isn't a `HybridBOError`."""
+        raise RuntimeError("boom")
+
+    # The error comes out of `main`
+    with pytest.raises(RuntimeError, match="boom"):
+        cli.main(
+            "illustrative_example",
+            ex.problem,
+            ex.measure,
+            {"failing": failing},
+            ex.study_settings,
+            argv=["--n-runs", "1", "--name", "broken", "--results-root", str(tmp_path)],
+        )
+
+    # Only the log, holding the study's start, with its path printed
+    experiment_dir = tmp_path / "illustrative_example"
+    assert [path.name for path in experiment_dir.iterdir()] == ["broken.log"]
+    assert "Method failing: 1 runs" in (experiment_dir / "broken.log").read_text()
+    assert str(experiment_dir / "broken.log") in capsys.readouterr().err
+
+
+def test_running_twice_in_one_process_logs_each_record_once(tmp_path):
+    """`main` puts logging back as it was when it returns, so a second study in the
+    same process logs each record once, to its own log only."""
+    # The root logger's handlers before, to compare after; one quick method
+    root = logging.getLogger()
+    handlers = list(root.handlers)
+    command = ["--method", "uniform_sampling", "--n-runs", "1", "--n-iterations", "1"]
+    command += ["--results-root", str(tmp_path)]
+
+    # Two studies in a row
+    run_cli([*command, "--name", "first"])
+    run_cli([*command, "--name", "second"])
+
+    # Each record once in each log, and the handlers as they were
+    experiment_dir = tmp_path / "illustrative_example"
+    first = (experiment_dir / "first" / "study.log").read_text()
+    second = (experiment_dir / "second" / "study.log").read_text()
+    assert first.count("Method uniform_sampling") == 1
+    assert second.count("Method uniform_sampling") == 1
+    assert "second" not in first
+    assert root.handlers == handlers

@@ -158,6 +158,12 @@ of the code and packages. One per study. It lists the study's runs but doesn't h
 them.
 _Avoid_: record, metadata, manifest, provenance
 
+**Study log**:
+The record of a study's progress as it ran: each run and iteration with its time, and
+every warning raised. Saved with the study, beside its artifact. It is for reading, not
+analysis: the runs hold the results.
+_Avoid_: run log
+
 **Reproducible**:
 A study is reproducible when its artifact records a clean code version (every file
 committed, none changed or untracked) and running its experiment again at that version,

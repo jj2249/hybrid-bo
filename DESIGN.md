@@ -32,7 +32,9 @@ The original code was hard to change for three reasons:
 4. **One way to do each thing.** One CasADi code path for symbolic and numeric use.
 5. **Explicit randomness.** Anything random takes an `rng: np.random.Generator`.
 6. **Errors raise** specific exceptions. Expected failures (one multistart start not
-   converging) are logged without tracebacks.
+   converging) are logged without tracebacks. Progress (each run and iteration, with
+   times) is logged too; the library never configures logging, and the experiment CLI
+   saves the records as the study log.
 7. **Rows are points.** A point is `(n,)`, a set is `(n_points, n)`, `f` is `(n_points,)`.
 8. **Experiments are short to write.** Defaults may be derived from other arguments when
    the derivation is obvious and recorded in the run.

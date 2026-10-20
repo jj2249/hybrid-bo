@@ -19,6 +19,10 @@ The study folder
 - ``runs/<method>/run-000.json``: one file per run.
 - ``summary.csv``: one row per method, the median and interquartile range (IQR) over
   its runs of the final values, and how many runs failed.
+- ``study.log``: the study log, the study's progress as it ran: each run and
+  iteration with its time and the incumbent, the time of each GP fit and multistart,
+  and every warning. While the study runs it is ``<study id>.log`` beside the study
+  folders; a study that doesn't finish leaves it there.
 - ``figures/``: written by ``plot`` (or ``--plot``).
 
 Every *evaluation* runs the measurement at a point ``u``, recovers the unmeasured

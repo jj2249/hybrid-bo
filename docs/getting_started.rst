@@ -39,7 +39,8 @@ points. ``pixi run experiment illustrative_example --help`` lists the flags:
 - ``--method NAME`` runs only that method (repeat it for several; default all);
 - ``--n-runs``, ``--n-iterations`` and ``--seed`` override the experiment's study
   settings;
-- ``--name`` names the study (default the current UTC time);
+- ``--name`` names the study (default the current UTC time); a name already taken
+  is refused before anything runs;
 - ``--plot`` draws the figures straight after;
 - ``--require-clean`` refuses to run with uncommitted or untracked files (without it,
   they get a warning), since the study wouldn't be reproducible.
@@ -60,6 +61,7 @@ The study is saved in ``results/illustrative_example/<study id>/``:
    artifact.json       what the study ran and how: settings, problem, methods
    runs/<method>/      one JSON file per run: every evaluated point, the GPs, ...
    summary.csv         the summary table printed above
+   study.log           the study's progress: each run and iteration, times, warnings
    figures/            convergence.png, regret.png and one figure per iteration
 
 Open ``figures/regret.png``: the median regret of each method over the evaluations,

@@ -14,18 +14,26 @@ and the pixi tasks run the script as a module from this folder:
 
 Running saves the study with `hb.save` to `<results root>/<experiment>/<study id>/` (the
 results root defaults to `results/` at the repo root), where the study id is `--name`
-or the UTC time at the start, with `-2`, `-3`, ... appended if taken when the study is
-saved, and prints `hb.summary` of it and saves it as `summary.csv` there. Running from
-a tree that isn't clean (uncommitted or untracked files) warns that the study won't be
-reproducible; `--require-clean` refuses to run instead. `plot` loads
-a study (default: the newest saved) with `hb.load` and saves its figures to its
-`figures/` folder.
+or the UTC time at the start, and prints `hb.summary` of it and saves it as
+`summary.csv` there. Before anything runs, the study id is reserved by creating the
+study log, `<study id>.log`, beside the study folders; an id is taken if that log or
+its folder exists. A taken `--name` is refused, and a taken UTC time gets `-2`, `-3`,
+... appended. The study log records the library's progress (DEBUG and above; the
+console shows INFO and above) and every warning, and is moved into the study's folder
+as `study.log` once the study is saved. A study that doesn't finish leaves its log
+where it was, which keeps its id taken. Running from a tree that isn't clean
+(uncommitted or untracked files) warns that the study won't be reproducible;
+`--require-clean` refuses to run instead. `plot` loads a study (default: the newest
+saved) with `hb.load` and saves its figures to its `figures/` folder.
 """
 
 import argparse
+import logging
 import os
 import sys
-from collections.abc import Mapping, Sequence
+import warnings
+from collections.abc import Generator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -40,6 +48,11 @@ from hybrid_bo.studies import Method
 
 RESULTS_ROOT = Path(__file__).parent.parent / "results"
 ARTIFACTS = (ARTIFACT_FILE, OLD_ARTIFACT_FILE)
+STUDY_LOG = "study.log"
+LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+CONSOLE_FORMAT = "%(levelname)s %(name)s: %(message)s"
+
+_logger = logging.getLogger(__name__)
 
 
 def main(
@@ -72,14 +85,9 @@ def main(
     # Run: a tree that isn't clean gives a study that isn't reproducible
     if command == "run":
         version = code_version(Path(hb.__file__).parent)
-        if not is_clean(version):
-            if parsed.require_clean:
-                parsers["run"].error(f"the code version {version} isn't clean")
-            print(
-                f"warning: the code version {version} isn't clean (uncommitted or "
-                "untracked files), so this study won't be reproducible",
-                file=sys.stderr,
-            )
+        clean = is_clean(version)
+        if not clean and parsed.require_clean:
+            parsers["run"].error(f"the code version {version} isn't clean")
 
         # The experiment's settings, overridden by the flags given
         given = {
@@ -92,12 +100,45 @@ def main(
             **{key: value for key, value in given.items() if value is not None},
         )
         chosen = {label: methods[label] for label in parsed.methods or methods}
-        study = hb.study(chosen, problem, measure, settings, name=name, optimum=optimum)
-        study_id = parsed.name or datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-        study_dir = save_new(study, experiment_dir, study_id)
-        for label in chosen:
-            n_saved = sum(run.method == label for run in study.runs)
-            print(f"{label}: saved {n_saved} of {settings.n_runs} runs to {study_dir}")
+
+        # Reserve the study id: a taken name is refused, a taken UTC time suffixed
+        default_id = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+        try:
+            log_path = reserve(
+                experiment_dir,
+                parsed.name or default_id,
+                suffix_if_taken=not parsed.name,
+            )
+        except FileExistsError as error:
+            parsers["run"].error(str(error))
+
+        # Run and save the study, logging to its study log; a study that doesn't
+        # finish leaves the log where it is
+        try:
+            with study_log(log_path):
+                if not clean:
+                    _logger.warning(
+                        "The code version %s isn't clean (uncommitted or untracked "
+                        "files), so this study won't be reproducible",
+                        version,
+                    )
+                study = hb.study(
+                    chosen, problem, measure, settings, name=name, optimum=optimum
+                )
+                study_dir = hb.save(study, log_path.with_suffix(""))
+                for label in chosen:
+                    n_saved = sum(run.method == label for run in study.runs)
+                    _logger.info(
+                        "%s: saved %d of %d runs to %s",
+                        label,
+                        n_saved,
+                        settings.n_runs,
+                        study_dir,
+                    )
+        except BaseException:
+            print(f"The study didn't finish; its log is {log_path}", file=sys.stderr)
+            raise
+        log_path.replace(study_dir / STUDY_LOG)
         save_summary(study, study_dir)
 
     # Plot: the study given, else the one saved last
@@ -168,16 +209,66 @@ def _from_init_cwd(path: Path) -> Path:
     return Path(os.environ.get("INIT_CWD", ".")) / path
 
 
-def save_new(study: hb.Study, experiment_dir: Path, study_id: str) -> Path:
-    """Saves `study` to the folder `study_id` in `experiment_dir`, with `-2`, `-3`, ...
-    appended if it is taken, and returns the folder. `hb.save` creates the folder and
-    refuses an existing one, so studies saved at once never share a folder."""
-    path, suffix = experiment_dir / study_id, 2
+def reserve(experiment_dir: Path, study_id: str, *, suffix_if_taken: bool) -> Path:
+    """Reserves a study id in `experiment_dir` by creating its study log,
+    `<study id>.log`, and returns the log's path (the study folder is the path
+    without `.log`). An id is taken if its log or its folder exists; creating the
+    log fails if it exists, so studies started at once never share an id.
+
+    A taken id gets `-2`, `-3`, ... appended if `suffix_if_taken`; otherwise raises
+    `FileExistsError` saying what holds it.
+    """
+    experiment_dir.mkdir(parents=True, exist_ok=True)
+    candidate, n = study_id, 2
     while True:
-        try:
-            return hb.save(study, path)
-        except FileExistsError:
-            path, suffix = experiment_dir / f"{study_id}-{suffix}", suffix + 1
+        folder, log = experiment_dir / candidate, experiment_dir / f"{candidate}.log"
+        if folder.exists():
+            holder = f"the saved study {folder}"
+        else:
+            try:
+                log.open("x").close()
+            except FileExistsError:
+                holder = f"the log of a study that didn't finish, {log}"
+            else:
+                return log
+        if not suffix_if_taken:
+            msg = f"the study id {candidate} is taken by {holder}"
+            raise FileExistsError(msg)
+        candidate, n = f"{study_id}-{n}", n + 1
+
+
+@contextmanager
+def study_log(path: Path) -> Generator[None]:
+    """Logs to the study log at `path` (DEBUG and above from the library, INFO and
+    above from the rest) and to the console (INFO and above), with warnings logged
+    too, until the block ends; then puts logging back as it was."""
+    # The handlers, on the root logger so the experiment's own records are kept
+    file_handler = logging.FileHandler(path)
+    file_handler.setFormatter(logging.Formatter(LOG_FORMAT))
+    console = logging.StreamHandler()
+    console.setLevel(logging.INFO)
+    console.setFormatter(logging.Formatter(CONSOLE_FORMAT))
+
+    # Attach them, saving what to put back: the levels, and whether warnings were
+    # logged already (logging's `showwarning` replaces the warnings module's)
+    root, library = logging.getLogger(), logging.getLogger("hybrid_bo")
+    root_level, library_level = root.level, library.level
+    captured = getattr(warnings.showwarning, "__module__", None) == "logging"
+    root.addHandler(file_handler)
+    root.addHandler(console)
+    root.setLevel(logging.INFO)
+    library.setLevel(logging.DEBUG)
+    logging.captureWarnings(True)
+
+    try:
+        yield
+    finally:
+        logging.captureWarnings(captured)
+        root.setLevel(root_level)
+        library.setLevel(library_level)
+        root.removeHandler(console)
+        root.removeHandler(file_handler)
+        file_handler.close()
 
 
 def save_summary(study: hb.Study, study_dir: Path) -> None:

@@ -71,8 +71,14 @@ The tasks run `python -m <name>` from `experiments/` in the `experiments` enviro
 No command lists every experiment, and a typo in the name fails with "No module named
 ...". A relative `--results-root` is relative to where pixi was started (`INIT_CWD`),
 not `experiments/`. The study id is `--name`, else the UTC time to the second at the
-start, with `-2`, `-3`, ... appended if taken when saved (`hb.save` creates the folder,
-so parallel runs never share one). `plot` loads the study given, else the one whose
+start. It is reserved before anything runs by creating the study log
+`<experiment>/<id>.log` exclusively, so parallel runs never share an id; an id is taken
+if that log or its folder exists. A taken `--name` is a usage error; a taken UTC time
+gets `-2`, `-3`, ... appended. The study log gets the library's records (DEBUG and
+above: every run, iteration, GP fit and multistart with its time) and every warning;
+the console shows INFO and above. Once saved, the log moves into the study folder as
+`study.log`; a study that doesn't finish leaves `<id>.log` in place, which keeps the id
+taken until it is deleted. `plot` loads the study given, else the one whose
 artifact was written last (`artifact.json`, or `study.json` in older studies), and
 saves `summary.csv` if the study has none (studies saved before summaries). Running
 with uncommitted or untracked files warns that the study won't be reproducible;

@@ -130,7 +130,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - `solvers.py`: `NLP` (`f`, bounds `(n,)`, optional `g(w) = 0`), `Ipopt` settings and
   `multistart(nlp, starts, solver) -> Solution` (`w`, `f`), the best start. It uses
   `cas.Opti` with bounds as constraints, as the pre-refactor code did, so IPOPT takes
-  the steps the baselines record; failed starts are logged at debug level,
+  the steps the baselines record; failed starts, and each call's number of failed
+  starts and time under `nlp.f`'s name, are logged at debug level,
   `NoSolutionError` if all fail. The caller draws the starts with `lhs`.
 - `kernels.py`: kernels as plain functions of CasADi matrices (`matern12/32/52`,
   `squared_exponential`, `linear`, `constant`); a lengthscale or scale is a scalar or
@@ -256,6 +257,11 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   (`error.run`). Only `repeat` (and so `study`) catches them, per run: it logs the
   error and keeps the partial run.
 - **The library never writes files on its own.** Saving is an explicit `save` call.
+- **Progress is logged, never configured.** `study` logs each method, `repeat` each
+  run, `optimization_loop` the initial points and each iteration (with the incumbent)
+  at INFO; `fit_gp` and `multistart` log their times at DEBUG. Times come from
+  `time.perf_counter`. The library adds no handlers; the experiment CLI saves the
+  records as the study log.
 - **Oracle incumbents.** `incumbents(history)` is the running minimum of the measured
   `f`. The benchmark metric `oracle_incumbents(history)` is `f_oracle` at the
   incumbent's point, not the running minimum of `f_oracle`; they agree only

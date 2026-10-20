@@ -238,8 +238,8 @@ def test_fit_converges_on_clustered_inputs(caplog):
     """
     X = np.array([-1.8859, 1.3673, -1.9739, -1.591, -1.5762, -1.57])[:, None]
 
-    # Record the solver's debug messages, which name every failed start
+    # Record the solver's debug messages, which count the failed starts
     with caplog.at_level(logging.DEBUG, logger="hybrid_bo.solvers"):
         fit_gp(default_gp(1), X, np.sin(X[:, 0]), np.random.default_rng(0))
 
-    assert "failed" not in caplog.text
+    assert "0 of 10 starts failed" in caplog.text
