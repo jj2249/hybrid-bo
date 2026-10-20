@@ -330,7 +330,9 @@ def multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
 There is no `Solver` protocol until a second solver exists. The caller draws the starts
 with `lhs(...)`. `multistart` builds the problem with `cas.Opti`, bounds as
 constraints, as the legacy optimizer did, so IPOPT takes the same steps. A failed start
-is logged at debug level without a traceback.
+is logged at debug level without a traceback. Starts that stopped at IPOPT's iteration
+limit also get one warning per call, under the objective's name: they fail like any
+other start, but they are what makes a fit slow (#108).
 
 ### GP (`gp.py`, `kernels.py`)
 
@@ -405,7 +407,9 @@ gp = hb.gp.PriorGP(
   cluster, and with legacy's 1e-10 the training covariance reached cond(K) of about
   1e11: most GP-fit starts then ran to IPOPT's iteration limit, and `fit_gp` took
   15-25s per iteration on the illustrative example. With 1e-6 the posterior std at
-  the data is about 1e-3 in scaled units, negligible for EI.
+  the data is about 1e-3 in scaled units, negligible for EI. `fit_gp` warns when
+  cond(K) at the kept hyperparameters exceeds 1e10 (`CONDITION_THRESHOLD`, #108),
+  below the 1e11 that stalled the fit.
 - **Output scale** multiplies the kernel unsquared, as legacy `OutputScaleKernel` did,
   so `default_gp` fits the same hyperparameters as the legacy GP.
 - `fit_gp` fits the scalers (`minmax` onto [0, 1] for X, `standard` for Y), calls

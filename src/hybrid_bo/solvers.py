@@ -78,7 +78,9 @@ def multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
         except RuntimeError as error:
             _logger.debug("Start %d of %d failed: %s", i + 1, len(starts), error)
             n_failed += 1
-            n_at_limit += opti.stats()["return_status"] == "Maximum_Iterations_Exceeded"
+            at_limit = opti.stats()["return_status"] == "Maximum_Iterations_Exceeded"
+            if at_limit:
+                n_at_limit += 1
             continue
         f = float(solution.value(opti.f))
         if f < f_best:

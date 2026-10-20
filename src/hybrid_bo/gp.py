@@ -309,9 +309,11 @@ def fit_gp(
         w_best = to_search_space(init)
     values = _split(hypers, np.where(is_log, np.exp(w_best), w_best))
 
-    # Warn if the training covariance is nearly singular at those values
+    # Warn if the training covariance is nearly singular at those values (a
+    # non-finite one counts as singular; the SVD behind `cond` would fail on it)
     K = cas.evalf(_training_covariance(gp, _namespace(values), Symbolic(X_scaled)))
-    condition_number = np.linalg.cond(K.full())
+    K = K.full()
+    condition_number = np.linalg.cond(K) if np.isfinite(K).all() else np.inf
     if condition_number > CONDITION_THRESHOLD:
         _logger.warning(
             "The fitted GP's training covariance is nearly singular: condition "

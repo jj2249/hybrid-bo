@@ -253,6 +253,7 @@ def test_nearly_singular_covariance_is_warned_about(caplog):
     The check runs at whichever hyperparameters the fit keeps, so a few iterations
     from two starts are enough (a full fit on these data takes about 20s).
     """
+    # Two inputs 1e-9 apart, with a jitter far below that
     X = np.array([0.0, 0.5, 0.5 + 1e-9, 1.0])[:, None]
     gp = replace(default_gp(1), jitter=1e-14)
     few_iterations = Ipopt(solver_options={"print_level": 0, "max_iter": 10})
@@ -266,10 +267,14 @@ def test_nearly_singular_covariance_is_warned_about(caplog):
         solver=few_iterations,
     )
 
-    messages = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
-    conditioning = [message for message in messages if "condition number" in message]
+    # One warning about the conditioning, whose arguments are the condition number
+    # (above the threshold) and the jitter
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    conditioning = [r for r in warnings if "condition number" in r.getMessage()]
     assert len(conditioning) == 1
-    assert "1e-14" in conditioning[0]
+    condition_number, jitter = conditioning[0].args
+    assert condition_number > 1e10
+    assert jitter == 1e-14
 
 
 def test_well_conditioned_fit_is_not_warned_about(caplog):

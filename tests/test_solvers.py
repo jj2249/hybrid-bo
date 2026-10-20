@@ -73,8 +73,9 @@ def test_every_start_failing_raises_without_tracebacks(caplog):
 
 def test_starts_at_the_iteration_limit_are_warned_about(caplog):
     """When starts run IPOPT to its iteration limit, multistart logs one warning
-    giving how many of the starts did and the name of the NLP's objective."""
-    # The Rosenbrock function, which three iterations don't solve from (-1.5, 2)
+    giving how many of the starts did and the name of the NLP's objective, even
+    though another start succeeded."""
+    # The Rosenbrock function, which five iterations solve only from its minimum
     v = cas.SX.sym("v", 2)
     rosenbrock = NLP(
         cas.Function(
@@ -83,16 +84,20 @@ def test_starts_at_the_iteration_limit_are_warned_about(caplog):
         lower=np.array([-5.0, -5.0]),
         upper=np.array([5.0, 5.0]),
     )
-    three_iterations = Ipopt(solver_options={"print_level": 0, "max_iter": 3})
+    five_iterations = Ipopt(solver_options={"print_level": 0, "max_iter": 5})
 
-    with caplog.at_level(logging.DEBUG), pytest.raises(NoSolutionError):
-        multistart(rosenbrock, np.array([[-1.5, 2.0], [-1.2, 1.0]]), three_iterations)
+    starts = np.array([[-1.5, 2.0], [-1.2, 1.0], [1.0, 1.0]])
 
+    # Solve, recording every log message
+    with caplog.at_level(logging.DEBUG):
+        multistart(rosenbrock, starts, five_iterations)
+
+    # One warning, counting the two starts away from the minimum
     warnings = [
         record for record in caplog.records if record.levelno == logging.WARNING
     ]
     assert len(warnings) == 1
-    assert "2 of 2 starts" in warnings[0].getMessage()
+    assert "2 of 3 starts" in warnings[0].getMessage()
     assert "rosenbrock" in warnings[0].getMessage()
 
 
