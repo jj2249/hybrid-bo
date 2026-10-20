@@ -23,6 +23,9 @@ from hybrid_bo.solvers import NLP
 # Added to the standard deviation in EI, so a zero std doesn't divide by zero
 _EI_STD_EPSILON = 1e-10
 
+# Below this a / tau, log log(1 + exp(a / tau)) is a / tau within about 1e-13
+_LOG_SOFTPLUS_LINEAR_BELOW = -30.0
+
 
 @dataclass(frozen=True)
 class EI:
@@ -73,6 +76,29 @@ class SAA:
 
 
 @dataclass(frozen=True)
+class SoftSAA:
+    """The soft sample-average approximation of hybrid BO's acquisition function
+    (SoftSAA-EI): SAA-EI with each scenario's improvement max(a, 0) replaced by the
+    smooth maximum tau log(1 + exp(a / tau)) at the temperature tau, and the problem
+    minimizing -log of the average, so it has no flat regions or kinks. It gives EI
+    only.
+
+    The temperature is in units of the objective. `n_scenarios` and
+    `unknown_states_as_variables` mean what they mean for `SAA`. Raises `ValueError`
+    unless the temperature is positive and finite.
+    """
+
+    temperature: float
+    n_scenarios: int = 25
+    unknown_states_as_variables: bool = True
+
+    def __post_init__(self) -> None:
+        if not (np.isfinite(self.temperature) and self.temperature > 0):
+            msg = f"SoftSAA temperature must be finite and > 0, got {self.temperature}"
+            raise ValueError(msg)
+
+
+@dataclass(frozen=True)
 class Linearization:
     """The linearization of hybrid BO's acquisition function (Lin-EI): the objective
     expanded to first order in the scenario draws around the nominal states, which
@@ -86,17 +112,25 @@ class Linearization:
 
 
 def _check_approximation(acquisition: EI | LCB, approximation: object) -> None:
-    """Raises `TypeError` unless `approximation` is an `SAA` or a `Linearization`, and
+    """Raises `TypeError` unless `approximation` is an `SAA`, a `SoftSAA` or a
+    `Linearization`, `ValueError` for `LCB` with `SoftSAA`, and
     `NotImplementedError` for `LCB` with `Linearization`.
 
     Hybrid BO's settings and acquisition builder check their approximation with this.
     """
-    if not isinstance(approximation, SAA | Linearization):
+    if not isinstance(approximation, SAA | SoftSAA | Linearization):
         msg = (
-            "The approximation must be SAA(n_scenarios, unknown_states_as_variables) "
-            f"or Linearization(unknown_states_as_variables), got {approximation!r}"
+            "The approximation must be SAA(n_scenarios, unknown_states_as_variables), "
+            "SoftSAA(temperature, n_scenarios, unknown_states_as_variables) or "
+            f"Linearization(unknown_states_as_variables), got {approximation!r}"
         )
         raise TypeError(msg)
+    if isinstance(acquisition, LCB) and isinstance(approximation, SoftSAA):
+        msg = (
+            "SoftSAA softens EI's improvement, so it gives EI only: use EI() with "
+            "SoftSAA, or EI() or LCB() with SAA"
+        )
+        raise ValueError(msg)  # noqa: TRY004  (both types are valid, not together)
     if isinstance(acquisition, LCB) and isinstance(approximation, Linearization):
         msg = (
             "LCB isn't implemented with Linearization: use EI() with Linearization, "
@@ -113,6 +147,19 @@ def _expected_improvement(mean: Any, std: Any, incumbent: float) -> Any:
     cdf = 0.5 * (1 + cas.erf(gamma / np.sqrt(2)))
     pdf = cas.exp(-0.5 * gamma**2) / np.sqrt(2 * np.pi)
     return improvement * cdf + std * pdf
+
+
+def _log_softplus(t: Any) -> Any:
+    """log log(1 + exp(t)), elementwise for CasADi expressions, finite with a
+    finite gradient for any finite t.
+
+    Far below zero, log(1 + exp(t)) underflows, so its log is taken as t; above
+    zero, it is t + log(1 + exp(-t)), so exp doesn't overflow.
+    """
+    below = cas.log(cas.log1p(cas.exp(t)))
+    above = cas.log(t + cas.log1p(cas.exp(-t)))
+    exact = cas.if_else(t > 0, above, below)
+    return cas.if_else(t < _LOG_SOFTPLUS_LINEAR_BELOW, t, exact)
 
 
 @dataclass(frozen=True)
@@ -312,7 +359,7 @@ def hybrid_acquisition(
     scenarios: Scenarios,
     incumbent: float,
     acquisition: EI | LCB,
-    approximation: SAA | Linearization = SAA(),
+    approximation: SAA | SoftSAA | Linearization = SAA(),
 ) -> AcquisitionProblem:
     """The acquisition problem of hybrid BO (paper, Problems 8 and 9).
 
@@ -325,7 +372,10 @@ def hybrid_acquisition(
 
     With f_s = f(x_s, y_s, u), the problem minimizes -SAA-EI, the weighted average of
     min(f_s - incumbent, 0), or SAA-LCB, the weighted mean of the f_s minus
-    `std_factor` times their weighted standard deviation. With `Linearization`, the
+    `std_factor` times their weighted standard deviation. With `SoftSAA`, it
+    minimizes -log SoftSAA-EI, -log of the weighted average of
+    tau log(1 + exp(a_s / tau)) with a_s = incumbent - f_s, as a logsumexp over the
+    scenarios (`_log_softplus`). With `Linearization`, the
     scenarios must be the nominal scenario, whose states are the nominal states, and
     the problem minimizes -Lin-EI: EI of the normal N(f, s^2), with s^2 = a a^T and
     a = df/dz there (`_sensitivity`).
@@ -333,9 +383,10 @@ def hybrid_acquisition(
     The variables are u, the x_s and, if variables, the y_s, in `_pack`'s order. Each
     variable is boxed by its bounds and started within its start bounds. Raises
     `TypeError` unless `acquisition` is an `EI` or an `LCB` and `approximation` an
-    `SAA` or a `Linearization`, `NotImplementedError` for `LCB` with
-    `Linearization`, and `ValueError` unless the scenarios have one column per
-    unknown state, or with `Linearization`, unless they are the nominal scenario.
+    `SAA`, a `SoftSAA` or a `Linearization`, `NotImplementedError` for `LCB` with
+    `Linearization`, and `ValueError` for `LCB` with `SoftSAA`, for scenarios without
+    one column per unknown state, and with `Linearization`, for scenarios other than
+    the nominal scenario.
     """
     # The checks, and the symbols for u and each scenario's mechanistic states
     _check_acquisition(acquisition)
@@ -373,12 +424,18 @@ def hybrid_acquisition(
         f_parts.append(problem.f(x_s, y_s, u))
     f = cas.vertcat(*f_parts)
 
-    # The acquisition function: a weighted average over the scenarios, or Lin-EI at
-    # the nominal scenario (EI only, as checked)
+    # The acquisition function: a weighted average over the scenarios, its smooth
+    # version's -log, or Lin-EI at the nominal scenario (the last two EI only, as
+    # checked)
     match approximation:
         case Linearization():
             a = _sensitivity(problem, gp, fitted)(x[0, :].T, y[0, :].T, u)
             objective = -_expected_improvement(f[0], cas.sqrt(a @ a.T), incumbent)
+        case SoftSAA(temperature=temperature):
+            log_smooth = np.log(temperature) + _log_softplus(
+                (incumbent - f) / temperature
+            )
+            objective = -cas.logsumexp(Symbolic(np.log(scenarios.w)) + log_smooth)
         case SAA():
             match acquisition:
                 case LCB(std_factor=std_factor):
