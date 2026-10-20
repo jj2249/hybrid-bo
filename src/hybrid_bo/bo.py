@@ -6,6 +6,8 @@ its own trial-point function. The loop evaluates the initial points, then in eac
 iteration asks the trial-point function for the next trial point and evaluates it.
 """
 
+import logging
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, fields, replace
 from typing import assert_never
@@ -36,6 +38,8 @@ from hybrid_bo.problem import Problem, Var, _h_inputs
 from hybrid_bo.run import Run, run_record
 from hybrid_bo.sampling import lhs
 from hybrid_bo.solvers import Ipopt, multistart
+
+_logger = logging.getLogger(__name__)
 
 # Chooses the next trial point (N,) from the points evaluated so far, drawing from the
 # run's generator, and returns it with the fitted surrogate model behind it and the
@@ -68,18 +72,38 @@ def optimization_loop(
     error) as `error.history`. If evaluating a trial point fails, its surrogate and
     acquisition solution are dropped with it, so the run keeps one of each per
     evaluated trial point.
+
+    Logs the time taken by the initial points, and each iteration's time and
+    incumbent, at info level.
     """
     history: History | None = None
     surrogates: list[FittedGP] = []
     acquisitions: list[AcquisitionSolution] = []
+    method = record["method"]
     try:
+        start = time.perf_counter()
         history = evaluate(problem, measure, initial_points, rng)
-        for _ in range(n_iterations):
+        _logger.info(
+            "%s: evaluated %d initial points in %.2fs",
+            method,
+            len(initial_points),
+            time.perf_counter() - start,
+        )
+        for i in range(n_iterations):
+            start = time.perf_counter()
             u, surrogate, acquisition = trial_point(problem, history, rng)
             later = evaluate(problem, measure, u[np.newaxis], rng)
             history = _concatenate(history, later)
             surrogates.append(surrogate)
             acquisitions.append(acquisition)
+            _logger.info(
+                "%s iteration %d of %d: %.2fs, incumbent %.6g",
+                method,
+                i + 1,
+                n_iterations,
+                time.perf_counter() - start,
+                incumbents(history)[-1],
+            )
     except HybridBOError as error:
         # Before the loop, the initial points evaluated so far are the partial run
         partial = error.history if history is None else history

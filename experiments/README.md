@@ -11,6 +11,10 @@ pixi run experiment <name> [--n-runs 3 --plot ...]   # run a study; --help lists
 pixi run plot <name> [STUDY]                         # plot the newest (or named) study
 ```
 
+A study shows its progress on the console and saves it as `study.log` in its folder;
+a study that doesn't finish leaves `<study id>.log` beside the study folders. A
+`--name` that is already taken is refused before anything runs.
+
 To write your own, see
 [Writing an experiment](../docs/writing_an_experiment.rst) (build the docs with
 `pixi run docs`).

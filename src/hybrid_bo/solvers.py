@@ -6,6 +6,7 @@ problem from several starts and keeps the best solution. The caller draws the st
 """
 
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -52,7 +53,8 @@ def multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
     with the lowest objective.
 
     A start that fails is expected, so it is logged (at debug level, without a
-    traceback) and skipped. Raises `NoSolutionError` if every start fails.
+    traceback) and skipped; so is the number that failed and the time taken, under
+    the name of `nlp.f`. Raises `NoSolutionError` if every start fails.
     """
     # The problem, with the bounds as constraints (as the pre-refactor optimizer had
     # them, so IPOPT takes the steps the regression baselines record)
@@ -65,7 +67,8 @@ def multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
     opti.subject_to(w <= nlp.upper[:, np.newaxis])
 
     # Solve from each start; a NaN objective never wins
-    best, f_best = None, np.inf
+    clock = time.perf_counter()
+    best, f_best, n_failed = None, np.inf, 0
     for i, start in enumerate(starts):
         opti.set_initial(w, start)
         opti.solver("ipopt", solver.plugin_options, solver.solver_options)
@@ -73,10 +76,18 @@ def multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
             solution = opti.solve()
         except RuntimeError as error:
             _logger.debug("Start %d of %d failed: %s", i + 1, len(starts), error)
+            n_failed += 1
             continue
         f = float(solution.value(opti.f))
         if f < f_best:
             best, f_best = np.atleast_1d(solution.value(w)).astype(float), f
+    _logger.debug(
+        "%s: %d of %d starts failed, %.2fs",
+        nlp.f.name(),
+        n_failed,
+        len(starts),
+        time.perf_counter() - clock,
+    )
 
     if best is None:
         msg = f"Every one of the {len(starts)} starts failed"

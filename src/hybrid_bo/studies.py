@@ -8,6 +8,7 @@ methods and the stated oracle optimum once. Save and load a study with `hb.save`
 """
 
 import logging
+import time
 import warnings
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
@@ -74,20 +75,34 @@ def repeat(
     gives the same runs, and run i of any method starts from the same initial points.
     Seed None draws a fresh seed, which every run records. A run that raises a
     `HybridBOError` is logged as a warning and kept as far as it got (`error.run`);
-    the next run goes on.
+    the next run goes on. Each finished run is logged at info level with its time.
     """
     runs = []
     children = np.random.SeedSequence(settings.seed).spawn(settings.n_runs)
     for index, child in enumerate(children):
+        start = time.perf_counter()
         rng = np.random.default_rng(child)
         u = initial_points(problem.system.u, settings.n_initial, rng)
         try:
             run = method(problem, measure, u, settings.n_iterations, rng=rng)
         except HybridBOError as error:
-            _logger.warning("Run %d failed: %r", index, error)
+            _logger.warning(
+                "Run %d of %d failed after %.2fs: %r",
+                index + 1,
+                settings.n_runs,
+                time.perf_counter() - start,
+                error,
+            )
             if error.run is None:
                 continue
             run = error.run
+        else:
+            _logger.info(
+                "Run %d of %d finished in %.2fs",
+                index + 1,
+                settings.n_runs,
+                time.perf_counter() - start,
+            )
         runs.append(replace(run, index=index))
     return tuple(runs)
 
@@ -103,7 +118,7 @@ def study(
     """Runs every method with `repeat` from the same seed, so run i of every method
     starts from the same initial points, and the same seed gives the same study.
     Each run is labeled with its key in `methods`, so two configurations of one
-    method can share a study.
+    method can share a study. Logs each key at info level as its runs start.
 
     Seed None draws a fresh seed first, and the study's settings hold it, so the
     saved study can be run again exactly. `optimum` is the oracle optimum of a test
@@ -118,6 +133,7 @@ def study(
     # Every method's runs, labeled with their key
     runs: list[Run] = []
     for label, method in methods.items():
+        _logger.info("Method %s: %d runs", label, settings.n_runs)
         method_runs = repeat(method, problem, measure, settings)
         runs += [replace(run, method=label) for run in method_runs]
 
