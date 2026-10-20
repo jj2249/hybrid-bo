@@ -69,3 +69,50 @@ def test_every_start_failing_raises_without_tracebacks(caplog):
 
     assert caplog.records
     assert all(record.exc_info is None for record in caplog.records)
+
+
+def test_starts_at_the_iteration_limit_are_warned_about(caplog):
+    """When starts run IPOPT to its iteration limit, multistart logs one warning
+    giving how many of the starts did and the name of the NLP's objective, even
+    though another start succeeded."""
+    # The Rosenbrock function, which five iterations solve only from its minimum
+    v = cas.SX.sym("v", 2)
+    rosenbrock = NLP(
+        cas.Function(
+            "rosenbrock", [v], [(1 - v[0]) ** 2 + 100 * (v[1] - v[0] ** 2) ** 2]
+        ),
+        lower=np.array([-5.0, -5.0]),
+        upper=np.array([5.0, 5.0]),
+    )
+    five_iterations = Ipopt(solver_options={"print_level": 0, "max_iter": 5})
+
+    starts = np.array([[-1.5, 2.0], [-1.2, 1.0], [1.0, 1.0]])
+
+    # Solve, recording every log message
+    with caplog.at_level(logging.DEBUG):
+        multistart(rosenbrock, starts, five_iterations)
+
+    # One warning, counting the two starts away from the minimum
+    warnings = [
+        record for record in caplog.records if record.levelno == logging.WARNING
+    ]
+    assert len(warnings) == 1
+    assert "2 of 3 starts" in warnings[0].getMessage()
+    assert "rosenbrock" in warnings[0].getMessage()
+
+
+def test_other_failures_are_not_warned_about(caplog):
+    """A start that fails for a reason other than the iteration limit (here an
+    infeasible constraint) is logged at debug level only."""
+    infeasible = NLP(
+        DOUBLE_WELL.f,
+        DOUBLE_WELL.lower,
+        DOUBLE_WELL.upper,
+        g=cas.Function("g", [w], [w**2 + 1]),
+    )
+
+    with caplog.at_level(logging.DEBUG), pytest.raises(NoSolutionError):
+        multistart(infeasible, np.array([[0.5], [-0.5]]), Ipopt())
+
+    assert caplog.records
+    assert all(record.levelno == logging.DEBUG for record in caplog.records)

@@ -131,8 +131,10 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `multistart(nlp, starts, solver) -> Solution` (`w`, `f`), the best start. It uses
   `cas.Opti` with bounds as constraints, as the pre-refactor code did, so IPOPT takes
   the steps the baselines record; failed starts, and each call's number of failed
-  starts and time under `nlp.f`'s name, are logged at debug level,
-  `NoSolutionError` if all fail. The caller draws the starts with `lhs`.
+  starts and time under `nlp.f`'s name, are logged at debug level; starts that
+  stopped at IPOPT's iteration limit (`opti.stats()["return_status"]` is
+  `Maximum_Iterations_Exceeded`) get one warning per call, giving their count and
+  `nlp.f`'s name, before `NoSolutionError` if all fail. The caller draws the starts with `lhs`.
 - `kernels.py`: kernels as plain functions of CasADi matrices (`matern12/32/52`,
   `squared_exponential`, `linear`, `constant`); a lengthscale or scale is a scalar or
   a `(d, 1)` column (ARD).
@@ -147,7 +149,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   hyperparameter named `noise_std`, if declared, is the noise:
   `K = k(X, X) + (noise_std**2 + jitter) I`; without it only `jitter` is added.
   The jitter defaults to 1e-6, a nugget: much smaller and the fit stalls once the
-  inputs cluster (#107, DESIGN.md).
+  inputs cluster (#107, DESIGN.md). After fitting, `fit_gp` warns if the condition
+  number of that `K` at the kept hyperparameters (numpy, scaled data) exceeds
+  `CONDITION_THRESHOLD` (1e10), giving it and the jitter.
   Numeric data enter CasADi as `Symbolic` constants. Keep the `minmax` operation
   order: it reproduces the pre-refactor values bit for bit for [0, 1], which the
   baselines depend on. `_gp_record` gives the prior GP as text for a run's record.
@@ -259,7 +263,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - **The library never writes files on its own.** Saving is an explicit `save` call.
 - **Progress is logged, never configured.** `study` logs each method, `repeat` each
   run, `optimization_loop` the initial points and each iteration (with the incumbent)
-  at INFO; `fit_gp` and `multistart` log their times at DEBUG. Times come from
+  at INFO; `fit_gp` and `multistart` log their times at DEBUG, and warn about a
+  nearly singular training covariance and starts at the iteration limit. Times come from
   `time.perf_counter`. The library adds no handlers; the experiment CLI saves the
   records as the study log.
 - **Oracle incumbents.** `incumbents(history)` is the running minimum of the measured

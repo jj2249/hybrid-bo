@@ -276,4 +276,9 @@ When something goes wrong
 - **ReconstructionWarning**: with an oracle, the measured variables don't pin the
   states down to the oracle's values (``g`` has several roots). Narrow the start
   bounds of the unmeasured states to the right branch, or measure other variables.
+- **Starts stopped at IPOPT's iteration limit** (a warning naming the NLP's
+  objective, such as ``negative_log_marginal_likelihood`` for a GP fit): the fit or
+  acquisition problem is hard to solve, and the run is slow. A GP fit that also warns
+  that its **training covariance is nearly singular** usually has a ``jitter`` that
+  is too small for clustered inputs, or badly scaled data.
 - **nan in the results**: look for ``math`` functions in ``g`` or ``f``.

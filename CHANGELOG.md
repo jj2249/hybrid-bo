@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `multistart` warns when starts stop at IPOPT's iteration limit, giving how many
+  of the starts did and the name of the NLP's objective (e.g.
+  `negative_log_marginal_likelihood` for a GP fit), and `fit_gp` warns when the
+  fitted GP's training covariance has a condition number above 1e10, giving it and
+  the jitter. Both appear in the study log; results don't change (#108).
 - A study logs its progress: `hb.study` each method, `hb.repeat` each run and the
   optimization loop each iteration (with its time and the incumbent) at INFO, and
   `fit_gp` and `multistart` their times at DEBUG. The library configures no handlers.
