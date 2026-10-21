@@ -76,7 +76,8 @@ variable needs ``start``. Make start bounds a realistic range of the variable.
    :end-before: system = hb.System(
 
 The :py:class:`~hybrid_bo.problem.System` takes keyword arguments: the variables, the
-known equations ``g`` (with ``x``, both optional), the arguments of the unknown equations (``h_inputs``, from ``u`` and ``x``) and
+known equations ``g`` (with ``x``, both optional), the arguments of the unknown
+equations (``h_inputs``, from ``u`` and ``x``) and
 the ``measured`` variables, the states your sensors read (from ``x`` and ``y``). There
 must be as many measured variables as unknown states, so the root-finding problem can
 recover the rest. The :py:class:`~hybrid_bo.problem.Problem` adds the objective ``f``,

@@ -90,7 +90,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   variables), and returns a `History` whose points are all initial points. Every
   fsolve goes through `_find_root` (CasADi Jacobian, accepts residual `< tol` within
   the bounds, silences fsolve's warnings; with no unmeasured states, as with M = 0,
-  it returns the empty root without solving; the starts are still drawn). With an oracle, one extra solve from the
+  it returns the empty root without solving; the starts are still drawn). With an
+  oracle, one extra solve from the
   oracle values (no draws) checks the reconstruction is on the same root, else
   `ReconstructionWarning`. `_start_bounds` (in `sampling.py`) and `_as_text` (in
   `problem.py`, an equation as text in the variable names) are shared helpers.
@@ -138,9 +139,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   (`settings.TYPES`: the settings, `EI`, `LCB` and the approximations) are saved with
   `"type"`, their class name, and `_decode` picks a union's member by it (`_union_member` picks
   untagged data by its JSON shape: a list, an empty array's `{"shape": ...}`, another
-  dict or a plain value). A new field on
-  `Run` or its parts round-trips without changes if its type is one `_decode`
-  handles. `save` refuses an existing folder.
+  dict or a plain value). A new field on `Run` or its parts round-trips without
+  changes if its type is one `_decode` handles. `save` refuses an existing folder.
 - `views.py`: `evaluations(study, optimum=None)`, `summary(study)` and
   `hyperparameters(study)`, Polars data frames (one row per evaluation, per method,
   per hyperparameter entry of each fitted GP, named by its dotted path in the GP,
@@ -342,9 +342,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - The unit tests (`test_kernels.py`, `test_gp.py`, `test_scalers.py`,
   `test_sampling.py`, `test_solvers.py`, `test_system.py`, `test_evaluation.py`,
   `test_baselines.py`, `test_standard_bo.py`, `test_hybrid_bo.py` (P = 2 unit tests
-  against numpy and finite differences), `test_no_known_equations.py` (M = 0 end to end:
-  every method, saving, plots, and hybrid BO matching standard BO when f = y),
-  `test_two_unknown_states.py` (P = 2 end to
+  against numpy and finite differences), `test_no_known_equations.py` (M = 0 end
+  to end: every method, saving, plots, and hybrid BO matching standard BO when
+  f = y), `test_two_unknown_states.py` (P = 2 end to
   end: runs, saving, plots),
   `test_studies.py`, `test_views.py`, `test_run.py`) compare against
   numpy/scipy references or closed forms. Add one when changing math.

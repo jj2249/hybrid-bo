@@ -197,8 +197,8 @@ class System:
 
     - u: the N decision variables;
     - x: the M mechanistic states, determined by the known equations 0 = g(x, y, u).
-      Both are optional and go together: without them (M = 0) hybrid BO is BO of a
-      composite function f(y, u) with y = h(u) (Astudillo & Frazier, arXiv
+      x and g are optional and go together: without them (M = 0) hybrid BO is BO of
+      a composite function f(y, u) with y = h(u) (Astudillo & Frazier, arXiv
       1906.01537);
     - y: the P unknown states, determined by the unknown equations y = h(x, u),
       whose form is not part of the system (ADR 0001);

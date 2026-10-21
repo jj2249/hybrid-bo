@@ -70,7 +70,8 @@ mechanistic states and the unknown states together.
 _Avoid_: outputs, process variables, dependent variables
 
 **Mechanistic states** (`x`, dimension M):
-The states determined by the known equations.
+The states determined by the known equations; there are none when there are no
+known equations (M = 0).
 
 **Unknown states** (`y`, dimension P):
 The states determined by the unknown equations; in hybrid BO, each has its own GP

@@ -186,10 +186,11 @@ return one expression or a list) and builds the `cas.Function`s in declaration o
 with inputs and outputs named `x`, `y`, `u` → `g`/`f`. It checks: names are identifiers,
 don't start with `_` (they would shadow the namespace's internals) and are unique;
 callables return CasADi expressions (`TypeError` otherwise); `lower <= upper`; start bounds finite, ordered and inside the bounds;
-`u` and `y` non-empty; `x` and `g` both given or both omitted (#115: without them M = 0,
-and `g` is traced from no equations, so `System.g` is always a `cas.Function` and the
-code downstream has no special case; with M = 0 the root-finding problem has nothing
-to solve and `multistart` adds no empty constraint); `len(g) == M`; `f` scalar; `h_inputs` from `u` and `x`,
+`u` and `y` non-empty; `x` and `g` both given or both omitted (#115: without them
+M = 0, and `g` is traced from no equations, so `System.g` is always a `cas.Function`
+and the code downstream has no special case; with M = 0 the root-finding problem has
+nothing to solve and `multistart` adds no empty constraint); `len(g) == M`; `f`
+scalar; `h_inputs` from `u` and `x`,
 `measured` from `x` and `y`, each without repeats; `len(measured) == P`. `Var` is a plain
 frozen dataclass, so membership checks use its equality; no CasADi `==` is involved.
 

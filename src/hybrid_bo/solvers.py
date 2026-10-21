@@ -62,7 +62,7 @@ def multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
     opti = cas.Opti()
     w = opti.variable(len(nlp.lower))
     opti.minimize(nlp.f(w))
-    # CasADi refuses an empty constraint, such as known equations with M = 0
+    # CasADi refuses an empty constraint, so a g of no rows is left out
     has_equations = nlp.g is not None and nlp.g.numel_out(0) > 0
     if has_equations:
         opti.subject_to(nlp.g(w) == 0)

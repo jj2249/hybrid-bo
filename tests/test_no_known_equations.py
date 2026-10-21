@@ -83,9 +83,33 @@ def test_every_method_runs_without_known_equations(study_1d):
         assert len(run.history.f) == 4, run.method
         assert run.history.x.shape == (4, 0)
         assert run.artifact["g"] == "none"
-    for run in study_1d.runs[: len(HYBRID)]:
+    for run in (run for run in study_1d.runs if run.method in HYBRID):
         assert len(run.surrogates) == 2
         assert all(solution.x.shape[1] == 0 for solution in run.acquisitions)
+
+
+def test_the_oracle_optimum_summary_and_regret_work_without_known_equations(study_1d):
+    """The oracle optimum of a system without known equations is the minimum of the
+    composite objective (here by a dense grid over u), and the summary and the
+    convergence and regret plots of its study draw from it."""
+    # Act: the oracle optimum, then the study's views and plots
+    problem, _ = composite_problem(1)
+    optimum = hb.oracle_optimum(
+        problem, lambda v: [cas.sin(v.u1) + v.u1 / 2], np.random.default_rng(0)
+    )
+    summary = hb.summary(study_1d)
+    convergence = hb.plots.convergence(study_1d)
+    regret = hb.plots.regret(study_1d, optimum)
+
+    # Check: the optimum against the grid; one summary row and one curve per method
+    u = np.linspace(-2.0, 2.0, 400_001)
+    f = (np.sin(u) + u / 2 - 0.3) ** 2 + u**2 / 10
+    # `pytest.approx` compares with a tolerance
+    assert optimum == pytest.approx(f.min(), abs=1e-8)
+    assert summary["method"].to_list() == list(METHODS)
+    assert len(convergence.get_lines()) >= len(METHODS)
+    assert len(regret.get_lines()) >= len(METHODS)
+    plt.close("all")
 
 
 def test_the_study_saves_and_loads_equal(study_1d, tmp_path):
@@ -105,7 +129,8 @@ def test_iteration_figures_draw_without_known_equations(study_1d):
     """Every BO method's iteration figure draws with one decision variable, its GP
     panel (y over u for hybrid BO), scenarios and acquisition function included."""
     problem, measure = composite_problem(1)
-    for run in study_1d.runs[: len(HYBRID) + 1]:
+    bo_runs = (run for run in study_1d.runs if run.method in [*HYBRID, "standard"])
+    for run in bo_runs:
         figure = hb.plots.iteration(run, problem, 1, measure=measure)
         assert len(figure.axes) == (3 if run.method in HYBRID else 2), run.method
     plt.close("all")
