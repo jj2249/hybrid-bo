@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.0 (2026-10-21)
+
 - **Breaking:** A run has an artifact (#123): `Run.record` is `Run.artifact`, with the
   same content, and a saved run's JSON names it `artifact`. `run_record` is
   `run_artifact`, and `optimization_loop` takes `artifact` for `record`. Studies whose
