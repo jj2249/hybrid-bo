@@ -368,10 +368,10 @@ def hybrid_acquisition(
     `problem.system.y`. Each scenario s has its own copy x_s of the mechanistic
     states, and the known equations g(x_s, y_s, u) = 0 are constraints. Its unknown
     states y_s are the GPs' prediction at the scenario's arguments of h,
-    mean + std * z_s (`_scenario_unknown_states`). With the
-    approximation's `unknown_states_as_variables` the y_s are variables too, tied to
-    the prediction by an equality constraint (Problem 8), which helps IPOPT; otherwise
-    the prediction is substituted for them.
+    mean + std * z_s (`_scenario_unknown_states`). With the approximation's
+    `unknown_states_as_variables` the y_s are variables too, tied to the prediction by
+    an equality constraint (Problem 8), which helps IPOPT; otherwise the prediction is
+    substituted for them.
 
     With f_s = f(x_s, y_s, u), the problem minimizes -SAA-EI, the weighted average of
     min(f_s - incumbent, 0), or SAA-LCB, the weighted mean of the f_s minus
@@ -404,8 +404,8 @@ def hybrid_acquisition(
         raise ValueError(msg)
     if len(fitted) != system.n_y:
         msg = (
-            f"The surrogate model needs one fitted GP per unknown state ({system.n_y}), "
-            f"got {len(fitted)}"
+            "The surrogate model needs one fitted GP per unknown state "
+            f"({system.n_y}), got {len(fitted)}"
         )
         raise ValueError(msg)
     is_nominal = len(scenarios.w) == 1 and not np.any(scenarios.z)

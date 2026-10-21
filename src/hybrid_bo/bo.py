@@ -40,8 +40,8 @@ _logger = logging.getLogger(__name__)
 
 # Chooses the next trial point (N,) from the points evaluated so far, drawing from the
 # run's generator, and returns it with the fitted surrogate model behind it (one
-# fitted GP per modeled variable) and the solution of the acquisition problem it came
-# from
+# fitted GP per unknown state, or the one GP of f) and the solution of the
+# acquisition problem it came from
 TrialPoint = Callable[
     [Problem, History, np.random.Generator],
     tuple[np.ndarray, tuple[FittedGP, ...], AcquisitionSolution],
@@ -223,12 +223,12 @@ def hybrid_bo(
     standard normal draws, equal weights; linearization draws nothing and has the
     nominal scenario alone), the same in every iteration. Then evaluates the initial
     points (n, N), and in each iteration fits the prior GP to each unknown state's
-    measured and reconstructed values so far, in the order of `system.y`, solves `hybrid_acquisition` by multistart from Latin hypercube
-    starts over the start bounds of its variables, and evaluates the decision
-    variables of the solution. The run holds the scenarios, each iteration's surrogate
-    holds one fitted GP per unknown state, and each iteration's acquisition solution
-    holds the scenario states at its trial point. `settings`
-    are keyword-only.
+    measured and reconstructed values so far, in the order of `system.y`, solves
+    `hybrid_acquisition` by multistart from Latin hypercube starts over the start
+    bounds of its variables, and evaluates the decision variables of the solution.
+    The run holds the scenarios, each iteration's surrogate holds one fitted GP per
+    unknown state, and each iteration's acquisition solution holds the scenario
+    states at its trial point. `settings` are keyword-only.
 
     Raises what `evaluate` and `multistart` raise; a `HybridBOError` carries the
     partial run, with the scenarios, as `error.run`.

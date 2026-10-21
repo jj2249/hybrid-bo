@@ -7,8 +7,7 @@ a study saved before the artifact was named: `study.json` with a `record` key, b
 one saved before GPs were data (ADR 0008), before runs held their settings or before
 runs had an artifact (a run's JSON with `record`, not `artifact`); a run saved with one
 fitted GP per iteration, before surrogates were tuples, loads with each as a 1-tuple.
-Arrays are
-nested lists; float64 values round-trip exactly. A GP's means, kernels and
+Arrays are nested lists; float64 values round-trip exactly. A GP's means, kernels and
 hyperparameters, and the methods' settings and their parts, are saved with their type's
 name (`"type"`), so a field that holds one of several types (kernels, approximations)
 loads as the right one. The library never calls `save` itself.

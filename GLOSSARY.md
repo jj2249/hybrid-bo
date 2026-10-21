@@ -73,7 +73,8 @@ _Avoid_: outputs, process variables, dependent variables
 The states determined by the known equations.
 
 **Unknown states** (`y`, dimension P):
-The states determined by the unknown equations; the GP predicts them.
+The states determined by the unknown equations; in hybrid BO, each has its own GP
+predicting it.
 _Avoid_: GP outputs, unknown variables
 
 **Known equations** (`g`, M equations):

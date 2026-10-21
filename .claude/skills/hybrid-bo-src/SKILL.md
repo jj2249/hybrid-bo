@@ -23,9 +23,10 @@ code uses GLOSSARY.md's terms; use them in PRs, tests and comments too.
 - **Hybrid BO** (`bo.py`, `acquisition.py`): the unknown equations are never used in
   the acquisition problem. The surrogate model is one independent GP per unknown state
   (any P >= 1), each mapping the `h_inputs` columns of `(u, x)` to its column of `y`,
-  all from the one prior GP in the settings and trained on the evaluated points. `HybridBOSettings.approximation` sets how the
-  acquisition function is computed (`acquisition` says what): the sample-average
-  approximation `SAA`, `SoftSAA` or `Linearization` (below). With SAA:
+  all from the one prior GP in the settings and trained on the evaluated points.
+  `HybridBOSettings.approximation` sets how the acquisition function is computed
+  (`acquisition` says what): the sample-average approximation `SAA`, `SoftSAA` or
+  `Linearization` (below). With SAA:
   - `SAA.n_scenarios` scenarios `mean + std * z_s` (unknown state j:
     `mean_j + std_j * z_sj`, from GP j). The scenario draws `z_s` are drawn once
     per run and reused in every iteration.
@@ -47,8 +48,9 @@ code uses GLOSSARY.md's terms; use them in PRs, tests and comments too.
     weight 1), so `x̄` solves `g` with `ȳ` the GP's mean (or tied to it, by the same
     flag). Lin-EI is analytic EI of `N(f(x̄, ȳ, u), s²)`, with `s² = a aᵀ` and `a` the row
     **total** derivative `df/dz` by the implicit function theorem (`_sensitivity`;
-    DESIGN.md), with `L = diag(std_1, ..., std_P)`. The partial `f_y L` is wrong: it gives `s ≡ 0` on the illustrative
-    example. EI only: LCB raises `NotImplementedError`.
+    DESIGN.md), with `L = diag(std_1, ..., std_P)`. The partial `f_y L` is wrong: it
+    gives `s ≡ 0` on the illustrative example. EI only: LCB raises
+    `NotImplementedError`.
   - Solved with `multistart`. The trial point is the `u` part of the solution.
 - **Standard BO** (`bo.py`): a GP directly on `u -> f`, with analytic EI or LCB over
   `u` only.
@@ -67,8 +69,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   callables over a namespace `v` of symbols (`v.x`), traced once in `_trace` into
   `cas.Function`s with column-vector inputs in the paper's order `(x, y, u)`. All
   input checks live in the constructors and raise `ValueError`; any number P >= 1 of
-  unknown states is allowed. `Symbolic` (`cas.SX`) is the symbol type of all library math. It is
-  SX only: switching it to MX breaks the GP (`cas.chol` has no MX overload) and the
+  unknown states is allowed. `Symbolic` (`cas.SX`) is the symbol type of all library
+  math. It is SX only: switching it to MX breaks the GP (`cas.chol` has no MX overload) and the
   artifact's equation text (DESIGN.md, Decisions). `_h_inputs(system, u, x)` gives the `h_inputs`
   columns of numeric or symbolic `u`, `x` (hybrid BO's GP training data and
   acquisition problem).
@@ -227,8 +229,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - `bo.py`: `optimization_loop(problem, measure, initial_points, n_iterations,
   trial_point, rng, artifact, *, settings) -> Run` (evaluate initial points, then per
   iteration `trial_point(problem, history, rng) -> (u, surrogate, acquisition
-  solution)`, the surrogate a tuple of fitted GPs, and evaluate u; the run keeps `settings`; a
-  `HybridBOError` gets the partial run as `error.run`). `standard_bo` and
+  solution)`, the surrogate a tuple of fitted GPs, and evaluate u; the run keeps
+  `settings`; a `HybridBOError` gets the partial run as `error.run`). `standard_bo` and
   `hybrid_bo` take `rng` last positionally and `settings` keyword-only and required:
   both settings require `gp`, the prior GP. `StandardBOSettings` and
   `standard_bo` (fit `u -> f`, `standard_acquisition`, `multistart` from `lhs` over
@@ -243,8 +245,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   scenarios, acquisition) -> Figure` draws the state before trial point i over the
   `u` start bounds, with one figure legend (`_figure_legend`); it dispatches on
   `n_u` (`ValueError` above 2, and for hybrid BO's GP panels with P > 1: they draw
-  `surrogates[i][0]` and `y[:, 0]`; with `gp=False` the replay works for any P). 1D (`_iteration_1d`): stacked curves over 101 points
-  plus the trial point. 2D (`_iteration_2d`): filled contours over a 30 x 30 grid, in
+  `surrogates[i][0]` and `y[:, 0]`; with `gp=False` the replay works for any P).
+  1D (`_iteration_1d`): stacked curves over 101 points plus the trial point. 2D (`_iteration_2d`): filled contours over a 30 x 30 grid, in
   rows of `_Map` panels (oracle | mean | std | acquisition; empty rows and columns
   dropped), oracle and mean sharing a color scale, panels of f log-scaled when
   positive over more than two decades, EI as log10 EI with EI <= 0 in gray cells

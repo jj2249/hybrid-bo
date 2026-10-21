@@ -7,6 +7,7 @@ a fixture below (here `study_1d`) is filled in by pytest with that fixture's val
 """
 
 import functools
+from typing import Any
 
 import casadi as cas
 import illustrative_example as ex
@@ -26,7 +27,7 @@ APPROXIMATIONS = {
 }
 
 
-def two_state_problem(n_u: int) -> tuple[hb.Problem, hb.Measure]:
+def benchmark_problem(n_u: int) -> tuple[hb.Problem, hb.Measure]:
     """A test system with n_u decision variables, one mechanistic state x1 and two
     unknown states y1 = sin(u1) and y2 = cos(u_last), both measured, with
     x1 + exp(x1) = y1 + y2 and f = x1^2 + (y1 - y2)^2; and its oracle measurement."""
@@ -49,10 +50,10 @@ def two_state_problem(n_u: int) -> tuple[hb.Problem, hb.Measure]:
     return problem, measure
 
 
-def two_state_study(n_u: int, approximations: dict) -> hb.Study:
+def two_state_study(n_u: int, approximations: dict[str, Any]) -> hb.Study:
     """One hybrid BO run per approximation on the test system: 2 initial points, 2
     iterations."""
-    problem, measure = two_state_problem(n_u)
+    problem, measure = benchmark_problem(n_u)
     methods = {
         label: functools.partial(
             hb.hybrid_bo,
@@ -108,7 +109,7 @@ def test_iteration_figures_replay_without_the_gp_panels(study_1d):
     """With two unknown states, the iteration figure draws the scenarios and the
     replayed acquisition function, whose curve passes through the stored value at the
     trial point (SoftSAA's -log EI drawn as -EI)."""
-    problem, _ = two_state_problem(1)
+    problem, _ = benchmark_problem(1)
     for run in study_1d.runs:
         figure = hb.plots.iteration(run, problem, 1, gp=False)
 
@@ -129,8 +130,10 @@ def test_iteration_figures_replay_without_the_gp_panels(study_1d):
 def test_iteration_figures_refuse_the_gp_panels(study_1d):
     """The GP panels draw one unknown state, so asking for them with two raises
     `ValueError` saying to pass gp=False."""
-    problem, _ = two_state_problem(1)
+    problem, _ = benchmark_problem(1)
 
+    # `pytest.raises` passes only if the block raises this exception, with a message
+    # matching the regular expression `match`
     with pytest.raises(ValueError, match="gp=False"):
         hb.plots.iteration(study_1d.runs[0], problem, 0)
 
@@ -139,7 +142,7 @@ def test_2d_iteration_figure_replays_without_the_gp_panels():
     """With two decision variables, the figure is one row of f under the scenarios
     and log10 EI, whose note gives the same stored and replayed value."""
     # Setup: one SAA run with two decision variables
-    problem, _ = two_state_problem(2)
+    problem, _ = benchmark_problem(2)
     (run,) = two_state_study(2, {"saa": APPROXIMATIONS["saa"]}).runs
 
     figure = hb.plots.iteration(run, problem, 1, gp=False)

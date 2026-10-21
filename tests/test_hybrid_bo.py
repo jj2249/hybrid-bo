@@ -553,6 +553,15 @@ def test_scenario_unknown_states_have_one_gp_per_unknown_state():
     np.testing.assert_allclose(symbolic, expected, rtol=1e-10)
 
 
+def test_acquisition_builder_needs_one_fitted_gp_per_unknown_state():
+    """The acquisition builder rejects a surrogate model with one GP for two unknown
+    states."""
+    (fitted, _) = two_fitted_gps()
+
+    with pytest.raises(ValueError, match="one fitted GP per unknown state"):
+        hybrid_acquisition(two_state_problem(), (fitted,), SCENARIOS_2, 0.0, EI())
+
+
 def test_sensitivity_has_one_entry_per_unknown_state():
     """df/dz at the nominal states matches central finite differences of a
     scenario's f_s along each of its two draws, where x1 solves the known equation
