@@ -289,13 +289,14 @@ class Run:
     surrogates: list[FittedGP]  # one per iteration; empty for baselines (default)
     acquisitions: list[AcquisitionSolution]  # one per iteration (#53)
     scenarios: Scenarios | None = None  # hybrid BO only (#29)
-    settings: StandardBOSettings | HybridBOSettings | None = None  # BO only (#120)
+    settings: MethodSettings | None = None  # BO only (#120)
 ```
 
 A BO run holds its method's **settings** in full (#120), the data the iteration plots
 replay; the record holds them as text, for people, and nothing reads that text back.
 The settings dataclasses live in `settings.py`, not with their methods in `bo.py`,
-because `run.py` needs them and `bo.py` imports `run.py`.
+because `run.py` needs them and `bo.py` imports `run.py`. `MethodSettings` is their
+union, the one place a new method's settings join.
 
 The **record** is built by the library (`run_record`, before the method draws
 anything), not the example: the variables with their bounds, `h_inputs`, `measured`,
@@ -666,6 +667,7 @@ def optimization_loop(
     trial_point: TrialPoint,
     rng,
     record,  # from run_record, before the method draws
+    *,
     settings,  # the method's, kept in the run (#120); None if not replayable
 ) -> Run: ...
 

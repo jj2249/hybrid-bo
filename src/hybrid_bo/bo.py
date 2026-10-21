@@ -33,7 +33,7 @@ from hybrid_bo.history import History, _concatenate, incumbents
 from hybrid_bo.problem import Problem, _h_inputs
 from hybrid_bo.run import Run, run_record
 from hybrid_bo.sampling import lhs
-from hybrid_bo.settings import HybridBOSettings, StandardBOSettings
+from hybrid_bo.settings import HybridBOSettings, MethodSettings, StandardBOSettings
 from hybrid_bo.solvers import multistart
 
 _logger = logging.getLogger(__name__)
@@ -55,7 +55,8 @@ def optimization_loop(
     trial_point: TrialPoint,
     rng: np.random.Generator,
     record: dict[str, str],
-    settings: StandardBOSettings | HybridBOSettings | None,
+    *,
+    settings: MethodSettings | None,
 ) -> Run:
     """Evaluates the initial points (n, N), then runs `n_iterations` iterations: each
     calls `trial_point` and evaluates the trial point it returns.
@@ -134,7 +135,7 @@ def _method_record(
     rng: np.random.Generator,
     method: str,
     n_iterations: int,
-    settings: StandardBOSettings | HybridBOSettings,
+    settings: MethodSettings,
 ) -> dict[str, str]:
     """The record of a BO run: `run_record` with the settings except the prior GP,
     whose repr is its own entry, `gp`."""
@@ -201,7 +202,7 @@ def standard_bo(
         trial_point,
         rng,
         record,
-        settings,
+        settings=settings,
     )
 
 
@@ -281,7 +282,7 @@ def hybrid_bo(
             trial_point,
             rng,
             record,
-            settings,
+            settings=settings,
         )
     except HybridBOError as error:
         if error.run is not None:

@@ -207,10 +207,11 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   acquisition_problem, w)` reads from the solution (or predicts, when the y_s are
   substituted).
 - `settings.py`: `StandardBOSettings` and `HybridBOSettings`, apart from `bo.py`
-  because `run.py` imports them and `bo.py` imports `run.py`; `TYPES`, the types
-  saving tags.
+  because `run.py` imports them and `bo.py` imports `run.py`; `MethodSettings`, their
+  union (`Run.settings`, the loop and the plots use it); `TYPES`, the types saving
+  tags.
 - `bo.py`: `optimization_loop(problem, measure, initial_points, n_iterations,
-  trial_point, rng, record, settings) -> Run` (evaluate initial points, then per
+  trial_point, rng, record, *, settings) -> Run` (evaluate initial points, then per
   iteration `trial_point(problem, history, rng) -> (u, surrogate, acquisition
   solution)` and evaluate u; the run keeps `settings`; a
   `HybridBOError` gets the partial run as `error.run`). `standard_bo` and

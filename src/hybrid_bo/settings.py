@@ -63,6 +63,9 @@ class HybridBOSettings:
         _check_approximation(self.acquisition, self.approximation)
 
 
+# A BO method's settings: the one place a new method's settings join
+MethodSettings = StandardBOSettings | HybridBOSettings
+
 # The settings types, which saving tags by name: the methods' and their parts'
 TYPES = (
     EI,

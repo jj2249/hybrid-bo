@@ -5,9 +5,6 @@ a fixture in `conftest.py` (here `illustrative_problem`) is filled in by pytest 
 that fixture's value.
 """
 
-import io
-import pickle
-
 import casadi as cas
 import illustrative_example as ex
 import numpy as np
@@ -66,28 +63,6 @@ def acquisition_values(nlp, u):
 def loop_record(problem, rng):
     """A record for runs of the optimization loop with a test trial-point function."""
     return run_record(problem, None, rng, "test", "")
-
-
-class _DataOnlyUnpickler(pickle.Unpickler):
-    """Loads only the library's data classes, numpy and builtins: no user code."""
-
-    allowed = (
-        "hybrid_bo.run",
-        "hybrid_bo.history",
-        "hybrid_bo.gp",
-        "hybrid_bo.acquisition",
-        "hybrid_bo.settings",
-        "hybrid_bo.solvers",
-        "numpy",
-        "builtins",
-    )
-
-    def find_class(self, module, name):
-        """The class `module.name`, if the module is allowed."""
-        if not module.startswith(self.allowed):
-            msg = f"the pickle needs {module}.{name}"
-            raise pickle.UnpicklingError(msg)
-        return super().find_class(module, name)
 
 
 # Acquisition functions
@@ -184,15 +159,19 @@ def test_run_has_one_surrogate_per_iteration(illustrative_problem):
     assert [len(fitted.X) for fitted in run.surrogates] == [2, 3]
 
 
-def test_run_pickles_without_the_code_that_produced_it(illustrative_problem):
-    """A run, its fitted GPs included, loads from a pickle without user code."""
+def test_run_pickles_without_the_code_that_produced_it(
+    illustrative_problem, data_only_pickle
+):
+    """A run, its fitted GPs and settings included, loads from a pickle without
+    user code."""
     run = illustrative_run(illustrative_problem)
 
-    loaded = _DataOnlyUnpickler(io.BytesIO(pickle.dumps(run))).load()
+    loaded = data_only_pickle(run)
 
     assert loaded.record == run.record
     np.testing.assert_array_equal(loaded.history.u, run.history.u)
     np.testing.assert_array_equal(loaded.surrogates[-1].X, run.surrogates[-1].X)
+    assert loaded.settings == run.settings
 
 
 def test_record_holds_the_settings_and_the_gp(illustrative_problem):

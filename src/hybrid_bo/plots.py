@@ -31,7 +31,7 @@ from hybrid_bo.history import n_iterations
 from hybrid_bo.problem import Problem, Symbolic
 from hybrid_bo.run import Run
 from hybrid_bo.sampling import _start_bounds
-from hybrid_bo.settings import HybridBOSettings, StandardBOSettings
+from hybrid_bo.settings import HybridBOSettings, MethodSettings, StandardBOSettings
 from hybrid_bo.studies import Study
 from hybrid_bo.views import evaluations
 
@@ -248,7 +248,7 @@ def iteration(
     return figure
 
 
-def _is_soft(settings: StandardBOSettings | HybridBOSettings) -> bool:
+def _is_soft(settings: MethodSettings) -> bool:
     """Whether the settings are hybrid BO's with SoftSAA."""
     return isinstance(settings, HybridBOSettings) and isinstance(
         settings.approximation, SoftSAA
@@ -259,7 +259,7 @@ def _replay(
     run: Run,
     problem: Problem,
     i: int,
-    settings: StandardBOSettings | HybridBOSettings,
+    settings: MethodSettings,
     u: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray | None, np.ndarray | None]:
     """Iteration i's acquisition function at each row of u (n_points, N), which holds

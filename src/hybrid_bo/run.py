@@ -14,7 +14,7 @@ from hybrid_bo.acquisition import AcquisitionSolution, Scenarios
 from hybrid_bo.gp import FittedGP
 from hybrid_bo.history import History
 from hybrid_bo.problem import Problem, _as_text
-from hybrid_bo.settings import HybridBOSettings, StandardBOSettings
+from hybrid_bo.settings import MethodSettings
 
 
 @dataclass(frozen=True)
@@ -45,7 +45,7 @@ class Run:
     surrogates: list[FittedGP] = field(default_factory=list)
     acquisitions: list[AcquisitionSolution] = field(default_factory=list)
     scenarios: Scenarios | None = None
-    settings: StandardBOSettings | HybridBOSettings | None = None
+    settings: MethodSettings | None = None
 
 
 def _git(path: Path, *args: str) -> str:
