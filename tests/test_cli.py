@@ -80,7 +80,7 @@ def test_run_then_plot_the_newest_study(tmp_path):
     run_cli(["plot", "--results-root", str(tmp_path)], true_curves=True)
 
     # The summary is back; the figures are convergence, regret and every iteration of
-    # every run
+    # run 0 of each method (the default of `--plot-runs`)
     assert pl.read_csv(study_dir / "summary.csv").equals(summary)
 
     figures = {
@@ -91,10 +91,49 @@ def test_run_then_plot_the_newest_study(tmp_path):
         "convergence.png",
         "regret.png",
         "standard_bo/run-000/iteration-00.png",
-        "standard_bo/run-001/iteration-00.png",
         "uniform_sampling/run-000/iteration-00.png",
-        "uniform_sampling/run-001/iteration-00.png",
     }
+
+
+def iteration_figures(study_dir):
+    """The runs with iteration figures in the study's `figures/` folder, as
+    `<method>/run-<index>` paths."""
+    return {
+        path.parent.relative_to(study_dir / "figures").as_posix()
+        for path in (study_dir / "figures").rglob("iteration-*.png")
+    }
+
+
+def test_plot_runs_chooses_the_runs_with_iteration_figures(tmp_path):
+    """`--plot-runs` takes run indices or `all`. On the run command it implies
+    `--plot`; on `plot` it draws the runs given. Convergence is always drawn."""
+    # Run three runs, plotting runs 1 and 2 without `--plot`
+    run_cli(
+        ["--method", "uniform_sampling", "--n-runs", "3", "--n-iterations", "1"]
+        + ["--name", "demo", "--plot-runs", "1", "2"]
+        + ["--results-root", str(tmp_path)]
+    )
+    study_dir = tmp_path / "illustrative_example" / "demo"
+    assert (study_dir / "figures" / "convergence.png").exists()
+    assert iteration_figures(study_dir) == {
+        "uniform_sampling/run-001",
+        "uniform_sampling/run-002",
+    }
+
+    # Plot every run
+    run_cli(["plot", "demo", "--plot-runs", "all", "--results-root", str(tmp_path)])
+    assert iteration_figures(study_dir) == {
+        f"uniform_sampling/run-{index:03d}" for index in range(3)
+    }
+
+
+@pytest.mark.parametrize("plot_runs", [["all", "1"], ["-1"], ["one"]])
+def test_plot_runs_takes_indices_or_all(tmp_path, plot_runs):
+    """`--plot-runs` takes run indices (from 0) or `all` alone; anything else is a
+    usage error."""
+    with pytest.raises(SystemExit) as exit_info:
+        run_cli(["plot", "--plot-runs", *plot_runs, "--results-root", str(tmp_path)])
+    assert exit_info.value.code != 0
 
 
 def test_plot_takes_the_study_saved_last(tmp_path):

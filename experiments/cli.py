@@ -9,8 +9,10 @@ An experiment ends with a call that passes everything it defines:
 and the pixi tasks run the script as a module from this folder:
 
     pixi run experiment illustrative_example [--method hybrid_bo ...] [--n-runs 3]
-        [--seed 0] [--n-iterations 5] [--name lcb-vs-ei] [--plot] [--require-clean]
+        [--seed 0] [--n-iterations 5] [--name lcb-vs-ei] [--plot] [--plot-runs 0 3]
+        [--require-clean]
     pixi run plot illustrative_example [STUDY]
+    pixi run experiment illustrative_example plot [STUDY] [--plot-runs all]
 
 Running saves the study with `hb.save` to `<results root>/<experiment>/<study id>/` (the
 results root defaults to `results/` at the repo root), where the study id is `--name`
@@ -24,7 +26,9 @@ as `study.log` once the study is saved. A study that doesn't finish leaves its l
 where it was, which keeps its id taken. Running from a tree that isn't clean
 (uncommitted or untracked files) warns that the study won't be reproducible;
 `--require-clean` refuses to run instead. `plot` loads a study (default: the newest
-saved) with `hb.load` and saves its figures to its `figures/` folder.
+saved) with `hb.load` and saves its figures to its `figures/` folder: convergence and
+regret, and the iteration figures of the runs `--plot-runs` names (indices, or `all`;
+default run 0 of each method). On the run command, `--plot-runs` implies `--plot`.
 """
 
 import argparse
@@ -80,6 +84,9 @@ def main(
     command, rest = ("plot", args[1:]) if args[:1] == ["plot"] else ("run", args)
     parsers = _parsers(name, methods)
     parsed = parsers[command].parse_args(rest)
+    plot_runs = parsed.plot_runs or []
+    if "all" in plot_runs and len(plot_runs) > 1:
+        parsers[command].error("--plot-runs takes run indices or all, not both")
     experiment_dir = _from_init_cwd(parsed.results_root) / name
 
     # Run: a tree that isn't clean gives a study that isn't reproducible
@@ -155,10 +162,17 @@ def main(
         if not any((study_dir / name).exists() for name in ARTIFACTS):
             parsers["plot"].error(f"{study_dir} holds no study")
 
-    # Plot, also straight after a run with --plot
-    if command == "plot" or parsed.plot:
+    # Plot, also straight after a run with --plot or --plot-runs
+    if command == "plot" or parsed.plot or parsed.plot_runs is not None:
+        runs = parsed.plot_runs or [0]
         with plt.style.context(hb.plots.STYLE):
-            plot(name, problem, measure if true_curves else None, study_dir)
+            plot(
+                name,
+                problem,
+                measure if true_curves else None,
+                study_dir,
+                runs=None if runs == ["all"] else runs,
+            )
 
 
 def _parsers(
@@ -186,6 +200,7 @@ def _parsers(
     )
     run_parser.add_argument("--name", help="the study id; default: the UTC time")
     run_parser.add_argument("--plot", action="store_true", help="plot after running")
+    _add_plot_runs(run_parser, " (implies --plot)")
     run_parser.add_argument(
         "--require-clean",
         action="store_true",
@@ -199,8 +214,33 @@ def _parsers(
         description=f"Plot a saved study of {name} into its figures/ folder.",
     )
     plot_parser.add_argument("study", nargs="?", help="the study id; default: newest")
+    _add_plot_runs(plot_parser)
     plot_parser.add_argument("--results-root", type=Path, default=RESULTS_ROOT)
     return {"run": run_parser, "plot": plot_parser}
+
+
+def _add_plot_runs(parser: argparse.ArgumentParser, note: str = "") -> None:
+    """Adds `--plot-runs` to the parser: run indices or `all`, None when not given."""
+    parser.add_argument(
+        "--plot-runs",
+        nargs="+",
+        type=_run_index,
+        metavar="RUN",
+        help=f"the runs with iteration figures: indices or all; default 0{note}",
+    )
+
+
+def _run_index(text: str) -> int | str:
+    """A `--plot-runs` value: a run index (from 0) or `all`.
+
+    Raises `argparse.ArgumentTypeError` otherwise.
+    """
+    if text == "all":
+        return text
+    if not text.isdigit():
+        msg = f"not a run index or all: {text!r}"
+        raise argparse.ArgumentTypeError(msg)
+    return int(text)
 
 
 def _from_init_cwd(path: Path) -> Path:
@@ -284,12 +324,14 @@ def plot(
     problem: hb.Problem,
     measure: hb.Measure | None,
     study_dir: Path,
+    *,
+    runs: Sequence[int] | None,
 ) -> None:
     """Saves the figures of the study in `study_dir` to its `figures/` folder:
     `convergence.png`, `regret.png` (when the study has an oracle optimum) and
-    `<method>/run-000/iteration-00.png` for every iteration of every run, with the
-    true curves from `measure` if given. A figure that can't be drawn is skipped
-    with a message. Saves `summary.csv` too if the study has none (a study saved
+    `<method>/run-000/iteration-00.png` for every iteration of each method's runs
+    with these indices (None: every run), with the true values from `measure` if
+    given. A figure that can't be drawn is skipped with a message. Saves `summary.csv` too if the study has none (a study saved
     before the CLI wrote summaries).
 
     Raises `ValueError` if the study was run on another experiment.
@@ -315,8 +357,10 @@ def plot(
         plt.savefig(figures_dir / "regret.png")
         plt.close("all")
 
-    # Every iteration of every run
+    # Every iteration of the runs chosen
     for run in study.runs:
+        if runs is not None and run.index not in runs:
+            continue
         run_dir = figures_dir / run.method / f"run-{run.index:03d}"
         for i in range(hb.history.n_iterations(run.history)):
             try:

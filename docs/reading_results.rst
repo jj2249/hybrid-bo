@@ -44,8 +44,10 @@ The figures
   initial points cost a measurement too.
 - ``regret.png``: the median regret, on a log scale, as in the paper. Only with an
   oracle optimum.
-- ``<method>/run-000/iteration-00.png``: one figure per iteration of each run, the
-  state before its trial point. Only for problems with one decision variable.
+- ``<method>/run-000/iteration-00.png``: one figure per iteration of a run, the
+  state before its trial point. Only for problems with one or two decision variables,
+  and by default only for run 0 of each method: ``--plot-runs 0 3`` chooses the runs,
+  ``--plot-runs all`` draws every one.
 
 Hybrid BO's iteration figure has three panels, one per step of the iteration: the GP of
 the unknown state over ``u``; the objective under the *scenarios* (draws from the GP,
@@ -53,6 +55,12 @@ each propagated through ``g`` to ``f``); and the acquisition function, whose min
 the next trial point. Standard BO's figure has the GP of ``f`` and its acquisition
 function; a baseline's has the points only. Each shows the points so far, the
 incumbent and the trial point, and, with ``true_curves=True``, the true curves.
+
+With two decision variables each panel is a map over ``u``: hybrid BO has a row for
+the unknown state (oracle, GP mean, GP std) and a row for ``f`` (oracle, the mean and
+std over the scenarios, and EI); standard BO the row for ``f`` with its GP. The oracle
+panels, with ``true_curves=True``, share the color scale of the mean beside them. EI
+is drawn as log10 EI, with the points where it is 0, SAA-EI's flat regions, in gray.
 
 The study in Python
 -------------------

@@ -800,7 +800,17 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   nothing is passed: until #120 the plots rebuilt the settings from the artifact's text
   with regular expressions, and a custom solver had to be passed. With linearization, the
   scenarios panel shows the nominal f ± s, with `s` recomputed from the stored
-  surrogate, in place of the scenario band.
+  surrogate, in place of the scenario band. With two decision variables (#117) the
+  panels are filled contours over a 30 x 30 grid, in a row of y (oracle, GP mean, GP
+  std) and a row of f (oracle, scenario mean, scenario std, EI); an oracle panel shares
+  the mean's color scale so they compare directly, the 2D stand-in for 1D's overlaid
+  true curve. EI is drawn as log10 EI with its zeros in gray, since SAA-EI's flat
+  regions are what the figure is for. The replay solves the grid in order of distance
+  from the trial point, each point from the nearest one solved, which in 1D is the
+  outward sweep it always was. GP prediction at the grid is mapped over the points
+  (`predict` maps a numpy input over its rows): predicting 900 points at once built
+  their whole covariance matrix and took 6 s. More than two decision variables need
+  another design.
 - **Entry point** (#51; revised in #65; moved to `experiments/` in #69). An
   experiment ends with an explicit call that passes everything it defines:
   `cli.main(name, problem, measure, methods, study_settings, optimum=...,
@@ -818,7 +828,9 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   figures/}` at the repo root. Running prints `hb.summary` and saves it as
   `summary.csv`; `plot` takes the study saved last by default, writes under
   `figures/`, and saves `summary.csv` only if the study has none (older studies).
-  `plot` passes the iteration figures nothing from the experiment's methods: each
+  `plot` draws iteration figures for the runs `--plot-runs` names (default run 0 of
+  each method, `all` for every run), since a study of 10 runs and 20 iterations is
+  hundreds of figures. `plot` passes the iteration figures nothing from the experiment's methods: each
   run's GP comes from its stored fitted GPs (#119), so a study run with another GP
   than the experiment's current one still plots. The `hybrid-bo-experiments` skill has the details. The CLI stays in
   `experiments/` for people who clone the repo; it is not part of the package.

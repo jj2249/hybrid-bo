@@ -68,8 +68,9 @@ oracle objective is below it.
   scaled units (inputs onto [0, 1], outputs standardized). Don't convert the noise by
   hand.
 - `true_curves=True` runs the measurement over the plot grid: only for an oracle.
-- The iteration figures need one decision variable; otherwise `plot` prints why and
-  skips that run's figures. They replay each run from what it stored (its fitted
+- The iteration figures need one or two decision variables; otherwise `plot` prints
+  why and skips that run's figures. They are drawn for run 0 of each method unless
+  `--plot-runs` names other runs (or `all`). They replay each run from what it stored (its fitted
   GPs and its settings), so nothing from the experiment's methods is passed and a
   study plots after the methods change.
 - Studies saved before #119 (GPs as data) or #120 (runs hold their settings) don't
@@ -77,9 +78,9 @@ oracle objective is below it.
 
 ## Running
 
-    pixi run experiment <name> [--method M ...] [--n-runs 10] [--seed 0] [--n-iterations 5] [--name ID] [--plot] [--require-clean]
+    pixi run experiment <name> [--method M ...] [--n-runs 10] [--seed 0] [--n-iterations 5] [--name ID] [--plot] [--plot-runs 0 3] [--require-clean]
     pixi run plot <name> [STUDY]
-    pixi run experiment <name> plot [STUDY] [--results-root DIR]
+    pixi run experiment <name> plot [STUDY] [--plot-runs all] [--results-root DIR]
 
 The tasks run `python -m <name>` from `experiments/` in the `experiments` environment.
 No command lists every experiment, and a typo in the name fails with "No module named
@@ -94,6 +95,9 @@ the console shows INFO and above. Once saved, the log moves into the study folde
 `study.log`; a study that doesn't finish leaves `<id>.log` in place, which keeps the id
 taken until it is deleted. `plot` loads the study given, else the one whose
 artifact was written last (`artifact.json`, or `study.json` in older studies), and
-saves `summary.csv` if the study has none (studies saved before summaries). Running
+saves `summary.csv` if the study has none (studies saved before summaries). Plotting
+draws convergence and regret, and the iteration figures of the runs `--plot-runs`
+names (indices or `all`, default `0`, of each method); on the run command
+`--plot-runs` implies `--plot`. Running
 with uncommitted or untracked files warns that the study won't be reproducible;
 `--require-clean` refuses to run instead.

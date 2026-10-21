@@ -26,7 +26,8 @@ pixi run -e dev lint | format | typecheck
 pixi run -e dev docs         # sphinx API docs -> docs/_build/html
 pixi run -e dev setup        # install pre-commit hooks (ruff and ty on commit)
 pixi run experiment illustrative_example [--n-runs 3 --plot ...]   # every method; --help lists the flags
-pixi run plot illustrative_example [STUDY]   # figures of the newest (or named) study
+pixi run plot illustrative_example [STUDY]   # figures of the newest (or named) study, iterations of run 0
+pixi run experiment illustrative_example plot [STUDY] --plot-runs all   # iteration figures of every run
 ```
 
 The pixi tasks run an experiment as a module from `experiments/` (`python -m
@@ -35,7 +36,8 @@ call that passes everything it defines; `experiments/cli.py` parses the flags an
 runs or plots. The `experiment`, `plot` and `docs` tasks set a
 `default-environment`, so they need no `-e`. `experiment` passes every flag through;
 `plot` takes only the study id, so plot with other flags as
-`pixi run experiment illustrative_example plot [STUDY] [--results-root ...]`.
+`pixi run experiment illustrative_example plot [STUDY] [--plot-runs ...]
+[--results-root ...]`.
 
 The git hook hardcodes the pixi Python path. If commits fail with "`pre-commit`
 not found" after a Python upgrade, re-run `pixi run -e dev setup`.

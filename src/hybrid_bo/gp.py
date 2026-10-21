@@ -536,10 +536,12 @@ def predict(fitted: FittedGP, X: Any) -> tuple[Any, Any]:
     for building acquisition problems.
     """
     # The conditional mean and variance at symbols for X, with the hyperparameters and
-    # data as constants
+    # data as constants. A numpy X is predicted one row at a time, mapped over its rows:
+    # predicting all rows at once builds their whole covariance matrix
     gp = fitted.gp
     X_train, Y_train = Symbolic(fitted.X), Symbolic(fitted.Y)
-    X_symbols = Symbolic.sym("X", *X.shape)
+    is_numeric = isinstance(X, np.ndarray)
+    X_symbols = Symbolic.sym("X", 1 if is_numeric else X.shape[0], X.shape[1])
     X_scaled = scale(fitted.x_scaler, X_symbols)
     L = _training_cholesky(gp, X_train, fitted.y_scaler)
     alpha = cas.solve(L, Y_train - prior_mean(gp.mean, X_train))
@@ -553,7 +555,7 @@ def predict(fitted: FittedGP, X: Any) -> tuple[Any, Any]:
         [X_symbols],
         [unscale(fitted.y_scaler, mean), cas.sqrt(variance) / fitted.y_scaler.slope[0]],
     )
-    mean, std = function(X)
-    if isinstance(X, np.ndarray):
+    if is_numeric:
+        mean, std = function.map(len(X))(X.reshape(1, -1))
         return mean.full().ravel(), std.full().ravel()
-    return mean, std
+    return function(X)
