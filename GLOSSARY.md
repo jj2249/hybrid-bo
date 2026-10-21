@@ -24,8 +24,10 @@ uniform sampling). A BO method includes its choice of surrogate model.
 _Avoid_: strategy, routine, algorithm
 
 **Surrogate model**:
-A GP that stands in for an unknown part of the problem: the unknown equations in
-hybrid BO, the whole map from decision variables to objective in standard BO.
+What stands in for an unknown part of the problem. In hybrid BO it models the unknown
+equations, with one independent GP per unknown state, all sharing the arguments of the
+unknown equations. In standard BO it is one GP of the whole map from decision variables
+to objective.
 _Avoid_: GP model, emulator
 
 **Prior GP**:
@@ -68,14 +70,19 @@ mechanistic states and the unknown states together.
 _Avoid_: outputs, process variables, dependent variables
 
 **Mechanistic states** (`x`, dimension M):
-The states determined by the known equations.
+The states determined by the known equations; there are none when there are no
+known equations (M = 0).
 
 **Unknown states** (`y`, dimension P):
-The states determined by the unknown equations; the GP predicts them.
+The states determined by the unknown equations; in hybrid BO, each has its own GP
+predicting it.
 _Avoid_: GP outputs, unknown variables
 
 **Known equations** (`g`, M equations):
-The equations `0 = g(x, y, u)` whose form is known.
+The equations `0 = g(x, y, u)` whose form is known. There may be none (M = 0, and
+then no mechanistic states): the known part of the problem is the objective alone,
+`f(y, u)` with `y = h(u)`, and hybrid BO is BO of a composite function (Astudillo &
+Frazier, [arXiv 1906.01537](https://arxiv.org/abs/1906.01537)).
 _Avoid_: h_known, mechanistic model
 
 **Unknown equations** (`h`, P equations):

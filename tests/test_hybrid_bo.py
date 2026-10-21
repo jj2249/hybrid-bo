@@ -33,6 +33,7 @@ from hybrid_bo import (
 from hybrid_bo.acquisition import (
     Scenarios,
     _pack,
+    _scenario_unknown_states,
     _sensitivity,
     _unpack,
     hybrid_acquisition,
@@ -143,7 +144,7 @@ def test_saa_ei_is_the_weighted_average_over_scenarios(
 
     nlp = hybrid_acquisition(
         problem,
-        fitted,
+        (fitted,),
         SCENARIOS,
         incumbent,
         EI(),
@@ -168,7 +169,7 @@ def test_saa_lcb_is_the_weighted_mean_minus_std_factor_times_weighted_std(
 
     nlp = hybrid_acquisition(
         problem,
-        fitted,
+        (fitted,),
         SCENARIOS,
         0.0,
         LCB(2.0),
@@ -190,7 +191,7 @@ def test_known_equations_hold_per_scenario_and_tie_the_unknown_states_to_the_gp(
     u, x = 0.3, np.array([-1.0, 0.0, 0.5])
     y = np.array([0.1, -0.2, 0.4])
 
-    nlp = hybrid_acquisition(problem, fitted, SCENARIOS, 0.0, EI()).nlp
+    nlp = hybrid_acquisition(problem, (fitted,), SCENARIOS, 0.0, EI()).nlp
     assert nlp.g is not None
     constraints = nlp.g(variables_at(u, x, y, True)).full().ravel()
 
@@ -209,7 +210,7 @@ def test_substituted_unknown_states_leave_only_the_known_equations():
 
     nlp = hybrid_acquisition(
         problem,
-        fitted,
+        (fitted,),
         SCENARIOS,
         0.0,
         EI(),
@@ -236,7 +237,7 @@ def test_bounds_and_start_bounds_come_from_each_variable(unknown_states_as_varia
 
     acquisition_problem = hybrid_acquisition(
         problem,
-        fitted,
+        (fitted,),
         SCENARIOS,
         0.0,
         EI(),
@@ -274,7 +275,7 @@ def test_unpack_undoes_pack(unknown_states_as_variables):
     fitted = fitted_gp(1)
     acquisition_problem = hybrid_acquisition(
         problem,
-        fitted,
+        (fitted,),
         SCENARIOS,
         0.0,
         EI(),
@@ -306,7 +307,7 @@ def test_unpack_rejects_a_decision_vector_of_the_wrong_length(
     fitted = fitted_gp(1)
     acquisition_problem = hybrid_acquisition(
         problem_with(["u"]),
-        fitted,
+        (fitted,),
         SCENARIOS,
         0.0,
         EI(),
@@ -325,7 +326,7 @@ def test_acquisition_builder_rejects_anything_but_ei_or_lcb():
     fitted = fitted_gp(1)
 
     with pytest.raises(TypeError, match=r"EI\(\) or LCB"):
-        hybrid_acquisition(problem_with(["u"]), fitted, SCENARIOS, 0.0, "ei")  # ty: ignore[invalid-argument-type]
+        hybrid_acquisition(problem_with(["u"]), (fitted,), SCENARIOS, 0.0, "ei")  # ty: ignore[invalid-argument-type]
 
 
 def test_scenarios_need_one_column_per_unknown_state():
@@ -335,7 +336,7 @@ def test_scenarios_need_one_column_per_unknown_state():
     scenarios = Scenarios(np.zeros((3, 2)), np.full(3, 1 / 3))
 
     with pytest.raises(ValueError, match="one column of z per unknown state"):
-        hybrid_acquisition(problem_with(["u"]), fitted, scenarios, 0.0, EI())
+        hybrid_acquisition(problem_with(["u"]), (fitted,), scenarios, 0.0, EI())
 
 
 @pytest.mark.parametrize("acquisition", ["ei", LCB, None])
@@ -358,7 +359,7 @@ def test_acquisition_builder_rejects_an_unknown_approximation():
     with pytest.raises(TypeError, match=r"SAA\("):
         hybrid_acquisition(
             problem_with(["u"]),
-            fitted,
+            (fitted,),
             SCENARIOS,
             0.0,
             EI(),
@@ -376,7 +377,7 @@ def test_lcb_with_linearization_is_not_implemented():
     with pytest.raises(NotImplementedError, match=r"EI\(\) with Linearization"):
         hybrid_acquisition(
             problem_with(["u"]),
-            fitted,
+            (fitted,),
             nominal_scenario(1),
             0.0,
             LCB(),
@@ -391,7 +392,7 @@ def test_linearization_needs_the_nominal_scenario():
 
     with pytest.raises(ValueError, match="nominal scenario"):
         hybrid_acquisition(
-            problem_with(["u"]), fitted, SCENARIOS, 0.0, EI(), Linearization()
+            problem_with(["u"]), (fitted,), SCENARIOS, 0.0, EI(), Linearization()
         )
 
 
@@ -438,7 +439,7 @@ def test_lin_ei_is_exact_for_a_linear_problem(unknown_states_as_variables):
     # Lin-EI's objective at the nominal states, x = 2y - u
     approximation = Linearization(unknown_states_as_variables)
     nlp = hybrid_acquisition(
-        problem, fitted, nominal_scenario(1), incumbent, EI(), approximation
+        problem, (fitted,), nominal_scenario(1), incumbent, EI(), approximation
     ).nlp
     y = np.array([y_bar])
     w = variables_at(u, 2 * y - u, y, unknown_states_as_variables)
@@ -459,7 +460,7 @@ def test_saa_ei_agrees_with_lin_ei_for_a_linear_problem():
 
     # SAA-EI at those scenario states
     nlp = hybrid_acquisition(
-        problem, fitted, scenarios, incumbent, EI(), SAA(500, False)
+        problem, (fitted,), scenarios, incumbent, EI(), SAA(500, False)
     ).nlp
     saa_ei = -nlp.f(variables_at(u, 2 * y_s - u, None, False)).full().item()
 
@@ -490,11 +491,106 @@ def test_sensitivity_is_the_total_derivative_of_f_in_the_draws(h_inputs):
 
     # The sensitivity at the nominal states (z = 0)
     x_bar, y_bar = scenario(0.0)
-    a = _sensitivity(problem, fitted)(x_bar, y_bar, u).full().item()
+    a = _sensitivity(problem, (fitted,))(x_bar, y_bar, u).full().item()
 
     # Central differences of f_s = x_s^2 + y_s in z
     f = [x**2 + y for x, y in (scenario(1e-5), scenario(-1e-5))]
     assert a == pytest.approx((f[0] - f[1]) / 2e-5, rel=1e-6)
+
+
+# More than one unknown state (P = 2)
+
+# Two scenarios of two unknown states, each draw different
+SCENARIOS_2 = Scenarios(z=np.array([[-1.0, 0.7], [0.5, -1.5]]), w=np.array([0.4, 0.6]))
+
+
+def two_state_problem():
+    """A system with one mechanistic state x1 and two unknown states y1 and y2, both
+    functions of (u, x1), with x1 + exp(x1) = y1 + y2 and f = x1^2 + y1 y2, so f
+    couples the unknown states."""
+    u, x1 = Var("u", -2.0, 2.0), Var("x1", start=(-2.5, 1.0))
+    y1, y2 = Var("y1", start=(-2.0, 2.0)), Var("y2", start=(-2.0, 2.0))
+    system = System(
+        u=[u],
+        x=[x1],
+        y=[y1, y2],
+        g=lambda v: [v.x1 + cas.exp(v.x1) - v.y1 - v.y2],
+        h_inputs=[u, x1],
+        measured=[y1, y2],
+    )
+    return Problem(system, f=lambda v: v.x1**2 + v.y1 * v.y2)
+
+
+def two_fitted_gps():
+    """The default GP over (u, x1) fitted to four points of each unknown state, with
+    different data so the two GPs differ."""
+    X = np.array([[-1.5, -1.0], [-0.5, 0.2], [0.4, -0.3], [1.7, 0.6]])
+    y1, y2 = np.array([0.3, -1.2, 0.9, 0.8]), np.array([-0.4, 0.5, 1.1, -0.9])
+    return tuple(fit_gp(ex.gp, X, y, np.random.default_rng(0)) for y in (y1, y2))
+
+
+def test_scenario_unknown_states_have_one_gp_per_unknown_state():
+    """Each scenario's unknown state j is mean_j + std_j * z_sj, from GP j at the
+    scenario's arguments of h, for numpy and CasADi inputs alike."""
+    # Reference: each GP's prediction at each scenario's (u, x1), by numpy
+    problem, fitted = two_state_problem(), two_fitted_gps()
+    u, x = np.array([0.3]), np.array([[-0.4], [0.8]])
+    inputs = np.column_stack([np.full(2, u[0]), x[:, 0]])
+    predictions = [predict(gp, inputs) for gp in fitted]
+    expected = np.column_stack(
+        [mean + std * SCENARIOS_2.z[:, j] for j, (mean, std) in enumerate(predictions)]
+    )
+
+    # Numeric, then symbolic evaluated at the same point
+    numeric = _scenario_unknown_states(problem.system, fitted, SCENARIOS_2, u, x)
+    u_sym, x_sym = cas.SX.sym("u", 1, 1), cas.SX.sym("x", 2, 1)
+    symbolic = cas.Function(
+        "y",
+        [u_sym, x_sym],
+        [_scenario_unknown_states(problem.system, fitted, SCENARIOS_2, u_sym, x_sym)],
+    )(u, x).full()
+    np.testing.assert_allclose(numeric, expected, rtol=1e-12)
+    np.testing.assert_allclose(symbolic, expected, rtol=1e-10)
+
+
+def test_acquisition_builder_needs_one_fitted_gp_per_unknown_state():
+    """The acquisition builder rejects a surrogate model with one GP for two unknown
+    states."""
+    (fitted, _) = two_fitted_gps()
+
+    with pytest.raises(ValueError, match="one fitted GP per unknown state"):
+        hybrid_acquisition(two_state_problem(), (fitted,), SCENARIOS_2, 0.0, EI())
+
+
+def test_sensitivity_has_one_entry_per_unknown_state():
+    """df/dz at the nominal states matches central finite differences of a
+    scenario's f_s along each of its two draws, where x1 solves the known equation
+    with each y_j GP j's scenario at (u, x1), so x1 moves with both."""
+    problem, fitted, u = two_state_problem(), two_fitted_gps(), 0.3
+
+    def scenario(z):
+        """The scenario states (x1, y) of the draws z (2,): x1 solves
+        x1 + exp(x1) = y1 + y2."""
+
+        def y_of(x1):
+            """Each GP's scenario mean_j + std_j * z_j at (u, x1)."""
+            predictions = [predict(gp, np.array([[u, x1]])) for gp in fitted]
+            return np.array([m[0] + s[0] * z_j for (m, s), z_j in zip(predictions, z)])
+
+        x1 = scipy.optimize.brentq(
+            lambda x1: x1 + np.exp(x1) - y_of(x1).sum(), -10.0, 5.0
+        )
+        return x1, y_of(x1)
+
+    # The sensitivity at the nominal states (z = 0)
+    x_bar, y_bar = scenario(np.zeros(2))
+    a = _sensitivity(problem, fitted)(x_bar, y_bar, u).full()
+    assert a.shape == (1, 2)
+
+    # Central differences of f_s = x1^2 + y1 y2 along each draw
+    for j, step in enumerate(1e-5 * np.eye(2)):
+        f = [x1**2 + y[0] * y[1] for x1, y in (scenario(step), scenario(-step))]
+        assert a[0, j] == pytest.approx((f[0] - f[1]) / 2e-5, rel=1e-6)
 
 
 # The soft sample-average approximation
@@ -518,7 +614,7 @@ def test_lcb_with_soft_saa_is_rejected():
         HybridBOSettings(gp=ex.gp, acquisition=LCB(), approximation=SoftSAA(1.0))
     with pytest.raises(ValueError, match=r"EI\(\) with SoftSAA"):
         hybrid_acquisition(
-            problem_with(["u"]), fitted, SCENARIOS, 0.0, LCB(), SoftSAA(1.0)
+            problem_with(["u"]), (fitted,), SCENARIOS, 0.0, LCB(), SoftSAA(1.0)
         )
 
 
@@ -533,7 +629,7 @@ def ei_problems(incumbent, temperature, unknown_states_as_variables):
     def build(approximation):
         """The EI acquisition problem with this approximation."""
         return hybrid_acquisition(
-            problem, fitted, SCENARIOS, incumbent, EI(), approximation
+            problem, (fitted,), SCENARIOS, incumbent, EI(), approximation
         )
 
     y, f = scenario_values(fitted, u, x, ["u"])
@@ -636,9 +732,10 @@ def test_both_settings_solve_the_illustrative_example(
     assert run.history.u.shape == (4, 1)
     assert np.all((-2.0 <= run.history.u) & (run.history.u <= 2.0))
 
-    # The surrogates: one per iteration, fitted on the points before its trial point
-    assert [len(fitted.X) for fitted in run.surrogates] == [2, 3]
-    assert all(isinstance(fitted, FittedGP) for fitted in run.surrogates)
+    # The surrogates: one per iteration, fitted on the points before its trial point,
+    # each one GP for the one unknown state
+    assert [len(fitted.X) for (fitted,) in run.surrogates] == [2, 3]
+    assert all(isinstance(fitted, FittedGP) for (fitted,) in run.surrogates)
 
     # The scenarios: drawn after the initial points, which take no stream draws
     rng = np.random.default_rng(0)
@@ -693,7 +790,7 @@ def test_stored_acquisition_solution_solves_the_acquisition_problem(
     history = run.history
     assert run.scenarios is not None
     assert len(run.acquisitions) == 2
-    for i, (solution, fitted) in enumerate(
+    for i, (solution, (fitted,)) in enumerate(
         zip(run.acquisitions, run.surrogates, strict=True)
     ):
         assert solution.x is not None and solution.y is not None
@@ -705,7 +802,7 @@ def test_stored_acquisition_solution_solves_the_acquisition_problem(
         incumbent = float(incumbents(history)[point - 1])
         nlp = hybrid_acquisition(
             illustrative_problem,
-            fitted,
+            (fitted,),
             run.scenarios,
             incumbent,
             EI(),
@@ -742,7 +839,7 @@ def test_linearization_runs_over_the_nominal_scenario(
     np.testing.assert_array_equal(run.scenarios.w, np.ones(1))
 
     # Per iteration: the nominal states, and the value at them
-    for i, (solution, fitted) in enumerate(
+    for i, (solution, (fitted,)) in enumerate(
         zip(run.acquisitions, run.surrogates, strict=True)
     ):
         assert solution.x is not None and solution.y is not None
@@ -756,7 +853,7 @@ def test_linearization_runs_over_the_nominal_scenario(
         incumbent = float(incumbents(history)[point - 1])
         nlp = hybrid_acquisition(
             illustrative_problem,
-            fitted,
+            (fitted,),
             run.scenarios,
             incumbent,
             EI(),
@@ -805,7 +902,7 @@ def test_gp_inputs_are_the_arguments_of_h():
     )
 
     # The fitted GP's inputs, unscaled, are the (u, x) of the points before it
-    fitted = run.surrogates[-1]
+    (fitted,) = run.surrogates[-1]
     inputs = (fitted.X - fitted.x_scaler.intercept) / fitted.x_scaler.slope
     history = run.history
     np.testing.assert_allclose(inputs, np.column_stack([history.u, history.x])[:3])
@@ -870,7 +967,7 @@ def test_run_pickles_without_the_code_that_produced_it(
 
     assert loaded.scenarios is not None and run.scenarios is not None
     np.testing.assert_array_equal(loaded.scenarios.z, run.scenarios.z)
-    np.testing.assert_array_equal(loaded.surrogates[-1].X, run.surrogates[-1].X)
+    np.testing.assert_array_equal(loaded.surrogates[-1][0].X, run.surrogates[-1][0].X)
     assert loaded.settings == run.settings
 
 

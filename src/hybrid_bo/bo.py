@@ -39,11 +39,12 @@ from hybrid_bo.solvers import multistart
 _logger = logging.getLogger(__name__)
 
 # Chooses the next trial point (N,) from the points evaluated so far, drawing from the
-# run's generator, and returns it with the fitted surrogate model behind it and the
-# solution of the acquisition problem it came from
+# run's generator, and returns it with the fitted surrogate model behind it (one
+# fitted GP per unknown state, or the one GP of f) and the solution of the
+# acquisition problem it came from
 TrialPoint = Callable[
     [Problem, History, np.random.Generator],
-    tuple[np.ndarray, FittedGP, AcquisitionSolution],
+    tuple[np.ndarray, tuple[FittedGP, ...], AcquisitionSolution],
 ]
 
 
@@ -78,7 +79,7 @@ def optimization_loop(
     incumbent, at info level.
     """
     history: History | None = None
-    surrogates: list[FittedGP] = []
+    surrogates: list[tuple[FittedGP, ...]] = []
     acquisitions: list[AcquisitionSolution] = []
     method = artifact["method"]
     try:
@@ -180,7 +181,7 @@ def standard_bo(
 
     def trial_point(
         problem: Problem, history: History, rng: np.random.Generator
-    ) -> tuple[np.ndarray, FittedGP, AcquisitionSolution]:
+    ) -> tuple[np.ndarray, tuple[FittedGP, ...], AcquisitionSolution]:
         """Fits the GP to the points so far and solves the acquisition problem."""
         fitted = fit_gp(
             gp, history.u, history.f, rng, settings.n_starts_gp, settings.solver
@@ -192,7 +193,7 @@ def standard_bo(
         starts = lhs(*acquisition_problem.start_bounds, settings.n_starts, rng)
         solution = multistart(acquisition_problem.nlp, starts, settings.solver)
         u, _, _ = _unpack(acquisition_problem, solution.w)
-        return u, fitted, AcquisitionSolution(solution.f)
+        return u, (fitted,), AcquisitionSolution(solution.f)
 
     return optimization_loop(
         problem,
@@ -215,18 +216,19 @@ def hybrid_bo(
     *,
     settings: HybridBOSettings,
 ) -> Run:
-    """Hybrid BO: a GP of the unknown states over the arguments of h, combined with
-    the known equations in the acquisition problem (paper, Problems 8 and 9).
+    """Hybrid BO: one GP per unknown state over the arguments of h, combined with the
+    known equations in the acquisition problem (paper, Problems 8 and 9).
 
     Draws the scenarios (SAA and SoftSAA: `settings.approximation.n_scenarios`
     standard normal draws, equal weights; linearization draws nothing and has the
     nominal scenario alone), the same in every iteration. Then evaluates the initial
-    points (n, N), and in each iteration fits the GP to the measured and reconstructed
-    states so far, solves `hybrid_acquisition` by multistart from Latin hypercube
-    starts over the start bounds of its variables, and evaluates the decision
-    variables of the solution. The run holds the scenarios, and each iteration's
-    acquisition solution holds the scenario states at its trial point. `settings`
-    are keyword-only.
+    points (n, N), and in each iteration fits the prior GP to each unknown state's
+    measured and reconstructed values so far, in the order of `system.y`, solves
+    `hybrid_acquisition` by multistart from Latin hypercube starts over the start
+    bounds of its variables, and evaluates the decision variables of the solution.
+    The run holds the scenarios, each iteration's surrogate holds one fitted GP per
+    unknown state, and each iteration's acquisition solution holds the scenario
+    states at its trial point. `settings` are keyword-only.
 
     Raises what `evaluate` and `multistart` raise; a `HybridBOError` carries the
     partial run, with the scenarios, as `error.run`.
@@ -249,12 +251,13 @@ def hybrid_bo(
 
     def trial_point(
         problem: Problem, history: History, rng: np.random.Generator
-    ) -> tuple[np.ndarray, FittedGP, AcquisitionSolution]:
-        """Fits the GP to the points so far and solves the acquisition problem."""
-        # One unknown state (P = 1), so the GP has one output
+    ) -> tuple[np.ndarray, tuple[FittedGP, ...], AcquisitionSolution]:
+        """Fits the GPs to the points so far and solves the acquisition problem."""
+        # One GP per unknown state, in the order of y, on the same arguments of h
         X = np.column_stack(_h_inputs(system, history.u, history.x))
-        fitted = fit_gp(
-            gp, X, history.y[:, 0], rng, settings.n_starts_gp, settings.solver
+        fitted = tuple(
+            fit_gp(gp, X, y, rng, settings.n_starts_gp, settings.solver)
+            for y in history.y.T
         )
         incumbent = float(incumbents(history)[-1])
         acquisition_problem = hybrid_acquisition(

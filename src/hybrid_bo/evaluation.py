@@ -83,10 +83,14 @@ def _find_root(
     Runs fsolve with the CasADi Jacobian from each row of `starts` in turn and returns
     the first root, shape (d,), whose residual norm is below `tol` and that lies within
     the bounds of `variables` (one per entry of `w`). A start that fails is expected,
-    so fsolve's convergence warnings are silenced.
+    so fsolve's convergence warnings are silenced. With no variables (no unmeasured
+    states, as without known equations) the root is empty and nothing is solved.
 
     Raises `RootFindingError` if no start gives such a root.
     """
+    if not variables:
+        return np.zeros(0)
+
     # Numeric residual and Jacobian, and the box a root must lie in
     residual = cas.Function("residual", [w], [residuals])
     jacobian = cas.Function("jacobian", [w], [cas.jacobian(residuals, w)])

@@ -312,7 +312,7 @@ def scenario_states(run: Run, iteration: int, u: np.ndarray) -> np.ndarray:
     """x_s at each u and scenario, (n_u, S), computed independently: y_s from the GP,
     then x_s from x + exp(x) = y_s with scipy's brentq."""
     assert run.scenarios is not None
-    mean, std = predict(run.surrogates[iteration], u[:, np.newaxis])
+    mean, std = predict(run.surrogates[iteration][0], u[:, np.newaxis])
     y = mean[:, np.newaxis] + std[:, np.newaxis] * run.scenarios.z[:, 0]
     return np.vectorize(
         lambda y_s: scipy.optimize.brentq(lambda x: x + np.exp(x) - y_s, -50, 50)
@@ -338,7 +338,7 @@ def test_hybrid_bo_figure_from_a_pickled_run(hybrid_run):
 
     # The GP of y: its prediction, and the oracle y = sin(u) as the true curve
     u = np.asarray(drawn_line(surrogate, "GP mean").get_xdata())
-    mean, _ = predict(hybrid_run.surrogates[1], u[:, np.newaxis])
+    mean, _ = predict(hybrid_run.surrogates[1][0], u[:, np.newaxis])
     np.testing.assert_allclose(line(surrogate, "GP mean"), mean, rtol=1e-12)
     np.testing.assert_allclose(line(surrogate, "true"), np.sin(u), atol=1e-8)
 
@@ -383,7 +383,7 @@ def test_lin_figure_draws_the_nominal_f_and_its_std(hybrid_lin_run):
     np.testing.assert_allclose(line(ax, "nominal f"), f, atol=1e-4)
 
     # The band: f +- s at each u
-    _, std = predict(hybrid_lin_run.surrogates[1], u[:, np.newaxis])
+    _, std = predict(hybrid_lin_run.surrogates[1][0], u[:, np.newaxis])
     f_x = 12 * (6 * x - 2) * np.sin(12 * x - 4)
     f_x += 12 * (6 * x - 2) ** 2 * np.cos(12 * x - 4)
     s = np.abs(f_x) * std / (1 + np.exp(x))
@@ -405,7 +405,7 @@ def test_standard_bo_figure_from_a_pickled_run(standard_run):
     gp_ax, acquisition_ax = figure.axes
     assert figure.get_suptitle() == "standard_bo, iteration 1"
     u = np.asarray(drawn_line(gp_ax, "GP mean").get_xdata())
-    surrogate = standard_run.surrogates[1]
+    (surrogate,) = standard_run.surrogates[1]
     mean, _ = predict(surrogate, u[:, np.newaxis])
     np.testing.assert_allclose(line(gp_ax, "GP mean"), mean, rtol=1e-12)
 
@@ -641,7 +641,7 @@ def test_2d_ei_mask_covers_the_points_where_saa_ei_is_zero(hybrid_2d_run):
     assert run.scenarios is not None
     u1, u2 = (np.linspace(-2.048, 2.048, 30) for _ in range(2))
     grid = np.column_stack([coordinate.ravel() for coordinate in np.meshgrid(u1, u2)])
-    mean, std = predict(run.surrogates[i], grid)
+    mean, std = predict(run.surrogates[i][0], grid)
     y = mean[:, np.newaxis] + std[:, np.newaxis] * run.scenarios.z[:, 0]
     f = 100 * y**2 + (grid[:, [0]] - 1) ** 2
     incumbent = run.history.f[: run.history.n_initial + i].min()

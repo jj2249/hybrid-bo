@@ -376,13 +376,13 @@ def test_a_loaded_run_draws_its_iterations_with_its_own_gp(tmp_path):
 
     # Check: the stored GP is the prior GP with its Params filled in, and the GP
     # panel draws its prediction
-    assert run.surrogates[1].gp.noise_std == 0.05
-    assert run.surrogates[1].gp.kernel == study.runs[0].surrogates[1].gp.kernel
+    assert run.surrogates[1][0].gp.noise_std == 0.05
+    assert run.surrogates[1][0].gp.kernel == study.runs[0].surrogates[1][0].gp.kernel
     (mean,) = [
         line for line in figures[1].axes[0].get_lines() if line.get_label() == "GP mean"
     ]
     u = np.asarray(mean.get_xdata())[:, np.newaxis]
-    expected, _ = hb.gp.predict(study.runs[0].surrogates[1], u)
+    expected, _ = hb.gp.predict(study.runs[0].surrogates[1][0], u)
     np.testing.assert_allclose(np.asarray(mean.get_ydata()), expected, rtol=1e-12)
     assert all(len(figure.axes) == 3 for figure in figures)
 
@@ -441,13 +441,30 @@ def test_save_and_load_keep_every_kind_of_gp_parameter(tmp_path):
     ard = hb.gp.GP(hb.gp.Zero(), hb.gp.SquaredExponential(lengthscale=(0.1, 0.2)))
     scaler = hb.gp.Scaler(np.ones(1), np.zeros(1))
     surrogates = [
-        hb.gp.FittedGP(g, np.zeros((2, 1)), np.zeros(2), scaler, scaler)
-        for g in (gp, ard)
+        tuple(
+            hb.gp.FittedGP(g, np.zeros((2, 1)), np.zeros(2), scaler, scaler)
+            for g in (gp, ard)
+        )
     ]
     run = hb.Run(history_of(2), artifact={"type": "an artifact entry"}, method="m")
     study = hb.Study(
         (dataclasses.replace(run, surrogates=surrogates),), SETTINGS, None, {}
     )
+
+    loaded = hb.load(hb.save(study, tmp_path / "study"))
+
+    assert_same(loaded, study)
+
+
+def test_an_empty_array_in_an_optional_field_loads_with_its_shape(tmp_path):
+    """An empty array where None is allowed too (here the oracle states of a system
+    without mechanistic states, shape (n, 0)) loads as an array of the saved shape,
+    not None."""
+    history = dataclasses.replace(
+        history_of(3), x=np.zeros((3, 0)), x_oracle=np.zeros((3, 0))
+    )
+    run = hb.Run(history, artifact={}, method="m")
+    study = hb.Study((run,), SETTINGS, None, {})
 
     loaded = hb.load(hb.save(study, tmp_path / "study"))
 
@@ -500,6 +517,24 @@ def test_load_rejects_a_bo_run_saved_without_its_settings(illustrative_study, tm
         hb.load(path)
 
 
+def test_load_reads_a_run_with_one_fitted_gp_per_iteration_as_1_tuples(
+    illustrative_study, tmp_path
+):
+    """A run saved before more than one unknown state, with one fitted GP per
+    iteration rather than a tuple of them, loads with each as a 1-tuple."""
+    # Save, then rewrite every BO run in the old format: each surrogate a single GP
+    path = hb.save(illustrative_study, tmp_path / "study")
+    for method in ("hybrid_bo", "standard_bo"):
+        run_path = path / "runs" / method / "run-000.json"
+        data = json.loads(run_path.read_text())
+        data["surrogates"] = [gp for (gp,) in data["surrogates"]]
+        run_path.write_text(json.dumps(data))
+
+    loaded = hb.load(path)
+
+    assert_same(loaded, illustrative_study)
+
+
 def test_load_rejects_a_study_saved_before_gps_were_data(illustrative_study, tmp_path):
     """A study whose fitted GPs were saved as named hyperparameters, before GPs were
     data, raises `StudyFormatError` saying to rerun it."""
@@ -507,6 +542,7 @@ def test_load_rejects_a_study_saved_before_gps_were_data(illustrative_study, tmp
     path = hb.save(illustrative_study, tmp_path / "study")
     run_path = path / "runs" / "standard_bo" / "run-000.json"
     data = json.loads(run_path.read_text())
+    data["surrogates"] = [gp for (gp,) in data["surrogates"]]
     for surrogate in data["surrogates"]:
         del surrogate["gp"]
         surrogate["hyperparameters"] = {"outputscale": [1.0], "lengthscale": [0.5]}
@@ -539,7 +575,7 @@ def test_load_rejects_a_gp_part_of_the_wrong_type(illustrative_study, tmp_path):
     path = hb.save(illustrative_study, tmp_path / "study")
     run_path = path / "runs" / "standard_bo" / "run-000.json"
     data = json.loads(run_path.read_text())
-    data["surrogates"][0]["gp"]["kernel"]["type"] = "Zero"
+    data["surrogates"][0][0]["gp"]["kernel"]["type"] = "Zero"
     run_path.write_text(json.dumps(data))
 
     with pytest.raises(hb.errors.StudyFormatError, match="'Zero'"):

@@ -154,7 +154,10 @@ def _as_text(
     function: cas.Function, x: Sequence[Var], y: Sequence[Var], u: Sequence[Var]
 ) -> str:
     """The expression of a function built by `_trace`, as text in the variable names
-    (e.g. `((x+exp(x))-y)`)."""
+    (e.g. `((x+exp(x))-y)`), or `none` for a function of no equations (g with M = 0).
+    """
+    if function.numel_out(0) == 0:
+        return "none"
     symbols = [
         cas.vertcat(*(Symbolic.sym(var.name) for var in block)) for block in (x, y, u)
     ]
@@ -193,14 +196,20 @@ class System:
     """The physical process (paper, Problem 4).
 
     - u: the N decision variables;
-    - x: the M mechanistic states, determined by the known equations 0 = g(x, y, u);
+    - x: the M mechanistic states, determined by the known equations 0 = g(x, y, u).
+      x and g are optional and go together: without them (M = 0) hybrid BO is BO of
+      a composite function f(y, u) with y = h(u) (Astudillo & Frazier, arXiv
+      1906.01537);
     - y: the P unknown states, determined by the unknown equations y = h(x, u),
       whose form is not part of the system (ADR 0001);
     - h_inputs: the arguments of h, drawn from u and x;
     - measured: the states the sensors read, drawn from x and y. There are P of them,
       so the root-finding problem for the other states is square.
 
-    `g` is a `cas.Function` with column-vector inputs `(x, y, u)` and output `(M, 1)`.
+    `g` is a `cas.Function` with column-vector inputs `(x, y, u)` and output `(M, 1)`,
+    with no equations (0, 1) when M = 0. The arguments are keyword-only. Raises
+    `ValueError` for an invalid argument, including mechanistic states without `g`
+    or `g` without mechanistic states.
     """
 
     u: tuple[Var, ...]
@@ -212,26 +221,31 @@ class System:
 
     def __init__(
         self,
+        *,
         u: Sequence[Var],
-        x: Sequence[Var],
+        x: Sequence[Var] = (),
         y: Sequence[Var],
-        g: Callable[[Any], Any],
+        g: Callable[[Any], Any] | None = None,
         h_inputs: Sequence[Var],
         measured: Sequence[Var],
     ) -> None:
-        # The variables: every block is non-empty and every name is unique
+        # The variables: u and y are non-empty, x and g go together, and every name
+        # is unique
         u, x, y = tuple(u), tuple(x), tuple(y)
-        for block, label in ((u, "u"), (x, "x"), (y, "y")):
+        for block, label in ((u, "u"), (y, "y")):
             if not block:
                 msg = f"The system needs at least one variable in {label}"
                 raise ValueError(msg)
-        _check_unique([var.name for var in (*u, *x, *y)], "u, x and y together")
-        if len(y) > 1:
+        if x and g is None:
+            msg = "The mechanistic states need their known equations: pass g"
+            raise ValueError(msg)
+        if g is not None and not x:
             msg = (
-                f"Only one unknown state is supported for now (got {len(y)}: "
-                f"{', '.join(var.name for var in y)})"
+                "g is given but there are no mechanistic states: pass x, or neither "
+                "for a system without known equations"
             )
-            raise NotImplementedError(msg)
+            raise ValueError(msg)
+        _check_unique([var.name for var in (*u, *x, *y)], "u, x and y together")
 
         # The structure: what h depends on, and what the sensors read
         h_inputs, measured = tuple(h_inputs), tuple(measured)
@@ -244,8 +258,8 @@ class System:
             )
             raise ValueError(msg)
 
-        # The known equations: one per mechanistic state
-        g_function = _trace("g", g, x, y, u)
+        # The known equations: one per mechanistic state, none without them
+        g_function = _trace("g", g or (lambda v: []), x, y, u)
         if g_function.size_out(0) != (len(x), 1):
             msg = (
                 f"g must give one equation per mechanistic state ({len(x)}) as a "

@@ -142,8 +142,8 @@ def iteration(
 
     The panels, each turned off by its flag:
 
-    - `gp`: the stored surrogate's mean and band; of y for hybrid BO, of f for
-      standard BO.
+    - `gp`: the stored surrogate's mean and band; of y for hybrid BO (one unknown
+      state only), of f for standard BO.
     - `scenarios` (hybrid BO): f under the scenarios, their weighted mean and band;
       with linearization, f at the nominal states and the band f +- s, with s
       recomputed from the stored surrogate.
@@ -171,19 +171,25 @@ def iteration(
     every grid point (generator seeded with 0), so pass an oracle measurement, never
     a real system.
 
-    The GP is the run's stored fitted GP; the rest of the replay (the acquisition
+    The GPs are the run's stored fitted GPs; the rest of the replay (the acquisition
     function, the approximation, the solver) comes from the run's stored settings.
 
     Raises `ValueError` unless the problem has one or two decision variables (and,
-    for hybrid BO's GP panels, h takes only u), or if `measure` has no oracle; and
-    `IndexError` if the run has no iteration `i`.
+    for hybrid BO's GP panels, one unknown state and h of u only), or if `measure`
+    has no oracle; and `IndexError` if the run has no iteration `i`.
     """
-    # The checks: one or two decision variables, the GP of y over u, the iteration
+    # The checks: one or two decision variables, one GP of y over u, the iteration
     system, history, settings = problem.system, run.history, run.settings
     if system.n_u not in (1, 2):
         msg = f"The plots need one or two decision variables, got {system.n_u}"
         raise ValueError(msg)
     is_hybrid = isinstance(settings, HybridBOSettings)
+    if is_hybrid and gp and system.n_y > 1:
+        msg = (
+            f"The GP panels draw one unknown state, got {system.n_y}: pass gp=False "
+            "to draw the other panels"
+        )
+        raise ValueError(msg)
     if is_hybrid and gp and list(system.h_inputs) != list(system.u):
         msg = "The GP of y is drawn over u, so h_inputs must be the decision variables"
         raise ValueError(msg)
@@ -207,7 +213,8 @@ def iteration(
 def _truth(
     problem: Problem, measure: Measure | None, u: np.ndarray
 ) -> tuple[np.ndarray | None, np.ndarray | None]:
-    """The oracle y and f at the rows of u, or None without a measurement.
+    """The oracle first unknown state and f at the rows of u, or None without a
+    measurement.
 
     Raises `ValueError` if the measurement has no oracle.
     """
@@ -277,7 +284,7 @@ def _iteration_1d(
             if panel == "gp" and is_hybrid:
                 values, true, label = history.y[:, 0], y_true, system.y[0].name
             if panel == "gp":
-                _band(ax, u, *predict(run.surrogates[i], u[:, None]))
+                _band(ax, u, *predict(run.surrogates[i][0], u[:, None]))
             elif panel == "scenarios":
                 assert run.scenarios is not None and f_scenarios is not None
                 if f_std is None:
@@ -339,7 +346,7 @@ def _iteration_2d(
     rows: list[list[_Panel | None]] = []
     if isinstance(settings, HybridBOSettings) and shown["gp"]:
         name = system.y[0].name
-        mean, std = predict(run.surrogates[i], grid)
+        mean, std = predict(run.surrogates[i][0], grid)
         oracle = None if y_true is None else _Panel(f"oracle {name}", y_true)
         rows.append(
             [
@@ -355,7 +362,7 @@ def _iteration_2d(
     if f_true is not None:
         row[0] = _Panel("oracle f", f_true, in_f_units=True)
     if isinstance(settings, StandardBOSettings) and shown["gp"]:
-        mean, std = predict(run.surrogates[i], grid)
+        mean, std = predict(run.surrogates[i][0], grid)
         row[1] = _Panel("GP mean of f", mean, in_f_units=True)
         row[2] = _Panel("GP std of f", std, in_f_units=True)
     if shown["scenarios"]:
@@ -533,7 +540,7 @@ def _replay(
     # Standard BO: its analytic acquisition function
     if isinstance(settings, StandardBOSettings):
         nlp = standard_acquisition(
-            problem, surrogate, incumbent, settings.acquisition
+            problem, surrogate[0], incumbent, settings.acquisition
         ).nlp
         values = np.array([nlp.f(_pack(point)).full().item() for point in u])
         return values, None, None
@@ -626,13 +633,14 @@ def _replay(
 
 def _scenario_objective(
     problem: Problem,
-    fitted: FittedGP,
+    fitted: tuple[FittedGP, ...],
     scenarios: Scenarios,
     unknown_states_as_variables: bool,
 ) -> cas.Function:
     """f under each scenario of a hybrid acquisition problem, and the scenario unknown
     states, as a function of u (N, 1), x (S, M) and, if they are variables, y (S, P)
-    to f (S, 1) and y (S, P); otherwise y is the GP's scenario prediction."""
+    to f (S, 1) and y (S, P); otherwise y is the GPs' scenario prediction, from
+    `fitted`, one fitted GP per unknown state."""
     system = problem.system
     u = Symbolic.sym("u", system.n_u, 1)
     x = Symbolic.sym("x", len(scenarios.w), len(system.x))

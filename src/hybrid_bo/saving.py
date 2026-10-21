@@ -5,8 +5,9 @@ artifact, and the list of run files) and one file per run,
 `path/runs/<method>/run-000.json`, holding every field of the run. `load` also reads
 a study saved before the artifact was named: `study.json` with a `record` key, but not
 one saved before GPs were data (ADR 0008), before runs held their settings or before
-runs had an artifact (a run's JSON with `record`, not `artifact`). Arrays are
-nested lists; float64 values round-trip exactly. A GP's means, kernels and
+runs had an artifact (a run's JSON with `record`, not `artifact`); a run saved with one
+fitted GP per iteration, before surrogates were tuples, loads with each as a 1-tuple.
+Arrays are nested lists; float64 values round-trip exactly. A GP's means, kernels and
 hyperparameters, and the methods' settings and their parts, are saved with their type's
 name (`"type"`), so a field that holds one of several types (kernels, approximations)
 loads as the right one. The library never calls `save` itself.
@@ -101,7 +102,8 @@ def _decode(value: Any, annotation: Any) -> Any:
 
 def _union_member(value: Any, members: tuple[Any, ...]) -> Any:
     """The member of a union that untagged JSON data `value` decodes as: the
-    sequence type for a list, the one dataclass for a dict, else the plain type.
+    sequence type for a list, an array for an empty array's `{"shape": ...}`, the
+    one dataclass for another dict, else the plain type.
 
     Raises `StudyFormatError` if no member fits.
     """
@@ -109,6 +111,8 @@ def _union_member(value: Any, members: tuple[Any, ...]) -> Any:
     if isinstance(value, list):
         kinds = (list, tuple, np.ndarray)
         fits = [m for m in members if (typing.get_origin(m) or m) in kinds]
+    elif isinstance(value, dict) and value.keys() == {"shape"}:
+        fits = [m for m in members if m is np.ndarray]
     elif isinstance(value, dict):
         fits = [m for m in members if dataclasses.is_dataclass(m)]
     else:
@@ -119,15 +123,27 @@ def _union_member(value: Any, members: tuple[Any, ...]) -> Any:
     return fits[0]
 
 
+def _with_surrogate_tuples(run_data: dict[str, Any]) -> dict[str, Any]:
+    """The saved run `run_data` with each iteration's surrogate a list of fitted GPs:
+    a run saved before more than one unknown state has one fitted GP (a dict) per
+    iteration, which becomes a list of one."""
+    surrogates = [
+        [surrogate] if isinstance(surrogate, dict) else surrogate
+        for surrogate in run_data.get("surrogates", [])
+    ]
+    return run_data | {"surrogates": surrogates}
+
+
 def _check_format(run_data: dict[str, Any], run_path: Path) -> None:
     """Raises `StudyFormatError` if a saved run predates GPs as data (its fitted GPs
     hold named hyperparameters and no GP, or, with no iterations, its `record` holds
     the GP's kernel as text), is a BO run (its `record` has the prior GP) saved
     before runs held their settings, or was saved before runs had an artifact (it
-    has `record`, the artifact's old name)."""
+    has `record`, the artifact's old name). Takes the run with its surrogates as
+    lists (`_with_surrogate_tuples`)."""
     # The older formats first, for their specific messages: their runs had `record` too
-    surrogates = run_data.get("surrogates", [])
-    has_old_surrogates = any("gp" not in surrogate for surrogate in surrogates)
+    fitted_gps = [gp for surrogate in run_data["surrogates"] for gp in surrogate]
+    has_old_surrogates = any("gp" not in fitted for fitted in fitted_gps)
     if has_old_surrogates or "kernel" in run_data.get("record", {}):
         msg = (
             f"{run_path} was saved before GPs were data (its fitted GPs hold named "
@@ -209,7 +225,7 @@ def load(path: str | Path) -> Study:
     # The runs, in the order the artifact lists them
     runs = []
     for run_path in study_data["runs"]:
-        run_data = json.loads((path / run_path).read_text())
+        run_data = _with_surrogate_tuples(json.loads((path / run_path).read_text()))
         _check_format(run_data, path / run_path)
         runs.append(_decode(run_data, Run))
     return Study(

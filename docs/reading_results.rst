@@ -84,7 +84,8 @@ functions turn it into `Polars <https://pola.rs>`_ data frames:
   regret and the acquisition value.
 - :py:func:`~hybrid_bo.views.summary`: one row per method, as in ``summary.csv``.
 - :py:func:`~hybrid_bo.views.hyperparameters`: the fitted GP hyperparameters of every
-  iteration, for checking the GP (a lengthscale stuck at a bound, say).
+  iteration, for checking the GP (a lengthscale stuck at a bound, say); ``output``
+  names the variable each GP models (an unknown state, or ``f`` for standard BO).
 
 .. code-block:: python
 
@@ -120,8 +121,9 @@ Each :py:class:`~hybrid_bo.run.Run` in ``study.runs`` is plain data:
   :py:func:`~hybrid_bo.history.incumbents` and
   :py:func:`~hybrid_bo.history.oracle_incumbents` give the incumbents after each
   evaluation.
-- ``run.surrogates``: the fitted GP (:py:class:`~hybrid_bo.gp.FittedGP`) of each
-  iteration, its prior GP with the fitted values in place of each ``Param``
+- ``run.surrogates``: the fitted GPs (:py:class:`~hybrid_bo.gp.FittedGP`) of each
+  iteration, a tuple of one per unknown state for hybrid BO and of one for standard BO;
+  each is its prior GP with the fitted values in place of each ``Param``
   (``fitted.gp``), for :py:func:`~hybrid_bo.gp.predict`; and ``run.acquisitions``: the acquisition problem's solution at each
   trial point. Both are empty for the baselines.
 - ``run.scenarios``: hybrid BO's scenario draws and weights.

@@ -100,14 +100,15 @@ def system(
     measured: Sequence[Var] = (Y,),
 ) -> System:
     """A valid one-of-each system; tests override one argument to break it."""
-    return System(u, x, y, g, h_inputs, measured)
+    return System(u=u, x=x, y=y, g=g, h_inputs=h_inputs, measured=measured)
 
 
 @pytest.mark.parametrize(
     ("overrides", "match"),
     [
         ({"u": []}, "at least one variable in u"),
-        ({"x": []}, "at least one variable in x"),
+        ({"x": []}, "g is given but there are no mechanistic states"),
+        ({"g": None}, "mechanistic states need their known equations"),
         ({"y": []}, "at least one variable in y"),
         ({"x": [X, Var("x", 0.0, 1.0)]}, "u, x and y together must not repeat .*: x"),
         ({"g": lambda v: [v.x, v.y]}, "one equation per mechanistic state"),
@@ -125,10 +126,23 @@ def test_system_rejects(overrides, match):
         system(**overrides)
 
 
-def test_more_than_one_unknown_state_is_not_supported_yet():
-    """A system with two unknown states raises NotImplementedError."""
-    with pytest.raises(NotImplementedError, match="one unknown state"):
-        system(y=[Y, Z], measured=[Y, Z])
+def test_a_system_can_have_no_known_equations():
+    """Without mechanistic states or known equations (M = 0), a system constructs:
+    hybrid BO is then BO of a composite function f(y, u) with y = h(u), and g has no
+    equations."""
+    composite = System(u=[U], y=[Y], h_inputs=[U], measured=[Y])
+
+    assert composite.n_x == 0
+    assert composite.g.size_out(0) == (0, 1)
+    assert composite.g([], 0.5, 0.2).shape == (0, 1)
+
+
+def test_a_system_can_have_more_than_one_unknown_state():
+    """A system with two unknown states, both measured, constructs, and g takes them
+    as one column in the order of y."""
+    two = system(y=[Y, Z], g=lambda v: [v.x - v.y * v.z], measured=[Y, Z])
+    assert two.n_y == 2
+    assert two.g(0.5, [2.0, 3.0], 0.0).full().item() == pytest.approx(0.5 - 6.0)
 
 
 def test_unknown_name_in_a_callable():

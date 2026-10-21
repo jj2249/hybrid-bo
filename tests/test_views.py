@@ -60,15 +60,17 @@ def surrogate(lengthscale: list[float]) -> FittedGP:
 
 
 def bo_run(index: int, f: list[float], f_oracle: list[float]) -> hb.Run:
-    """A BO run with one surrogate and acquisition solution per iteration."""
+    """A standard BO run with one surrogate (one GP, of f) and acquisition solution
+    per iteration."""
     n_iterations = len(f) - 2
     return hb.Run(
         history(f, f_oracle),
         artifact={},
         method="bo",
         index=index,
-        surrogates=[surrogate([0.1 * i, 0.2 * i]) for i in range(n_iterations)],
+        surrogates=[(surrogate([0.1 * i, 0.2 * i]),) for i in range(n_iterations)],
         acquisitions=[AcquisitionSolution(-float(i)) for i in range(n_iterations)],
+        settings=hb.StandardBOSettings(gp=GP(Zero(), Matern52())),
     )
 
 
@@ -254,6 +256,7 @@ def test_hyperparameters_has_one_row_per_fitted_entry():
         "method",
         "run",
         "iteration",
+        "output",
         "hyperparameter",
         "entry",
         "value",
@@ -267,6 +270,34 @@ def test_hyperparameters_has_one_row_per_fitted_entry():
     )
     assert lengthscales["entry"].to_list() == [0, 1]
     assert lengthscales["value"].to_list() == pytest.approx([0.1, 0.2])
+    # Standard BO's one GP models the objective
+    assert frame["output"].unique().to_list() == ["f"]
+
+
+def test_hyperparameters_name_the_unknown_state_each_gp_models():
+    """With two unknown states, hybrid BO fits one GP per unknown state in each
+    iteration, and each row's `output` names the unknown state its GP models."""
+    # Setup: a hybrid BO run of one iteration whose GPs have different lengthscales
+    artifact = ARTIFACT | {
+        "y": "Var(name='rate', lower=-inf, upper=inf, start=(0.0, 1.0)); "
+        "Var(name='yield_', lower=-inf, upper=inf, start=(0.0, 1.0))"
+    }
+    run = hb.Run(
+        history([3.0, 2.0, 1.0], None),
+        artifact={},
+        method="hybrid",
+        surrogates=[(surrogate([0.1, 0.2]), surrogate([0.3, 0.4]))],
+        acquisitions=[AcquisitionSolution(0.0)],
+        settings=hb.HybridBOSettings(gp=GP(Zero(), Matern52())),
+    )
+    study = hb.Study((run,), SETTINGS, name="two states", artifact=artifact)
+
+    frame = hb.hyperparameters(study)
+
+    # Check: the output scale and two lengthscales of each GP, in the order of y
+    assert frame["output"].to_list() == ["rate"] * 3 + ["yield_"] * 3
+    lengthscales = frame.filter(pl.col("hyperparameter") == "kernel.kernel.lengthscale")
+    assert lengthscales["value"].to_list() == pytest.approx([0.1, 0.2, 0.3, 0.4])
 
 
 # Without Polars

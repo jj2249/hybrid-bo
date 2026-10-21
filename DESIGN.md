@@ -155,13 +155,16 @@ class Var:
 @dataclass(frozen=True, init=False)
 class System:
     u: tuple[Var, ...]  # N decision variables
-    x: tuple[Var, ...]  # M mechanistic states
-    y: tuple[Var, ...]  # P unknown states (P > 1 raises NotImplementedError)
-    g: cas.Function  # g(x, y, u) -> (M, 1), column-vector inputs
+    x: tuple[Var, ...]  # M >= 0 mechanistic states; optional with g (#115)
+    y: tuple[Var, ...]  # P >= 1 unknown states, one GP each in hybrid BO (#114)
+    g: cas.Function  # g(x, y, u) -> (M, 1), column-vector inputs; (0, 1) if M = 0
     h_inputs: tuple[Var, ...]  # the arguments of h, from u and x
     measured: tuple[Var, ...]  # the states the sensors read, from x and y; P of them
 
-    def __init__(self, u, x, y, g: Callable, h_inputs, measured): ...
+    # keyword-only; x and g go together, both omitted for no known equations
+    def __init__(
+        self, *, u, x=(), y, g: Callable | None = None, h_inputs, measured
+    ): ...
 
     # n_u, n_x, n_y properties
 
@@ -183,7 +186,11 @@ return one expression or a list) and builds the `cas.Function`s in declaration o
 with inputs and outputs named `x`, `y`, `u` → `g`/`f`. It checks: names are identifiers,
 don't start with `_` (they would shadow the namespace's internals) and are unique;
 callables return CasADi expressions (`TypeError` otherwise); `lower <= upper`; start bounds finite, ordered and inside the bounds;
-`u`, `x`, `y` non-empty; `len(g) == M`; `f` scalar; `h_inputs` from `u` and `x`,
+`u` and `y` non-empty; `x` and `g` both given or both omitted (#115: without them
+M = 0, and `g` is traced from no equations, so `System.g` is always a `cas.Function`
+and the code downstream has no special case; with M = 0 the root-finding problem has
+nothing to solve and `multistart` adds no empty constraint); `len(g) == M`; `f`
+scalar; `h_inputs` from `u` and `x`,
 `measured` from `x` and `y`, each without repeats; `len(measured) == P`. `Var` is a plain
 frozen dataclass, so membership checks use its equality; no CasADi `==` is involved.
 
@@ -286,7 +293,8 @@ class Run:
     artifact: dict[str, str]  # how the run was produced, as text (#123)
     method: str  # its label: the key in the study's methods (#53)
     index: int = 0  # its position among that method's runs (#53)
-    surrogates: list[FittedGP]  # one per iteration; empty for baselines (default)
+    surrogates: list[tuple[FittedGP, ...]]  # one per iteration; P GPs (hybrid BO) or
+    # 1 (standard BO) each (#114); empty for baselines (default)
     acquisitions: list[AcquisitionSolution]  # one per iteration (#53)
     scenarios: Scenarios | None = None  # hybrid BO only (#29)
     settings: MethodSettings | None = None  # BO only (#120)
@@ -420,7 +428,8 @@ only operator; `kernel * kernel` raises `TypeError` (the kernels share `_Scalabl
   entry per input, the count taken from the training data at fit time; a fixed one
   given as one number applies to every input. A fitted GP holds the numbers: a float,
   or a tuple of one per input. `hb.hyperparameters(study)` names each by its dotted
-  path in the GP (`kernel.kernel.lengthscale`).
+  path in the GP (`kernel.kernel.lengthscale`) and by the variable its GP models
+  (`output`: an unknown state, or `f` for standard BO).
 - **Units.** Kernel hyperparameters are in scaled units, as the fit sees them
   (lengthscales relative to inputs scaled onto [0, 1], the output scale relative to standardized
   outputs). `noise_std` is in measured units, the units of the training outputs, so an
@@ -575,6 +584,14 @@ decision vector `w`.
 - Hybrid BO only needs "mean and std of `y` at given inputs" from the surrogate, through
   `predict`, so other surrogates or hyperparameter samples can be paired with scenarios
   later.
+- **More than one unknown state (#114).** The surrogate model is P independent GPs,
+  one per unknown state in the order of `y`, each fitted to its own column of `y` on
+  the same `h_inputs` data from the one prior GP in the settings. Unknown state j of
+  scenario s is `mean_j + std_j * z_sj`, and Lin-EI's `L` is `diag(std_1, ..., std_P)`.
+  A surrogate is a tuple of fitted GPs, and standard BO's a 1-tuple, so every run has
+  the same type; `load` reads a run saved with one fitted GP per iteration as 1-tuples.
+  Not built: per-equation arguments of h, a prior GP per unknown state, and the GP
+  panels of the iteration plots for P > 1 (`ValueError` with `gp=True`).
 
 #### Soft SAA (SoftSAA-EI)
 
@@ -632,8 +649,8 @@ total one gives `s = |f_x| L / (1 + e^x̄)`.
 `s` is built symbolically in SX: `cas.jacobian` of `g`, `f` and the GP mean with
 respect to `x` and `y` at fresh symbols, one `cas.solve` (M×M) for `dx/dz`, then a
 `cas.Function` evaluated at the problem's `(x̄, ȳ, u)`, so it works whether `ȳ` is a
-variable or the substituted prediction. It is in matrix form, so P > 1 needs no
-rework.
+variable or the substituted prediction. It is in matrix form, so P > 1 needed no
+rework beyond stacking the P GPs' means and stds.
 
 The expansion is first order only: with the second-order term `f` is a generalized
 χ², and the closed form no longer holds. Lin-LCB is not implemented. A run stores
@@ -788,8 +805,8 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   from the study's artifact. Regret is the oracle incumbent minus `optimum`, else the
   artifact's oracle optimum, else null. `hb.summary(study)`: one row per method (runs,
   failed runs against `n_runs`, median and IQR of the final incumbent, oracle
-  incumbent and regret). `hb.hyperparameters(study)`: one row per run, iteration and
-  hyperparameter entry. Polars is imported on first use; without it a view raises an
+  incumbent and regret). `hb.hyperparameters(study)`: one row per run, iteration,
+  fitted GP (`output`) and hyperparameter entry. Polars is imported on first use; without it a view raises an
   `ImportError` naming the extra.
 - **Plots** (#55; `plots.py`), static, over **evaluations** (initial points are
   not free): `plots.convergence(study)` (median oracle incumbent, else incumbent, with
@@ -851,7 +868,9 @@ in this order:
 3. each evaluation, initial points first: the measurement (oracle simulation: full-solve
    starts, then noise), then the root-finding starts;
 4. each iteration: GP-fit starts, then acquisition starts, then the evaluation of the
-   trial point as in 3.
+   trial point as in 3. Hybrid BO with P > 1 unknown states fits its GPs in the order
+   of `y`, each from its own `lhs` starts, before the acquisition starts; with P = 1
+   the draws are those of a single GP fit.
 
 Root-finding starts are drawn even without noise, because the reconstruction always
 runs. Each consumer draws only what it uses, when it uses it.
@@ -896,5 +915,3 @@ Not built now; the design leaves room for them.
 - **Alternatives to SAA.** Sigma points or cubature produce a different `Scenarios`
   (deterministic `z`, specific `w`); the acquisition builders already take weights.
   A moment-matched second-order linearization could be an option of `Linearization`.
-- **More than one unknown state (P > 1).** Shapes already allow it; the open modeling
-  question is whether each unknown equation has its own arguments.
