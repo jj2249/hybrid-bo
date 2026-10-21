@@ -1,5 +1,5 @@
 """The illustrative example with two decision variables, run with SAA-EI, Lin-EI,
-standard BO and Latin hypercube sampling.
+SoftSAA-EI, standard BO and Latin hypercube sampling.
 
 Two decision variables u1 and u2, one mechanistic state x and one unknown state y.
 The known equation and the objective are the illustrative example's, x + exp(x) = y
@@ -70,7 +70,8 @@ gp = hb.gp.GP(
 
 # Methods: each takes (problem, measure, initial_points, n, rng), where n is the
 # number of iterations, or of design points for the baseline. Hybrid BO substitutes
-# the GP prediction for the unknown state, with SAA-EI and with Lin-EI
+# the GP prediction for the unknown state, with SAA-EI, with Lin-EI and with
+# SoftSAA-EI at a temperature of 1e-6, as in rosenbrock.py
 methods = {
     "hybrid_bo": functools.partial(
         hb.hybrid_bo,
@@ -82,6 +83,12 @@ methods = {
         hb.hybrid_bo,
         settings=hb.HybridBOSettings(
             gp=gp, approximation=hb.Linearization(unknown_states_as_variables=False)
+        ),
+    ),
+    "hybrid_bo_soft": functools.partial(
+        hb.hybrid_bo,
+        settings=hb.HybridBOSettings(
+            gp=gp, approximation=hb.SoftSAA(1e-6, unknown_states_as_variables=False)
         ),
     ),
     "standard_bo": functools.partial(

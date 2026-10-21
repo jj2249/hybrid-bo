@@ -6,8 +6,8 @@ compare. `cli.py` is the shared command line, not an experiment.
 - `illustrative_example.py`: the illustrative example of the
   [paper](https://arxiv.org/abs/2603.11199), with an oracle.
 - `illustrative_example_2d.py`: the illustrative example with two decision
-  variables, y = sin(u1) cos(u2), with an oracle, comparing SAA-EI, Lin-EI, standard
-  BO and Latin hypercube sampling. Its iteration figures show every 2D panel,
+  variables, y = sin(u1) cos(u2), with an oracle, comparing SAA-EI, Lin-EI,
+  SoftSAA-EI, standard BO and Latin hypercube sampling. Its iteration figures show every 2D panel,
   including the GP of y.
 - `rosenbrock.py`: the 2D Rosenbrock function as a composite function, with no known
   equations and two unknown states (adapted from Astudillo & Frazier,
