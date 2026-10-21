@@ -5,6 +5,11 @@ compare. `cli.py` is the shared command line, not an experiment.
 
 - `illustrative_example.py`: the illustrative example of the
   [paper](https://arxiv.org/abs/2603.11199), with an oracle.
+- `rosenbrock.py`: the 2D Rosenbrock function as a hybrid model (adapted from
+  Astudillo & Frazier, [arXiv 1906.01537](https://arxiv.org/abs/1906.01537), App.
+  D.2), with an oracle, comparing SAA-EI, SoftSAA-EI, standard BO and Latin
+  hypercube sampling. Its iteration figures aren't drawn yet, since they need one
+  decision variable.
 
 ```bash
 pixi run experiment <name> [--n-runs 3 --plot ...]   # run a study; --help lists the flags
