@@ -105,7 +105,7 @@ methods = {
 }
 
 # The study, which the command line's flags override: 6 initial points, the paper's
-# 2(d + 1). Seed None draws a fresh seed, which the saved study keeps, so it can be run
+# 2(N + 1). Seed None draws a fresh seed, which the saved study keeps, so it can be run
 # again exactly
 study_settings = hb.StudySettings(n_runs=10, n_initial=6, n_iterations=20, seed=None)
 

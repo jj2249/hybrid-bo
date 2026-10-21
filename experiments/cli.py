@@ -365,19 +365,23 @@ def plot(
         plt.savefig(figures_dir / "regret.png")
         plt.close("all")
 
-    # Every iteration of the runs chosen. Hybrid BO's GP panels draw one unknown
-    # state, so with more than one its figures are drawn without them
+    # Every iteration of the runs chosen
     for run in study.runs:
         if runs is not None and run.index not in runs:
             continue
         run_dir = figures_dir / run.method / f"run-{run.index:03d}"
-        several_gps = (
+        # Hybrid BO's GP panels draw one unknown state, so with more it goes without
+        hybrid_with_several_unknown_states = (
             isinstance(run.settings, hb.HybridBOSettings) and problem.system.n_y > 1
         )
         for i in range(hb.history.n_iterations(run.history)):
             try:
                 figure = hb.plots.iteration(
-                    run, problem, i, measure=measure, gp=not several_gps
+                    run,
+                    problem,
+                    i,
+                    measure=measure,
+                    gp=not hybrid_with_several_unknown_states,
                 )
             except (ValueError, hb.HybridBOError) as error:
                 print(f"{run.method} run {run.index}: no iteration figures: {error}")
