@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.0 (2026-10-21)
+
 - **Breaking:** A system may have no mechanistic states or known equations (#115):
   `System`'s arguments are keyword-only, and `x` and `g` are optional, both left out
   for M = 0, which makes hybrid BO BO of a composite function. Every method, saving
