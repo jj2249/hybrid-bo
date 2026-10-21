@@ -13,7 +13,6 @@ import illustrative_example as ex
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
-import rosenbrock as rb
 import scipy
 from matplotlib.axes import Axes
 from matplotlib.collections import QuadMesh
@@ -38,6 +37,7 @@ from hybrid_bo import (
     hybrid_bo,
     initial_points,
     latin_hypercube_sampling,
+    oracle_measure,
     plots,
     standard_bo,
 )
@@ -499,7 +499,22 @@ def test_hybrid_bo_gp_panel_needs_h_to_take_only_u(hybrid_run):
         plots.iteration(hybrid_run, problem, 0)
 
 
-# The figure of one iteration with two decision variables, on the Rosenbrock problem
+# The figure of one iteration with two decision variables, on the 2D Rosenbrock
+# function f = 100 (u2 - u1^2)^2 + (u1 - 1)^2 as a hybrid model with one unknown state,
+# so hybrid BO has a row of y: the mechanistic state x = u1 - 1 is known, the unknown
+# state y = u2 - u1^2 is measured by an oracle
+ROSENBROCK_U = [Var(f"u{i}", lower=-2.048, upper=2.048) for i in (1, 2)]
+ROSENBROCK_Y = Var("y", start=(-6.3, 2.1))
+ROSENBROCK_SYSTEM = System(
+    u=ROSENBROCK_U,
+    x=[Var("x", start=(-3.1, 1.1))],
+    y=[ROSENBROCK_Y],
+    g=lambda v: [v.x - (v.u1 - 1)],
+    h_inputs=ROSENBROCK_U,
+    measured=[ROSENBROCK_Y],
+)
+ROSENBROCK = Problem(ROSENBROCK_SYSTEM, f=lambda v: 100 * v.y**2 + v.x**2)
+ROSENBROCK_MEASURE = oracle_measure(ROSENBROCK_SYSTEM, lambda v: [v.u2 - v.u1**2])
 
 
 def rosenbrock_run(
@@ -509,10 +524,10 @@ def rosenbrock_run(
     """A pickled run of `method` on the Rosenbrock problem: 2 initial points, then 2
     iterations (or design points)."""
     rng = np.random.default_rng(0)
-    u = initial_points(rb.system.u, 2, rng)
+    u = initial_points(ROSENBROCK_SYSTEM.u, 2, rng)
     if settings is None:
-        return pickled(method(rb.problem, rb.measure, u, 2, rng))
-    return pickled(method(rb.problem, rb.measure, u, 2, rng, settings=settings))
+        return pickled(method(ROSENBROCK, ROSENBROCK_MEASURE, u, 2, rng))
+    return pickled(method(ROSENBROCK, ROSENBROCK_MEASURE, u, 2, rng, settings=settings))
 
 
 @pytest.fixture(scope="module")
@@ -521,7 +536,7 @@ def hybrid_2d_run() -> Run:
     scenarios, the GP's prediction substituted for the unknown state."""
     approximation = SAA(n_scenarios=10, unknown_states_as_variables=False)
     return rosenbrock_run(
-        hybrid_bo, HybridBOSettings(gp=rb.gp, approximation=approximation)
+        hybrid_bo, HybridBOSettings(gp=ex.gp, approximation=approximation)
     )
 
 
@@ -530,14 +545,14 @@ def hybrid_soft_2d_run() -> Run:
     """As `hybrid_2d_run`, with SoftSAA-EI at a temperature of 10."""
     approximation = SoftSAA(10.0, n_scenarios=10, unknown_states_as_variables=False)
     return rosenbrock_run(
-        hybrid_bo, HybridBOSettings(gp=rb.gp, approximation=approximation)
+        hybrid_bo, HybridBOSettings(gp=ex.gp, approximation=approximation)
     )
 
 
 @pytest.fixture(scope="module")
 def standard_2d_run() -> Run:
     """A pickled standard BO run on the Rosenbrock problem."""
-    return rosenbrock_run(standard_bo, StandardBOSettings(gp=rb.gp))
+    return rosenbrock_run(standard_bo, StandardBOSettings(gp=ex.gp))
 
 
 @pytest.fixture(scope="module")
@@ -578,7 +593,7 @@ def test_2d_figure_has_a_panel_per_quantity(request, run_name, expected, tmp_pat
     f. Every panel shows the points, and the figure saves as a PNG."""
     # Act: iteration 1, with the oracle
     run = request.getfixturevalue(run_name)
-    figure = plots.iteration(run, rb.problem, 1, measure=rb.measure)
+    figure = plots.iteration(run, ROSENBROCK, 1, measure=ROSENBROCK_MEASURE)
 
     # Check: the titles, the points on every panel, one legend
     assert titles(figure) == expected
@@ -597,7 +612,7 @@ def test_2d_figure_has_a_panel_per_quantity(request, run_name, expected, tmp_pat
 
 def test_2d_figure_without_measure_drops_the_oracle_column(hybrid_2d_run):
     """Without a measurement there are no oracle values, so the oracle panels go."""
-    figure = plots.iteration(hybrid_2d_run, rb.problem, 0)
+    figure = plots.iteration(hybrid_2d_run, ROSENBROCK, 0)
 
     assert titles(figure) == [
         title for title in HYBRID_2D_TITLES if not title.startswith("oracle")
@@ -608,10 +623,10 @@ def test_2d_figure_without_measure_drops_the_oracle_column(hybrid_2d_run):
 def test_2d_flags_turn_panels_off(hybrid_2d_run):
     """The flags drop the same parts as in 1D: `gp` the row of y, `scenarios` the
     panels over the scenarios, `acquisition` the EI panel."""
-    no_gp = plots.iteration(hybrid_2d_run, rb.problem, 0, gp=False)
-    no_scenarios = plots.iteration(hybrid_2d_run, rb.problem, 0, scenarios=False)
+    no_gp = plots.iteration(hybrid_2d_run, ROSENBROCK, 0, gp=False)
+    no_scenarios = plots.iteration(hybrid_2d_run, ROSENBROCK, 0, scenarios=False)
     nothing = plots.iteration(
-        hybrid_2d_run, rb.problem, 0, gp=False, scenarios=False, acquisition=False
+        hybrid_2d_run, ROSENBROCK, 0, gp=False, scenarios=False, acquisition=False
     )
 
     assert titles(no_gp) == [
@@ -631,7 +646,7 @@ def test_2d_ei_mask_covers_the_points_where_saa_ei_is_zero(hybrid_2d_run):
     with y_s the GP's scenario prediction."""
     # Act: iteration 1's EI panel alone
     run, i = hybrid_2d_run, 1
-    figure = plots.iteration(run, rb.problem, i, gp=False, scenarios=False)
+    figure = plots.iteration(run, ROSENBROCK, i, gp=False, scenarios=False)
     (mesh,) = [c for c in figure.axes[0].collections if isinstance(c, QuadMesh)]
     gray = mesh.get_array()
     assert gray is not None
@@ -663,7 +678,7 @@ def test_2d_acquisition_panel_checks_the_replay_at_the_trial_point(request, run_
     point, and they agree: the replay solves the stored acquisition problem."""
     # Act: iteration 1's EI panel alone
     run = request.getfixturevalue(run_name)
-    figure = plots.iteration(run, rb.problem, 1, gp=False, scenarios=False)
+    figure = plots.iteration(run, ROSENBROCK, 1, gp=False, scenarios=False)
 
     # Check: the note's two numbers, against the stored value in log10 EI
     (note,) = figure.axes[0].texts

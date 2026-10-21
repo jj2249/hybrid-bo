@@ -1,6 +1,7 @@
 """The command line of the experiments (experiments/cli.py, behind `pixi run experiment`
 and `pixi run plot`): running studies and plotting them."""
 
+import functools
 import logging
 import subprocess
 import sys
@@ -14,7 +15,20 @@ import numpy as np
 import polars as pl
 import pytest
 
-from hybrid_bo import initial_points, load, summary, uniform_sampling
+from hybrid_bo import (
+    SAA,
+    HybridBOSettings,
+    Problem,
+    StudySettings,
+    System,
+    Var,
+    hybrid_bo,
+    initial_points,
+    load,
+    oracle_measure,
+    summary,
+    uniform_sampling,
+)
 
 
 def summary_of(study):
@@ -357,6 +371,41 @@ def test_plot_flag_plots_straight_after_the_run(tmp_path):
 
     study_dir = tmp_path / "illustrative_example" / "demo"
     assert (study_dir / "figures" / "convergence.png").exists()
+
+
+def test_hybrid_bo_with_two_unknown_states_gets_iteration_figures_without_gps(
+    tmp_path, capsys
+):
+    """The iteration figure draws hybrid BO's GP panels for one unknown state only, so
+    with two the CLI draws its figures without them rather than skipping the run."""
+    # Setup: two decision variables, no known equations, two measured unknown states
+    # y1 = u1 and y2 = u2, and f = y1^2 + y2^2
+    u1, u2 = Var("u1", lower=-1.0, upper=1.0), Var("u2", lower=-1.0, upper=1.0)
+    y1, y2 = Var("y1", start=(-1.0, 1.0)), Var("y2", start=(-1.0, 1.0))
+    system = System(u=[u1, u2], y=[y1, y2], h_inputs=[u1, u2], measured=[y1, y2])
+    problem = Problem(system, f=lambda v: v.y1**2 + v.y2**2)
+    measure = oracle_measure(system, lambda v: [v.u1, v.u2])
+    settings = HybridBOSettings(
+        gp=ex.gp, approximation=SAA(n_scenarios=5, unknown_states_as_variables=False)
+    )
+    methods = {"hybrid_bo": functools.partial(hybrid_bo, settings=settings)}
+
+    # Act: run one iteration and plot it with the oracle
+    cli.main(
+        "two_states",
+        problem,
+        measure,
+        methods,
+        StudySettings(n_runs=1, n_initial=2, n_iterations=1, seed=0),
+        optimum=0.0,
+        true_curves=True,
+        argv=["--name", "demo", "--plot", "--results-root", str(tmp_path)],
+    )
+
+    # Check: the run has its iteration figure, and nothing was skipped
+    study_dir = tmp_path / "two_states" / "demo"
+    assert iteration_figures(study_dir) == {"hybrid_bo/run-000"}
+    assert "no iteration figures" not in capsys.readouterr().out
 
 
 def test_warnings_reach_the_study_log(tmp_path):

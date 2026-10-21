@@ -337,7 +337,8 @@ def plot(
     `convergence.png`, `regret.png` (when the study has an oracle optimum) and
     `<method>/run-000/iteration-00.png` for every iteration of each method's runs
     with these indices (None: every run), with the oracle values from `measure` if
-    given. A figure that can't be drawn is skipped with a message. Saves
+    given; hybrid BO's are drawn without the GP panels when it has more than one
+    unknown state. A figure that can't be drawn is skipped with a message. Saves
     `summary.csv` too if the study has none (a study saved before the CLI wrote
     summaries).
 
@@ -364,14 +365,20 @@ def plot(
         plt.savefig(figures_dir / "regret.png")
         plt.close("all")
 
-    # Every iteration of the runs chosen
+    # Every iteration of the runs chosen. Hybrid BO's GP panels draw one unknown
+    # state, so with more than one its figures are drawn without them
     for run in study.runs:
         if runs is not None and run.index not in runs:
             continue
         run_dir = figures_dir / run.method / f"run-{run.index:03d}"
+        several_gps = (
+            isinstance(run.settings, hb.HybridBOSettings) and problem.system.n_y > 1
+        )
         for i in range(hb.history.n_iterations(run.history)):
             try:
-                figure = hb.plots.iteration(run, problem, i, measure=measure)
+                figure = hb.plots.iteration(
+                    run, problem, i, measure=measure, gp=not several_gps
+                )
             except (ValueError, hb.HybridBOError) as error:
                 print(f"{run.method} run {run.index}: no iteration figures: {error}")
                 break

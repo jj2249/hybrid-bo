@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- The experiment `langermann` (`pixi run experiment langermann`): the Langermann
+  function of Astudillo & Frazier's App. D.1 as a composite function, with no known
+  equations and five unknown states, comparing SAA-EI, SoftSAA-EI, standard BO and
+  Latin hypercube sampling (#132). The experiment `rosenbrock` is now D.2 adapted to
+  2D, with no known equations and two unknown states, y1 = u2 - u1^2 and y2 = u1.
+- The experiment CLI draws the iteration figures of a hybrid BO run with more than
+  one unknown state without the GP panels, instead of skipping them (#132).
+
 ## 0.4.0 (2026-10-21)
 
 - **Breaking:** A system may have no mechanistic states or known equations (#115):

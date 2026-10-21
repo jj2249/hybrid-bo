@@ -1,8 +1,9 @@
-"""The 2D Rosenbrock function as a hybrid model, run with SAA-EI, SoftSAA-EI,
+"""The 2D Rosenbrock function as a composite function, run with SAA-EI, SoftSAA-EI,
 standard BO and Latin hypercube sampling.
 
-Two decision variables u1 and u2, one mechanistic state x and one unknown state y. The
-objective is f = 100 y^2 + x^2 = 100 (u2 - u1^2)^2 + (u1 - 1)^2, whose minimum f = 0
+Two decision variables u1 and u2, no mechanistic states or known equations, and two
+unknown states, y1 = u2 - u1^2 and y2 = u1, which only the oracle knows. The objective
+is f = 100 y1^2 + (y2 - 1)^2 = 100 (u2 - u1^2)^2 + (u1 - 1)^2, whose minimum f = 0
 at u = (1, 1) lies at the end of a flat curved valley. The question is whether
 SoftSAA-EI reaches a lower regret than SAA-EI there: once the incumbent is in the
 valley, few scenarios improve anywhere, so SAA-EI is exactly zero over most of the
@@ -10,17 +11,14 @@ domain and the acquisition multistart gets no gradient, while SoftSAA-EI has no 
 regions.
 
 It adapts Appendix D.2 of Astudillo & Frazier, "Bayesian optimization of composite
-functions" (arXiv 1906.01537), to 2D. D.2 has two unknown states, y1 = u2 - u1^2 and
-y2 = u1, and no known equations. The library supports neither yet (#114, #115), so the
-identity y2 = u1 moves to the known side as the known equation x = u1 - 1, and the
-unknown equation is y = u2 - u1^2, which only the oracle knows. Run it, then plot the
-newest study:
+functions" (arXiv 1906.01537), to 2D. Run it, then plot the newest study:
 
     pixi run experiment rosenbrock [--n-runs 3 --plot ...]
     pixi run plot rosenbrock
     pixi run experiment rosenbrock plot --plot-runs all
 
-`pixi run experiment rosenbrock --help` lists the flags.
+`pixi run experiment rosenbrock --help` lists the flags. Hybrid BO's iteration figures
+have no GP panels, since those draw one unknown state.
 """
 
 import functools
@@ -31,29 +29,27 @@ import hybrid_bo as hb
 
 # Problem: what we know about the physics, and what we want. The decision variables
 # span the restricted box of the Rosenbrock function in Surjanovic & Bingham's Virtual
-# Library of Simulation Experiments (SFU). The states' start bounds cover their range
-# over it, rounded out: x = u1 - 1 is in [-3.048, 1.048] and y = u2 - u1^2 in
-# [-6.242, 2.048]
+# Library of Simulation Experiments (SFU). The unknown states' start bounds cover their
+# range over it, rounded out: y1 = u2 - u1^2 is in [-6.242, 2.048] and y2 = u1 in
+# [-2.048, 2.048]
 u1 = hb.Var("u1", lower=-2.048, upper=2.048)
 u2 = hb.Var("u2", lower=-2.048, upper=2.048)
-x = hb.Var("x", start=(-3.1, 1.1))
-y = hb.Var("y", start=(-6.3, 2.1))
+y1 = hb.Var("y1", start=(-6.3, 2.1))
+y2 = hb.Var("y2", start=(-2.1, 2.1))
 
 system = hb.System(
     u=[u1, u2],
-    x=[x],
-    y=[y],
-    g=lambda v: [v.x - (v.u1 - 1)],  # 0 = g(x, y, u)
+    y=[y1, y2],
     h_inputs=[u1, u2],  # y = h(u1, u2)
-    measured=[y],
+    measured=[y1, y2],
 )
-problem = hb.Problem(system, f=lambda v: 100 * v.y**2 + v.x**2)
+problem = hb.Problem(system, f=lambda v: 100 * v.y1**2 + (v.y2 - 1) ** 2)
 
 
 # Measurement: an oracle plays the real system
 def oracle(v):
-    """The unknown equation y = h(u1, u2), hidden from the methods."""
-    return [v.u2 - v.u1**2]
+    """The unknown equations y1 = u2 - u1^2 and y2 = u1, hidden from the methods."""
+    return [v.u2 - v.u1**2, v.u1]
 
 
 measure = hb.oracle_measure(system, oracle, noise_std=0.0)
@@ -76,7 +72,7 @@ gp = hb.gp.GP(
 
 # Methods: each takes (problem, measure, initial_points, n, rng), where n is the
 # number of iterations, or of design points for the baseline. Hybrid BO substitutes
-# the GP prediction for the unknown state, with SAA-EI and with SoftSAA-EI at a
+# the GPs' predictions for the unknown states, with SAA-EI and with SoftSAA-EI at a
 # temperature of 1e-6. Its -log keeps a gradient at any temperature, and a temperature
 # near the improvements makes it re-measure the incumbent, which scores tau log 2
 methods = {
