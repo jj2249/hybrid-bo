@@ -127,10 +127,13 @@ def test_plot_runs_chooses_the_runs_with_iteration_figures(tmp_path):
     }
 
 
+# `parametrize` runs the test once per value in the list, each as its own test case
 @pytest.mark.parametrize("plot_runs", [["all", "1"], ["-1"], ["one"]])
 def test_plot_runs_takes_indices_or_all(tmp_path, plot_runs):
     """`--plot-runs` takes run indices (from 0) or `all` alone; anything else is a
     usage error."""
+    # A usage error makes argparse exit, which `pytest.raises` catches; `exit_info`
+    # holds the exit code
     with pytest.raises(SystemExit) as exit_info:
         run_cli(["plot", "--plot-runs", *plot_runs, "--results-root", str(tmp_path)])
     assert exit_info.value.code != 0

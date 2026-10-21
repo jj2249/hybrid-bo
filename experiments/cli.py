@@ -84,9 +84,6 @@ def main(
     command, rest = ("plot", args[1:]) if args[:1] == ["plot"] else ("run", args)
     parsers = _parsers(name, methods)
     parsed = parsers[command].parse_args(rest)
-    plot_runs = parsed.plot_runs or []
-    if "all" in plot_runs and len(plot_runs) > 1:
-        parsers[command].error("--plot-runs takes run indices or all, not both")
     experiment_dir = _from_init_cwd(parsed.results_root) / name
 
     # Run: a tree that isn't clean gives a study that isn't reproducible
@@ -164,15 +161,9 @@ def main(
 
     # Plot, also straight after a run with --plot or --plot-runs
     if command == "plot" or parsed.plot or parsed.plot_runs is not None:
-        runs = parsed.plot_runs or [0]
+        runs = _plot_runs(parsers[command], parsed.plot_runs)
         with plt.style.context(hb.plots.STYLE):
-            plot(
-                name,
-                problem,
-                measure if true_curves else None,
-                study_dir,
-                runs=None if runs == ["all"] else runs,
-            )
+            plot(name, problem, measure if true_curves else None, study_dir, runs=runs)
 
 
 def _parsers(
@@ -224,14 +215,14 @@ def _add_plot_runs(parser: argparse.ArgumentParser, note: str = "") -> None:
     parser.add_argument(
         "--plot-runs",
         nargs="+",
-        type=_run_index,
+        type=_plot_run,
         metavar="RUN",
         help=f"the runs with iteration figures: indices or all; default 0{note}",
     )
 
 
-def _run_index(text: str) -> int | str:
-    """A `--plot-runs` value: a run index (from 0) or `all`.
+def _plot_run(text: str) -> int | str:
+    """One `--plot-runs` value: a run index (from 0) or `all`.
 
     Raises `argparse.ArgumentTypeError` otherwise.
     """
@@ -241,6 +232,21 @@ def _run_index(text: str) -> int | str:
         msg = f"not a run index or all: {text!r}"
         raise argparse.ArgumentTypeError(msg)
     return int(text)
+
+
+def _plot_runs(
+    parser: argparse.ArgumentParser, values: list[int | str] | None
+) -> list[int] | None:
+    """The runs `--plot-runs` chose: its indices, run 0 if it wasn't given, or None
+    (every run) for `all`. `all` among indices is a usage error (`parser.error`)."""
+    if values is None:
+        return [0]
+    indices = [value for value in values if isinstance(value, int)]
+    if len(indices) == len(values):
+        return indices
+    if len(values) > 1:
+        parser.error("--plot-runs takes run indices or all, not both")
+    return None
 
 
 def _from_init_cwd(path: Path) -> Path:
@@ -330,9 +336,10 @@ def plot(
     """Saves the figures of the study in `study_dir` to its `figures/` folder:
     `convergence.png`, `regret.png` (when the study has an oracle optimum) and
     `<method>/run-000/iteration-00.png` for every iteration of each method's runs
-    with these indices (None: every run), with the true values from `measure` if
-    given. A figure that can't be drawn is skipped with a message. Saves `summary.csv` too if the study has none (a study saved
-    before the CLI wrote summaries).
+    with these indices (None: every run), with the oracle values from `measure` if
+    given. A figure that can't be drawn is skipped with a message. Saves
+    `summary.csv` too if the study has none (a study saved before the CLI wrote
+    summaries).
 
     Raises `ValueError` if the study was run on another experiment.
     """

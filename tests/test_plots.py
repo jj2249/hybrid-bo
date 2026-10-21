@@ -586,6 +586,8 @@ def test_2d_figure_has_a_panel_per_quantity(request, run_name, expected, tmp_pat
     panels = [ax for ax in figure.axes if ax.get_title()]
     n_points = run.history.n_initial + 1
     for ax in panels:
+        # The last four collections are the markers: initial points, points so far,
+        # incumbent, trial point
         offsets = np.concatenate([c.get_offsets() for c in ax.collections[-4:]])
         assert len(offsets) == n_points + 2  # the incumbent again, the trial point
     assert {"initial points", "incumbent", "trial point"} <= set(legend_labels(figure))
@@ -650,4 +652,24 @@ def test_2d_ei_mask_covers_the_points_where_saa_ei_is_zero(hybrid_2d_run):
     clear = np.abs(best_improvement) > 1e-6
     np.testing.assert_array_equal(zero[clear], (best_improvement <= 0)[clear])
     assert zero.any() and not zero.all()
+    plt.close("all")
+
+
+@pytest.mark.parametrize(
+    "run_name", ["hybrid_2d_run", "hybrid_soft_2d_run", "standard_2d_run"]
+)
+def test_2d_acquisition_panel_checks_the_replay_at_the_trial_point(request, run_name):
+    """The acquisition panel notes the stored and the replayed log10 EI at the trial
+    point, and they agree: the replay solves the stored acquisition problem."""
+    # Act: iteration 1's EI panel alone
+    run = request.getfixturevalue(run_name)
+    figure = plots.iteration(run, rb.problem, 1, gp=False, scenarios=False)
+
+    # Check: the note's two numbers, against the stored value in log10 EI
+    (note,) = figure.axes[0].texts
+    stored, replayed = (float(part.split()[-1]) for part in note.get_text().split(","))
+    value = run.acquisitions[1].value
+    ei = np.exp(-value) if run_name == "hybrid_soft_2d_run" else -value
+    np.testing.assert_allclose(stored, np.log10(ei), rtol=1e-3)
+    np.testing.assert_allclose(replayed, stored, rtol=1e-3)
     plt.close("all")

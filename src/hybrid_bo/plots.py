@@ -164,9 +164,10 @@ def iteration(
     the color scale of the mean beside it. Panels of f are on a log color scale when
     their values are positive and span more than two decades. EI is drawn as log10
     EI, with the grid points where it is 0 (SAA-EI's flat regions) in gray;
-    LCB is drawn as it is.
+    LCB is drawn as it is. The acquisition panel notes the stored and the replayed
+    value at the trial point, which check the replay.
 
-    `measure` adds the true values (curves, or the oracle panels in 2D); it runs at
+    `measure` adds the oracle values (curves, or the oracle panels in 2D); it runs at
     every grid point (generator seeded with 0), so pass an oracle measurement, never
     a real system.
 
@@ -293,15 +294,16 @@ def _iteration_1d(
 
 
 @dataclass(frozen=True)
-class _Map:
+class _Panel:
     """A panel of the 2D figure: its title and its values over the grid (n_grid,);
-    `in_f_units` panels may get a log color scale, and `ei` is EI, drawn as log10 EI
-    with its zeros in gray."""
+    `in_f_units` panels may get a log color scale, `ei` is EI, drawn as log10 EI
+    with its zeros in gray, and `note` is drawn in a corner."""
 
     title: str
     values: np.ndarray
     in_f_units: bool = False
     ei: bool = False
+    note: str = ""
 
 
 def _iteration_2d(
@@ -323,53 +325,62 @@ def _iteration_2d(
     grid = np.column_stack([U1.ravel(), U2.ravel()])
     y_true, f_true = _truth(problem, measure, grid)
 
-    # The replay, from the trial point (dropped after) over the grid
+    # The replay, from the trial point (the first row, split off after) over the grid
     curve = f_scenarios = f_std = None
+    at_trial = np.nan
     if settings is not None and (shown["scenarios"] or shown["acquisition"]):
         u = np.vstack([history.u[n], grid])
         curve, f_scenarios, f_std = _replay(run, problem, i, settings, u)
-        curve = curve[1:]
+        at_trial, curve = curve[0], curve[1:]
         f_scenarios = None if f_scenarios is None else f_scenarios[1:]
         f_std = None if f_std is None else f_std[1:]
 
     # The row of y (hybrid BO's GP), oracle | GP mean | GP std
-    rows: list[list[_Map | None]] = []
+    rows: list[list[_Panel | None]] = []
     if isinstance(settings, HybridBOSettings) and shown["gp"]:
         name = system.y[0].name
         mean, std = predict(run.surrogates[i], grid)
-        oracle = None if y_true is None else _Map(f"oracle {name}", y_true)
+        oracle = None if y_true is None else _Panel(f"oracle {name}", y_true)
         rows.append(
-            [oracle, _Map(f"GP mean of {name}", mean), _Map(f"GP std of {name}", std)]
+            [
+                oracle,
+                _Panel(f"GP mean of {name}", mean),
+                _Panel(f"GP std of {name}", std),
+            ]
             + [None]
         )
 
     # The row of f: oracle | GP or scenario mean | its std | acquisition function
-    row: list[_Map | None] = [None] * 4
+    row: list[_Panel | None] = [None] * 4
     if f_true is not None:
-        row[0] = _Map("oracle f", f_true, in_f_units=True)
+        row[0] = _Panel("oracle f", f_true, in_f_units=True)
     if isinstance(settings, StandardBOSettings) and shown["gp"]:
         mean, std = predict(run.surrogates[i], grid)
-        row[1] = _Map("GP mean of f", mean, in_f_units=True)
-        row[2] = _Map("GP std of f", std, in_f_units=True)
+        row[1] = _Panel("GP mean of f", mean, in_f_units=True)
+        row[2] = _Panel("GP std of f", std, in_f_units=True)
     if shown["scenarios"]:
         assert run.scenarios is not None and f_scenarios is not None
         if f_std is None:
             w = run.scenarios.w
             mean = f_scenarios @ w
             std = np.sqrt((f_scenarios - mean[:, np.newaxis]) ** 2 @ w)
-            row[1] = _Map("mean f over scenarios", mean, in_f_units=True)
-            row[2] = _Map("std f over scenarios", std, in_f_units=True)
+            row[1] = _Panel("mean f over scenarios", mean, in_f_units=True)
+            row[2] = _Panel("std f over scenarios", std, in_f_units=True)
         else:
-            row[1] = _Map("nominal f", f_scenarios[:, 0], in_f_units=True)
-            row[2] = _Map("s, the std of f", f_std, in_f_units=True)
+            row[1] = _Panel("nominal f", f_scenarios[:, 0], in_f_units=True)
+            row[2] = _Panel("s, the std of f", f_std, in_f_units=True)
     if shown["acquisition"]:
         assert settings is not None and curve is not None
-        row[3] = _acquisition_map(settings, curve)
+        stored = run.acquisitions[i].value
+        row[3] = _acquisition_panel(settings, curve, stored, at_trial)
     rows.append(row)
 
     # Drop the empty rows and columns
     rows = [row for row in rows if any(row)]
     columns = [c for c in range(4) if any(row[c] for row in rows)]
+
+    # Every panel shows the points so far, the incumbent and the trial point
+    points = (history.u[:, 0], history.u[:, 1], history.f, history.n_initial, n)
     import matplotlib.pyplot as plt
 
     with plt.style.context(STYLE):
@@ -389,9 +400,7 @@ def _iteration_2d(
             ax.set_box_aspect(1)
             ax.set_xlim(lower[0], upper[0])
             ax.set_ylim(lower[1], upper[1])
-            _points(
-                ax, history.u[:, 0], history.u[:, 1], history.f, history.n_initial, n
-            )
+            _points(ax, *points)
             ax.set_xlabel(system.u[0].name)
             ax.set_ylabel(system.u[1].name)
 
@@ -409,14 +418,16 @@ def _iteration_2d(
                 else:
                     _contours(ax, U1, U2, panel.values, scale, panel.in_f_units)
                 ax.set_title(panel.title)
-                _points(
-                    ax,
-                    history.u[:, 0],
-                    history.u[:, 1],
-                    history.f,
-                    history.n_initial,
-                    n,
-                )
+                if panel.note:
+                    ax.text(
+                        0.02,
+                        0.02,
+                        panel.note,
+                        transform=ax.transAxes,
+                        fontsize="small",
+                        bbox={"facecolor": "white", "alpha": 0.8},
+                    )
+                _points(ax, *points)
 
                 # Axis labels on the outer side of the panels
                 below = rows[r + 1][c] if r + 1 < len(rows) else None
@@ -428,13 +439,23 @@ def _iteration_2d(
     return figure
 
 
-def _acquisition_map(settings: MethodSettings, curve: np.ndarray) -> _Map:
-    """The acquisition panel of the 2D figure from the replayed acquisition values:
-    LCB as it is, else EI (-value, or exp(-value) for SoftSAA's -log EI)."""
+def _acquisition_panel(
+    settings: MethodSettings, curve: np.ndarray, stored: float, replayed: float
+) -> _Panel:
+    """The acquisition panel of the 2D figure from the replayed acquisition values
+    over the grid: LCB as it is (linear), else EI (-value, or exp(-value) for
+    SoftSAA's -log EI). Its note gives the stored and the replayed value at the trial
+    point in the panel's units."""
     if isinstance(settings.acquisition, LCB):
-        return _Map("LCB", curve, in_f_units=True)
-    ei = np.exp(-curve) if _is_soft(settings) else -curve
-    return _Map("log10 EI", ei, ei=True)
+        title, values, at_trial = "LCB", curve, np.array([stored, replayed])
+    else:
+        title = "log10 EI"
+        to_ei = (lambda v: np.exp(-v)) if _is_soft(settings) else np.negative
+        values, at_trial = to_ei(curve), to_ei(np.array([stored, replayed]))
+        with np.errstate(divide="ignore", invalid="ignore"):
+            at_trial = np.log10(at_trial)
+    note = f"trial point: stored {at_trial[0]:.4g}, replayed {at_trial[1]:.4g}"
+    return _Panel(title, values, ei=title != "LCB", note=note)
 
 
 def _contours(
