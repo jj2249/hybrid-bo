@@ -425,8 +425,10 @@ def test_save_and_load_keep_every_kind_of_method_settings(tmp_path):
     )
     study = hb.Study(runs, SETTINGS, None, {})
 
+    # Act: save and load
     loaded = hb.load(hb.save(study, tmp_path / "study"))
 
+    # Check: equal settings, of the same types throughout
     assert [run.settings for run in loaded.runs] == all_settings
     assert_same(loaded, study)
 
@@ -434,6 +436,7 @@ def test_save_and_load_keep_every_kind_of_method_settings(tmp_path):
 def test_load_rejects_a_bo_run_saved_without_its_settings(illustrative_study, tmp_path):
     """A BO run saved before runs held their settings (only the record's text) raises
     `StudyFormatError`: the plots replay from the settings."""
+    # Save, then remove one BO run's settings
     path = hb.save(illustrative_study, tmp_path / "study")
     run_path = path / "runs" / "hybrid_bo" / "run-000.json"
     data = json.loads(run_path.read_text())

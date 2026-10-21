@@ -210,9 +210,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   because `run.py` imports them and `bo.py` imports `run.py`; `TYPES`, the types
   saving tags.
 - `bo.py`: `optimization_loop(problem, measure, initial_points, n_iterations,
-  trial_point, rng, record, settings) -> Run` (settings kept in the run) (evaluate initial points, then per iteration
-  `trial_point(problem, history, rng) -> (u, surrogate, acquisition solution)` and
-  evaluate u; a
+  trial_point, rng, record, settings) -> Run` (evaluate initial points, then per
+  iteration `trial_point(problem, history, rng) -> (u, surrogate, acquisition
+  solution)` and evaluate u; the run keeps `settings`; a
   `HybridBOError` gets the partial run as `error.run`). `standard_bo` and
   `hybrid_bo` take `rng` last positionally and `settings` keyword-only and required:
   both settings require `gp`, the prior GP. `StandardBOSettings` and

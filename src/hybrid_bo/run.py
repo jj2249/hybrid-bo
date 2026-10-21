@@ -24,8 +24,8 @@ class Run:
     were produced.
 
     Holds only data (arrays, numbers, strings and frozen dataclasses of them), never
-    the problem or any user callable, so it saves as JSON (`hb.save`) and loads without the code that produced it
-    (ADR 0003, ADR 0004).
+    the problem or any user callable, so it saves as JSON (`hb.save`) and loads
+    without the code that produced it (ADR 0003, ADR 0004).
     `method` is the label the run was run under: the key in the study's methods, or
     the method's name when run on its own. `index` is its position among that
     method's runs in a study, so run i of every method starts from the same initial

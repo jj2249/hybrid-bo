@@ -39,7 +39,7 @@ def _encode(value: Any) -> Any:
     name if it is tagged), an array as nested lists (an empty one as its
     shape, which nested lists would lose)."""
     if dataclasses.is_dataclass(value) and not isinstance(value, type):
-        tagged = type(value).__name__ in _TAGGED
+        tagged = _TAGGED.get(type(value).__name__) is type(value)
         tag = {"type": type(value).__name__} if tagged else {}
         return tag | {
             field.name: _encode(getattr(value, field.name))

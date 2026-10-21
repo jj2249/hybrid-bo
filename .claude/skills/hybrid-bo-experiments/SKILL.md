@@ -68,12 +68,12 @@ oracle objective is below it.
   scaled units (inputs onto [0, 1], outputs standardized). Don't convert the noise by
   hand.
 - `true_curves=True` runs the measurement over the plot grid: only for an oracle.
-- The iteration figures need one decision variable. They take the GP from the run's
-  stored fitted GPs, and read the other settings from the run's record, so only a
-  custom solver needs `settings=` in `hb.plots.iteration`; otherwise `plot` prints why
-  and skips that run's figures.
-- Studies saved before #119 (GPs as data) don't load: `hb.load` raises
-  `StudyFormatError`. Rerun them.
+- The iteration figures need one decision variable; otherwise `plot` prints why and
+  skips that run's figures. They replay each run from what it stored (its fitted
+  GPs and its settings), so nothing from the experiment's methods is passed and a
+  study plots after the methods change.
+- Studies saved before #119 (GPs as data) or #120 (runs hold their settings) don't
+  load: `hb.load` raises `StudyFormatError`. Rerun them.
 
 ## Running
 
