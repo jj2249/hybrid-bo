@@ -19,7 +19,7 @@ matplotlib, Polars and the docs, and `dev` includes everything.
 ```bash
 pixi install -e dev
 pixi run -e dev check        # lint (with --fix) + format + typecheck
-pixi run -e dev test         # pytest (~6s)
+pixi run -e dev test         # pytest (~45s)
 pixi run -e dev test --update-baselines   # regenerate regression results
 pixi run -e dev coverage     # tests + per-file line coverage of src/hybrid_bo
 pixi run -e dev lint | format | typecheck
@@ -41,6 +41,9 @@ runs or plots. The `experiment`, `plot` and `docs` tasks set a
 
 The git hook hardcodes the pixi Python path. If commits fail with "`pre-commit`
 not found" after a Python upgrade, re-run `pixi run -e dev setup`.
+If `ty` fails with "Invalid `VIRTUAL_ENV`" (a shell that has `VIRTUAL_ENV` set to
+`.pixi/envs/dev`, which has no `pyvenv.cfg`), run it as `env -u VIRTUAL_ENV pixi run
+-e dev check`.
 
 `tests/test_regression.py` runs each method of the illustrative example
 (seed 0, 2 iterations) and compares the results with `tests/data/regression/*.json`.
