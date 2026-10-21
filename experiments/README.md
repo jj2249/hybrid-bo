@@ -5,6 +5,9 @@ compare. `cli.py` is the shared command line, not an experiment.
 
 - `illustrative_example.py`: the illustrative example of the
   [paper](https://arxiv.org/abs/2603.11199), with an oracle.
+- `illustrative_example_noisy.py`: the illustrative example with measurement noise
+  of standard deviation 0.01 on y, which every BO method's GP states as its
+  observation noise.
 - `rosenbrock.py`: the 2D Rosenbrock function as a hybrid model (adapted from
   Astudillo & Frazier, [arXiv 1906.01537](https://arxiv.org/abs/1906.01537), App.
   D.2), with an oracle, comparing SAA-EI, SoftSAA-EI, standard BO and Latin

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- The experiment `illustrative_example_noisy` (#122): the illustrative example
+  with measurement noise of standard deviation 0.01 on y, every BO method's GP
+  stating the same `noise_std=0.01` as its observation noise. The illustrative example itself is unchanged.
+
 ## 0.3.0 (2026-10-21)
 
 - **Breaking:** A run has an artifact (#123): `Run.record` is `Run.artifact`, with the
