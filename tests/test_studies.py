@@ -335,6 +335,49 @@ def test_a_loaded_run_draws_its_iterations_with_its_own_gp(tmp_path):
     assert all(len(figure.axes) == 3 for figure in figures)
 
 
+def test_a_loaded_study_draws_every_bo_method_from_its_stored_settings(tmp_path):
+    """The iteration figures replay each run from the settings it stored, so every
+    BO method's runs draw with no settings passed, a custom solver's included, and
+    the replayed acquisition function passes through the stored value."""
+    # Setup: each approximation and acquisition function, and a custom solver
+    solver = hb.solvers.Ipopt(solver_options={"print_level": 0, "max_iter": 500})
+    hybrid = {
+        "saa": hb.HybridBOSettings(gp=ex.gp, approximation=hb.SAA(5, False)),
+        "soft": hb.HybridBOSettings(gp=ex.gp, approximation=hb.SoftSAA(0.5, 5, False)),
+        "lin": hb.HybridBOSettings(gp=ex.gp, approximation=hb.Linearization(False)),
+        "lcb": hb.HybridBOSettings(gp=ex.gp, acquisition=hb.LCB(2.0), solver=solver),
+    }
+    standard = hb.StandardBOSettings(gp=ex.gp, acquisition=hb.LCB(1.0))
+    all_settings = hybrid | {"standard": standard}
+    methods = {
+        label: functools.partial(hb.hybrid_bo, settings=settings)
+        for label, settings in hybrid.items()
+    } | {"standard": functools.partial(hb.standard_bo, settings=standard)}
+    study_settings = hb.StudySettings(n_runs=1, n_initial=2, n_iterations=1, seed=0)
+    study = hb.study(methods, ex.problem, ex.measure, study_settings)
+    loaded = hb.load(hb.save(study, tmp_path / "study"))
+
+    # Act: iteration 0 of every run, with the acquisition panel alone
+    figures = [
+        hb.plots.iteration(run, ex.problem, 0, gp=False, scenarios=False)
+        for run in loaded.runs
+    ]
+
+    # Check: each run's settings, and each curve through its stored value (SoftSAA
+    # stores -log EI and draws -EI)
+    for run, figure in zip(loaded.runs, figures, strict=True):
+        assert run.settings == all_settings[run.method]
+        (ax,) = figure.axes
+        (curve,) = ax.get_lines()
+        trial = run.history.u[run.history.n_initial, 0]
+        (at_trial,) = np.flatnonzero(np.asarray(curve.get_xdata()) == trial)
+        stored = run.acquisitions[0].value
+        if run.method == "soft":
+            stored = -np.exp(-stored)
+        replayed = np.asarray(curve.get_ydata())[at_trial]
+        np.testing.assert_allclose(replayed, stored, rtol=1e-8, err_msg=run.method)
+
+
 def test_save_and_load_keep_every_kind_of_gp_parameter(tmp_path):
     """A fitted GP's parameters round-trip as they were given: a number, a tuple
     (one per input) and, inside a kernel held by another, the right kernel type."""
@@ -357,6 +400,48 @@ def test_save_and_load_keep_every_kind_of_gp_parameter(tmp_path):
     loaded = hb.load(hb.save(study, tmp_path / "study"))
 
     assert_same(loaded, study)
+
+
+def test_save_and_load_keep_every_kind_of_method_settings(tmp_path):
+    """A run's settings round-trip whole and of the right types: each approximation
+    with its own settings (SoftSAA's temperature), LCB with its factor, and a custom
+    solver."""
+    # Setup: one run per kind of settings, with no points
+    solver = hb.solvers.Ipopt(
+        plugin_options={"print_time": 0, "expand": True},
+        solver_options={"print_level": 0, "max_iter": 50, "tol": 1e-6},
+    )
+    all_settings = [
+        hb.HybridBOSettings(gp=ex.gp, approximation=hb.SAA(5, False), solver=solver),
+        hb.HybridBOSettings(gp=ex.gp, approximation=hb.SoftSAA(0.5, 7, False)),
+        hb.HybridBOSettings(gp=ex.gp, approximation=hb.Linearization(False)),
+        hb.HybridBOSettings(gp=ex.gp, acquisition=hb.LCB(2.5), n_starts=3),
+        hb.StandardBOSettings(gp=ex.gp, acquisition=hb.LCB(1.5), n_starts_gp=4),
+        hb.StandardBOSettings(gp=ex.gp, solver=solver),
+    ]
+    runs = tuple(
+        hb.Run(history_of(0), {"method": "m"}, "m", index, settings=settings)
+        for index, settings in enumerate(all_settings)
+    )
+    study = hb.Study(runs, SETTINGS, None, {})
+
+    loaded = hb.load(hb.save(study, tmp_path / "study"))
+
+    assert [run.settings for run in loaded.runs] == all_settings
+    assert_same(loaded, study)
+
+
+def test_load_rejects_a_bo_run_saved_without_its_settings(illustrative_study, tmp_path):
+    """A BO run saved before runs held their settings (only the record's text) raises
+    `StudyFormatError`: the plots replay from the settings."""
+    path = hb.save(illustrative_study, tmp_path / "study")
+    run_path = path / "runs" / "hybrid_bo" / "run-000.json"
+    data = json.loads(run_path.read_text())
+    del data["settings"]
+    run_path.write_text(json.dumps(data))
+
+    with pytest.raises(hb.errors.StudyFormatError, match="settings"):
+        hb.load(path)
 
 
 def test_load_rejects_a_study_saved_before_gps_were_data(illustrative_study, tmp_path):

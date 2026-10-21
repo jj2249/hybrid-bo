@@ -869,7 +869,12 @@ def test_run_pickles_without_the_code_that_produced_it(illustrative_problem):
         def find_class(self, module, name):
             """The class `module.name`, if the module is allowed."""
             allowed = ("hybrid_bo.run", "hybrid_bo.history", "hybrid_bo.gp")
-            allowed += ("hybrid_bo.acquisition", "numpy", "builtins")
+            allowed += (
+                "hybrid_bo.acquisition",
+                "hybrid_bo.settings",
+                "hybrid_bo.solvers",
+            )
+            allowed += ("numpy", "builtins")
             if not module.startswith(allowed):
                 msg = f"the pickle needs {module}.{name}"
                 raise pickle.UnpicklingError(msg)

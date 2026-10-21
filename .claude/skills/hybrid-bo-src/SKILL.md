@@ -94,7 +94,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   unless a study relabels it; `index` in its study; `surrogates`: one `FittedGP` per
   iteration, the one behind its trial point, and `acquisitions`: one
   `AcquisitionSolution` per iteration, both empty for the baselines; `scenarios`,
-  hybrid BO only, else None), pure data that loads without user code (ADR 0003).
+  hybrid BO only, else None; `settings`, the BO method's settings in full, else
+  None), pure data that loads without user code (ADR 0003).
   `run_record(problem, measure, rng, method, settings)` builds the text record
   from `_problem_record`, `_generator_record` and `_versions_record` (a study's
   artifact reuses them); call it before the method draws. `code_version(path)` is
@@ -115,12 +116,14 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - `saving.py`: `save(study, path)` / `load(path)` (ADR 0004): `artifact.json` lists the
   run files `runs/<method>/run-<index:03d>.json`; `load` also reads the older
   `study.json` (with `record` for `artifact`), but a run saved before #119 (fitted
-  GPs without `gp`, or a record with a `kernel` entry) raises `StudyFormatError`
+  GPs without `gp`, or a record with a `kernel` entry) or a BO run saved before #120
+  (a record with `gp` but no `settings` field) raises `StudyFormatError`
   (`_check_format`), as do a tag naming no expected type and data that fits no
   member of a union. `_encode`/`_decode`
   convert any dataclass by its type hints; arrays are nested lists of floats (an empty
-  one is `{"shape": ...}`). The GP types (`gp.TYPES`) are saved with `"type"`, their
-  class name, and `_decode` picks a union's member by it (`_union_member` picks
+  one is `{"shape": ...}`). The GP types (`gp.TYPES`) and the settings types
+  (`settings.TYPES`: the settings, `EI`, `LCB` and the approximations) are saved with
+  `"type"`, their class name, and `_decode` picks a union's member by it (`_union_member` picks
   untagged data by its JSON shape: a list, a dict or a plain value). A new field on
   `Run` or its parts round-trips without changes if its type is one `_decode`
   handles. `save` refuses an existing folder.
@@ -203,8 +206,11 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `(S, P)`, which `_scenario_states(system, fitted, scenarios,
   acquisition_problem, w)` reads from the solution (or predicts, when the y_s are
   substituted).
+- `settings.py`: `StandardBOSettings` and `HybridBOSettings`, apart from `bo.py`
+  because `run.py` imports them and `bo.py` imports `run.py`; `TYPES`, the types
+  saving tags.
 - `bo.py`: `optimization_loop(problem, measure, initial_points, n_iterations,
-  trial_point, rng, record) -> Run` (evaluate initial points, then per iteration
+  trial_point, rng, record, settings) -> Run` (settings kept in the run) (evaluate initial points, then per iteration
   `trial_point(problem, history, rng) -> (u, surrogate, acquisition solution)` and
   evaluate u; a
   `HybridBOError` gets the partial run as `error.run`). `standard_bo` and
@@ -219,15 +225,12 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - `plots.py`: static figures, no widgets and no `rng`. `convergence(study, ax)` and
   `regret(study, optimum, ax)` draw `evaluations` (median and IQR per method over
   evaluations, `_over_evaluations`). `iteration(run, problem, i, *, measure, gp,
-  scenarios, acquisition, settings) -> Figure` draws the state before trial point i
+  scenarios, acquisition) -> Figure` draws the state before trial point i
   over a 101-point grid of one-dimensional `u` (start bounds) plus the trial point,
   with one figure legend (`_figure_legend`). The GP is iteration i's stored fitted
-  GP, for the GP panel and the replay alike. `_replay_settings` reads the acquisition
-  function and the approximation (its kind, `unknown_states_as_variables` and
-  SoftSAA's temperature) from the record's settings text; the fields the replay uses
-  (`_REPLAYED`, a dotted name for a field of a field), the kind of approximation and
-  SoftSAA's temperature must appear in that text,
-  so a custom solver needs `settings` (whose GP is ignored).
+  GP, for the GP panel and the replay alike; the rest of the replay comes from
+  `run.settings` (its type says hybrid or standard BO; None draws the points only).
+  The record's settings text is never read back.
   `_replay`: standard BO evaluates `standard_acquisition`'s NLP; hybrid BO rebuilds
   `hybrid_acquisition` and solves it over all of `w` with u fixed by equal bounds
   (built with `_pack`), outwards from

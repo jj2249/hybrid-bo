@@ -7,8 +7,6 @@ Plots read finished runs, so a saved study is plotted without running it again (
 style, `STYLE`; use it elsewhere with `plt.style.use(hb.plots.STYLE)`.
 """
 
-import re
-from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -17,9 +15,7 @@ import numpy as np
 import scipy
 
 from hybrid_bo.acquisition import (
-    EI,
     LCB,
-    SAA,
     Linearization,
     SoftSAA,
     _pack,
@@ -29,13 +25,13 @@ from hybrid_bo.acquisition import (
     hybrid_acquisition,
     standard_acquisition,
 )
-from hybrid_bo.bo import HybridBOSettings, StandardBOSettings
 from hybrid_bo.evaluation import Measure, evaluate
-from hybrid_bo.gp import GP, predict
+from hybrid_bo.gp import predict
 from hybrid_bo.history import n_iterations
 from hybrid_bo.problem import Problem, Symbolic
 from hybrid_bo.run import Run
 from hybrid_bo.sampling import _start_bounds
+from hybrid_bo.settings import HybridBOSettings, StandardBOSettings
 from hybrid_bo.studies import Study
 from hybrid_bo.views import evaluations
 
@@ -49,16 +45,6 @@ STYLE = Path(__file__).with_name("hybrid_bo.mplstyle")
 
 _N_GRID = 101  # grid points over u
 _CONFIDENCE = 0.9  # probability inside the confidence bands
-
-# Each BO method's settings type and the fields its replay uses, by the method in
-# the record; a dotted name is a field of a field
-_REPLAYED = {
-    "hybrid_bo": (
-        HybridBOSettings,
-        ["acquisition", "approximation.unknown_states_as_variables", "solver"],
-    ),
-    "standard_bo": (StandardBOSettings, ["acquisition"]),
-}
 
 
 def convergence(study: Study, ax: "Axes | None" = None) -> "Axes":
@@ -143,7 +129,6 @@ def iteration(
     gp: bool = True,
     scenarios: bool = True,
     acquisition: bool = True,
-    settings: StandardBOSettings | HybridBOSettings | None = None,
 ) -> "Figure":
     """The figure of iteration i of a run (from 0; negative counts from the end): the
     state before its i-th trial point (design point, for the baselines), over a grid
@@ -167,21 +152,19 @@ def iteration(
     true curves; it runs at every grid point (generator seeded with 0), so pass an
     oracle measurement, never a real system.
 
-    The GP is the run's stored fitted GP; the other settings are read from the run's
-    record, so a run with, say, a custom solver needs `settings` (whose GP is
-    ignored).
+    The GP is the run's stored fitted GP; the rest of the replay (the acquisition
+    function, the approximation, the solver) comes from the run's stored settings.
 
     Raises `ValueError` unless the problem has one decision variable (and, for hybrid
-    BO's GP panel, h takes only u), if the settings don't match the record, or if
-    `measure` has no oracle; `TypeError` if the settings aren't the
-    run's method's; and `IndexError` if the run has no iteration `i`.
+    BO's GP panel, h takes only u), or if `measure` has no oracle; and `IndexError`
+    if the run has no iteration `i`.
     """
     # The checks: one decision variable, the GP of y over u, the iteration
-    system, history = problem.system, run.history
+    system, history, settings = problem.system, run.history, run.settings
     if system.n_u != 1:
         msg = f"The plots need one decision variable, got {system.n_u}"
         raise ValueError(msg)
-    is_hybrid = run.record.get("method") == "hybrid_bo"
+    is_hybrid = isinstance(settings, HybridBOSettings)
     if is_hybrid and gp and list(system.h_inputs) != list(system.u):
         msg = "The GP of y is drawn over u, so h_inputs must be the decision variable"
         raise ValueError(msg)
@@ -190,8 +173,6 @@ def iteration(
         msg = f"The run has {n_later} iterations, so no iteration {i}"
         raise IndexError(msg)
     i %= n_later
-    fitted_gp = run.surrogates[i].gp if run.surrogates else None
-    settings = _replay_settings(run, fitted_gp, settings)
 
     # The grid, with the trial point in it so the replay starts there
     n = history.n_initial + i
@@ -267,92 +248,11 @@ def iteration(
     return figure
 
 
-def _replay_settings(
-    run: Run,
-    gp: GP | None,
-    settings: StandardBOSettings | HybridBOSettings | None,
-) -> StandardBOSettings | HybridBOSettings | None:
-    """The settings a run is replayed with: `settings` if given, else the record's
-    acquisition function and approximation with `gp` as their GP. None for the
-    baselines.
-
-    The replay reads the GP from the run's fitted GPs, never from the settings, so
-    `gp` (the iteration's fitted GP, or None for the baselines) only fills the
-    required field.
-
-    Raises `TypeError` if `settings` aren't the run's method's, and `ValueError` if
-    the fields the replay uses don't match the record.
-    """
-    # The method's settings type; the baselines have none
-    method = run.record.get("method", "")
-    expected, replayed = _REPLAYED.get(method, (None, []))
-    if settings is not None and (expected is None or type(settings) is not expected):
-        name = "no" if expected is None else expected.__name__
-        msg = f"A {method} run takes {name} settings, got {type(settings).__name__}"
-        raise TypeError(msg)
-    if expected is None:
-        return None
-
-    # The settings: given, else the defaults with the recorded acquisition function
-    # and approximation (SAA in records from before there was a choice)
-    recorded = run.record.get("settings", "")
-    if settings is None:
-        assert gp is not None  # a BO run has a fitted GP per iteration
-        lcb = re.search(r"acquisition=LCB\(std_factor=([^)]*)\)", recorded)
-        settings = expected(
-            gp=gp,
-            acquisition=EI() if lcb is None else LCB(float(lcb[1])),
-        )
-        if isinstance(settings, HybridBOSettings):
-            as_variables = "unknown_states_as_variables=False" not in recorded
-            settings = replace(
-                settings, approximation=_recorded_approximation(recorded, as_variables)
-            )
-
-    # The fields the replay uses must be the recorded ones (a custom solver, say),
-    # and so must the kind of approximation, in records that name it, and SoftSAA's
-    # temperature
-    texts = [_field_text(settings, name) for name in replayed]
-    if isinstance(settings, HybridBOSettings) and "approximation=" in recorded:
-        texts.append(f"approximation={type(settings.approximation).__name__}(")
-    if _is_soft(settings):
-        texts.append(_field_text(settings, "approximation.temperature"))
-    if any(text not in recorded for text in texts):
-        msg = f"The settings don't match the run's record ({recorded}); pass them"
-        raise ValueError(msg)
-    return settings
-
-
-def _recorded_approximation(
-    recorded: str, unknown_states_as_variables: bool
-) -> SAA | SoftSAA | Linearization:
-    """The approximation a record's settings text names, with this flag:
-    linearization, SoftSAA (with the recorded temperature and number of scenarios),
-    or else SAA (with the recorded number of scenarios)."""
-    if "approximation=Linearization(" in recorded:
-        return Linearization(unknown_states_as_variables)
-    n_scenarios = re.search(r"n_scenarios=(\d+)", recorded)
-    n = SAA.n_scenarios if n_scenarios is None else int(n_scenarios[1])
-    temperature = re.search(r"approximation=SoftSAA\(temperature=([^,)]*)", recorded)
-    if temperature is not None:
-        return SoftSAA(float(temperature[1]), n, unknown_states_as_variables)
-    return SAA(n, unknown_states_as_variables)
-
-
 def _is_soft(settings: StandardBOSettings | HybridBOSettings) -> bool:
     """Whether the settings are hybrid BO's with SoftSAA."""
     return isinstance(settings, HybridBOSettings) and isinstance(
         settings.approximation, SoftSAA
     )
-
-
-def _field_text(settings: StandardBOSettings | HybridBOSettings, name: str) -> str:
-    """The text `field=value` of a settings field as a record shows it; a dotted name
-    reads a field of a field and gives the last one's text."""
-    value: Any = settings
-    for part in name.split("."):
-        value = getattr(value, part)
-    return f"{name.split('.')[-1]}={value!r}"
 
 
 def _replay(

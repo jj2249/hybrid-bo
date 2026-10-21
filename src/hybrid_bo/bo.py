@@ -9,20 +9,16 @@ iteration asks the trial-point function for the next trial point and evaluates i
 import logging
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field, fields, replace
+from dataclasses import fields, replace
 from typing import assert_never
 
 import numpy as np
 
 from hybrid_bo.acquisition import (
-    EI,
-    LCB,
     SAA,
     AcquisitionSolution,
     Linearization,
     SoftSAA,
-    _check_acquisition,
-    _check_approximation,
     _scenario_states,
     _unpack,
     hybrid_acquisition,
@@ -32,12 +28,13 @@ from hybrid_bo.acquisition import (
 )
 from hybrid_bo.errors import HybridBOError
 from hybrid_bo.evaluation import Measure, evaluate
-from hybrid_bo.gp import GP, FittedGP, fit_gp
+from hybrid_bo.gp import FittedGP, fit_gp
 from hybrid_bo.history import History, _concatenate, incumbents
 from hybrid_bo.problem import Problem, _h_inputs
 from hybrid_bo.run import Run, run_record
 from hybrid_bo.sampling import lhs
-from hybrid_bo.solvers import Ipopt, multistart
+from hybrid_bo.settings import HybridBOSettings, StandardBOSettings
+from hybrid_bo.solvers import multistart
 
 _logger = logging.getLogger(__name__)
 
@@ -58,14 +55,17 @@ def optimization_loop(
     trial_point: TrialPoint,
     rng: np.random.Generator,
     record: dict[str, str],
+    settings: StandardBOSettings | HybridBOSettings | None,
 ) -> Run:
     """Evaluates the initial points (n, N), then runs `n_iterations` iterations: each
     calls `trial_point` and evaluates the trial point it returns.
 
-    Returns the run with `record`, labeled with the method it names, and per
-    iteration the surrogate and the acquisition problem's solution behind that
-    iteration's trial point. For writing new methods: `record` comes from
-    `run_record`, built before the method draws anything.
+    Returns the run with `record` and `settings`, labeled with the method the record
+    names, and per iteration the surrogate and the acquisition problem's solution
+    behind that iteration's trial point. For writing new methods: `record` comes
+    from `run_record`, built before the method draws anything, and `settings` are
+    the method's, which the iteration plots replay (None for a method they can't
+    replay).
 
     Raises what `evaluate` and `trial_point` raise; a `HybridBOError` carries the
     partial run as `error.run`, and its history (every point evaluated before the
@@ -115,6 +115,7 @@ def optimization_loop(
                 record["method"],
                 surrogates=surrogates,
                 acquisitions=acquisitions,
+                settings=settings,
             )
         raise
     return Run(
@@ -123,51 +124,8 @@ def optimization_loop(
         record["method"],
         surrogates=surrogates,
         acquisitions=acquisitions,
+        settings=settings,
     )
-
-
-@dataclass(frozen=True)
-class StandardBOSettings:
-    """Settings of standard BO: the prior GP of u -> f, the acquisition function,
-    the number of multistart starts for the acquisition problem and for fitting the
-    GP, and the solver for both.
-
-    Raises `TypeError` unless `acquisition` is an `EI` or an `LCB`.
-    """
-
-    gp: GP
-    acquisition: EI | LCB = field(default_factory=EI)
-    n_starts: int = 10
-    n_starts_gp: int = 10
-    solver: Ipopt = field(default_factory=Ipopt)
-
-    def __post_init__(self) -> None:
-        _check_acquisition(self.acquisition)
-
-
-@dataclass(frozen=True)
-class HybridBOSettings:
-    """Settings of hybrid BO: the prior GP of the unknown states over the arguments
-    of h (`h_inputs`), the acquisition function (what is computed), its
-    approximation (how it is computed, with its own settings), the number of
-    multistart starts for the acquisition problem and for fitting the GP, and the
-    solver for both.
-
-    Raises `TypeError` unless `acquisition` is an `EI` or an `LCB` and
-    `approximation` an `SAA`, a `SoftSAA` or a `Linearization`, `ValueError` for
-    `LCB` with `SoftSAA`, and `NotImplementedError` for `LCB` with `Linearization`.
-    """
-
-    gp: GP
-    acquisition: EI | LCB = field(default_factory=EI)
-    approximation: SAA | SoftSAA | Linearization = field(default_factory=SAA)
-    n_starts: int = 10
-    n_starts_gp: int = 10
-    solver: Ipopt = field(default_factory=Ipopt)
-
-    def __post_init__(self) -> None:
-        _check_acquisition(self.acquisition)
-        _check_approximation(self.acquisition, self.approximation)
 
 
 def _method_record(
@@ -236,7 +194,14 @@ def standard_bo(
         return u, fitted, AcquisitionSolution(solution.f)
 
     return optimization_loop(
-        problem, measure, initial_points, n_iterations, trial_point, rng, record
+        problem,
+        measure,
+        initial_points,
+        n_iterations,
+        trial_point,
+        rng,
+        record,
+        settings,
     )
 
 
@@ -309,7 +274,14 @@ def hybrid_bo(
 
     try:
         run = optimization_loop(
-            problem, measure, initial_points, n_iterations, trial_point, rng, record
+            problem,
+            measure,
+            initial_points,
+            n_iterations,
+            trial_point,
+            rng,
+            record,
+            settings,
         )
     except HybridBOError as error:
         if error.run is not None:

@@ -7,7 +7,6 @@ tests read the drawn data back from the matplotlib axes by their labels.
 
 import pickle
 from collections.abc import Callable
-from dataclasses import replace
 
 import casadi as cas
 import illustrative_example as ex
@@ -463,49 +462,6 @@ def test_iteration_must_exist(standard_run, i):
     """Two iterations ran, so only iterations 0 and 1 (or -2 and -1) can be drawn."""
     with pytest.raises(IndexError, match="iteration"):
         plots.iteration(standard_run, ex.problem, i)
-
-
-def test_settings_matching_the_record_are_used(hybrid_run):
-    """A run's settings can be passed when they match the record."""
-    figure = plots.iteration(hybrid_run, ex.problem, 0, settings=HYBRID_SETTINGS)
-    assert len(figure.axes) == 3
-    plt.close("all")
-
-
-def test_a_custom_solver_needs_the_settings(hybrid_run):
-    """The replay solves with the run's solver options, so a run whose record shows
-    other options than the defaults can't be replayed without its settings."""
-    settings = hybrid_run.record["settings"].replace(
-        "'print_level': 0", "'print_level': 5"
-    )
-    run = replace(hybrid_run, record=hybrid_run.record | {"settings": settings})
-    with pytest.raises(ValueError, match="settings"):
-        plots.iteration(run, ex.problem, 0)
-
-
-@pytest.mark.parametrize(
-    ("run_name", "settings", "error"),
-    [
-        ("hybrid_run", StandardBOSettings(gp=ex.gp), TypeError),
-        ("standard_run", HybridBOSettings(gp=ex.gp), TypeError),
-        ("lhs_run", StandardBOSettings(gp=ex.gp), TypeError),
-        ("hybrid_run", HybridBOSettings(gp=ex.gp), ValueError),
-        ("hybrid_lin_run", HYBRID_SETTINGS, ValueError),
-        ("hybrid_soft_run", HYBRID_SETTINGS, ValueError),
-        (
-            "hybrid_soft_run",
-            HybridBOSettings(gp=ex.gp, approximation=SoftSAA(2.0, 10, False)),
-            ValueError,
-        ),
-    ],
-)
-def test_settings_must_be_the_runs(request, run_name, settings, error):
-    """Settings must be the run's method's (else `TypeError`) and match its record,
-    the kind of approximation and SoftSAA's temperature included (else
-    `ValueError`)."""
-    run = request.getfixturevalue(run_name)
-    with pytest.raises(error, match="settings"):
-        plots.iteration(run, ex.problem, 0, settings=settings)
 
 
 def test_figure_needs_one_decision_variable(lhs_run):

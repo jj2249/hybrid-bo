@@ -19,13 +19,14 @@ from hybrid_bo import (
     run,
     sampling,
     saving,
+    settings,
     solvers,
     studies,
     views,
 )
 from hybrid_bo.acquisition import EI, LCB, SAA, Linearization, SoftSAA
 from hybrid_bo.baselines import latin_hypercube_sampling, uniform_sampling
-from hybrid_bo.bo import HybridBOSettings, StandardBOSettings, hybrid_bo, standard_bo
+from hybrid_bo.bo import hybrid_bo, standard_bo
 from hybrid_bo.errors import (
     HybridBOError,
     NoSolutionError,
@@ -39,5 +40,6 @@ from hybrid_bo.problem import Problem, System, Var
 from hybrid_bo.run import Run
 from hybrid_bo.sampling import initial_points
 from hybrid_bo.saving import load, save
+from hybrid_bo.settings import HybridBOSettings, StandardBOSettings
 from hybrid_bo.studies import Study, StudySettings, repeat, study
 from hybrid_bo.views import evaluations, hyperparameters, summary

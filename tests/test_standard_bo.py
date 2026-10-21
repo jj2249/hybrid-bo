@@ -76,6 +76,8 @@ class _DataOnlyUnpickler(pickle.Unpickler):
         "hybrid_bo.history",
         "hybrid_bo.gp",
         "hybrid_bo.acquisition",
+        "hybrid_bo.settings",
+        "hybrid_bo.solvers",
         "numpy",
         "builtins",
     )
@@ -311,6 +313,7 @@ def test_loop_evaluates_each_trial_point_after_the_initial_points(
         trial_point,
         rng,
         loop_record(problem, rng),
+        None,
     )
 
     # Every point is evaluated (y = sin(u) is the oracle), in order
@@ -343,6 +346,7 @@ def test_failed_trial_point_carries_the_partial_run(illustrative_problem):
             trial_point,
             rng,
             loop_record(problem, rng),
+            None,
         )
 
     # The partial run: 2 initial points and the one trial point before the failure
@@ -377,6 +381,7 @@ def test_failed_initial_point_carries_the_points_before_it(illustrative_problem)
             trial_point,
             rng,
             loop_record(problem, rng),
+            None,
         )
 
     run = info.value.run

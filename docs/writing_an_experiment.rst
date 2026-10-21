@@ -162,7 +162,7 @@ with ``functools.partial``:
    :end-before: # The study
 
 - :py:func:`~hybrid_bo.bo.hybrid_bo` with
-  :py:class:`~hybrid_bo.bo.HybridBOSettings`: the acquisition function
+  :py:class:`~hybrid_bo.settings.HybridBOSettings`: the acquisition function
   (:py:class:`~hybrid_bo.acquisition.EI`, the default, or
   :py:class:`~hybrid_bo.acquisition.LCB` with a ``std_factor``), how it is
   approximated (``approximation``, default
@@ -182,7 +182,7 @@ with ``functools.partial``:
   SAA-EI), and ``SAA``'s settings; it gives EI only. Its stored acquisition value
   is -log EI; the iteration plot draws it as -EI.
 - :py:func:`~hybrid_bo.bo.standard_bo` with
-  :py:class:`~hybrid_bo.bo.StandardBOSettings`: BO with a GP of the objective, as the
+  :py:class:`~hybrid_bo.settings.StandardBOSettings`: BO with a GP of the objective, as the
   usual comparison. Its GP is required too.
 - :py:func:`~hybrid_bo.baselines.latin_hypercube_sampling` and
   :py:func:`~hybrid_bo.baselines.uniform_sampling`, which sample without a model and
