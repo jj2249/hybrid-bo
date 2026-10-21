@@ -1,5 +1,5 @@
-"""The 2D Rosenbrock function as a hybrid model, run with SAA-EI, SoftSAA-EI and
-standard BO.
+"""The 2D Rosenbrock function as a hybrid model, run with SAA-EI, SoftSAA-EI,
+standard BO and Latin hypercube sampling.
 
 Two decision variables u1 and u2, one mechanistic state x and one unknown state y. The
 objective is f = 100 y^2 + x^2 = 100 (u2 - u1^2)^2 + (u1 - 1)^2, whose minimum f = 0
@@ -10,11 +10,11 @@ domain and the acquisition multistart gets no gradient, while SoftSAA-EI has no 
 regions.
 
 It adapts Appendix D.2 of Astudillo & Frazier, "Bayesian optimization of composite
-functions" (arXiv 1906.01537), to 2D. D.2 has two unknown outputs, y1 = u2 - u1^2 and
-y2 = u1, and no known equations. The library supports only one unknown state, so the
-identity output y2 = u1 moves to the known side as the known equation x = u1 - 1, and
-the unknown equation is y = u2 - u1^2, which only the oracle knows. Run it, then plot
-the newest study:
+functions" (arXiv 1906.01537), to 2D. D.2 has two unknown states, y1 = u2 - u1^2 and
+y2 = u1, and no known equations. The library supports neither yet (#114, #115), so the
+identity y2 = u1 moves to the known side as the known equation x = u1 - 1, and the
+unknown equation is y = u2 - u1^2, which only the oracle knows. Run it, then plot the
+newest study:
 
     pixi run experiment rosenbrock [--n-runs 3 --plot ...]
     pixi run plot rosenbrock
@@ -29,8 +29,10 @@ import cli
 import hybrid_bo as hb
 
 # Problem: what we know about the physics, and what we want. The decision variables
-# span the restricted box of the SFU library's Rosenbrock function, and the states'
-# start bounds cover their range over it
+# span the restricted box of the Rosenbrock function in Surjanovic & Bingham's Virtual
+# Library of Simulation Experiments (SFU). The states' start bounds cover their range
+# over it, rounded out: x = u1 - 1 is in [-3.048, 1.048] and y = u2 - u1^2 in
+# [-6.242, 2.048]
 u1 = hb.Var("u1", lower=-2.048, upper=2.048)
 u2 = hb.Var("u2", lower=-2.048, upper=2.048)
 x = hb.Var("x", start=(-3.1, 1.1))
