@@ -33,7 +33,9 @@ A GP learns ``h`` from measurements. In the illustrative example, ``u`` is in
 ``y = sin(u)`` and the objective is ``f = (6x - 2)^2 sin(12x - 4)``.
 
 A system may have several unknown states; hybrid BO then fits one GP per unknown
-state, all over the same arguments of ``h``.
+state, all over the same arguments of ``h``. It may also have no mechanistic states
+and no known equations: leave out ``x`` and ``g``, and the objective ``f(y, u)`` is the
+only known part (BO of a composite function).
 
 CasADi in two minutes
 ---------------------
@@ -73,8 +75,8 @@ variable needs ``start``. Make start bounds a realistic range of the variable.
    :start-at: u = hb.Var(
    :end-before: system = hb.System(
 
-The :py:class:`~hybrid_bo.problem.System` lists the variables, the known equations
-``g``, the arguments of the unknown equations (``h_inputs``, from ``u`` and ``x``) and
+The :py:class:`~hybrid_bo.problem.System` takes keyword arguments: the variables, the
+known equations ``g`` (with ``x``, both optional), the arguments of the unknown equations (``h_inputs``, from ``u`` and ``x``) and
 the ``measured`` variables, the states your sensors read (from ``x`` and ``y``). There
 must be as many measured variables as unknown states, so the root-finding problem can
 recover the rest. The :py:class:`~hybrid_bo.problem.Problem` adds the objective ``f``,

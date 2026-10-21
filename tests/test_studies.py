@@ -456,6 +456,21 @@ def test_save_and_load_keep_every_kind_of_gp_parameter(tmp_path):
     assert_same(loaded, study)
 
 
+def test_an_empty_array_in_an_optional_field_loads_with_its_shape(tmp_path):
+    """An empty array where None is allowed too (here the oracle states of a system
+    without mechanistic states, shape (n, 0)) loads as an array of the saved shape,
+    not None."""
+    history = dataclasses.replace(
+        history_of(3), x=np.zeros((3, 0)), x_oracle=np.zeros((3, 0))
+    )
+    run = hb.Run(history, artifact={}, method="m")
+    study = hb.Study((run,), SETTINGS, None, {})
+
+    loaded = hb.load(hb.save(study, tmp_path / "study"))
+
+    assert_same(loaded, study)
+
+
 def test_save_and_load_keep_every_kind_of_method_settings(tmp_path):
     """A run's settings round-trip whole and of the right types: each approximation
     with its own settings (SoftSAA's temperature), LCB with its factor, and a custom

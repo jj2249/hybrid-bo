@@ -102,7 +102,8 @@ def _decode(value: Any, annotation: Any) -> Any:
 
 def _union_member(value: Any, members: tuple[Any, ...]) -> Any:
     """The member of a union that untagged JSON data `value` decodes as: the
-    sequence type for a list, the one dataclass for a dict, else the plain type.
+    sequence type for a list, an array for an empty array's `{"shape": ...}`, the
+    one dataclass for another dict, else the plain type.
 
     Raises `StudyFormatError` if no member fits.
     """
@@ -110,6 +111,8 @@ def _union_member(value: Any, members: tuple[Any, ...]) -> Any:
     if isinstance(value, list):
         kinds = (list, tuple, np.ndarray)
         fits = [m for m in members if (typing.get_origin(m) or m) in kinds]
+    elif isinstance(value, dict) and value.keys() == {"shape"}:
+        fits = [m for m in members if m is np.ndarray]
     elif isinstance(value, dict):
         fits = [m for m in members if dataclasses.is_dataclass(m)]
     else:

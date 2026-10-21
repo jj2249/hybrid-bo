@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Breaking:** A system may have no mechanistic states or known equations (#115):
+  `System`'s arguments are keyword-only, and `x` and `g` are optional, both left out
+  for M = 0, which makes hybrid BO BO of a composite function. Every method, saving
+  and the plots work for such a system. An empty array saved where `None` is allowed
+  too now loads as an array. Results with known equations don't change.
 - **Breaking:** A system may have more than one unknown state (#114). Hybrid BO fits one
   independent GP per unknown state, all from the settings' prior GP over the same
   arguments of h. `Run.surrogates` holds a tuple of fitted GPs per iteration (one per

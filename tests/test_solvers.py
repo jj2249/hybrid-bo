@@ -49,6 +49,23 @@ def test_bounds_and_constraints():
     np.testing.assert_allclose(solution.w, [0.7, 0.3], atol=1e-6)
 
 
+def test_an_empty_constraint_is_no_constraint():
+    """An equality constraint of no rows (the known equations of a system without
+    mechanistic states) leaves the problem unconstrained: the double well's global
+    minimum."""
+    nlp = NLP(
+        DOUBLE_WELL.f,
+        DOUBLE_WELL.lower,
+        DOUBLE_WELL.upper,
+        g=cas.Function("g", [w], [cas.SX(0, 1)]),
+    )
+
+    solution = multistart(nlp, np.array([[-1.5]]), Ipopt())
+
+    reference = multistart(DOUBLE_WELL, np.array([[-1.5]]), Ipopt())
+    np.testing.assert_allclose(solution.w, reference.w, atol=1e-8)
+
+
 def test_every_start_failing_raises_without_tracebacks(caplog):
     """When no start converges, multistart raises NoSolutionError and logs each
     failure without a traceback.

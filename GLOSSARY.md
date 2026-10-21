@@ -78,7 +78,10 @@ predicting it.
 _Avoid_: GP outputs, unknown variables
 
 **Known equations** (`g`, M equations):
-The equations `0 = g(x, y, u)` whose form is known.
+The equations `0 = g(x, y, u)` whose form is known. There may be none (M = 0, and
+then no mechanistic states): the known part of the problem is the objective alone,
+`f(y, u)` with `y = h(u)`, and hybrid BO is BO of a composite function (Astudillo &
+Frazier, [arXiv 1906.01537](https://arxiv.org/abs/1906.01537)).
 _Avoid_: h_known, mechanistic model
 
 **Unknown equations** (`h`, P equations):

@@ -64,8 +64,10 @@ re-exports only what a typical script uses (DESIGN.md, "A slim top level");
 `tests/test_namespace.py` pins that set. Everything else, tests included, is imported
 from its module (`from hybrid_bo.gp import fit_gp`).
 
-- `problem.py`: `Var` (name, bounds, start bounds), `System` (`u`, `x`, `y`, `g`,
-  `h_inputs`, `measured`) and `Problem` (`system`, `f`). `g` and `f` are user
+- `problem.py`: `Var` (name, bounds, start bounds), `System` (keyword-only `u`, `x`,
+  `y`, `g`, `h_inputs`, `measured`; `x` and `g` optional and together: without them
+  M = 0 and `g` is traced from no equations, a `cas.Function` with output (0, 1),
+  whose artifact text is `none`) and `Problem` (`system`, `f`). `g` and `f` are user
   callables over a namespace `v` of symbols (`v.x`), traced once in `_trace` into
   `cas.Function`s with column-vector inputs in the paper's order `(x, y, u)`. All
   input checks live in the constructors and raise `ValueError`; any number P >= 1 of
@@ -87,7 +89,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   solves the root-finding problem (`_reconstruct`, starts over the unmeasured
   variables), and returns a `History` whose points are all initial points. Every
   fsolve goes through `_find_root` (CasADi Jacobian, accepts residual `< tol` within
-  the bounds, silences fsolve's warnings). With an oracle, one extra solve from the
+  the bounds, silences fsolve's warnings; with no unmeasured states, as with M = 0,
+  it returns the empty root without solving; the starts are still drawn). With an oracle, one extra solve from the
   oracle values (no draws) checks the reconstruction is on the same root, else
   `ReconstructionWarning`. `_start_bounds` (in `sampling.py`) and `_as_text` (in
   `problem.py`, an equation as text in the variable names) are shared helpers.
@@ -134,7 +137,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   one is `{"shape": ...}`). The GP types (`gp.TYPES`) and the settings types
   (`settings.TYPES`: the settings, `EI`, `LCB` and the approximations) are saved with
   `"type"`, their class name, and `_decode` picks a union's member by it (`_union_member` picks
-  untagged data by its JSON shape: a list, a dict or a plain value). A new field on
+  untagged data by its JSON shape: a list, an empty array's `{"shape": ...}`, another
+  dict or a plain value). A new field on
   `Run` or its parts round-trips without changes if its type is one `_decode`
   handles. `save` refuses an existing folder.
 - `views.py`: `evaluations(study, optimum=None)`, `summary(study)` and
@@ -149,7 +153,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - `baselines.py`: `latin_hypercube_sampling` and `uniform_sampling` draw the whole
   design over the `u` start bounds, then `evaluate` initial points plus design in
   one call.
-- `solvers.py`: `NLP` (`f`, bounds `(n,)`, optional `g(w) = 0`), `Ipopt` settings and
+- `solvers.py`: `NLP` (`f`, bounds `(n,)`, optional `g(w) = 0`; a `g` of no rows is
+  no constraint, since `cas.Opti` refuses an empty one), `Ipopt` settings and
   `multistart(nlp, starts, solver) -> Solution` (`w`, `f`), the best start. It uses
   `cas.Opti` with bounds as constraints, as the pre-refactor code did, so IPOPT takes
   the steps the baselines record; failed starts, and each call's number of failed
@@ -337,7 +342,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - The unit tests (`test_kernels.py`, `test_gp.py`, `test_scalers.py`,
   `test_sampling.py`, `test_solvers.py`, `test_system.py`, `test_evaluation.py`,
   `test_baselines.py`, `test_standard_bo.py`, `test_hybrid_bo.py` (P = 2 unit tests
-  against numpy and finite differences), `test_two_unknown_states.py` (P = 2 end to
+  against numpy and finite differences), `test_no_known_equations.py` (M = 0 end to end:
+  every method, saving, plots, and hybrid BO matching standard BO when f = y),
+  `test_two_unknown_states.py` (P = 2 end to
   end: runs, saving, plots),
   `test_studies.py`, `test_views.py`, `test_run.py`) compare against
   numpy/scipy references or closed forms. Add one when changing math.

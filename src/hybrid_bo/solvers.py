@@ -23,7 +23,7 @@ class NLP:
     """min f(w) subject to g(w) = 0 and lower <= w <= upper.
 
     `f` and `g` are CasADi functions (`cas.Function`) of the column w; the bounds have
-    shape (n,) and may be infinite.
+    shape (n,) and may be infinite. A `g` of no rows is no constraint.
     """
 
     f: cas.Function
@@ -62,7 +62,9 @@ def multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
     opti = cas.Opti()
     w = opti.variable(len(nlp.lower))
     opti.minimize(nlp.f(w))
-    if nlp.g is not None:
+    # CasADi refuses an empty constraint, such as known equations with M = 0
+    has_equations = nlp.g is not None and nlp.g.numel_out(0) > 0
+    if has_equations:
         opti.subject_to(nlp.g(w) == 0)
     opti.subject_to(w >= nlp.lower[:, np.newaxis])
     opti.subject_to(w <= nlp.upper[:, np.newaxis])

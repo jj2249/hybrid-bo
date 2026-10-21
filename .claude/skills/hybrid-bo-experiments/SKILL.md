@@ -61,6 +61,8 @@ oracle objective is below it.
 
 - `math.exp(v.x)` on a CasADi symbol silently returns `nan`; numpy functions mostly
   work but emit a CasADi `FutureWarning`. Always use `cas.*`.
+- `System` takes keyword arguments only. Without known equations, leave out both
+  `x` and `g` (M = 0); giving one without the other raises `ValueError`.
 - Exactly one measured variable per unknown state. With `P > 1` unknown states,
   `plots.iteration` draws only with `gp=False` (else `ValueError`), so the CLI's
   `--plot` skips their iteration figures with a message.
