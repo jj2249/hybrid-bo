@@ -321,7 +321,7 @@ def plot(
         for i in range(hb.history.n_iterations(run.history)):
             try:
                 figure = hb.plots.iteration(run, problem, i, measure=measure)
-            except (ValueError, TypeError, hb.HybridBOError) as error:
+            except (ValueError, hb.HybridBOError) as error:
                 print(f"{run.method} run {run.index}: no iteration figures: {error}")
                 break
             run_dir.mkdir(parents=True, exist_ok=True)

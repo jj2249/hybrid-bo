@@ -4,10 +4,11 @@
 artifact, and the list of run files) and one file per run,
 `path/runs/<method>/run-000.json`, holding every field of the run. `load` also reads
 a study saved before the artifact was named: `study.json` with a `record` key, but not
-one saved before GPs were data (ADR 0008). Arrays are nested lists; float64 values
-round-trip exactly. A GP's means, kernels and hyperparameters are saved with their type's
-name (`"type"`), so a field that holds one of several kernels loads as the right one.
-The library never calls `save` itself.
+one saved before GPs were data (ADR 0008) or before runs held their settings. Arrays are
+nested lists; float64 values round-trip exactly. A GP's means, kernels and
+hyperparameters, and the methods' settings and their parts, are saved with their type's
+name (`"type"`), so a field that holds one of several types (kernels, approximations)
+loads as the right one. The library never calls `save` itself.
 """
 
 import dataclasses
@@ -19,8 +20,8 @@ from typing import Any
 
 import numpy as np
 
+from hybrid_bo import gp, settings
 from hybrid_bo.errors import StudyFormatError
-from hybrid_bo.gp import TYPES
 from hybrid_bo.run import Run
 from hybrid_bo.studies import Study, StudySettings
 
@@ -28,16 +29,18 @@ from hybrid_bo.studies import Study, StudySettings
 ARTIFACT_FILE = "artifact.json"
 OLD_ARTIFACT_FILE = "study.json"
 
-# The types saved with their name, by name: the closed set of a GP's parts
-_TAGGED = {cls.__name__: cls for cls in TYPES}
+# The types saved with their name, by name: the closed sets of a GP's parts and of the
+# methods' settings and their parts
+_TAGGED = {cls.__name__: cls for cls in (*gp.TYPES, *settings.TYPES)}
 
 
 def _encode(value: Any) -> Any:
     """`value` as JSON data: a dataclass as a dict of its fields (with its type's
-    name if it is one of a GP's parts), an array as nested lists (an empty one as its
+    name if it is tagged), an array as nested lists (an empty one as its
     shape, which nested lists would lose)."""
     if dataclasses.is_dataclass(value) and not isinstance(value, type):
-        tag = {"type": type(value).__name__} if type(value) in TYPES else {}
+        tagged = _TAGGED.get(type(value).__name__) is type(value)
+        tag = {"type": type(value).__name__} if tagged else {}
         return tag | {
             field.name: _encode(getattr(value, field.name))
             for field in dataclasses.fields(value)
@@ -58,7 +61,7 @@ def _decode(value: Any, annotation: Any) -> Any:
 
     Handles what runs and studies hold: dataclasses, arrays of floats, lists,
     tuples, dicts with string keys, optional values, unions and plain values. Where a
-    GP part is expected, a tagged dict decodes as the type it names; a union's other
+    tagged type is expected, a tagged dict decodes as the type it names; a union's other
     members are told apart by the data. Raises `StudyFormatError` for a tag that
     names no expected type, or data that fits no member of a union.
     """
@@ -66,9 +69,9 @@ def _decode(value: Any, annotation: Any) -> Any:
     if value is None:
         return None
 
-    # A GP part, by its tag, where the annotation is one or a union holding one
+    # A tagged type, by its tag, where the annotation is one or a union holding one
     expected = {annotation, *args}
-    if isinstance(value, dict) and "type" in value and expected & set(TYPES):
+    if isinstance(value, dict) and "type" in value and expected & {*_TAGGED.values()}:
         tagged = _TAGGED.get(value["type"])
         if tagged not in expected:
             msg = f"A saved {value['type']!r} where {annotation} was expected"
@@ -116,9 +119,10 @@ def _union_member(value: Any, members: tuple[Any, ...]) -> Any:
 
 
 def _check_format(run_data: dict[str, Any], run_path: Path) -> None:
-    """Raises `StudyFormatError` if a saved run predates GPs as data: its fitted GPs
-    hold named hyperparameters and no GP, or (with no iterations) its record holds
-    the GP's kernel as text."""
+    """Raises `StudyFormatError` if a saved run predates GPs as data (its fitted GPs
+    hold named hyperparameters and no GP, or, with no iterations, its record holds
+    the GP's kernel as text), or is a BO run (its record has the prior GP) saved
+    before runs held their settings."""
     surrogates = run_data.get("surrogates", [])
     has_old_surrogates = any("gp" not in surrogate for surrogate in surrogates)
     if has_old_surrogates or "kernel" in run_data.get("record", {}):
@@ -126,6 +130,13 @@ def _check_format(run_data: dict[str, Any], run_path: Path) -> None:
             f"{run_path} was saved before GPs were data (its fitted GPs hold named "
             "hyperparameters, not their GP), so it can't be loaded: rerun the study, "
             "or load it with the version that saved it"
+        )
+        raise StudyFormatError(msg)
+    if "gp" in run_data.get("record", {}) and "settings" not in run_data:
+        msg = (
+            f"{run_path} was saved before runs held their settings (its record holds "
+            "them as text only), so it can't be loaded: rerun the study, or load it "
+            "with the version that saved it"
         )
         raise StudyFormatError(msg)
 
@@ -174,7 +185,8 @@ def save(study: Study, path: str | Path) -> Path:
 def load(path: str | Path) -> Study:
     """Reads the study saved in the folder `path` by `save`.
 
-    Raises `StudyFormatError` for a study saved before GPs were data.
+    Raises `StudyFormatError` for a study saved before GPs were data or before runs
+    held their settings.
     """
     # The artifact, else the older `study.json`, which named it `record`
     path = Path(path)

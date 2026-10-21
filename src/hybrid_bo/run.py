@@ -14,24 +14,28 @@ from hybrid_bo.acquisition import AcquisitionSolution, Scenarios
 from hybrid_bo.gp import FittedGP
 from hybrid_bo.history import History
 from hybrid_bo.problem import Problem, _as_text
+from hybrid_bo.settings import MethodSettings
 
 
 @dataclass(frozen=True)
 class Run:
     """One run of a method: the evaluated points, the fitted surrogate models, the
-    acquisition problems' solutions and a record of how they were produced.
+    acquisition problems' solutions, the method's settings and a record of how they
+    were produced.
 
-    Holds only arrays, numbers and strings, never the problem or any user callable,
-    so it saves as JSON (`hb.save`) and loads without the code that produced it
-    (ADR 0003, ADR 0004).
+    Holds only data (arrays, numbers, strings and frozen dataclasses of them), never
+    the problem or any user callable, so it saves as JSON (`hb.save`) and loads
+    without the code that produced it (ADR 0003, ADR 0004).
     `method` is the label the run was run under: the key in the study's methods, or
     the method's name when run on its own. `index` is its position among that
     method's runs in a study, so run i of every method starts from the same initial
     points. `surrogates` has one fitted surrogate model per iteration, the one behind
     that iteration's trial point, and `acquisitions` the solution of that iteration's
     acquisition problem; both are empty for the baselines. `scenarios` are hybrid
-    BO's, the same in every iteration, and None for the other methods. So every saved
-    run has the same fields.
+    BO's, the same in every iteration, and None for the other methods. `settings` are
+    the BO method's settings in full, which the iteration plots replay, and None for
+    the baselines; the record holds them as text, for people. So every saved run has
+    the same fields.
     """
 
     history: History
@@ -41,6 +45,7 @@ class Run:
     surrogates: list[FittedGP] = field(default_factory=list)
     acquisitions: list[AcquisitionSolution] = field(default_factory=list)
     scenarios: Scenarios | None = None
+    settings: MethodSettings | None = None
 
 
 def _git(path: Path, *args: str) -> str:

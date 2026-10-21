@@ -5,9 +5,6 @@ a fixture in `conftest.py` (here `illustrative_problem`) is filled in by pytest 
 that fixture's value.
 """
 
-import io
-import pickle
-
 import casadi as cas
 import illustrative_example as ex
 import numpy as np
@@ -859,32 +856,22 @@ def test_settings_are_required_and_keyword_only(illustrative_problem):
         )
 
 
-def test_run_pickles_without_the_code_that_produced_it(illustrative_problem):
-    """A hybrid BO run, its GPs and scenarios included, loads from a pickle without
-    user code."""
-
-    class DataOnlyUnpickler(pickle.Unpickler):
-        """Loads only the library's data classes, numpy and builtins."""
-
-        def find_class(self, module, name):
-            """The class `module.name`, if the module is allowed."""
-            allowed = ("hybrid_bo.run", "hybrid_bo.history", "hybrid_bo.gp")
-            allowed += ("hybrid_bo.acquisition", "numpy", "builtins")
-            if not module.startswith(allowed):
-                msg = f"the pickle needs {module}.{name}"
-                raise pickle.UnpicklingError(msg)
-            return super().find_class(module, name)
-
+def test_run_pickles_without_the_code_that_produced_it(
+    illustrative_problem, data_only_pickle
+):
+    """A hybrid BO run, its GPs, scenarios and settings included, loads from a
+    pickle without user code."""
     run = illustrative_run(
         illustrative_problem,
         HybridBOSettings(gp=ex.gp, approximation=SAA(n_scenarios=5)),
     )
 
-    loaded = DataOnlyUnpickler(io.BytesIO(pickle.dumps(run))).load()
+    loaded = data_only_pickle(run)
 
     assert loaded.scenarios is not None and run.scenarios is not None
     np.testing.assert_array_equal(loaded.scenarios.z, run.scenarios.z)
     np.testing.assert_array_equal(loaded.surrogates[-1].X, run.surrogates[-1].X)
+    assert loaded.settings == run.settings
 
 
 def test_failed_evaluation_carries_the_partial_run_with_its_scenarios(

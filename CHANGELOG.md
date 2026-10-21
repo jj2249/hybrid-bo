@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Breaking:** Runs hold their method's settings (#120): `Run.settings` is the
+  `StandardBOSettings` or `HybridBOSettings` a BO run ran with (None for the
+  baselines), saved in full. `hb.plots.iteration` replays from them and loses its
+  `settings=` argument, so a run with a custom solver plots with nothing passed.
+  The record keeps the settings as text, for people. `optimization_loop` takes the
+  settings as a required keyword, `settings=` (None for a method the plots can't
+  replay). The settings classes moved to `hybrid_bo.settings`
+  (still `hb.HybridBOSettings` and `hb.StandardBOSettings`). Studies saved before
+  this change don't load: `hb.load` raises `StudyFormatError`; rerun them.
 - **Breaking:** GPs are data (#119, ADR 0008). A prior GP is
   `hb.gp.GP(mean, kernel, noise_std=0.0, jitter=1e-6)` built from a closed set of
   frozen dataclasses: the `Zero` mean and the kernels `Matern12`, `Matern32`,

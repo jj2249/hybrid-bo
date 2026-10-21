@@ -289,7 +289,14 @@ class Run:
     surrogates: list[FittedGP]  # one per iteration; empty for baselines (default)
     acquisitions: list[AcquisitionSolution]  # one per iteration (#53)
     scenarios: Scenarios | None = None  # hybrid BO only (#29)
+    settings: MethodSettings | None = None  # BO only (#120)
 ```
+
+A BO run holds its method's **settings** in full (#120), the data the iteration plots
+replay; the record holds them as text, for people, and nothing reads that text back.
+The settings dataclasses live in `settings.py`, not with their methods in `bo.py`,
+because `run.py` needs them and `bo.py` imports `run.py`. `MethodSettings` is their
+union, the one place a new method's settings join.
 
 The **record** is built by the library (`run_record`, before the method draws
 anything), not the example: the variables with their bounds, `h_inputs`, `measured`,
@@ -624,7 +631,7 @@ The expansion is first order only: with the second-order term `f` is a generaliz
 the nominal scenario as its scenarios, and each acquisition solution the nominal
 states as one-row `x (1, M)` and `y (1, P)`.
 
-### Methods and the optimization loop (`bo.py`)
+### Methods and the optimization loop (`bo.py`, `settings.py`)
 
 ```python
 @dataclass(frozen=True)
@@ -660,6 +667,8 @@ def optimization_loop(
     trial_point: TrialPoint,
     rng,
     record,  # from run_record, before the method draws
+    *,
+    settings,  # the method's, kept in the run (#120); None if not replayable
 ) -> Run: ...
 
 
@@ -756,7 +765,11 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   `OracleOptimumWarning` if an evaluated point's oracle objective is below it.
 - **Saving** (#53; `saving.py`). `hb.save(study, path)` writes `artifact.json`
   (settings, name, artifact, the run files in order) and `runs/<method>/run-000.json`;
-  `hb.load(path)` reads them back exactly. `save` refuses an existing folder.
+  `hb.load(path)` reads them back exactly. `save` refuses an existing folder. A
+  dataclass from a closed set (a GP's parts, #119; the methods' settings and their
+  parts, #120) is saved with its type's name, so a field holding one of several types
+  loads as the right one. Studies saved before #119 or #120 raise
+  `StudyFormatError`.
 - **Views** (#54; `views.py`). `hb.evaluations(study, optimum=None)`: one row
   per evaluation (method, run, evaluation from 1, iteration from 1 or null for initial
   points, `u_<name>`/`x_<name>`/`y_<name>`, f, `x_oracle_<name>`/`y_oracle_<name>`/
@@ -772,16 +785,14 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   an IQR band and a dotted line after the initial points), `plots.regret(study,
   optimum=None)` (the same on a log scale, as in the paper) and
   `plots.iteration(run, problem, i, *, measure=None, gp=True, scenarios=True,
-  acquisition=True, settings=None)`, one iteration per call, no widgets and no `rng`.
+  acquisition=True)`, one iteration per call, no widgets and no `rng`.
   The GP panel comes from the stored surrogate; the acquisition panels replay the
   method's acquisition problem with u fixed at each grid point, warm-started outwards
   from the stored solution (ADR 0005), so the curve passes through the stored
-  acquisition value. The GP is the run's stored fitted GP, so no GP is ever passed;
-  the other settings are read from the run's record, and `settings` is needed only
-  when they aren't the defaults the record parsing assumes (a custom solver, say;
-  #120 stores them as data). The fields the replay uses (acquisition function, and for
-  hybrid BO the solver, the kind of approximation and its
-  `unknown_states_as_variables`) must match the record. With linearization, the
+  acquisition value. The GP is the run's stored fitted GP and the rest of the replay
+  (acquisition function, approximation, solver) the run's stored settings (#120), so
+  nothing is passed: until #120 the plots rebuilt the settings from the record's text
+  with regular expressions, and a custom solver had to be passed. With linearization, the
   scenarios panel shows the nominal f ± s, with `s` recomputed from the stored
   surrogate, in place of the scenario band.
 - **Entry point** (#51; revised in #65; moved to `experiments/` in #69). An
