@@ -76,8 +76,8 @@ gp = hb.gp.GP(
 # Methods: each takes (problem, measure, initial_points, n, rng), where n is the
 # number of iterations, or of design points for the baseline. Hybrid BO substitutes
 # the GP prediction for the unknown state, with SAA-EI and with SoftSAA-EI at a
-# temperature of 10, deliberately high so late-run improvements still have a gradient
-# (#113 scales it with f)
+# temperature of 1e-6. Its -log keeps a gradient at any temperature, and a temperature
+# near the improvements makes it re-measure the incumbent, which scores tau log 2
 methods = {
     "hybrid_bo": functools.partial(
         hb.hybrid_bo,
@@ -88,7 +88,7 @@ methods = {
     "hybrid_bo_soft": functools.partial(
         hb.hybrid_bo,
         settings=hb.HybridBOSettings(
-            gp=gp, approximation=hb.SoftSAA(10.0, unknown_states_as_variables=False)
+            gp=gp, approximation=hb.SoftSAA(1e-6, unknown_states_as_variables=False)
         ),
     ),
     "standard_bo": functools.partial(
