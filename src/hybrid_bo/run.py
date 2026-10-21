@@ -1,4 +1,4 @@
-"""A run of a method, as pure data (ADR 0003), and the record of how it was produced."""
+"""A run of a method, as pure data (ADR 0003), and its artifact: how it was produced."""
 
 import functools
 import importlib.metadata
@@ -20,8 +20,8 @@ from hybrid_bo.settings import MethodSettings
 @dataclass(frozen=True)
 class Run:
     """One run of a method: the evaluated points, the fitted surrogate models, the
-    acquisition problems' solutions, the method's settings and a record of how they
-    were produced.
+    acquisition problems' solutions, the method's settings and the run's artifact,
+    which says, as text, how they were produced.
 
     Holds only data (arrays, numbers, strings and frozen dataclasses of them), never
     the problem or any user callable, so it saves as JSON (`hb.save`) and loads
@@ -34,12 +34,12 @@ class Run:
     acquisition problem; both are empty for the baselines. `scenarios` are hybrid
     BO's, the same in every iteration, and None for the other methods. `settings` are
     the BO method's settings in full, which the iteration plots replay, and None for
-    the baselines; the record holds them as text, for people. So every saved run has
+    the baselines; the artifact holds them as text, for people. So every saved run has
     the same fields.
     """
 
     history: History
-    record: dict[str, str]
+    artifact: dict[str, str]
     method: str
     index: int = 0
     surrogates: list[FittedGP] = field(default_factory=list)
@@ -93,7 +93,7 @@ def _version(distribution: str) -> str:
         return "unknown"
 
 
-def _problem_record(problem: Problem, measure: object) -> dict[str, str]:
+def _problem_artifact(problem: Problem, measure: object) -> dict[str, str]:
     """The problem's variables, structure and equations, and the measurement, as text.
 
     The measurement is described by its docstring when it has one (the oracle
@@ -114,7 +114,7 @@ def _problem_record(problem: Problem, measure: object) -> dict[str, str]:
     }
 
 
-def _generator_record(rng: np.random.Generator) -> dict[str, str]:
+def _generator_artifact(rng: np.random.Generator) -> dict[str, str]:
     """The generator's seed, spawn key and state, as text: rebuild it with
     `SeedSequence(seed, spawn_key=spawn_key)`."""
     seed_sequence = rng.bit_generator.seed_seq
@@ -128,7 +128,7 @@ def _generator_record(rng: np.random.Generator) -> dict[str, str]:
     }
 
 
-def _versions_record() -> dict[str, str]:
+def _versions_artifact() -> dict[str, str]:
     """The versions of hybrid_bo (with its git commit), Python and the numerical
     packages."""
     return {
@@ -141,7 +141,7 @@ def _versions_record() -> dict[str, str]:
     }
 
 
-def run_record(
+def run_artifact(
     problem: Problem,
     measure: object,
     rng: np.random.Generator,
@@ -157,8 +157,8 @@ def run_record(
     one (the oracle simulation does), else by its name.
     """
     return (
-        _problem_record(problem, measure)
+        _problem_artifact(problem, measure)
         | {"method": method, "settings": settings}
-        | _generator_record(rng)
-        | _versions_record()
+        | _generator_artifact(rng)
+        | _versions_artifact()
     )

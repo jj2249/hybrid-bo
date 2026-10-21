@@ -90,15 +90,15 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - `history.py`: `History` (`u`, `x`, `y`, `f`, oracle values or `None`, `n_initial`)
   `incumbents` and `oracle_incumbents` (the benchmark metric); `_concatenate`
   appends one history to another.
-- `run.py`: `Run` (`history`, `record`, `method`: its label, `record["method"]`
+- `run.py`: `Run` (`history`, `artifact`, `method`: its label, `artifact["method"]`
   unless a study relabels it; `index` in its study; `surrogates`: one `FittedGP` per
   iteration, the one behind its trial point, and `acquisitions`: one
   `AcquisitionSolution` per iteration, both empty for the baselines; `scenarios`,
   hybrid BO only, else None; `settings`, the BO method's settings in full, else
   None), pure data that loads without user code (ADR 0003).
-  `run_record(problem, measure, rng, method, settings)` builds the text record
-  from `_problem_record`, `_generator_record` and `_versions_record` (a study's
-  artifact reuses them); call it before the method draws. `code_version(path)` is
+  `run_artifact(problem, measure, rng, method, settings)` builds the run's artifact,
+  text, from `_problem_artifact`, `_generator_artifact` and `_versions_artifact` (a
+  study's artifact reuses them); call it before the method draws. `code_version(path)` is
   `git describe --always --dirty` plus `-untracked` for untracked files that aren't
   ignored, or `unknown`; `is_clean(version)` says whether it pins the code (the CLI
   checks it before running). A measurement is recorded by
@@ -116,8 +116,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - `saving.py`: `save(study, path)` / `load(path)` (ADR 0004): `artifact.json` lists the
   run files `runs/<method>/run-<index:03d>.json`; `load` also reads the older
   `study.json` (with `record` for `artifact`), but a run saved before #119 (fitted
-  GPs without `gp`, or a record with a `kernel` entry) or a BO run saved before #120
-  (a record with `gp` but no `settings` field) raises `StudyFormatError`
+  GPs without `gp`, or a `record` with a `kernel` entry), a BO run saved before #120
+  (a `record` with `gp` but no `settings` field) or any run saved before #123 (with
+  `record`, the artifact's old name) raises `StudyFormatError`
   (`_check_format`), as do a tag naming no expected type and data that fits no
   member of a union. `_encode`/`_decode`
   convert any dataclass by its type hints; arrays are nested lists of floats (an empty
@@ -211,18 +212,18 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   union (`Run.settings`, the loop and the plots use it); `TYPES`, the types saving
   tags.
 - `bo.py`: `optimization_loop(problem, measure, initial_points, n_iterations,
-  trial_point, rng, record, *, settings) -> Run` (evaluate initial points, then per
+  trial_point, rng, artifact, *, settings) -> Run` (evaluate initial points, then per
   iteration `trial_point(problem, history, rng) -> (u, surrogate, acquisition
   solution)` and evaluate u; the run keeps `settings`; a
   `HybridBOError` gets the partial run as `error.run`). `standard_bo` and
   `hybrid_bo` take `rng` last positionally and `settings` keyword-only and required:
   both settings require `gp`, the prior GP. `StandardBOSettings` and
   `standard_bo` (fit `u -> f`, `standard_acquisition`, `multistart` from `lhs` over
-  the `u` start bounds), `HybridBOSettings` and `hybrid_bo` (record, then
+  the `u` start bounds), `HybridBOSettings` and `hybrid_bo` (artifact, then
   `saa_scenarios` or `nominal_scenario`, then the loop; fit `h_inputs -> y`,
   `hybrid_acquisition`; adds the
-  scenarios to the run and to `error.run`). `_method_record` builds both methods'
-  records: the settings without the GP, and `gp`, the prior GP's repr.
+  scenarios to the run and to `error.run`). `_method_artifact` builds both methods'
+  artifacts: the settings without the GP, and `gp`, the prior GP's repr.
 - `plots.py`: static figures, no widgets and no `rng`. `convergence(study, ax)` and
   `regret(study, optimum, ax)` draw `evaluations` (median and IQR per method over
   evaluations, `_over_evaluations`). `iteration(run, problem, i, *, measure, gp,
@@ -231,7 +232,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   with one figure legend (`_figure_legend`). The GP is iteration i's stored fitted
   GP, for the GP panel and the replay alike; the rest of the replay comes from
   `run.settings` (its type says hybrid or standard BO; None draws the points only).
-  The record's settings text is never read back.
+  The artifact's settings text is never read back.
   `_replay`: standard BO evaluates `standard_acquisition`'s NLP; hybrid BO rebuilds
   `hybrid_acquisition` and solves it over all of `w` with u fixed by equal bounds
   (built with `_pack`), outwards from
@@ -257,7 +258,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   Start bounds are finite and set the ranges of initial points, multistart starts and
   `fsolve` starts.
 - **Runs are pure data.** A `Run` holds arrays, numbers and strings only, so it
-  saves as JSON (and pickles) without user code; the record is text. Plots are functions of a
+  saves as JSON (and pickles) without user code; the artifact is text. Plots are functions of a
   finished run.
 - **Runtime aliases** (e.g. `Symbolic`) are used at runtime. Keep them as plain
   assignments, never `type X = ...`.

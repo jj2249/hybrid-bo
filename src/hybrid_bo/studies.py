@@ -18,7 +18,7 @@ import numpy as np
 from hybrid_bo.errors import HybridBOError, OracleOptimumWarning
 from hybrid_bo.evaluation import Measure
 from hybrid_bo.problem import Problem
-from hybrid_bo.run import Run, _problem_record, _versions_record
+from hybrid_bo.run import Run, _problem_artifact, _versions_artifact
 from hybrid_bo.sampling import initial_points
 
 _logger = logging.getLogger(__name__)
@@ -137,13 +137,14 @@ def study(
         method_runs = repeat(method, problem, measure, settings)
         runs += [replace(run, method=label) for run in method_runs]
 
-    # Each method with its settings, from the record of one of its runs
-    artifact = _problem_record(problem, measure)
-    records = {run.method: run.record for run in runs}
+    # Each method with its settings, from the artifact of one of its runs
+    artifact = _problem_artifact(problem, measure)
+    run_artifacts = {run.method: run.artifact for run in runs}
     method_lines = []
     for label in methods:
-        if label in records:
-            text = f"{records[label]['method']}({records[label]['settings']})"
+        if label in run_artifacts:
+            run_artifact = run_artifacts[label]
+            text = f"{run_artifact['method']}({run_artifact['settings']})"
         else:
             text = "no runs"
         method_lines.append(f"{label}: {text}")
@@ -154,7 +155,7 @@ def study(
         artifact["oracle_optimum"] = repr(float(optimum))
         _check_optimum(runs, float(optimum))
 
-    return Study(tuple(runs), settings, name, artifact | _versions_record())
+    return Study(tuple(runs), settings, name, artifact | _versions_artifact())
 
 
 def _check_optimum(runs: list[Run], optimum: float) -> None:

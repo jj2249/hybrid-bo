@@ -11,7 +11,7 @@ import numpy as np
 from hybrid_bo.errors import HybridBOError
 from hybrid_bo.evaluation import Measure, evaluate
 from hybrid_bo.problem import Problem
-from hybrid_bo.run import Run, run_record
+from hybrid_bo.run import Run, run_artifact
 from hybrid_bo.sampling import _start_bounds, lhs, uniform
 
 
@@ -21,7 +21,7 @@ def _run_design(
     initial_points: np.ndarray,
     design: np.ndarray,
     rng: np.random.Generator,
-    record: dict[str, str],
+    artifact: dict[str, str],
 ) -> Run:
     """Evaluates the initial points (n_initial, N), then the design (n_points, N).
 
@@ -37,9 +37,9 @@ def _run_design(
         if error.history is not None:
             n_evaluated = len(error.history.u)
             partial = replace(error.history, n_initial=min(n_initial, n_evaluated))
-            error.run = Run(partial, record, record["method"])
+            error.run = Run(partial, artifact, artifact["method"])
         raise
-    return Run(replace(history, n_initial=n_initial), record, record["method"])
+    return Run(replace(history, n_initial=n_initial), artifact, artifact["method"])
 
 
 def latin_hypercube_sampling(
@@ -55,11 +55,11 @@ def latin_hypercube_sampling(
     Raises what `evaluate` raises; a `HybridBOError` carries the partial run as
     `error.run`.
     """
-    record = run_record(
+    artifact = run_artifact(
         problem, measure, rng, "latin_hypercube_sampling", f"n_points={n_points}"
     )
     design = lhs(*_start_bounds(problem.system.u), n_points, rng)
-    return _run_design(problem, measure, initial_points, design, rng, record)
+    return _run_design(problem, measure, initial_points, design, rng, artifact)
 
 
 def uniform_sampling(
@@ -75,8 +75,8 @@ def uniform_sampling(
     Raises what `evaluate` raises; a `HybridBOError` carries the partial run as
     `error.run`.
     """
-    record = run_record(
+    artifact = run_artifact(
         problem, measure, rng, "uniform_sampling", f"n_points={n_points}"
     )
     design = uniform(*_start_bounds(problem.system.u), n_points, rng)
-    return _run_design(problem, measure, initial_points, design, rng, record)
+    return _run_design(problem, measure, initial_points, design, rng, artifact)

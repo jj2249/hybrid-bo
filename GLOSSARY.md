@@ -159,14 +159,17 @@ method starts from the same initial points. The unit that is saved, loaded and a
 _Avoid_: benchmark, experiment, results, batch
 
 **Artifact**:
-What a saved study leaves to say what it ran and how: the problem, the measurement,
-each method with its settings, the seed, the oracle optimum if stated, and the versions
-of the code and packages. One per study. It lists the study's runs but doesn't hold
-them.
+What a study or a run leaves to say what it ran and how, as text for people. One per
+study and one per run. A study's artifact holds the problem, the measurement, each
+method with its settings, the seed, the oracle optimum if stated, and the versions of
+the code and packages; it lists the study's runs but doesn't hold them. A run's
+artifact holds the problem, the measurement, its method with its settings, its
+generator's seed and state, and the versions, so a run made without a study still says
+how it was made.
 _Avoid_: record, metadata, manifest, provenance
 
 **Study log**:
-The record of a study's progress as it ran: each run and iteration with its time, and
+What a study logged as it ran: each run and iteration with its time, and
 every warning raised. Saved with the study, beside its artifact. It is for reading, not
 analysis: the runs hold the results.
 _Avoid_: run log

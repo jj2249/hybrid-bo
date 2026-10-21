@@ -156,13 +156,13 @@ def fake_run(
         f_oracle=None if f_oracle is None else np.array(f_oracle),
         n_initial=2,
     )
-    return Run(history, record={"method": method}, method=method, index=index)
+    return Run(history, artifact={"method": method}, method=method, index=index)
 
 
-def fake_study(runs: list[Run], record: dict[str, str] | None = None) -> Study:
+def fake_study(runs: list[Run], artifact: dict[str, str] | None = None) -> Study:
     """A study of these runs, 2 initial points and 2 iterations each."""
     settings = StudySettings(n_runs=2, n_initial=2, n_iterations=2, seed=0)
-    return Study(tuple(runs), settings, "fake", record or {})
+    return Study(tuple(runs), settings, "fake", artifact or {})
 
 
 def band(ax: Axes) -> np.ndarray:
@@ -239,12 +239,12 @@ def test_regret_is_the_median_regret_on_a_log_axis():
 
 
 @pytest.mark.parametrize(
-    ("f_oracle", "record"),
+    ("f_oracle", "artifact"),
     [(None, {"oracle_optimum": "0.5"}), ([3.0, 1.0], {})],
 )
-def test_regret_needs_an_oracle_and_an_optimum(f_oracle, record):
+def test_regret_needs_an_oracle_and_an_optimum(f_oracle, artifact):
     """Without oracle values, or without an optimum, there is no regret to draw."""
-    study = fake_study([fake_run("a", 0, [3.0, 1.0], f_oracle)], record)
+    study = fake_study([fake_run("a", 0, [3.0, 1.0], f_oracle)], artifact)
     with pytest.raises(ValueError, match="no regret"):
         plots.regret(study)
 

@@ -64,7 +64,7 @@ def bo_run(index: int, f: list[float], f_oracle: list[float]) -> hb.Run:
     n_iterations = len(f) - 2
     return hb.Run(
         history(f, f_oracle),
-        record={},
+        artifact={},
         method="bo",
         index=index,
         surrogates=[surrogate([0.1 * i, 0.2 * i]) for i in range(n_iterations)],
@@ -74,7 +74,7 @@ def bo_run(index: int, f: list[float], f_oracle: list[float]) -> hb.Run:
 
 def baseline_run(index: int, f: list[float], f_oracle: list[float]) -> hb.Run:
     """A baseline run: no surrogates and no acquisition solutions."""
-    return hb.Run(history(f, f_oracle), record={}, method="lhs", index=index)
+    return hb.Run(history(f, f_oracle), artifact={}, method="lhs", index=index)
 
 
 # Noise: the second BO run's best measured point is not its best oracle point. The
@@ -177,7 +177,7 @@ def test_regret_is_null_without_an_optimum():
 def test_oracle_columns_are_null_without_oracle_values():
     """A run without oracle values has null oracle values, oracle incumbents and
     regret, with the same columns as a run that has them."""
-    run = hb.Run(history([1.0, 0.0], None), record={}, method="lhs")
+    run = hb.Run(history([1.0, 0.0], None), artifact={}, method="lhs")
     study = hb.Study((run,), SETTINGS, name=None, artifact=ARTIFACT)
 
     frame = hb.evaluations(study)

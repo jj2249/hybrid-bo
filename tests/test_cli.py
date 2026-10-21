@@ -61,7 +61,7 @@ def test_run_then_plot_the_newest_study(tmp_path):
     assert study.artifact["oracle_optimum"] == repr(ex.optimum)
     runs = [run for run in study.runs if run.method == "standard_bo"]
     assert len(runs) == 2
-    assert runs[0].record["seed"] == "0"
+    assert runs[0].artifact["seed"] == "0"
     n_initial = study.settings.n_initial
     rng = np.random.default_rng(0).spawn(2)[1]
     expected = initial_points(ex.system.u, n_initial, rng)
