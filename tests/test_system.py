@@ -125,10 +125,12 @@ def test_system_rejects(overrides, match):
         system(**overrides)
 
 
-def test_more_than_one_unknown_state_is_not_supported_yet():
-    """A system with two unknown states raises NotImplementedError."""
-    with pytest.raises(NotImplementedError, match="one unknown state"):
-        system(y=[Y, Z], measured=[Y, Z])
+def test_a_system_can_have_more_than_one_unknown_state():
+    """A system with two unknown states, both measured, constructs, and g takes them
+    as one column in the order of y."""
+    two = system(y=[Y, Z], g=lambda v: [v.x - v.y * v.z], measured=[Y, Z])
+    assert two.n_y == 2
+    assert two.g(0.5, [2.0, 3.0], 0.0).full().item() == pytest.approx(0.5 - 6.0)
 
 
 def test_unknown_name_in_a_callable():

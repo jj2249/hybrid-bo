@@ -305,41 +305,45 @@ def nominal_scenario(n_y: int) -> Scenarios:
 
 def _scenario_unknown_states(
     system: System,
-    fitted: FittedGP,
+    fitted: tuple[FittedGP, ...],
     scenarios: Scenarios,
     u: Any,
     x: Any,
 ) -> Any:
-    """The scenarios' unknown states (S, P): the GP's prediction at each scenario's
-    arguments of h, mean + std * z_s, for u (N,) and x (S, M) as numpy arrays, or u
-    (N, 1) and x (S, M) as CasADi matrices.
+    """The scenarios' unknown states (S, P): unknown state j of scenario s is GP j's
+    prediction at the scenario's arguments of h, mean_j + std_j * z_sj, for u (N,)
+    and x (S, M) as numpy arrays, or u (N, 1) and x (S, M) as CasADi matrices.
+    `fitted` holds one fitted GP per unknown state, in the order of `system.y`.
     """
-    # One unknown state (P = 1), so the GP's mean and std match the one column of z
+    # One column of mean and std per unknown state, matching the columns of z
     n_scenarios = len(scenarios.w)
     if isinstance(x, np.ndarray):
         inputs = np.column_stack(_h_inputs(system, np.tile(u, (n_scenarios, 1)), x))
-        mean, std = predict(fitted, inputs)
-        return mean[:, np.newaxis] + std[:, np.newaxis] * scenarios.z
+        mean, std = zip(*(predict(gp, inputs) for gp in fitted), strict=True)
+        return np.column_stack(mean) + np.column_stack(std) * scenarios.z
     inputs = cas.horzcat(*_h_inputs(system, cas.repmat(u.T, n_scenarios, 1), x))
-    mean, std = predict(fitted, inputs)
-    return mean + std * Symbolic(scenarios.z)
+    mean, std = zip(*(predict(gp, inputs) for gp in fitted), strict=True)
+    return cas.horzcat(*mean) + cas.horzcat(*std) * Symbolic(scenarios.z)
 
 
-def _sensitivity(problem: Problem, fitted: FittedGP) -> cas.Function:
+def _sensitivity(problem: Problem, fitted: tuple[FittedGP, ...]) -> cas.Function:
     """The total derivative df/dz of the objective in the scenario draws at the
     nominal scenario (z = 0), as a function of columns x (M, 1), y (P, 1) and u
-    (N, 1) to a row a (1, P).
+    (N, 1) to a row a (1, P). `fitted` holds one fitted GP per unknown state.
 
     The states move with the draws: y = mean(x, u) + L(x, u) z, and x with y through
     g = 0. By the implicit function theorem, dx/dz = -(g_x + g_y mean_x)^-1 g_y L and
-    dy/dz = mean_x dx/dz + L, so a = f_x dx/dz + f_y dy/dz. L is the GP's std.
+    dy/dz = mean_x dx/dz + L, so a = f_x dx/dz + f_y dy/dz. L = diag(std_1, ...,
+    std_P), the GPs' stds, since the GPs are independent.
     """
-    # Symbols for the point, and the GP's mean and std there
+    # Symbols for the point, and the GPs' means and stds there, as columns (P, 1)
     system = problem.system
     x = Symbolic.sym("x", system.n_x)
     y = Symbolic.sym("y", system.n_y)
     u = Symbolic.sym("u", system.n_u)
-    mean, std = predict(fitted, cas.horzcat(*_h_inputs(system, u.T, x.T)))
+    inputs = cas.horzcat(*_h_inputs(system, u.T, x.T))
+    means, stds = zip(*(predict(gp, inputs) for gp in fitted), strict=True)
+    mean, std = cas.vertcat(*means), cas.vertcat(*stds)
 
     # How the states move with the draws, then the objective
     g, f, L = system.g(x, y, u), problem.f(x, y, u), cas.diag(std)
@@ -352,7 +356,7 @@ def _sensitivity(problem: Problem, fitted: FittedGP) -> cas.Function:
 
 def hybrid_acquisition(
     problem: Problem,
-    fitted: FittedGP,
+    fitted: tuple[FittedGP, ...],
     scenarios: Scenarios,
     incumbent: float,
     acquisition: EI | LCB,
@@ -360,9 +364,11 @@ def hybrid_acquisition(
 ) -> AcquisitionProblem:
     """The acquisition problem of hybrid BO (paper, Problems 8 and 9).
 
-    Each scenario s has its own copy x_s of the mechanistic states, and the known
-    equations g(x_s, y_s, u) = 0 are constraints. Its unknown states y_s are the GP's
-    prediction at the scenario's arguments of h, mean + std * z_s. With the
+    `fitted` is the surrogate model: one fitted GP per unknown state, in the order of
+    `problem.system.y`. Each scenario s has its own copy x_s of the mechanistic
+    states, and the known equations g(x_s, y_s, u) = 0 are constraints. Its unknown
+    states y_s are the GPs' prediction at the scenario's arguments of h,
+    mean + std * z_s (`_scenario_unknown_states`). With the
     approximation's `unknown_states_as_variables` the y_s are variables too, tied to
     the prediction by an equality constraint (Problem 8), which helps IPOPT; otherwise
     the prediction is substituted for them.
@@ -381,9 +387,9 @@ def hybrid_acquisition(
     variable is boxed by its bounds and started within its start bounds. Raises
     `TypeError` unless `acquisition` is an `EI` or an `LCB` and `approximation` an
     `SAA`, a `SoftSAA` or a `Linearization`, `NotImplementedError` for `LCB` with
-    `Linearization`, and `ValueError` for `LCB` with `SoftSAA`, for scenarios without
-    one column per unknown state, and with `Linearization`, for scenarios other than
-    the nominal scenario.
+    `Linearization`, and `ValueError` for `LCB` with `SoftSAA`, for scenarios or
+    fitted GPs without one column or one GP per unknown state, and with
+    `Linearization`, for scenarios other than the nominal scenario.
     """
     # The checks, and the symbols for u and each scenario's mechanistic states
     _check_acquisition(acquisition)
@@ -394,6 +400,12 @@ def hybrid_acquisition(
         msg = (
             f"The scenarios need one column of z per unknown state ({system.n_y}), "
             f"got {scenarios.z.shape[1]}"
+        )
+        raise ValueError(msg)
+    if len(fitted) != system.n_y:
+        msg = (
+            f"The surrogate model needs one fitted GP per unknown state ({system.n_y}), "
+            f"got {len(fitted)}"
         )
         raise ValueError(msg)
     is_nominal = len(scenarios.w) == 1 and not np.any(scenarios.z)
@@ -473,7 +485,7 @@ def hybrid_acquisition(
 
 def _scenario_states(
     system: System,
-    fitted: FittedGP,
+    fitted: tuple[FittedGP, ...],
     scenarios: Scenarios,
     problem: AcquisitionProblem,
     w: np.ndarray,
@@ -482,7 +494,8 @@ def _scenario_states(
     problem.
 
     The x_s are read from w. So are the y_s when they are variables; otherwise they
-    are the GP's prediction at each scenario's arguments of h, mean + std * z_s.
+    are the GPs' prediction at each scenario's arguments of h, mean + std * z_s, from
+    `fitted`, one fitted GP per unknown state.
     """
     u, x, y = _unpack(problem, w)
     if y is None:

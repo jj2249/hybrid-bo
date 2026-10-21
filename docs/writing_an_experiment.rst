@@ -32,7 +32,8 @@ A GP learns ``h`` from measurements. In the illustrative example, ``u`` is in
 ``[-2, 2]``, the known equation is ``x + exp(x) = y``, the unknown one is
 ``y = sin(u)`` and the objective is ``f = (6x - 2)^2 sin(12x - 4)``.
 
-Only one unknown state is supported for now.
+A system may have several unknown states; hybrid BO then fits one GP per unknown
+state, all over the same arguments of ``h``.
 
 CasADi in two minutes
 ---------------------

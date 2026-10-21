@@ -5,7 +5,9 @@ artifact, and the list of run files) and one file per run,
 `path/runs/<method>/run-000.json`, holding every field of the run. `load` also reads
 a study saved before the artifact was named: `study.json` with a `record` key, but not
 one saved before GPs were data (ADR 0008), before runs held their settings or before
-runs had an artifact (a run's JSON with `record`, not `artifact`). Arrays are
+runs had an artifact (a run's JSON with `record`, not `artifact`); a run saved with one
+fitted GP per iteration, before surrogates were tuples, loads with each as a 1-tuple.
+Arrays are
 nested lists; float64 values round-trip exactly. A GP's means, kernels and
 hyperparameters, and the methods' settings and their parts, are saved with their type's
 name (`"type"`), so a field that holds one of several types (kernels, approximations)
@@ -119,15 +121,27 @@ def _union_member(value: Any, members: tuple[Any, ...]) -> Any:
     return fits[0]
 
 
+def _with_surrogate_tuples(run_data: dict[str, Any]) -> dict[str, Any]:
+    """The saved run `run_data` with each iteration's surrogate a list of fitted GPs:
+    a run saved before more than one unknown state has one fitted GP (a dict) per
+    iteration, which becomes a list of one."""
+    surrogates = [
+        [surrogate] if isinstance(surrogate, dict) else surrogate
+        for surrogate in run_data.get("surrogates", [])
+    ]
+    return run_data | {"surrogates": surrogates}
+
+
 def _check_format(run_data: dict[str, Any], run_path: Path) -> None:
     """Raises `StudyFormatError` if a saved run predates GPs as data (its fitted GPs
     hold named hyperparameters and no GP, or, with no iterations, its `record` holds
     the GP's kernel as text), is a BO run (its `record` has the prior GP) saved
     before runs held their settings, or was saved before runs had an artifact (it
-    has `record`, the artifact's old name)."""
+    has `record`, the artifact's old name). Takes the run with its surrogates as
+    lists (`_with_surrogate_tuples`)."""
     # The older formats first, for their specific messages: their runs had `record` too
-    surrogates = run_data.get("surrogates", [])
-    has_old_surrogates = any("gp" not in surrogate for surrogate in surrogates)
+    fitted_gps = [gp for surrogate in run_data["surrogates"] for gp in surrogate]
+    has_old_surrogates = any("gp" not in fitted for fitted in fitted_gps)
     if has_old_surrogates or "kernel" in run_data.get("record", {}):
         msg = (
             f"{run_path} was saved before GPs were data (its fitted GPs hold named "
@@ -209,7 +223,7 @@ def load(path: str | Path) -> Study:
     # The runs, in the order the artifact lists them
     runs = []
     for run_path in study_data["runs"]:
-        run_data = json.loads((path / run_path).read_text())
+        run_data = _with_surrogate_tuples(json.loads((path / run_path).read_text()))
         _check_format(run_data, path / run_path)
         runs.append(_decode(run_data, Run))
     return Study(

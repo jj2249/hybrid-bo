@@ -16,6 +16,7 @@ import numpy as np
 from hybrid_bo.gp import _hyperparameters
 from hybrid_bo.history import incumbents, n_iterations, oracle_incumbents
 from hybrid_bo.run import Run
+from hybrid_bo.settings import HybridBOSettings, StandardBOSettings
 from hybrid_bo.studies import Study
 
 if TYPE_CHECKING:
@@ -158,10 +159,23 @@ def summary(study: Study) -> "pl.DataFrame":
     )
 
 
+def _outputs(run: Run, artifact: dict[str, str], n: int) -> list[str]:
+    """The names of the variables the n GPs of each of a run's surrogates model: the
+    unknown states (named from the study's artifact) for hybrid BO, the objective
+    `f` for standard BO, else their positions as text."""
+    if isinstance(run.settings, HybridBOSettings):
+        return _names(artifact, "y", n)
+    if isinstance(run.settings, StandardBOSettings):
+        return ["f"]
+    return [str(j) for j in range(n)]
+
+
 def hyperparameters(study: Study) -> "pl.DataFrame":
     """The fitted GPs' hyperparameters over the iterations: one row per run,
-    iteration and hyperparameter entry, with columns `method`, `run`, `iteration`
-    (from 1, as in `evaluations`), `hyperparameter` (its dotted path in the GP, e.g.
+    iteration, fitted GP and hyperparameter entry, with columns `method`, `run`,
+    `iteration` (from 1, as in `evaluations`), `output` (the variable the GP models:
+    the unknown state's name for hybrid BO, which fits one GP per unknown state, and
+    `f` for standard BO), `hyperparameter` (its dotted path in the GP, e.g.
     `kernel.outputscale`), `entry` (its position in the hyperparameter, from 0; e.g.
     one lengthscale per input) and `value`. Fixed hyperparameters are listed too.
     The baselines fit nothing, so they have no rows. Raises `ImportError` without
@@ -169,16 +183,20 @@ def hyperparameters(study: Study) -> "pl.DataFrame":
     """
     pl = _polars()
     rows = [
-        (run.method, run.index, iteration, path, entry, float(value))
+        (run.method, run.index, iteration, output, path, entry, float(value))
         for run in study.runs
         for iteration, surrogate in enumerate(run.surrogates, start=1)
-        for path, values, _ in _hyperparameters(surrogate.gp, surrogate.X.shape[1])
+        for output, fitted in zip(
+            _outputs(run, study.artifact, len(surrogate)), surrogate, strict=True
+        )
+        for path, values, _ in _hyperparameters(fitted.gp, fitted.X.shape[1])
         for entry, value in enumerate(values if isinstance(values, tuple) else [values])
     ]
     schema = {
         "method": pl.String,
         "run": pl.Int64,
         "iteration": pl.Int64,
+        "output": pl.String,
         "hyperparameter": pl.String,
         "entry": pl.Int64,
         "value": pl.Float64,

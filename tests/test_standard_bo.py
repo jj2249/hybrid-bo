@@ -153,10 +153,11 @@ def test_run_has_one_surrogate_per_iteration(illustrative_problem):
     assert run.history.u.shape == (4, 1)
     assert np.all((-2.0 <= run.history.u) & (run.history.u <= 2.0))
 
-    # The surrogates: one per iteration, fitted on the points before its trial point
+    # The surrogates: one per iteration, fitted on the points before its trial point,
+    # each a 1-tuple of the GP of f
     assert len(run.surrogates) == 2
-    assert all(isinstance(fitted, FittedGP) for fitted in run.surrogates)
-    assert [len(fitted.X) for fitted in run.surrogates] == [2, 3]
+    assert all(isinstance(fitted, FittedGP) for (fitted,) in run.surrogates)
+    assert [len(fitted.X) for (fitted,) in run.surrogates] == [2, 3]
 
 
 def test_run_pickles_without_the_code_that_produced_it(
@@ -170,7 +171,7 @@ def test_run_pickles_without_the_code_that_produced_it(
 
     assert loaded.artifact == run.artifact
     np.testing.assert_array_equal(loaded.history.u, run.history.u)
-    np.testing.assert_array_equal(loaded.surrogates[-1].X, run.surrogates[-1].X)
+    np.testing.assert_array_equal(loaded.surrogates[-1][0].X, run.surrogates[-1][0].X)
     assert loaded.settings == run.settings
 
 
@@ -256,7 +257,7 @@ def test_stored_acquisition_value_is_the_objective_at_the_trial_point(
 
     history = run.history
     assert len(run.acquisitions) == 2
-    for i, (solution, fitted) in enumerate(
+    for i, (solution, (fitted,)) in enumerate(
         zip(run.acquisitions, run.surrogates, strict=True)
     ):
         point = history.n_initial + i

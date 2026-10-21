@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Breaking:** A system may have more than one unknown state (#114). Hybrid BO fits one
+  independent GP per unknown state, all from the settings' prior GP over the same
+  arguments of h. `Run.surrogates` holds a tuple of fitted GPs per iteration (one per
+  unknown state; a 1-tuple for standard BO), and `load` reads older runs' single GPs
+  as 1-tuples. `hb.hyperparameters` has an `output` column naming the variable each GP
+  models (the unknown state, or `f`). `plots.iteration` with more than one unknown
+  state draws only with `gp=False`. Results with one unknown state don't change.
 - A study's artifact gives each BO method's prior GP (#128): the run artifact's `gp`,
   on the line after the method's settings in `methods`, so the study artifact alone
   says how to run the study again. Studies saved before have it only in their runs.

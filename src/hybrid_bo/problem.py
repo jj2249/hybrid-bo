@@ -226,12 +226,6 @@ class System:
                 msg = f"The system needs at least one variable in {label}"
                 raise ValueError(msg)
         _check_unique([var.name for var in (*u, *x, *y)], "u, x and y together")
-        if len(y) > 1:
-            msg = (
-                f"Only one unknown state is supported for now (got {len(y)}: "
-                f"{', '.join(var.name for var in y)})"
-            )
-            raise NotImplementedError(msg)
 
         # The structure: what h depends on, and what the sensors read
         h_inputs, measured = tuple(h_inputs), tuple(measured)

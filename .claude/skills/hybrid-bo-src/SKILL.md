@@ -21,11 +21,13 @@ code uses GLOSSARY.md's terms; use them in PRs, tests and comments too.
   The library then always solves the **root-finding problem**: `g` for the unmeasured
   states given `u` and the measured variables.
 - **Hybrid BO** (`bo.py`, `acquisition.py`): the unknown equations are never used in
-  the acquisition problem. A GP maps the `h_inputs` columns of `(u, x)` to `y` and is
-  trained on the evaluated points. `HybridBOSettings.approximation` sets how the
+  the acquisition problem. The surrogate model is one independent GP per unknown state
+  (any P >= 1), each mapping the `h_inputs` columns of `(u, x)` to its column of `y`,
+  all from the one prior GP in the settings and trained on the evaluated points. `HybridBOSettings.approximation` sets how the
   acquisition function is computed (`acquisition` says what): the sample-average
   approximation `SAA`, `SoftSAA` or `Linearization` (below). With SAA:
-  - `SAA.n_scenarios` scenarios `mean + std * z_s`. The scenario draws `z_s` are drawn once
+  - `SAA.n_scenarios` scenarios `mean + std * z_s` (unknown state j:
+    `mean_j + std_j * z_sj`, from GP j). The scenario draws `z_s` are drawn once
     per run and reused in every iteration.
   - Each scenario has its own copy `x_s` of the mechanistic states, and
     `g(x_s, y_s, u) = 0` holds for every scenario.
@@ -45,7 +47,7 @@ code uses GLOSSARY.md's terms; use them in PRs, tests and comments too.
     weight 1), so `x̄` solves `g` with `ȳ` the GP's mean (or tied to it, by the same
     flag). Lin-EI is analytic EI of `N(f(x̄, ȳ, u), s²)`, with `s² = a aᵀ` and `a` the row
     **total** derivative `df/dz` by the implicit function theorem (`_sensitivity`;
-    DESIGN.md). The partial `f_y L` is wrong: it gives `s ≡ 0` on the illustrative
+    DESIGN.md), with `L = diag(std_1, ..., std_P)`. The partial `f_y L` is wrong: it gives `s ≡ 0` on the illustrative
     example. EI only: LCB raises `NotImplementedError`.
   - Solved with `multistart`. The trial point is the `u` part of the solution.
 - **Standard BO** (`bo.py`): a GP directly on `u -> f`, with analytic EI or LCB over
@@ -64,8 +66,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `h_inputs`, `measured`) and `Problem` (`system`, `f`). `g` and `f` are user
   callables over a namespace `v` of symbols (`v.x`), traced once in `_trace` into
   `cas.Function`s with column-vector inputs in the paper's order `(x, y, u)`. All
-  input checks live in the constructors and raise `ValueError` (`NotImplementedError`
-  for `P > 1`). `Symbolic` (`cas.SX`) is the symbol type of all library math. It is
+  input checks live in the constructors and raise `ValueError`; any number P >= 1 of
+  unknown states is allowed. `Symbolic` (`cas.SX`) is the symbol type of all library math. It is
   SX only: switching it to MX breaks the GP (`cas.chol` has no MX overload) and the
   artifact's equation text (DESIGN.md, Decisions). `_h_inputs(system, u, x)` gives the `h_inputs`
   columns of numeric or symbolic `u`, `x` (hybrid BO's GP training data and
@@ -91,8 +93,10 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `incumbents` and `oracle_incumbents` (the benchmark metric); `_concatenate`
   appends one history to another.
 - `run.py`: `Run` (`history`, `artifact`, `method`: its label, `artifact["method"]`
-  unless a study relabels it; `index` in its study; `surrogates`: one `FittedGP` per
-  iteration, the one behind its trial point, and `acquisitions`: one
+  unless a study relabels it; `index` in its study; `surrogates`: per iteration a
+  `tuple[FittedGP, ...]`, the surrogate behind its trial point (hybrid BO: one GP per
+  unknown state in the order of `system.y`; standard BO: a 1-tuple, the GP of f), and
+  `acquisitions`: one
   `AcquisitionSolution` per iteration, both empty for the baselines; `scenarios`,
   hybrid BO only, else None; `settings`, the BO method's settings in full, else
   None), pure data that loads without user code (ADR 0003).
@@ -116,7 +120,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `rng`: the settings alone reproduce a study.
 - `saving.py`: `save(study, path)` / `load(path)` (ADR 0004): `artifact.json` lists the
   run files `runs/<method>/run-<index:03d>.json`; `load` also reads the older
-  `study.json` (with `record` for `artifact`), but a run saved before #119 (fitted
+  `study.json` (with `record` for `artifact`), and a run saved before #114, whose
+  surrogates are single fitted GPs, as 1-tuples (`_with_surrogate_tuples`, before
+  `_check_format`); but a run saved before #119 (fitted
   GPs without `gp`, or a `record` with a `kernel` entry), a BO run saved before #120
   (a `record` with `gp` but no `settings` field) or any run saved before #123 (with
   `record`, the artifact's old name) raises `StudyFormatError`
@@ -132,7 +138,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - `views.py`: `evaluations(study, optimum=None)`, `summary(study)` and
   `hyperparameters(study)`, Polars data frames (one row per evaluation, per method,
   per hyperparameter entry of each fitted GP, named by its dotted path in the GP,
-  e.g. `kernel.kernel.lengthscale`); each docstring lists its columns. Variable
+  e.g. `kernel.kernel.lengthscale`, with `output` naming the variable the GP models:
+  the unknown state for hybrid BO, `f` for standard BO); each docstring lists its
+  columns. Variable
   columns are named from the study's artifact (`_names` reads `Var(name='...')`).
   Polars is imported inside the functions (`_polars`), so `import hybrid_bo` works
   without it; a missing Polars raises `ImportError` naming `hybrid-bo[analysis]`.
@@ -197,13 +205,16 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `SoftSAA`). `nominal_scenario(n_y)` is linearization's one scenario, which
   `hybrid_acquisition` requires with it (`ValueError` otherwise);
   `_sensitivity(problem, fitted)` is the `cas.Function` `(x, y, u) -> a (1, P)`.
+  Every hybrid builder (`hybrid_acquisition`, `_scenario_unknown_states`,
+  `_sensitivity`, `_scenario_states`) takes `fitted`, the surrogate model: a tuple of
+  one fitted GP per unknown state (`ValueError` in `hybrid_acquisition` otherwise).
   `Scenarios` (`z (S, P)`,
   `w (S,)`, checked), `saa_scenarios(n, n_y, rng)` and `hybrid_acquisition(..., acquisition,
   approximation)` (variables
   `u`, then `vec` of the `(S, M)` x copies, then of the `(S, P)` y copies if variables;
   bounds and start bounds from each `Var`, repeated per scenario; `g` per scenario,
   followed by its GP tie). `_scenario_unknown_states` is the one GP scenario
-  prediction (mean + std * z_s), symbolic or numeric.
+  prediction (`mean_j + std_j * z_sj` per unknown state j), symbolic or numeric.
   `AcquisitionSolution(value, x, y)` is one iteration's solution: the minimized
   objective at the trial point and, for hybrid BO, the scenario states `(S, M)`,
   `(S, P)`, which `_scenario_states(system, fitted, scenarios,
@@ -216,14 +227,14 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - `bo.py`: `optimization_loop(problem, measure, initial_points, n_iterations,
   trial_point, rng, artifact, *, settings) -> Run` (evaluate initial points, then per
   iteration `trial_point(problem, history, rng) -> (u, surrogate, acquisition
-  solution)` and evaluate u; the run keeps `settings`; a
+  solution)`, the surrogate a tuple of fitted GPs, and evaluate u; the run keeps `settings`; a
   `HybridBOError` gets the partial run as `error.run`). `standard_bo` and
   `hybrid_bo` take `rng` last positionally and `settings` keyword-only and required:
   both settings require `gp`, the prior GP. `StandardBOSettings` and
   `standard_bo` (fit `u -> f`, `standard_acquisition`, `multistart` from `lhs` over
   the `u` start bounds), `HybridBOSettings` and `hybrid_bo` (artifact, then
-  `saa_scenarios` or `nominal_scenario`, then the loop; fit `h_inputs -> y`,
-  `hybrid_acquisition`; adds the
+  `saa_scenarios` or `nominal_scenario`, then the loop; fit one GP `h_inputs -> y_j`
+  per unknown state, in the order of `system.y`, `hybrid_acquisition`; adds the
   scenarios to the run and to `error.run`). `_method_artifact` builds both methods'
   artifacts: the settings without the GP, and `gp`, the prior GP's repr.
 - `plots.py`: static figures, no widgets and no `rng`. `convergence(study, ax)` and
@@ -231,7 +242,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   evaluations, `_over_evaluations`). `iteration(run, problem, i, *, measure, gp,
   scenarios, acquisition) -> Figure` draws the state before trial point i over the
   `u` start bounds, with one figure legend (`_figure_legend`); it dispatches on
-  `n_u` (`ValueError` above 2). 1D (`_iteration_1d`): stacked curves over 101 points
+  `n_u` (`ValueError` above 2, and for hybrid BO's GP panels with P > 1: they draw
+  `surrogates[i][0]` and `y[:, 0]`; with `gp=False` the replay works for any P). 1D (`_iteration_1d`): stacked curves over 101 points
   plus the trial point. 2D (`_iteration_2d`): filled contours over a 30 x 30 grid, in
   rows of `_Map` panels (oracle | mean | std | acquisition; empty rows and columns
   dropped), oracle and mean sharing a color scale, panels of f log-scaled when
@@ -283,7 +295,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
      the baselines draw their whole design; standard BO draws nothing;
   3. each evaluation: oracle `fsolve` starts, then the noise (even when `noise_std`
      is 0), then root-finding starts;
-  4. each iteration: GP-fit starts, then acquisition starts, then the evaluation.
+  4. each iteration: GP-fit starts (hybrid BO with P > 1: each GP's own `lhs`
+     starts, in the order of `system.y`), then acquisition starts, then the
+     evaluation.
 
   **`lhs` doesn't consume the stream.** scipy's `LatinHypercube(rng=rng)` spawns the
   next child of `rng`'s `SeedSequence`, so `lhs` calls (all `fsolve` starts,
@@ -320,7 +334,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   their keys to the stored files and leaves the other values as they are.
 - The unit tests (`test_kernels.py`, `test_gp.py`, `test_scalers.py`,
   `test_sampling.py`, `test_solvers.py`, `test_system.py`, `test_evaluation.py`,
-  `test_baselines.py`, `test_standard_bo.py`, `test_hybrid_bo.py`,
+  `test_baselines.py`, `test_standard_bo.py`, `test_hybrid_bo.py` (P = 2 unit tests
+  against numpy and finite differences), `test_two_unknown_states.py` (P = 2 end to
+  end: runs, saving, plots),
   `test_studies.py`, `test_views.py`, `test_run.py`) compare against
   numpy/scipy references or closed forms. Add one when changing math.
 - Tests follow the comment rules in CLAUDE.md Conventions (docstrings, commented

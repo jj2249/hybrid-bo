@@ -61,7 +61,9 @@ oracle objective is below it.
 
 - `math.exp(v.x)` on a CasADi symbol silently returns `nan`; numpy functions mostly
   work but emit a CasADi `FutureWarning`. Always use `cas.*`.
-- Exactly one measured variable per unknown state, and only `P == 1` is supported.
+- Exactly one measured variable per unknown state. With `P > 1` unknown states,
+  `plots.iteration` draws only with `gp=False` (else `ValueError`), so the CLI's
+  `--plot` skips their iteration figures with a message.
 - With measurement noise, state it in the GP too, as the same number:
   `GP(..., noise_std=0.01)` for `oracle_measure(..., noise_std=0.01)`. `noise_std`
   is in measured units; kernel hyperparameters (`Param` bounds, fixed lengthscales) are in
