@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- The experiment `rosenbrock` (`pixi run experiment rosenbrock`): the 2D
+  Rosenbrock function as a hybrid model, the first experiment with two decision
+  variables, comparing SAA-EI, SoftSAA-EI, standard BO and Latin hypercube
+  sampling (#116).
 - `multistart` warns when starts stop at IPOPT's iteration limit, giving how many
   of the starts did and the name of the NLP's objective (e.g.
   `negative_log_marginal_likelihood` for a GP fit), and `fit_gp` warns when the
