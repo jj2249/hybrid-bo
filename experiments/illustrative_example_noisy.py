@@ -22,7 +22,8 @@ import hybrid_bo as hb
 measure = hb.oracle_measure(system, oracle, noise_std=0.01)
 
 # The prior GP of every BO method: the illustrative example's, with the measurement's
-# noise, in the same (measured) units
+# noise as its observation noise. noise_std is in measured units, so it is the same
+# number; the bounds are in scaled units
 outputscale = hb.gp.Param(1.0, bounds=(0.1, 10.0))
 lengthscale = hb.gp.Param(1.0, bounds=(1e-3, 1e2))
 gp = hb.gp.GP(
@@ -31,7 +32,8 @@ gp = hb.gp.GP(
     noise_std=0.01,
 )
 
-# Methods: those of the illustrative example, with the noisy GP
+# Methods: the same methods and settings as the illustrative example's when this was
+# written, with the noisy GP
 methods = {
     "hybrid_bo": functools.partial(
         hb.hybrid_bo,

@@ -3,8 +3,8 @@
 ## Unreleased
 
 - The experiment `illustrative_example_noisy` (#122): the illustrative example
-  measured with noise of standard deviation 0.01 on y, every BO method's GP stating
-  the same `noise_std=0.01`. The illustrative example itself is unchanged.
+  with measurement noise of standard deviation 0.01 on y, every BO method's GP
+  stating the same `noise_std=0.01` as its observation noise. The illustrative example itself is unchanged.
 
 ## 0.3.0 (2026-10-21)
 
