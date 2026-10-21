@@ -41,15 +41,12 @@ from hybrid_bo import (
     standard_bo,
 )
 from hybrid_bo.acquisition import _pack, hybrid_acquisition, standard_acquisition
-from hybrid_bo.gp import GP, Matern52, Scale, Zero, predict
-
-# The prior GP of the experiments: an output scale times Matern-5/2, both fitted
-PRIOR_GP = GP(Zero(), Scale(Matern52()))
+from hybrid_bo.gp import predict
 
 # The illustrative example's hybrid BO settings: the GP's prediction substituted for
 # the unknown states
 HYBRID_SETTINGS = HybridBOSettings(
-    gp=PRIOR_GP, approximation=SAA(unknown_states_as_variables=False)
+    gp=ex.gp, approximation=SAA(unknown_states_as_variables=False)
 )
 
 
@@ -84,9 +81,7 @@ def hybrid_run() -> Run:
 @pytest.fixture(scope="module")
 def hybrid_lcb_run() -> Run:
     """A pickled hybrid BO run with LCB and the unknown states as variables."""
-    return illustrative_run(
-        hybrid_bo, HybridBOSettings(gp=PRIOR_GP, acquisition=LCB(2.0))
-    )
+    return illustrative_run(hybrid_bo, HybridBOSettings(gp=ex.gp, acquisition=LCB(2.0)))
 
 
 @pytest.fixture(scope="module")
@@ -95,7 +90,7 @@ def hybrid_lin_run() -> Run:
     unknown states."""
     approximation = Linearization(unknown_states_as_variables=False)
     return illustrative_run(
-        hybrid_bo, HybridBOSettings(gp=PRIOR_GP, approximation=approximation)
+        hybrid_bo, HybridBOSettings(gp=ex.gp, approximation=approximation)
     )
 
 
@@ -105,14 +100,14 @@ def hybrid_soft_run() -> Run:
     prediction substituted for the unknown states."""
     approximation = SoftSAA(0.5, n_scenarios=10, unknown_states_as_variables=False)
     return illustrative_run(
-        hybrid_bo, HybridBOSettings(gp=PRIOR_GP, approximation=approximation)
+        hybrid_bo, HybridBOSettings(gp=ex.gp, approximation=approximation)
     )
 
 
 @pytest.fixture(scope="module")
 def standard_run() -> Run:
     """A pickled standard BO run with the illustrative example's settings."""
-    return illustrative_run(standard_bo, StandardBOSettings(gp=PRIOR_GP))
+    return illustrative_run(standard_bo, StandardBOSettings(gp=ex.gp))
 
 
 @pytest.fixture(scope="module")
@@ -491,15 +486,15 @@ def test_a_custom_solver_needs_the_settings(hybrid_run):
 @pytest.mark.parametrize(
     ("run_name", "settings", "error"),
     [
-        ("hybrid_run", StandardBOSettings(gp=PRIOR_GP), TypeError),
-        ("standard_run", HybridBOSettings(gp=PRIOR_GP), TypeError),
-        ("lhs_run", StandardBOSettings(gp=PRIOR_GP), TypeError),
-        ("hybrid_run", HybridBOSettings(gp=PRIOR_GP), ValueError),
+        ("hybrid_run", StandardBOSettings(gp=ex.gp), TypeError),
+        ("standard_run", HybridBOSettings(gp=ex.gp), TypeError),
+        ("lhs_run", StandardBOSettings(gp=ex.gp), TypeError),
+        ("hybrid_run", HybridBOSettings(gp=ex.gp), ValueError),
         ("hybrid_lin_run", HYBRID_SETTINGS, ValueError),
         ("hybrid_soft_run", HYBRID_SETTINGS, ValueError),
         (
             "hybrid_soft_run",
-            HybridBOSettings(gp=PRIOR_GP, approximation=SoftSAA(2.0, 10, False)),
+            HybridBOSettings(gp=ex.gp, approximation=SoftSAA(2.0, 10, False)),
             ValueError,
         ),
     ],

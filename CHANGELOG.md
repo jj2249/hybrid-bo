@@ -6,7 +6,7 @@
   `hb.gp.GP(mean, kernel, noise_std=0.0, jitter=1e-6)` built from a closed set of
   frozen dataclasses: the `Zero` mean and the kernels `Scale` (an output scale,
   unsquared), `Matern12`, `Matern32`, `Matern52` and `SquaredExponential`. A kernel's
-  parameters are its fields: a number fixes one, `hb.gp.Param(init, bounds, log=True)`
+  hyperparameters are its fields: a number fixes one, `hb.gp.Param(init, bounds, log=True)`
   fits it; a lengthscale has one entry per input unless `ard=False`. `noise_std` is a
   known noise in measured units, so it is the same number as the measurement's
   noise. `HybridBOSettings.gp` and `StandardBOSettings.gp` are required, so

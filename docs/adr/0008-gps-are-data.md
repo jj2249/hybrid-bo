@@ -3,7 +3,8 @@
 A prior GP is a frozen dataclass, `hb.gp.GP(mean, kernel, noise_std)`, built from a
 closed set of means and kernels that are frozen dataclasses too: `Zero`, and `Scale`,
 `Matern12`, `Matern32`, `Matern52` and `SquaredExponential`. Each kernel declares its
-parameters as fields; a number fixes one, and `hb.gp.Param(init, bounds, log)` fits it.
+hyperparameters as fields; a number fixes one, and `hb.gp.Param(init, bounds, log)`
+fits it.
 Behavior is plain functions that match on the type (`covariance`, `prior_mean`), as the
 acquisition code does for approximations. A fitted GP is the prior GP with every
 `Param` replaced by its value, held with its training data and scalers, so it describes
@@ -12,7 +13,7 @@ plot redraws an iteration from the saved run alone.
 
 This amends [ADR 0003](0003-runs-are-pure-data.md): runs still hold only data, and
 that data is now the whole GP. It replaces the convention that kernels are functions
-and there are no kernel classes (DESIGN.md, Principles). Kernel parameters are in
+and there are no kernel classes (DESIGN.md, Principles). Kernel hyperparameters are in
 scaled units, as the fit sees them; the known observation noise `noise_std` is in
 measured units, so an experiment states the noise of its measurement as it is.
 

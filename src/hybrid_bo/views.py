@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from hybrid_bo.gp import _parameters
+from hybrid_bo.gp import _hyperparameters
 from hybrid_bo.history import incumbents, n_iterations, oracle_incumbents
 from hybrid_bo.run import Run
 from hybrid_bo.studies import Study
@@ -172,7 +172,7 @@ def hyperparameters(study: Study) -> "pl.DataFrame":
         (run.method, run.index, iteration, path, entry, float(value))
         for run in study.runs
         for iteration, surrogate in enumerate(run.surrogates, start=1)
-        for path, values, _ in _parameters(surrogate.gp, surrogate.X.shape[1])
+        for path, values, _ in _hyperparameters(surrogate.gp, surrogate.X.shape[1])
         for entry, value in enumerate(values if isinstance(values, tuple) else [values])
     ]
     schema = {

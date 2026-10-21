@@ -114,8 +114,10 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `rng`: the settings alone reproduce a study.
 - `saving.py`: `save(study, path)` / `load(path)` (ADR 0004): `artifact.json` lists the
   run files `runs/<method>/run-<index:03d>.json`; `load` also reads the older
-  `study.json` (with `record` for `artifact`), but a run whose fitted GPs have no `gp`
-  (saved before #119) raises `StudyFormatError` (`_check_format`). `_encode`/`_decode`
+  `study.json` (with `record` for `artifact`), but a run saved before #119 (fitted
+  GPs without `gp`, or a record with a `kernel` entry) raises `StudyFormatError`
+  (`_check_format`), as do a tag naming no expected type and data that fits no
+  member of a union. `_encode`/`_decode`
   convert any dataclass by its type hints; arrays are nested lists of floats (an empty
   one is `{"shape": ...}`). The GP types (`gp.TYPES`) are saved with `"type"`, their
   class name, and `_decode` picks a union's member by it (`_union_member` picks
@@ -141,7 +143,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `Maximum_Iterations_Exceeded`) get one warning per call, giving their count and
   `nlp.f`'s name, before `NoSolutionError` if all fail. The caller draws the starts with `lhs`.
 - `gp.py` (ADR 0008): GPs are data, frozen dataclasses from a closed set. `Param(init,
-  bounds, log=True)` is a parameter to fit (checked: init inside the bounds, positive
+  bounds, log=True)` is a hyperparameter to fit (checked: init inside the bounds, positive
   bounds for log). Kernels `Matern12/32/52` and `SquaredExponential` (`lengthscale:
   float | tuple | Param`, `ard=True`) and `Scale(kernel, outputscale)` (unsquared),
   `Kernel` their union; the `Zero` mean (`Mean`); `TYPES` the closed set, which
@@ -149,19 +151,19 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   GP; `FittedGP(gp, X, Y, x_scaler, y_scaler)` the fitted GP, its `gp` with no
   `Param` left (checked), scaled data and scalers. `covariance(kernel, X1, X2)` and
   `prior_mean(mean, X)` match on the type; the formulas are the cases' bodies. A
-  parameter is a field whose type hint admits `Param`; `_parameters(node, n_inputs)`
+  hyperhyperparameter is a field whose type hint admits `Param`; `_hyperparameters(node, n_inputs)`
   lists them as (dotted path, value, entries or None) in fit order, a node's own
   before those of the kernels it holds (so `Scale(Matern52())` fits outputscale,
   then the lengthscales, as `default_gp` did: the baselines depend on that order),
-  and `_with_parameters` sets them by path. A fitted value is a float, or a tuple of
+  and `_with_hyperparameters` sets them by path. A fitted value is a float, or a tuple of
   one per input for an ARD lengthscale; a fixed number applies to every input.
   `fit_gp(gp, X, Y, rng, ...) -> FittedGP` fits every `Param` (log ones in log
   space) by `multistart` from `lhs` starts over the bounds; with no `Param` it draws
   nothing. `predict(fitted, X)` (the noise-free conditional mean and std; numpy X ->
   arrays `(n,)`, symbolic X -> `(n, 1)` columns) and `log_marginal_likelihood(fitted)`,
-  which `fit_gp` maximizes. Kernel parameters are in scaled units; `noise_std` is a
+  which `fit_gp` maximizes. Kernel hyperparameters are in scaled units; `noise_std` is a
   known noise in **measured** units, scaled by the output scaler's slope:
-  `K = k(X, X) + ((noise_std * slope)**2 + jitter) I`. Parameters in the fit are SX
+  `K = k(X, X) + ((noise_std * slope)**2 + jitter) I`. Hyperparameters in the fit are SX
   slices put in the dataclass fields. `Scaler` with `minmax`/`standard`/`scale`/
   `unscale`. The jitter defaults to 1e-6, a nugget: much smaller and the fit stalls
   once the inputs cluster (#107, DESIGN.md). After fitting, `fit_gp` warns if the

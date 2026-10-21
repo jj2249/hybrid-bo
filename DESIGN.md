@@ -338,11 +338,11 @@ other start, but they are what makes a fit slow (#108).
 ### GP (`gp.py`)
 
 GPs are data ([ADR 0008](docs/adr/0008-gps-are-data.md)): the prior GP, its mean, its
-kernel and its parameters are frozen dataclasses from a closed set.
+kernel and its hyperparameters are frozen dataclasses from a closed set.
 
 ```python
 @dataclass(frozen=True)
-class Param:  # a parameter to fit
+class Param:  # a hyperparameter to fit
     init: float
     bounds: tuple[float, float]  # hard limits; the fit's starts are drawn within them
     log: bool = True  # fit in log space
@@ -390,15 +390,15 @@ An experiment builds each method's GP; there is no default:
 gp = hb.gp.GP(hb.gp.Zero(), hb.gp.Scale(hb.gp.Matern52()), noise_std=0.01)
 ```
 
-- **Parameters.** A kernel's parameters are its fields whose type admits a `Param`; a
-  number fixes one. They are fitted in a fixed order: a node's own parameters before
+- **Parameters.** A kernel's hyperparameters are its fields whose type admits a `Param`; a
+  number fixes one. They are fitted in a fixed order: a node's own hyperparameters before
   those of the kernels it holds, so `Scale(Matern52())` fits the output scale, then the
   lengthscales, as `default_gp` did. A lengthscale with `ard` (the default) has one
   entry per input, the count taken from the training data at fit time; a fixed one
   given as one number applies to every input. A fitted GP holds the numbers: a float,
   or a tuple of one per input. `hb.hyperparameters(study)` names each by its dotted
   path in the GP (`kernel.kernel.lengthscale`).
-- **Units.** Kernel parameters are in scaled units, as the fit sees them (lengthscales
+- **Units.** Kernel hyperparameters are in scaled units, as the fit sees them (lengthscales
   relative to inputs scaled onto [0, 1], the output scale relative to standardized
   outputs). `noise_std` is in measured units, the units of the training outputs, so an
   experiment states the noise of its measurement as it is: `fit_gp` and `predict`
@@ -415,7 +415,7 @@ gp = hb.gp.GP(hb.gp.Zero(), hb.gp.Scale(hb.gp.Matern52()), noise_std=0.01)
   1e11: most GP-fit starts then ran to IPOPT's iteration limit, and `fit_gp` took
   15-25s per iteration on the illustrative example. With 1e-6 the posterior std at
   the data is about 1e-3 in scaled units, negligible for EI. `fit_gp` warns when
-  cond(K) at the kept parameters exceeds 1e10 (`CONDITION_THRESHOLD`, #108),
+  cond(K) at the kept hyperparameters exceeds 1e10 (`CONDITION_THRESHOLD`, #108),
   below the 1e11 that stalled the fit.
 - **Output scale** multiplies the kernel unsquared, as legacy `OutputScaleKernel` did,
   so `GP(Zero(), Scale(Matern52()))` fits the same hyperparameters as the legacy GP.

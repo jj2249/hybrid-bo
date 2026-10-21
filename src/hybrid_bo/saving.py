@@ -5,7 +5,7 @@ artifact, and the list of run files) and one file per run,
 `path/runs/<method>/run-000.json`, holding every field of the run. `load` also reads
 a study saved before the artifact was named: `study.json` with a `record` key, but not
 one saved before GPs were data (ADR 0008). Arrays are nested lists; float64 values
-round-trip exactly. A GP's means, kernels and parameters are saved with their type's
+round-trip exactly. A GP's means, kernels and hyperparameters are saved with their type's
 name (`"type"`), so a field that holds one of several kernels loads as the right one.
 The library never calls `save` itself.
 """
@@ -57,15 +57,24 @@ def _decode(value: Any, annotation: Any) -> Any:
     """The JSON data `value` as the type `annotation`, the inverse of `_encode`.
 
     Handles what runs and studies hold: dataclasses, arrays of floats, lists,
-    tuples, dicts with string keys, optional values, unions and plain values. A
-    union's member is the type a tagged dict names, else the one that fits the data.
+    tuples, dicts with string keys, optional values, unions and plain values. Where a
+    GP part is expected, a tagged dict decodes as the type it names; a union's other
+    members are told apart by the data. Raises `StudyFormatError` for a tag that
+    names no expected type, or data that fits no member of a union.
     """
     origin, args = typing.get_origin(annotation), typing.get_args(annotation)
     if value is None:
         return None
-    if isinstance(value, dict) and "type" in value and origin is not dict:
-        value = dict(value)
-        return _decode(value, _TAGGED[value.pop("type")])
+
+    # A GP part, by its tag, where the annotation is one or a union holding one
+    expected = {annotation, *args}
+    if isinstance(value, dict) and "type" in value and expected & set(TYPES):
+        tagged = _TAGGED.get(value["type"])
+        if tagged not in expected:
+            msg = f"A saved {value['type']!r} where {annotation} was expected"
+            raise StudyFormatError(msg)
+        fields = {key: item for key, item in value.items() if key != "type"}
+        return _decode(fields, tagged)
     if origin in (types.UnionType, typing.Union):
         return _decode(value, _union_member(value, args))
     if annotation is np.ndarray:
@@ -88,7 +97,10 @@ def _decode(value: Any, annotation: Any) -> Any:
 
 def _union_member(value: Any, members: tuple[Any, ...]) -> Any:
     """The member of a union that untagged JSON data `value` decodes as: the
-    sequence type for a list, the one dataclass for a dict, else the plain type."""
+    sequence type for a list, the one dataclass for a dict, else the plain type.
+
+    Raises `StudyFormatError` if no member fits.
+    """
     members = tuple(member for member in members if member is not type(None))
     if isinstance(value, list):
         kinds = (list, tuple, np.ndarray)
@@ -97,13 +109,19 @@ def _union_member(value: Any, members: tuple[Any, ...]) -> Any:
         fits = [m for m in members if dataclasses.is_dataclass(m)]
     else:
         fits = [m for m in members if isinstance(value, typing.get_origin(m) or m)]
+    if not fits:
+        msg = f"The saved value {value!r} is none of {members}"
+        raise StudyFormatError(msg)
     return fits[0]
 
 
 def _check_format(run_data: dict[str, Any], run_path: Path) -> None:
-    """Raises `StudyFormatError` if a saved run's fitted GPs predate GPs as data
-    (named hyperparameters, no GP)."""
-    if any("gp" not in surrogate for surrogate in run_data.get("surrogates", [])):
+    """Raises `StudyFormatError` if a saved run predates GPs as data: its fitted GPs
+    hold named hyperparameters and no GP, or (with no iterations) its record holds
+    the GP's kernel as text."""
+    surrogates = run_data.get("surrogates", [])
+    has_old_surrogates = any("gp" not in surrogate for surrogate in surrogates)
+    if has_old_surrogates or "kernel" in run_data.get("record", {}):
         msg = (
             f"{run_path} was saved before GPs were data (its fitted GPs hold named "
             "hyperparameters, not their GP), so it can't be loaded: rerun the study, "

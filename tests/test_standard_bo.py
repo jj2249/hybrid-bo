@@ -9,6 +9,7 @@ import io
 import pickle
 
 import casadi as cas
+import illustrative_example as ex
 import numpy as np
 import pytest
 import scipy
@@ -31,10 +32,7 @@ from hybrid_bo.acquisition import (
     standard_acquisition,
 )
 from hybrid_bo.bo import optimization_loop
-from hybrid_bo.gp import GP, FittedGP, Matern52, Scale, Zero, fit_gp, predict
-
-# The prior GP of the experiments: an output scale times Matern-5/2, both fitted
-PRIOR_GP = GP(Zero(), Scale(Matern52()))
+from hybrid_bo.gp import FittedGP, fit_gp, predict
 from hybrid_bo.run import run_record
 
 
@@ -46,7 +44,7 @@ def illustrative_measure(problem):
 def illustrative_run(problem, settings=None) -> Run:
     """A standard BO run on the illustrative example: 2 initial points, 2 iterations,
     with the default settings unless `settings` is given."""
-    settings = StandardBOSettings(gp=PRIOR_GP) if settings is None else settings
+    settings = StandardBOSettings(gp=ex.gp) if settings is None else settings
     rng = np.random.default_rng(0)
     u = initial_points(problem.system.u, 2, rng)
     measure = illustrative_measure(problem)
@@ -57,7 +55,7 @@ def fitted_illustrative_gp():
     """The default GP and its fit to four points of u -> f."""
     u = np.array([[-1.5], [-0.5], [0.4], [1.7]])
     f = np.array([0.3, -1.2, 2.0, 0.8])
-    return fit_gp(PRIOR_GP, u, f, np.random.default_rng(0))
+    return fit_gp(ex.gp, u, f, np.random.default_rng(0))
 
 
 def acquisition_values(nlp, u):
@@ -154,7 +152,7 @@ def test_lcb_needs_a_finite_nonnegative_std_factor(std_factor):
 def test_settings_reject_anything_but_ei_or_lcb(acquisition):
     """The settings accept only an EI or LCB instance, not a name or the class."""
     with pytest.raises(TypeError, match=r"EI\(\) or LCB"):
-        StandardBOSettings(gp=PRIOR_GP, acquisition=acquisition)
+        StandardBOSettings(gp=ex.gp, acquisition=acquisition)
 
 
 def test_acquisition_builder_rejects_anything_but_ei_or_lcb(illustrative_problem):
@@ -198,7 +196,7 @@ def test_run_pickles_without_the_code_that_produced_it(illustrative_problem):
 def test_record_holds_the_settings_and_the_gp(illustrative_problem):
     """The record holds the settings, and the prior GP as its repr in an entry of
     its own."""
-    settings = StandardBOSettings(gp=PRIOR_GP, acquisition=LCB(2.0))
+    settings = StandardBOSettings(gp=ex.gp, acquisition=LCB(2.0))
 
     record = illustrative_run(illustrative_problem, settings).record
 
@@ -210,7 +208,7 @@ def test_record_holds_the_settings_and_the_gp(illustrative_problem):
     assert "GP(" not in record["settings"]
 
     # The GP: its repr, which names its parts and their Params
-    assert record["gp"] == repr(PRIOR_GP)
+    assert record["gp"] == repr(ex.gp)
     assert "Matern52(lengthscale=Param(init=1.0" in record["gp"]
 
 
@@ -232,7 +230,7 @@ def test_settings_are_required_and_keyword_only(illustrative_problem):
             u,
             0,
             np.random.default_rng(0),
-            StandardBOSettings(gp=PRIOR_GP),  # ty: ignore[too-many-positional-arguments]
+            StandardBOSettings(gp=ex.gp),  # ty: ignore[too-many-positional-arguments]
         )
 
 
@@ -254,7 +252,7 @@ def test_failed_evaluation_carries_the_partial_run(illustrative_problem):
             np.array([[-0.5], [0.5]]),
             2,
             np.random.default_rng(0),
-            settings=StandardBOSettings(gp=PRIOR_GP),
+            settings=StandardBOSettings(gp=ex.gp),
         )
 
     # The partial run: the initial points, and no surrogate (the surrogate behind the

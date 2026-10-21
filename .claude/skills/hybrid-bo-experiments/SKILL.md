@@ -59,7 +59,7 @@ oracle objective is below it.
 - Exactly one measured variable per unknown state, and only `P == 1` is supported.
 - With measurement noise, state it in the GP too, as the same number:
   `GP(..., noise_std=0.01)` for `oracle_measure(..., noise_std=0.01)`. `noise_std`
-  is in measured units; kernel parameters (`Param` bounds, fixed lengthscales) are in
+  is in measured units; kernel hyperparameters (`Param` bounds, fixed lengthscales) are in
   scaled units (inputs onto [0, 1], outputs standardized). Don't convert the noise by
   hand.
 - `true_curves=True` runs the measurement over the plot grid: only for an oracle.

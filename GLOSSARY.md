@@ -40,6 +40,13 @@ likelihood. Its predictions are the conditional mean and standard deviation of t
 noise-free output.
 _Avoid_: trained GP, conditioned GP, posterior
 
+**Hyperparameter** (`hb.gp.Param` when fitted):
+A field of a GP's kernel, such as a lengthscale or an output scale: a number fixes it,
+a `Param` (an initial value and bounds) is fitted to the training data. Kernel
+hyperparameters are in scaled units (inputs scaled onto [0, 1], outputs standardized);
+the observation noise `noise_std` is in measured units.
+_Avoid_: parameter (on its own), kernel parameter
+
 **Jitter** or **nugget** (`jitter`):
 A small constant added to the diagonal of a GP's training covariance so it stays
 well conditioned. It is a numerical safeguard, not observation noise, which the prior

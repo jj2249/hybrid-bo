@@ -375,6 +375,34 @@ def test_load_rejects_a_study_saved_before_gps_were_data(illustrative_study, tmp
         hb.load(path)
 
 
+def test_load_rejects_an_old_bo_run_without_iterations(illustrative_study, tmp_path):
+    """An old BO run that stopped before its first iteration has no fitted GP to
+    show its format, but its record held the GP's kernel as text: it raises
+    `StudyFormatError` too."""
+    path = hb.save(illustrative_study, tmp_path / "study")
+    run_path = path / "runs" / "standard_bo" / "run-000.json"
+    data = json.loads(run_path.read_text())
+    data["surrogates"], data["acquisitions"] = [], []
+    data["record"]["kernel"] = "outputscale*matern52(u, u')"
+    run_path.write_text(json.dumps(data))
+
+    with pytest.raises(hb.errors.StudyFormatError, match="rerun"):
+        hb.load(path)
+
+
+def test_load_rejects_a_gp_part_of_the_wrong_type(illustrative_study, tmp_path):
+    """A saved kernel whose tag names no kernel (here, the mean's type) raises
+    `StudyFormatError`, not an error from inside the loader."""
+    path = hb.save(illustrative_study, tmp_path / "study")
+    run_path = path / "runs" / "standard_bo" / "run-000.json"
+    data = json.loads(run_path.read_text())
+    data["surrogates"][0]["gp"]["kernel"]["type"] = "Zero"
+    run_path.write_text(json.dumps(data))
+
+    with pytest.raises(hb.errors.StudyFormatError, match="'Zero'"):
+        hb.load(path)
+
+
 def test_save_refuses_an_existing_folder(illustrative_study, tmp_path):
     """Saving never overwrites: an existing folder raises `FileExistsError`."""
     with pytest.raises(FileExistsError):

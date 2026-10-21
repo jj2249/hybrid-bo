@@ -31,7 +31,7 @@ from hybrid_bo.acquisition import (
 )
 from hybrid_bo.bo import HybridBOSettings, StandardBOSettings
 from hybrid_bo.evaluation import Measure, evaluate
-from hybrid_bo.gp import predict
+from hybrid_bo.gp import GP, predict
 from hybrid_bo.history import n_iterations
 from hybrid_bo.problem import Problem, Symbolic
 from hybrid_bo.run import Run
@@ -190,7 +190,8 @@ def iteration(
         msg = f"The run has {n_later} iterations, so no iteration {i}"
         raise IndexError(msg)
     i %= n_later
-    settings = _replay_settings(run, i, settings)
+    fitted_gp = run.surrogates[i].gp if run.surrogates else None
+    settings = _replay_settings(run, fitted_gp, settings)
 
     # The grid, with the trial point in it so the replay starts there
     n = history.n_initial + i
@@ -268,12 +269,16 @@ def iteration(
 
 def _replay_settings(
     run: Run,
-    i: int,
+    gp: GP | None,
     settings: StandardBOSettings | HybridBOSettings | None,
 ) -> StandardBOSettings | HybridBOSettings | None:
-    """The settings iteration i of a run is replayed with: `settings` if given, else
-    the record's acquisition function and approximation, with the GP of iteration
-    i's fitted GP (the replay reads the fitted GP itself). None for the baselines.
+    """The settings a run is replayed with: `settings` if given, else the record's
+    acquisition function and approximation with `gp` as their GP. None for the
+    baselines.
+
+    The replay reads the GP from the run's fitted GPs, never from the settings, so
+    `gp` (the iteration's fitted GP, or None for the baselines) only fills the
+    required field.
 
     Raises `TypeError` if `settings` aren't the run's method's, and `ValueError` if
     the fields the replay uses don't match the record.
@@ -292,9 +297,10 @@ def _replay_settings(
     # and approximation (SAA in records from before there was a choice)
     recorded = run.record.get("settings", "")
     if settings is None:
+        assert gp is not None  # a BO run has a fitted GP per iteration
         lcb = re.search(r"acquisition=LCB\(std_factor=([^)]*)\)", recorded)
         settings = expected(
-            gp=run.surrogates[i].gp,
+            gp=gp,
             acquisition=EI() if lcb is None else LCB(float(lcb[1])),
         )
         if isinstance(settings, HybridBOSettings):

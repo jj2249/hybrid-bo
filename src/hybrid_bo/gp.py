@@ -2,9 +2,9 @@
 
 A prior GP is data (ADR 0008): `GP(mean, kernel, noise_std)`, with the mean and the
 kernel from a closed set of frozen dataclasses (`Zero`; `Scale`, `Matern12`,
-`Matern32`, `Matern52`, `SquaredExponential`). Each kernel declares its parameters as
+`Matern32`, `Matern52`, `SquaredExponential`). Each kernel declares its hyperparameters as
 fields: a number fixes the value, a `Param` is fitted within its bounds. Kernel
-parameters are in scaled units (inputs scaled onto [0, 1], outputs standardized);
+hyperparameters are in scaled units (inputs scaled onto [0, 1], outputs standardized);
 `noise_std`, the known observation noise, is in measured units.
 
 `fit_gp` scales the training data, fits every `Param` by maximizing the log marginal
@@ -38,7 +38,7 @@ CONDITION_THRESHOLD = 1e10
 
 @dataclass(frozen=True)
 class Param:
-    """A parameter to fit: its initial value and its bounds, the hard limits of the
+    """A hyperparameter to fit: its initial value and its bounds, the hard limits of the
     fit and where its multistart draws the starts.
 
     With `log`, fitting searches over its logarithm, so the bounds must be positive.
@@ -146,7 +146,7 @@ TYPES = (Param, Matern12, Matern32, Matern52, SquaredExponential, Scale, Zero)
 @dataclass(frozen=True)
 class GP:
     """A prior GP, before it sees any data: its mean, its kernel with each
-    parameter fixed or to be fitted, and its observation noise.
+    hyperparameter fixed or to be fitted, and its observation noise.
 
     `noise_std` is the known standard deviation of the observation noise, in
     measured units (those of the training outputs); 0 is noise-free, and the fitted
@@ -176,7 +176,7 @@ class Scaler:
 
 @dataclass(frozen=True)
 class FittedGP:
-    """A fitted GP: a prior GP with every parameter fitted to its training data, held
+    """A fitted GP: a prior GP with every hyperparameter fitted to its training data, held
     with that data (scaled) and the scalers that produced it. It describes itself, so
     `predict` takes nothing else and a run saves it whole (ADR 0008).
 
@@ -190,24 +190,26 @@ class FittedGP:
     y_scaler: Scaler
 
     def __post_init__(self) -> None:
-        unfitted = [path for path, value, _ in _parameters(self.gp, 1) if _is(value)]
+        unfitted = [
+            path for path, value, _ in _hyperparameters(self.gp, 1) if _is(value)
+        ]
         if unfitted:
             msg = f"A fitted GP has no Param left; unfitted: {unfitted}"
             raise ValueError(msg)
 
 
 def _is(value: Any) -> bool:
-    """Whether a parameter's value is a `Param`, still to be fitted."""
+    """Whether a hyperparameter's value is a `Param`, still to be fitted."""
     return isinstance(value, Param)
 
 
-def _parameters(node: Any, n_inputs: int) -> list[tuple[str, Any, int | None]]:
-    """The parameters of a GP, mean or kernel, in the order they are fitted: each as
+def _hyperparameters(node: Any, n_inputs: int) -> list[tuple[str, Any, int | None]]:
+    """The hyperparameters of a GP, mean or kernel, in the order they are fitted: each as
     its dotted path from `node`, its value (a `Param`, a number, a tuple or a
     symbol) and its number of entries, None for one number (a lengthscale with ARD
     has `n_inputs`).
 
-    A parameter is a field whose type admits a `Param`. A node's own parameters come
+    A hyperparameter is a field whose type admits a `Param`. A node's own hyperparameters come
     before those of the means and kernels it holds.
     """
     hints = typing.get_type_hints(type(node))
@@ -220,13 +222,13 @@ def _parameters(node: Any, n_inputs: int) -> list[tuple[str, Any, int | None]]:
         elif isinstance(value, TYPES):
             held += [
                 (f"{field.name}.{path}", inner, size)
-                for path, inner, size in _parameters(value, n_inputs)
+                for path, inner, size in _hyperparameters(value, n_inputs)
             ]
     return own + held
 
 
-def _with_parameters(node: Any, values: dict[str, Any]) -> Any:
-    """`node` with the parameters at the given dotted paths set to the given values."""
+def _with_hyperparameters(node: Any, values: dict[str, Any]) -> Any:
+    """`node` with the hyperparameters at the given dotted paths set to the given values."""
     changes = {}
     for field in dataclasses.fields(node):
         if field.name in values:
@@ -239,12 +241,14 @@ def _with_parameters(node: Any, values: dict[str, Any]) -> Any:
             if path.startswith(prefix)
         }
         if inner:
-            changes[field.name] = _with_parameters(getattr(node, field.name), inner)
+            changes[field.name] = _with_hyperparameters(
+                getattr(node, field.name), inner
+            )
     return dataclasses.replace(node, **changes)
 
 
 def _symbolic(value: Any) -> Any:
-    """A parameter's value as a CasADi constant or column (a tuple as a column)."""
+    """A hyperparameter's value as a CasADi constant or column (a tuple as a column)."""
     return Symbolic(np.array(value)) if isinstance(value, tuple) else Symbolic(value)
 
 
@@ -273,7 +277,7 @@ def _squared_distance(X1: Any, X2: Any, lengthscale: Any) -> Any:
 
 def covariance(kernel: Kernel, X1: Any, X2: Any) -> Any:
     """The kernel's covariance between the rows of the CasADi matrices X1 (n1, d) and
-    X2 (n2, d), shape (n1, n2). Each parameter must be a number or a CasADi symbol, not
+    X2 (n2, d), shape (n1, n2). Each hyperparameter must be a number or a CasADi symbol, not
     a `Param`."""
     match kernel:
         case Scale(kernel=inner, outputscale=outputscale):
@@ -360,7 +364,7 @@ def _log_marginal_likelihood(
     gp: GP, X: np.ndarray, Y: np.ndarray, y_scaler: Scaler
 ) -> Any:
     """The log marginal likelihood of the scaled data X (n, d), Y (n,) as a CasADi
-    scalar in the GP's parameters (numbers or symbols)."""
+    scalar in the GP's hyperparameters (numbers or symbols)."""
     X_c, Y_c = Symbolic(X), Symbolic(Y)
     residual = Y_c - prior_mean(gp.mean, X_c)
     L = _training_cholesky(gp, X_c, y_scaler)
@@ -404,16 +408,16 @@ def fit_gp(
     Raises `ValueError` if a fixed lengthscale per input doesn't have one entry per
     column of X.
     """
-    # Scale the data, and find the parameters to fit
+    # Scale the data, and find the hyperparameters to fit
     start = time.perf_counter()
     x_scaler, y_scaler = minmax(X), standard(Y[:, np.newaxis])
     X_scaled, Y_scaled = scale(x_scaler, X), scale(y_scaler, Y[:, np.newaxis]).ravel()
-    parameters = _parameters(gp, X.shape[1])
-    for path, value, _ in parameters:
+    hyperparameters = _hyperparameters(gp, X.shape[1])
+    for path, value, _ in hyperparameters:
         if isinstance(value, tuple) and len(value) != X.shape[1]:
             msg = f"{path} has {len(value)} entries for {X.shape[1]} inputs"
             raise ValueError(msg)
-    free = [(path, param, size) for path, param, size in parameters if _is(param)]
+    free = [(path, param, size) for path, param, size in hyperparameters if _is(param)]
     fitted_gp = gp
     if free:
         fitted_gp = _fit(gp, free, X_scaled, Y_scaled, y_scaler, rng, n_starts, solver)
@@ -444,9 +448,9 @@ def _fit(
     n_starts: int,
     solver: Ipopt,
 ) -> GP:
-    """The prior GP with each `Param` (`free`, from `_parameters`) set to the value
+    """The prior GP with each `Param` (`free`, from `_hyperparameters`) set to the value
     that maximizes the log marginal likelihood of the scaled data; see `fit_gp`."""
-    # The search space: one entry per parameter entry, log ones as logarithms
+    # The search space: one entry per hyperparameter entry, log ones as logarithms
     sizes = [1 if size is None else size for _, _, size in free]
     ends = np.cumsum(sizes)
     is_log = np.repeat([param.log for _, param, _ in free], sizes)
@@ -455,12 +459,12 @@ def _fit(
     init = np.repeat([param.init for _, param, _ in free], sizes)
 
     def to_search_space(values: np.ndarray) -> np.ndarray:
-        """Parameter entries as search-space entries: logarithms for log ones."""
+        """Hyperparameter entries as search-space entries: logarithms for log ones."""
         return np.where(is_log, np.log(np.where(is_log, values, 1.0)), values)
 
     def with_entries(entries: Any, as_value: Callable[[Any, int | None], Any]) -> GP:
-        """The GP with each free parameter set to its slice of `entries`."""
-        return _with_parameters(
+        """The GP with each free hyperparameter set to its slice of `entries`."""
+        return _with_hyperparameters(
             gp,
             {
                 path: as_value(entries[end - n : end], size)
@@ -489,7 +493,7 @@ def _fit(
 
     # Numbers: one per input as a tuple, else one float
     def as_number(value: np.ndarray, size: int | None) -> float | tuple[float, ...]:
-        """A fitted parameter's entries as its value."""
+        """A fitted hyperparameter's entries as its value."""
         return float(value[0]) if size is None else tuple(map(float, value))
 
     return with_entries(np.where(is_log, np.exp(w_best), w_best), as_number)
@@ -504,7 +508,7 @@ def predict(fitted: FittedGP, X: Any) -> tuple[Any, Any]:
     mean and variance themselves are built in SX), returns two (n, 1) CasADi columns,
     for building acquisition problems.
     """
-    # The conditional mean and variance at symbols for X, with the parameters and
+    # The conditional mean and variance at symbols for X, with the hyperparameters and
     # data as constants
     gp = fitted.gp
     X_train, Y_train = Symbolic(fitted.X), Symbolic(fitted.Y)

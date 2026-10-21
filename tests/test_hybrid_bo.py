@@ -9,6 +9,7 @@ import io
 import pickle
 
 import casadi as cas
+import illustrative_example as ex
 import numpy as np
 import pytest
 import scipy.optimize
@@ -42,10 +43,7 @@ from hybrid_bo.acquisition import (
     saa_scenarios,
 )
 from hybrid_bo.evaluation import evaluate
-from hybrid_bo.gp import GP, FittedGP, Matern52, Scale, Zero, fit_gp, predict
-
-# The prior GP of the experiments: an output scale times Matern-5/2, both fitted
-PRIOR_GP = GP(Zero(), Scale(Matern52()))
+from hybrid_bo.gp import FittedGP, Matern52, Scale, fit_gp, predict
 
 # Three scenarios with unequal weights, so a plain mean would give other values
 SCENARIOS = Scenarios(z=np.array([[-1.0], [0.5], [2.0]]), w=np.array([0.2, 0.3, 0.5]))
@@ -72,7 +70,7 @@ def fitted_gp(n_inputs):
     """The default GP over n_inputs arguments of h, fitted to four points of y."""
     X = np.array([[-1.5, -1.0], [-0.5, 0.2], [0.4, -0.3], [1.7, 0.6]])[:, :n_inputs]
     y = np.array([0.3, -1.2, 0.9, 0.8])
-    return fit_gp(PRIOR_GP, X, y, np.random.default_rng(0))
+    return fit_gp(ex.gp, X, y, np.random.default_rng(0))
 
 
 def scenario_values(fitted, u, x, h_inputs):
@@ -347,13 +345,13 @@ def test_scenarios_need_one_column_per_unknown_state():
 def test_settings_reject_anything_but_ei_or_lcb(acquisition):
     """The settings accept only an EI or LCB instance, not a name or the class."""
     with pytest.raises(TypeError, match=r"EI\(\) or LCB"):
-        HybridBOSettings(gp=PRIOR_GP, acquisition=acquisition)
+        HybridBOSettings(gp=ex.gp, acquisition=acquisition)
 
 
 def test_settings_reject_an_unknown_approximation():
     """The settings accept only an approximation the library knows, such as SAA()."""
     with pytest.raises(TypeError, match=r"SAA\("):
-        HybridBOSettings(gp=PRIOR_GP, approximation=object())  # ty: ignore[invalid-argument-type]
+        HybridBOSettings(gp=ex.gp, approximation=object())  # ty: ignore[invalid-argument-type]
 
 
 def test_acquisition_builder_rejects_an_unknown_approximation():
@@ -377,7 +375,7 @@ def test_lcb_with_linearization_is_not_implemented():
     fitted = fitted_gp(1)
 
     with pytest.raises(NotImplementedError, match=r"EI\(\) with Linearization"):
-        HybridBOSettings(gp=PRIOR_GP, acquisition=LCB(), approximation=Linearization())
+        HybridBOSettings(gp=ex.gp, acquisition=LCB(), approximation=Linearization())
     with pytest.raises(NotImplementedError, match=r"EI\(\) with Linearization"):
         hybrid_acquisition(
             problem_with(["u"]),
@@ -520,7 +518,7 @@ def test_lcb_with_soft_saa_is_rejected():
 
     # The settings, then the acquisition builder
     with pytest.raises(ValueError, match=r"EI\(\) with SoftSAA"):
-        HybridBOSettings(gp=PRIOR_GP, acquisition=LCB(), approximation=SoftSAA(1.0))
+        HybridBOSettings(gp=ex.gp, acquisition=LCB(), approximation=SoftSAA(1.0))
     with pytest.raises(ValueError, match=r"EI\(\) with SoftSAA"):
         hybrid_acquisition(
             problem_with(["u"]), fitted, SCENARIOS, 0.0, LCB(), SoftSAA(1.0)
@@ -632,7 +630,7 @@ def test_both_settings_solve_the_illustrative_example(
     """Hybrid BO runs on the illustrative example either way: one trial point per
     iteration within the bounds, one GP per iteration, and the scenarios it drew."""
     approximation = SAA(unknown_states_as_variables=unknown_states_as_variables)
-    settings = HybridBOSettings(gp=PRIOR_GP, approximation=approximation)
+    settings = HybridBOSettings(gp=ex.gp, approximation=approximation)
 
     run = illustrative_run(illustrative_problem, settings)
 
@@ -663,7 +661,7 @@ def test_soft_saa_solves_the_illustrative_example(
     approximation = SoftSAA(
         1.0, unknown_states_as_variables=unknown_states_as_variables
     )
-    settings = HybridBOSettings(gp=PRIOR_GP, approximation=approximation)
+    settings = HybridBOSettings(gp=ex.gp, approximation=approximation)
 
     run = illustrative_run(illustrative_problem, settings)
 
@@ -690,7 +688,7 @@ def test_stored_acquisition_solution_solves_the_acquisition_problem(
     approximation = SAA(
         n_scenarios=5, unknown_states_as_variables=unknown_states_as_variables
     )
-    settings = HybridBOSettings(gp=PRIOR_GP, approximation=approximation)
+    settings = HybridBOSettings(gp=ex.gp, approximation=approximation)
 
     run = illustrative_run(illustrative_problem, settings)
 
@@ -736,7 +734,7 @@ def test_linearization_runs_over_the_nominal_scenario(
     stores the nominal states at its trial point, where x solves the known equation
     with y the GP's mean, and the acquisition problem's objective there."""
     approximation = Linearization(unknown_states_as_variables)
-    settings = HybridBOSettings(gp=PRIOR_GP, approximation=approximation)
+    settings = HybridBOSettings(gp=ex.gp, approximation=approximation)
 
     run = illustrative_run(illustrative_problem, settings)
 
@@ -788,7 +786,7 @@ def test_linearization_draws_nothing_from_the_generator(illustrative_problem):
     states = {}
     for approximation in (Linearization(), SAA()):
         rng = np.random.default_rng(0)
-        settings = HybridBOSettings(gp=PRIOR_GP, approximation=approximation)
+        settings = HybridBOSettings(gp=ex.gp, approximation=approximation)
         hybrid_bo(illustrative_problem, measure, u, 0, rng, settings=settings)
         states[type(approximation)] = rng.bit_generator.state
 
@@ -806,7 +804,7 @@ def test_gp_inputs_are_the_arguments_of_h():
     problem = problem_with(["u", "x"])
 
     run = illustrative_run(
-        problem, HybridBOSettings(gp=PRIOR_GP, approximation=SAA(n_scenarios=5))
+        problem, HybridBOSettings(gp=ex.gp, approximation=SAA(n_scenarios=5))
     )
 
     # The fitted GP's inputs, unscaled, are the (u, x) of the points before it
@@ -825,7 +823,7 @@ def test_record_holds_the_settings_and_the_gp_over_the_arguments_of_h(
 ):
     """The record names the method and its settings, and the prior GP as its repr."""
     approximation = SAA(n_scenarios=5, unknown_states_as_variables=False)
-    settings = HybridBOSettings(gp=PRIOR_GP, approximation=approximation)
+    settings = HybridBOSettings(gp=ex.gp, approximation=approximation)
 
     record = illustrative_run(illustrative_problem, settings).record
 
@@ -835,7 +833,7 @@ def test_record_holds_the_settings_and_the_gp_over_the_arguments_of_h(
         in record["settings"]
     )
     assert "GP(" not in record["settings"]
-    assert record["gp"] == repr(PRIOR_GP)
+    assert record["gp"] == repr(ex.gp)
 
 
 def test_settings_are_required_and_keyword_only(illustrative_problem):
@@ -857,7 +855,7 @@ def test_settings_are_required_and_keyword_only(illustrative_problem):
             u,
             0,
             np.random.default_rng(0),
-            HybridBOSettings(gp=PRIOR_GP),  # ty: ignore[too-many-positional-arguments]
+            HybridBOSettings(gp=ex.gp),  # ty: ignore[too-many-positional-arguments]
         )
 
 
@@ -879,7 +877,7 @@ def test_run_pickles_without_the_code_that_produced_it(illustrative_problem):
 
     run = illustrative_run(
         illustrative_problem,
-        HybridBOSettings(gp=PRIOR_GP, approximation=SAA(n_scenarios=5)),
+        HybridBOSettings(gp=ex.gp, approximation=SAA(n_scenarios=5)),
     )
 
     loaded = DataOnlyUnpickler(io.BytesIO(pickle.dumps(run))).load()
@@ -911,7 +909,7 @@ def test_failed_evaluation_carries_the_partial_run_with_its_scenarios(
             np.array([[-0.5], [0.5]]),
             2,
             np.random.default_rng(0),
-            settings=HybridBOSettings(gp=PRIOR_GP, approximation=SAA(n_scenarios=5)),
+            settings=HybridBOSettings(gp=ex.gp, approximation=SAA(n_scenarios=5)),
         )
 
     run = info.value.run

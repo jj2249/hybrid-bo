@@ -217,10 +217,10 @@ and :py:class:`~hybrid_bo.gp.Scale`, which multiplies a kernel by an output scal
 
    gp = hb.gp.GP(hb.gp.Zero(), hb.gp.Scale(hb.gp.Matern52()))
 
-A kernel's parameters are its fields. A number fixes one; a
+A kernel's hyperparameters are its fields. A number fixes one; a
 :py:class:`~hybrid_bo.gp.Param` (an initial value and bounds) is fitted to the data
 in each iteration, and the defaults are ``Param``\ s. A lengthscale has one entry per
-input unless ``ard=False``. The parameters are in *scaled units*: the GP sees its
+input unless ``ard=False``. The hyperparameters are in *scaled units*: the GP sees its
 inputs scaled onto [0, 1] and its outputs scaled to zero mean and unit standard
 deviation, so a lengthscale of 0.5 is half the range of the data.
 
