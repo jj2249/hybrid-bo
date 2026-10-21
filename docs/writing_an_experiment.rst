@@ -158,7 +158,7 @@ with ``functools.partial``:
 
 .. literalinclude:: ../experiments/illustrative_example.py
    :language: python
-   :start-at: # Methods:
+   :start-at: # The prior GP
    :end-before: # The study
 
 - :py:func:`~hybrid_bo.bo.hybrid_bo` with
@@ -215,10 +215,11 @@ which multiply by an output scale written in front of them:
 
 .. code-block:: python
 
+   outputscale = hb.gp.Param(1.0, bounds=(0.1, 10.0))
+   lengthscale = hb.gp.Param(1.0, bounds=(1e-3, 1e2))
    gp = hb.gp.GP(
        mean=hb.gp.Zero(),
-       kernel=hb.gp.Param(1.0, bounds=(0.1, 10.0))
-       * hb.gp.Matern52(lengthscale=hb.gp.Param(1.0, bounds=(1e-3, 1e2))),
+       kernel=outputscale * hb.gp.Matern52(lengthscale=lengthscale),
    )
 
 A kernel's hyperparameters are its fields, and the output scale is the factor in
@@ -240,7 +241,7 @@ of the measured variable, the same number as the measurement's noise. It default
    measure = hb.oracle_measure(system, oracle, noise_std=0.01)
    gp = hb.gp.GP(
        mean=hb.gp.Zero(),
-       kernel=hb.gp.Param(1.0, bounds=(0.1, 10.0)) * hb.gp.Matern52(),
+       kernel=outputscale * hb.gp.Matern52(lengthscale=lengthscale),
        noise_std=0.01,
    )
 

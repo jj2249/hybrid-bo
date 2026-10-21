@@ -17,7 +17,8 @@ on top.
 An experiment is one module under `experiments/`, importable as a top-level module
 (pytest and ty put `experiments/` on the path). At module level, in this order:
 Problem, measurement (with a module-level `def oracle(v)` and the stated `optimum` for
-a benchmark), `methods`, `study_settings`, then a `__main__` block calling `cli.main`.
+a benchmark), the BO methods' prior GP (`gp`), `methods`, `study_settings`, then a
+`__main__` block calling `cli.main`.
 
 - Everything the command line uses is passed in the `cli.main` call (directly, or
   inside `problem` and `measure`); nothing is read from the module by name.
@@ -31,10 +32,12 @@ a benchmark), `methods`, `study_settings`, then a `__main__` block calling `cli.
 - A BO method's settings are required, since they name its GP: bind them with
   `functools.partial(hb.hybrid_bo, settings=hb.HybridBOSettings(gp=gp, ...))`, never
   put `hb.hybrid_bo` or `hb.standard_bo` in `methods` bare. `settings` is
-  keyword-only, after `rng`. Define the GP once as a module-level `gp`, e.g.
-  `hb.gp.GP(mean=hb.gp.Zero(), kernel=hb.gp.Param(1.0, bounds=(0.1, 10.0)) *
-  hb.gp.Matern52(lengthscale=hb.gp.Param(1.0, bounds=(1e-3, 1e2))))`, written out in
-  full so the experiment shows every fitted hyperparameter. The shipped experiments
+  keyword-only, after `rng`. Define the GP once as a module-level `gp`, each fitted
+  hyperparameter its own variable so the experiment shows them all (see
+  `illustrative_example.py`): `outputscale = hb.gp.Param(1.0, bounds=(0.1, 10.0))`,
+  `lengthscale = hb.gp.Param(1.0, bounds=(1e-3, 1e2))`, then
+  `hb.gp.GP(mean=hb.gp.Zero(), kernel=outputscale *
+  hb.gp.Matern52(lengthscale=lengthscale))`. The shipped experiments
   share it between methods; each method fits its own GP to its own data.
 
 ## Randomness
