@@ -127,6 +127,21 @@ def test_artifact_holds_the_problem_methods_and_stated_oracle_optimum(
     assert illustrative_study.settings == SETTINGS
 
 
+def test_artifact_holds_each_bo_methods_prior_gp(illustrative_study):
+    """The study's artifact gives each BO method's prior GP, the run artifact's `gp`,
+    on the line after the method's settings, so the study can be run again from it."""
+    methods = illustrative_study.artifact["methods"]
+    bo_runs = [run for run in illustrative_study.runs if "gp" in run.artifact]
+    assert bo_runs
+    for run in bo_runs:
+        artifact = run.artifact
+        lines = (
+            f"{run.method}: {artifact['method']}({artifact['settings']})\n"
+            f"  gp: {artifact['gp']}"
+        )
+        assert lines in methods
+
+
 def test_without_a_stated_optimum_the_study_has_none(illustrative_problem):
     """The study never computes the oracle optimum, even when the measurement has an
     oracle."""

@@ -719,7 +719,9 @@ The baselines are named `*_sampling` because `hb.sampling.uniform` and
   `error.run` for every method: the points evaluated so far (also `error.history`) and
   one surrogate per evaluated trial point (a failed evaluation drops its surrogate). A method that adds fields to its `Run` (hybrid BO's scenarios)
   adds them to the returned run and to `error.run`.
-- The artifact holds the settings without the GP, plus `gp`, the prior GP's repr. The
+- The artifact holds the settings without the GP, plus `gp`, the prior GP's repr. A
+  study's artifact gives the prior GP on the line after the method's settings, since
+  the study can't be run again without it; the fitted GPs stay in the runs. The
   GP is required, so `hb.standard_bo` and `hb.hybrid_bo` go into `methods` as a
   `functools.partial` with their settings, never bare.
 - The baselines are not sequential: they draw their whole design and `evaluate` it after

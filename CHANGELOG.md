@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- A study's artifact gives each BO method's prior GP (#128): the run artifact's `gp`,
+  on the line after the method's settings in `methods`, so the study artifact alone
+  says how to run the study again. Studies saved before have it only in their runs.
+
 ## 0.3.0 (2026-10-21)
 
 - **Breaking:** A run has an artifact (#123): `Run.record` is `Run.artifact`, with the

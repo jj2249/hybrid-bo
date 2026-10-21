@@ -110,7 +110,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   catches `HybridBOError`, logs it and keeps `error.run`) and `study` (resolves a
   None seed to fresh entropy kept in its settings, then each method's `repeat` from
   that seed; relabels runs with their key; its artifact records a stated `optimum` as
-  `oracle_optimum`, never computes one, and warns with `OracleOptimumWarning` if an
+  `oracle_optimum`, never computes one, gives a BO method's prior GP (the run
+  artifact's `gp`) on the line after its settings in `methods`, and warns with `OracleOptimumWarning` if an
   evaluated point's `f_oracle` is below it). Studies take a seed, not an
   `rng`: the settings alone reproduce a study.
 - `saving.py`: `save(study, path)` / `load(path)` (ADR 0004): `artifact.json` lists the

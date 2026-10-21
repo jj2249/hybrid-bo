@@ -52,7 +52,8 @@ class Study:
     (`run.index`), and run i of every method starts from the same initial points.
 
     `artifact` says, as text, what the study ran and how: the problem, the
-    measurement, each method with its settings, the oracle optimum (if stated) and
+    measurement, each method with its settings (a BO method's prior GP included,
+    never the fitted GPs, which are in the runs), the oracle optimum (if stated) and
     the versions. The seed is in `settings`.
     """
 
@@ -137,7 +138,8 @@ def study(
         method_runs = repeat(method, problem, measure, settings)
         runs += [replace(run, method=label) for run in method_runs]
 
-    # Each method with its settings, from the artifact of one of its runs
+    # Each method with its settings, from the artifact of one of its runs; a BO
+    # method's prior GP follows on its own line
     artifact = _problem_artifact(problem, measure)
     run_artifacts = {run.method: run.artifact for run in runs}
     method_lines = []
@@ -145,6 +147,8 @@ def study(
         if label in run_artifacts:
             run_artifact = run_artifacts[label]
             text = f"{run_artifact['method']}({run_artifact['settings']})"
+            if "gp" in run_artifact:
+                text += f"\n  gp: {run_artifact['gp']}"
         else:
             text = "no runs"
         method_lines.append(f"{label}: {text}")
