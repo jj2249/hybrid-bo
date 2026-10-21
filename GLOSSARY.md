@@ -24,8 +24,10 @@ uniform sampling). A BO method includes its choice of surrogate model.
 _Avoid_: strategy, routine, algorithm
 
 **Surrogate model**:
-A GP that stands in for an unknown part of the problem: the unknown equations in
-hybrid BO, the whole map from decision variables to objective in standard BO.
+What stands in for an unknown part of the problem. In hybrid BO it models the unknown
+equations, with one independent GP per unknown state, all sharing the arguments of the
+unknown equations. In standard BO it is one GP of the whole map from decision variables
+to objective.
 _Avoid_: GP model, emulator
 
 **Prior GP**:
