@@ -64,9 +64,11 @@ with a GitHub issue labeled `bug`: remove the marker when fixing the bug.
 - Data in, data out: functions return new values and don't mutate their inputs.
   No set-then-call sequences (`set_problem` → `solve()`).
 - Frozen dataclasses for data and settings; behavior lives in plain functions.
-  Methods are settings dataclasses plus functions, kernels are functions, and
-  there are no strategy or kernel classes. Add a protocol only once a second
-  implementation exists.
+  Methods are settings dataclasses plus functions, and there are no strategy
+  classes. Kernels and means are frozen dataclasses from a closed set, with their
+  behavior in functions that match on the type (`covariance`; ADR 0008). An
+  operator may only build data (`Param(...) * Matern52()` is a `Scale`). Add a
+  protocol only once a second implementation exists.
 - American spelling everywhere, in code and prose (`optimization_loop`,
   "optimization loop").
 - Library code lives at the top level of `hybrid_bo`.

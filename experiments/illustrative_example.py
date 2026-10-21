@@ -47,6 +47,17 @@ measure = hb.oracle_measure(system, oracle, noise_std=0.0)
 # checked: hybrid BO runs reach it, and none evaluates a point below it
 optimum = -50.4608044704652
 
+# The prior GP of every BO method, which each fits to its own data: a zero mean and an
+# output scale times a Matern-5/2 kernel, both fitted within these bounds (in scaled
+# units), and no noise, as the measurement has none
+outputscale = hb.gp.Param(1.0, bounds=(0.1, 10.0))
+lengthscale = hb.gp.Param(1.0, bounds=(1e-3, 1e2))
+gp = hb.gp.GP(
+    mean=hb.gp.Zero(),
+    kernel=outputscale * hb.gp.Matern52(lengthscale=lengthscale),
+    noise_std=0.0,
+)
+
 # Methods: each takes (problem, measure, initial_points, n, rng), where n is the
 # number of iterations, or of design points for the baselines. Hybrid BO substitutes
 # the GP prediction for the unknown states, as this experiment always has, with SAA-EI,
@@ -55,22 +66,24 @@ methods = {
     "hybrid_bo": functools.partial(
         hb.hybrid_bo,
         settings=hb.HybridBOSettings(
-            approximation=hb.SAA(unknown_states_as_variables=False)
+            gp=gp, approximation=hb.SAA(unknown_states_as_variables=False)
         ),
     ),
     "hybrid_bo_lin": functools.partial(
         hb.hybrid_bo,
         settings=hb.HybridBOSettings(
-            approximation=hb.Linearization(unknown_states_as_variables=False)
+            gp=gp, approximation=hb.Linearization(unknown_states_as_variables=False)
         ),
     ),
     "hybrid_bo_soft": functools.partial(
         hb.hybrid_bo,
         settings=hb.HybridBOSettings(
-            approximation=hb.SoftSAA(1.0, unknown_states_as_variables=False)
+            gp=gp, approximation=hb.SoftSAA(1.0, unknown_states_as_variables=False)
         ),
     ),
-    "standard_bo": hb.standard_bo,
+    "standard_bo": functools.partial(
+        hb.standard_bo, settings=hb.StandardBOSettings(gp=gp)
+    ),
     "latin_hypercube_sampling": hb.latin_hypercube_sampling,
     "uniform_sampling": hb.uniform_sampling,
 }

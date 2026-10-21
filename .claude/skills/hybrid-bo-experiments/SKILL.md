@@ -17,7 +17,8 @@ on top.
 An experiment is one module under `experiments/`, importable as a top-level module
 (pytest and ty put `experiments/` on the path). At module level, in this order:
 Problem, measurement (with a module-level `def oracle(v)` and the stated `optimum` for
-a benchmark), `methods`, `study_settings`, then a `__main__` block calling `cli.main`.
+a benchmark), the BO methods' prior GP (`gp`), `methods`, `study_settings`, then a
+`__main__` block calling `cli.main`.
 
 - Everything the command line uses is passed in the `cli.main` call (directly, or
   inside `problem` and `measure`); nothing is read from the module by name.
@@ -28,9 +29,16 @@ a benchmark), `methods`, `study_settings`, then a `__main__` block calling `cli.
   baselines: that is a *logic* change.
 - A custom measurement is `(u (N,), rng) -> measured (P,)`; its docstring (else its
   name) is its record.
-- A BO method with its default settings goes into `methods` bare (`hb.standard_bo`);
-  bind other settings with `functools.partial(hb.hybrid_bo, settings=...)`.
-  `settings` is keyword-only, after `rng`.
+- A BO method's settings are required, since they name its GP: bind them with
+  `functools.partial(hb.hybrid_bo, settings=hb.HybridBOSettings(gp=gp, ...))`, never
+  put `hb.hybrid_bo` or `hb.standard_bo` in `methods` bare. `settings` is
+  keyword-only, after `rng`. Define the GP once as a module-level `gp`, each fitted
+  hyperparameter its own variable so the experiment shows them all (see
+  `illustrative_example.py`): `outputscale = hb.gp.Param(1.0, bounds=(0.1, 10.0))`,
+  `lengthscale = hb.gp.Param(1.0, bounds=(1e-3, 1e2))`, then
+  `hb.gp.GP(mean=hb.gp.Zero(), kernel=outputscale *
+  hb.gp.Matern52(lengthscale=lengthscale))`. The shipped experiments
+  share it between methods; each method fits its own GP to its own data.
 
 ## Randomness
 
@@ -54,12 +62,18 @@ oracle objective is below it.
 - `math.exp(v.x)` on a CasADi symbol silently returns `nan`; numpy functions mostly
   work but emit a CasADi `FutureWarning`. Always use `cas.*`.
 - Exactly one measured variable per unknown state, and only `P == 1` is supported.
-- With `noise_std > 0`, the GP needs a `noise_std` hyperparameter (`default_gp` is
-  noise-free).
+- With measurement noise, state it in the GP too, as the same number:
+  `GP(..., noise_std=0.01)` for `oracle_measure(..., noise_std=0.01)`. `noise_std`
+  is in measured units; kernel hyperparameters (`Param` bounds, fixed lengthscales) are in
+  scaled units (inputs onto [0, 1], outputs standardized). Don't convert the noise by
+  hand.
 - `true_curves=True` runs the measurement over the plot grid: only for an oracle.
-- The iteration figures need one decision variable and read the settings from the
-  run's record, so a custom GP needs `settings=` in `hb.plots.iteration`; otherwise
-  `plot` prints why and skips that run's figures.
+- The iteration figures need one decision variable. They take the GP from the run's
+  stored fitted GPs, and read the other settings from the run's record, so only a
+  custom solver needs `settings=` in `hb.plots.iteration`; otherwise `plot` prints why
+  and skips that run's figures.
+- Studies saved before #119 (GPs as data) don't load: `hb.load` raises
+  `StudyFormatError`. Rerun them.
 
 ## Running
 

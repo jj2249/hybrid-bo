@@ -28,6 +28,11 @@ class NoSolutionError(HybridBOError):
     """Every start of a multistart solve failed."""
 
 
+class StudyFormatError(ValueError):
+    """A saved study is in a format this version can't load, such as one saved before
+    GPs were data. Rerun it, or load it with the version that saved it."""
+
+
 class ReconstructionWarning(UserWarning):
     """The root-finding problem found a different root from the oracle values.
 

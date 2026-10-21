@@ -31,7 +31,7 @@ from hybrid_bo.acquisition import (
 )
 from hybrid_bo.bo import HybridBOSettings, StandardBOSettings
 from hybrid_bo.evaluation import Measure, evaluate
-from hybrid_bo.gp import PriorGP, _gp_record, default_gp, predict
+from hybrid_bo.gp import GP, predict
 from hybrid_bo.history import n_iterations
 from hybrid_bo.problem import Problem, Symbolic
 from hybrid_bo.run import Run
@@ -167,12 +167,13 @@ def iteration(
     true curves; it runs at every grid point (generator seeded with 0), so pass an
     oracle measurement, never a real system.
 
-    The settings are read from the run's record. The record holds the GP as text, not
-    its kernel function, so a run with a GP other than `default_gp` needs `settings`.
+    The GP is the run's stored fitted GP; the other settings are read from the run's
+    record, so a run with, say, a custom solver needs `settings` (whose GP is
+    ignored).
 
     Raises `ValueError` unless the problem has one decision variable (and, for hybrid
-    BO's GP panel, h takes only u), if the settings or the default GP don't match the
-    record, or if `measure` has no oracle; `TypeError` if the settings aren't the
+    BO's GP panel, h takes only u), if the settings don't match the record, or if
+    `measure` has no oracle; `TypeError` if the settings aren't the
     run's method's; and `IndexError` if the run has no iteration `i`.
     """
     # The checks: one decision variable, the GP of y over u, the iteration
@@ -189,7 +190,8 @@ def iteration(
         msg = f"The run has {n_later} iterations, so no iteration {i}"
         raise IndexError(msg)
     i %= n_later
-    settings, prior_gp = _replay_settings(run, problem, settings)
+    fitted_gp = run.surrogates[i].gp if run.surrogates else None
+    settings = _replay_settings(run, fitted_gp, settings)
 
     # The grid, with the trial point in it so the replay starts there
     n = history.n_initial + i
@@ -214,9 +216,7 @@ def iteration(
     panels = [panel for panel, on in shown.items() if on] or ["points"]
     curve = f_scenarios = f_std = None
     if settings is not None and (shown["scenarios"] or shown["acquisition"]):
-        curve, f_scenarios, f_std = _replay(
-            run, problem, i, settings, prior_gp, u[:, np.newaxis]
-        )
+        curve, f_scenarios, f_std = _replay(run, problem, i, settings, u[:, np.newaxis])
 
     import matplotlib.pyplot as plt
 
@@ -251,7 +251,7 @@ def iteration(
             if panel == "gp" and is_hybrid:
                 values, true, label = history.y[:, 0], y_true, system.y[0].name
             if panel == "gp":
-                _band(ax, u, *predict(prior_gp, run.surrogates[i], u[:, None]))
+                _band(ax, u, *predict(run.surrogates[i], u[:, None]))
             elif panel == "scenarios":
                 assert run.scenarios is not None and f_scenarios is not None
                 if f_std is None:
@@ -269,15 +269,19 @@ def iteration(
 
 def _replay_settings(
     run: Run,
-    problem: Problem,
+    gp: GP | None,
     settings: StandardBOSettings | HybridBOSettings | None,
-) -> tuple[StandardBOSettings | HybridBOSettings | None, PriorGP]:
-    """The settings a run is replayed with and its prior GP: `settings` if given, else
-    the record's acquisition function and approximation with `default_gp`. None and
-    `default_gp` for the baselines.
+) -> StandardBOSettings | HybridBOSettings | None:
+    """The settings a run is replayed with: `settings` if given, else the record's
+    acquisition function and approximation with `gp` as their GP. None for the
+    baselines.
+
+    The replay reads the GP from the run's fitted GPs, never from the settings, so
+    `gp` (the iteration's fitted GP, or None for the baselines) only fills the
+    required field.
 
     Raises `TypeError` if `settings` aren't the run's method's, and `ValueError` if
-    the fields the replay uses, or the GP, don't match the record.
+    the fields the replay uses don't match the record.
     """
     # The method's settings type; the baselines have none
     method = run.record.get("method", "")
@@ -286,16 +290,19 @@ def _replay_settings(
         name = "no" if expected is None else expected.__name__
         msg = f"A {method} run takes {name} settings, got {type(settings).__name__}"
         raise TypeError(msg)
-    gp_inputs = problem.system.h_inputs if method == "hybrid_bo" else problem.system.u
     if expected is None:
-        return None, default_gp(len(gp_inputs))
+        return None
 
     # The settings: given, else the defaults with the recorded acquisition function
     # and approximation (SAA in records from before there was a choice)
     recorded = run.record.get("settings", "")
     if settings is None:
+        assert gp is not None  # a BO run has a fitted GP per iteration
         lcb = re.search(r"acquisition=LCB\(std_factor=([^)]*)\)", recorded)
-        settings = expected(acquisition=EI() if lcb is None else LCB(float(lcb[1])))
+        settings = expected(
+            gp=gp,
+            acquisition=EI() if lcb is None else LCB(float(lcb[1])),
+        )
         if isinstance(settings, HybridBOSettings):
             as_variables = "unknown_states_as_variables=False" not in recorded
             settings = replace(
@@ -313,14 +320,7 @@ def _replay_settings(
     if any(text not in recorded for text in texts):
         msg = f"The settings don't match the run's record ({recorded}); pass them"
         raise ValueError(msg)
-
-    # The prior GP, whose text must be the recorded one
-    prior_gp = default_gp(len(gp_inputs)) if settings.gp is None else settings.gp
-    gp_text = _gp_record(prior_gp, [var.name for var in gp_inputs])
-    if any(run.record.get(key) != text for key, text in gp_text.items()):
-        msg = "The run's GP isn't default_gp; pass the settings it was run with"
-        raise ValueError(msg)
-    return settings, prior_gp
+    return settings
 
 
 def _recorded_approximation(
@@ -360,7 +360,6 @@ def _replay(
     problem: Problem,
     i: int,
     settings: StandardBOSettings | HybridBOSettings,
-    prior_gp: PriorGP,
     u: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray | None, np.ndarray | None]:
     """Iteration i's acquisition function at each row of u (n_points, N), which holds
@@ -374,7 +373,7 @@ def _replay(
     # Standard BO: its analytic acquisition function
     if isinstance(settings, StandardBOSettings):
         nlp = standard_acquisition(
-            problem, prior_gp, surrogate, incumbent, settings.acquisition
+            problem, surrogate, incumbent, settings.acquisition
         ).nlp
         values = np.array([nlp.f(_pack(point)).full().item() for point in u])
         return values, None, None
@@ -383,7 +382,6 @@ def _replay(
     assert run.scenarios is not None  # hybrid BO runs hold their scenarios
     acquisition_problem = hybrid_acquisition(
         problem,
-        prior_gp,
         surrogate,
         run.scenarios,
         incumbent,
@@ -411,7 +409,7 @@ def _replay(
     # Linearization's std of f, from the sensitivity at the nominal states
     sensitivity = None
     if isinstance(settings.approximation, Linearization):
-        sensitivity = _sensitivity(problem, prior_gp, surrogate)
+        sensitivity = _sensitivity(problem, surrogate)
 
     # Solve at each u outwards from the trial point, each from its neighbor's solution
     values = np.full(len(u), np.nan)
@@ -435,7 +433,6 @@ def _replay(
             values[k] = float(result["f"])
             x, y = _scenario_states(
                 problem.system,
-                prior_gp,
                 surrogate,
                 run.scenarios,
                 acquisition_problem,

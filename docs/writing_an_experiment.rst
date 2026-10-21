@@ -153,12 +153,12 @@ Methods and settings
 --------------------
 
 A *method* is how the problem is solved. ``methods`` maps a label to a method; every
-method takes the same arguments. A BO method runs with its default settings unless
-they are bound with ``functools.partial``:
+method takes the same arguments. A BO method's settings, which name its GP, are bound
+with ``functools.partial``:
 
 .. literalinclude:: ../experiments/illustrative_example.py
    :language: python
-   :start-at: # Methods:
+   :start-at: # The prior GP
    :end-before: # The study
 
 - :py:func:`~hybrid_bo.bo.hybrid_bo` with
@@ -167,7 +167,7 @@ they are bound with ``functools.partial``:
   :py:class:`~hybrid_bo.acquisition.LCB` with a ``std_factor``), how it is
   approximated (``approximation``, default
   :py:class:`~hybrid_bo.acquisition.SAA`), the solver starts (``n_starts``) and the
-  GP (``gp``, default :py:func:`~hybrid_bo.gp.default_gp`). ``SAA`` takes the number
+  prior GP (``gp``, required; see below). ``SAA`` takes the number
   of scenarios (``n_scenarios``) and ``unknown_states_as_variables``: ``False`` (as
   above) makes the acquisition problem smaller; the default, ``True``, often helps
   the solver.
@@ -183,7 +183,7 @@ they are bound with ``functools.partial``:
   is -log EI; the iteration plot draws it as -EI.
 - :py:func:`~hybrid_bo.bo.standard_bo` with
   :py:class:`~hybrid_bo.bo.StandardBOSettings`: BO with a GP of the objective, as the
-  usual comparison.
+  usual comparison. Its GP is required too.
 - :py:func:`~hybrid_bo.baselines.latin_hypercube_sampling` and
   :py:func:`~hybrid_bo.baselines.uniform_sampling`, which sample without a model and
   take no settings.
@@ -194,16 +194,59 @@ different settings:
 .. code-block:: python
 
    methods = {
-       "hybrid_bo_ei": hb.hybrid_bo,
+       "hybrid_bo_ei": functools.partial(
+           hb.hybrid_bo, settings=hb.HybridBOSettings(gp=gp)
+       ),
        "hybrid_bo_lcb": functools.partial(
-           hb.hybrid_bo, settings=hb.HybridBOSettings(acquisition=hb.LCB(2.0))
+           hb.hybrid_bo, settings=hb.HybridBOSettings(gp=gp, acquisition=hb.LCB(2.0))
        ),
    }
 
-The default GP assumes noise-free measurements. With noise, give the prior GP a
-hyperparameter named ``noise_std``: copy :py:func:`~hybrid_bo.gp.default_gp`, which
-returns a :py:class:`~hybrid_bo.gp.PriorGP`, and add
-``hb.gp.Hyper("noise_std", ...)``, then pass it as ``HybridBOSettings(gp=...)``.
+The GP
+------
+
+Each BO method states its prior GP, :py:class:`~hybrid_bo.gp.GP`: a mean, a kernel
+and the observation noise. Hybrid BO's GP maps the arguments of ``h`` to the unknown
+state; standard BO's maps ``u`` to ``f``. The means and kernels are a fixed set in
+``hb.gp``: the :py:class:`~hybrid_bo.gp.Zero` mean, the kernels
+:py:class:`~hybrid_bo.gp.Matern12`, :py:class:`~hybrid_bo.gp.Matern32`,
+:py:class:`~hybrid_bo.gp.Matern52` and :py:class:`~hybrid_bo.gp.SquaredExponential`,
+which multiply by an output scale written in front of them:
+
+.. code-block:: python
+
+   outputscale = hb.gp.Param(1.0, bounds=(0.1, 10.0))
+   lengthscale = hb.gp.Param(1.0, bounds=(1e-3, 1e2))
+   gp = hb.gp.GP(
+       mean=hb.gp.Zero(),
+       kernel=outputscale * hb.gp.Matern52(lengthscale=lengthscale),
+   )
+
+A kernel's hyperparameters are its fields, and the output scale is the factor in
+front. A number fixes one (``2.0 * hb.gp.Matern52(lengthscale=0.3)``); a
+:py:class:`~hybrid_bo.gp.Param` (an initial value and bounds) is fitted to the data
+in each iteration. Each method fits its own GP to its own data, so methods can share
+one prior GP. Left out, a lengthscale is the ``Param`` above; without a factor there
+is no output scale. A lengthscale has one entry per input unless ``ard=False``. There
+is no product or sum of two kernels. The hyperparameters are in *scaled units*: the GP sees its
+inputs scaled onto [0, 1] and its outputs scaled to zero mean and unit standard
+deviation, so a lengthscale of 0.5 is half the range of the data.
+
+``noise_std`` is the known standard deviation of the measurement noise, in the units
+of the measured variable, the same number as the measurement's noise. It defaults to
+0, noise-free. With noise of 0.01 on the measured state:
+
+.. code-block:: python
+
+   measure = hb.oracle_measure(system, oracle, noise_std=0.01)
+   gp = hb.gp.GP(
+       mean=hb.gp.Zero(),
+       kernel=outputscale * hb.gp.Matern52(lengthscale=lengthscale),
+       noise_std=0.01,
+   )
+
+A run saves its fitted GPs whole, so the iteration figures of a saved study need
+nothing from the experiment.
 
 The study and the command line
 ------------------------------

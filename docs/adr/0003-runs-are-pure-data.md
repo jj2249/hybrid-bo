@@ -12,6 +12,10 @@ prediction takes the spec back in: `hb.predict(gp, fitted, X)`. Plots are functi
 finished run (`hb.plots`), not callbacks during the loop, so slow runs are never
 repeated to redraw a figure.
 
+Amended by [ADR 0008](0008-gps-are-data.md): the GP is now data (frozen dataclasses from
+a closed set, no callables), so a fitted surrogate holds its whole GP and prediction
+takes the fitted GP alone, `hb.gp.predict(fitted, X)`. Runs still hold only data.
+
 ## Considered Options
 
 - **Keep the spec in the run and save with `cloudpickle`/`dill`**: saved files would

@@ -14,7 +14,7 @@ explains the method; these pages explain how to use the library.
   Python.
 
 Import the package as ``import hybrid_bo as hb``: the top level holds what a typical
-experiment uses, the rest is in its module (``hb.gp.default_gp``). The
+experiment uses, the rest is in its module (``hb.gp.GP``). The
 :doc:`API reference <autoapi/index>` covers every function.
 
 .. toctree::

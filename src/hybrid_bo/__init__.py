@@ -14,7 +14,6 @@ from hybrid_bo import (
     evaluation,
     gp,
     history,
-    kernels,
     plots,
     problem,
     run,

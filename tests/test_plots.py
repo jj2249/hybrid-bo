@@ -41,11 +41,13 @@ from hybrid_bo import (
     standard_bo,
 )
 from hybrid_bo.acquisition import _pack, hybrid_acquisition, standard_acquisition
-from hybrid_bo.gp import default_gp, predict
+from hybrid_bo.gp import predict
 
 # The illustrative example's hybrid BO settings: the GP's prediction substituted for
 # the unknown states
-HYBRID_SETTINGS = HybridBOSettings(approximation=SAA(unknown_states_as_variables=False))
+HYBRID_SETTINGS = HybridBOSettings(
+    gp=ex.gp, approximation=SAA(unknown_states_as_variables=False)
+)
 
 
 def pickled(run: Run) -> Run:
@@ -79,7 +81,7 @@ def hybrid_run() -> Run:
 @pytest.fixture(scope="module")
 def hybrid_lcb_run() -> Run:
     """A pickled hybrid BO run with LCB and the unknown states as variables."""
-    return illustrative_run(hybrid_bo, HybridBOSettings(acquisition=LCB(2.0)))
+    return illustrative_run(hybrid_bo, HybridBOSettings(gp=ex.gp, acquisition=LCB(2.0)))
 
 
 @pytest.fixture(scope="module")
@@ -87,7 +89,9 @@ def hybrid_lin_run() -> Run:
     """A pickled hybrid BO run with Lin-EI, the GP's prediction substituted for the
     unknown states."""
     approximation = Linearization(unknown_states_as_variables=False)
-    return illustrative_run(hybrid_bo, HybridBOSettings(approximation=approximation))
+    return illustrative_run(
+        hybrid_bo, HybridBOSettings(gp=ex.gp, approximation=approximation)
+    )
 
 
 @pytest.fixture(scope="module")
@@ -95,13 +99,15 @@ def hybrid_soft_run() -> Run:
     """A pickled hybrid BO run with SoftSAA-EI at a temperature of 0.5, the GP's
     prediction substituted for the unknown states."""
     approximation = SoftSAA(0.5, n_scenarios=10, unknown_states_as_variables=False)
-    return illustrative_run(hybrid_bo, HybridBOSettings(approximation=approximation))
+    return illustrative_run(
+        hybrid_bo, HybridBOSettings(gp=ex.gp, approximation=approximation)
+    )
 
 
 @pytest.fixture(scope="module")
 def standard_run() -> Run:
     """A pickled standard BO run with the illustrative example's settings."""
-    return illustrative_run(standard_bo, StandardBOSettings())
+    return illustrative_run(standard_bo, StandardBOSettings(gp=ex.gp))
 
 
 @pytest.fixture(scope="module")
@@ -305,7 +311,7 @@ def scenario_states(run: Run, iteration: int, u: np.ndarray) -> np.ndarray:
     """x_s at each u and scenario, (n_u, S), computed independently: y_s from the GP,
     then x_s from x + exp(x) = y_s with scipy's brentq."""
     assert run.scenarios is not None
-    mean, std = predict(default_gp(1), run.surrogates[iteration], u[:, np.newaxis])
+    mean, std = predict(run.surrogates[iteration], u[:, np.newaxis])
     y = mean[:, np.newaxis] + std[:, np.newaxis] * run.scenarios.z[:, 0]
     return np.vectorize(
         lambda y_s: scipy.optimize.brentq(lambda x: x + np.exp(x) - y_s, -50, 50)
@@ -331,7 +337,7 @@ def test_hybrid_bo_figure_from_a_pickled_run(hybrid_run):
 
     # The GP of y: its prediction, and the oracle y = sin(u) as the true curve
     u = np.asarray(drawn_line(surrogate, "GP mean").get_xdata())
-    mean, _ = predict(default_gp(1), hybrid_run.surrogates[1], u[:, np.newaxis])
+    mean, _ = predict(hybrid_run.surrogates[1], u[:, np.newaxis])
     np.testing.assert_allclose(line(surrogate, "GP mean"), mean, rtol=1e-12)
     np.testing.assert_allclose(line(surrogate, "true"), np.sin(u), atol=1e-8)
 
@@ -347,7 +353,6 @@ def test_hybrid_bo_figure_from_a_pickled_run(hybrid_run):
     incumbent = hybrid_run.history.f[:3].min()
     nlp = hybrid_acquisition(
         ex.problem,
-        default_gp(1),
         hybrid_run.surrogates[1],
         hybrid_run.scenarios,
         incumbent,
@@ -377,7 +382,7 @@ def test_lin_figure_draws_the_nominal_f_and_its_std(hybrid_lin_run):
     np.testing.assert_allclose(line(ax, "nominal f"), f, atol=1e-4)
 
     # The band: f +- s at each u
-    _, std = predict(default_gp(1), hybrid_lin_run.surrogates[1], u[:, np.newaxis])
+    _, std = predict(hybrid_lin_run.surrogates[1], u[:, np.newaxis])
     f_x = 12 * (6 * x - 2) * np.sin(12 * x - 4)
     f_x += 12 * (6 * x - 2) ** 2 * np.cos(12 * x - 4)
     s = np.abs(f_x) * std / (1 + np.exp(x))
@@ -400,14 +405,12 @@ def test_standard_bo_figure_from_a_pickled_run(standard_run):
     assert figure.get_suptitle() == "standard_bo, iteration 1"
     u = np.asarray(drawn_line(gp_ax, "GP mean").get_xdata())
     surrogate = standard_run.surrogates[1]
-    mean, _ = predict(default_gp(1), surrogate, u[:, np.newaxis])
+    mean, _ = predict(surrogate, u[:, np.newaxis])
     np.testing.assert_allclose(line(gp_ax, "GP mean"), mean, rtol=1e-12)
 
     # The acquisition panel is the acquisition problem's objective
     incumbent = standard_run.history.f[:3].min()
-    nlp = standard_acquisition(
-        ex.problem, default_gp(1), surrogate, incumbent, EI()
-    ).nlp
+    nlp = standard_acquisition(ex.problem, surrogate, incumbent, EI()).nlp
     expected = [nlp.f(_pack(np.array([u_k]))).full().item() for u_k in u]
     np.testing.assert_allclose(line(acquisition_ax, "-EI"), expected, rtol=1e-12)
     plt.close("all")
@@ -463,20 +466,10 @@ def test_iteration_must_exist(standard_run, i):
 
 
 def test_settings_matching_the_record_are_used(hybrid_run):
-    """A run's settings, with the GP given, can be passed when they match the
-    record."""
-    settings = replace(HYBRID_SETTINGS, gp=default_gp(1))
-    figure = plots.iteration(hybrid_run, ex.problem, 0, settings=settings)
+    """A run's settings can be passed when they match the record."""
+    figure = plots.iteration(hybrid_run, ex.problem, 0, settings=HYBRID_SETTINGS)
     assert len(figure.axes) == 3
     plt.close("all")
-
-
-def test_a_gp_other_than_the_default_needs_the_settings(hybrid_run):
-    """The record holds the GP as text, so a run whose GP isn't `default_gp` can't
-    be replayed without its settings."""
-    run = replace(hybrid_run, record=hybrid_run.record | {"kernel": "another"})
-    with pytest.raises(ValueError, match="settings"):
-        plots.iteration(run, ex.problem, 0)
 
 
 def test_a_custom_solver_needs_the_settings(hybrid_run):
@@ -493,15 +486,15 @@ def test_a_custom_solver_needs_the_settings(hybrid_run):
 @pytest.mark.parametrize(
     ("run_name", "settings", "error"),
     [
-        ("hybrid_run", StandardBOSettings(), TypeError),
-        ("standard_run", HybridBOSettings(), TypeError),
-        ("lhs_run", StandardBOSettings(), TypeError),
-        ("hybrid_run", HybridBOSettings(), ValueError),
+        ("hybrid_run", StandardBOSettings(gp=ex.gp), TypeError),
+        ("standard_run", HybridBOSettings(gp=ex.gp), TypeError),
+        ("lhs_run", StandardBOSettings(gp=ex.gp), TypeError),
+        ("hybrid_run", HybridBOSettings(gp=ex.gp), ValueError),
         ("hybrid_lin_run", HYBRID_SETTINGS, ValueError),
         ("hybrid_soft_run", HYBRID_SETTINGS, ValueError),
         (
             "hybrid_soft_run",
-            HybridBOSettings(approximation=SoftSAA(2.0, 10, False)),
+            HybridBOSettings(gp=ex.gp, approximation=SoftSAA(2.0, 10, False)),
             ValueError,
         ),
     ],

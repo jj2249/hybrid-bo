@@ -13,7 +13,7 @@ import pytest
 
 import hybrid_bo as hb
 from hybrid_bo.acquisition import AcquisitionSolution
-from hybrid_bo.gp import FittedGP, Scaler
+from hybrid_bo.gp import GP, FittedGP, Matern52, Scale, Scaler, Zero
 
 OPTIMUM = -1.0
 
@@ -47,11 +47,12 @@ def history(f: list[float], f_oracle: list[float] | None) -> hb.History:
 
 
 def surrogate(lengthscale: list[float]) -> FittedGP:
-    """A fitted GP with an output scale of 1 and the given lengthscales."""
+    """A fitted GP of two inputs with an output scale of 1 and the given
+    lengthscales."""
     scaler = Scaler(np.zeros(1), np.ones(1))
     return FittedGP(
-        {"outputscale": np.array([1.0]), "lengthscale": np.array(lengthscale)},
-        X=np.zeros((2, 1)),
+        GP(Zero(), Scale(Matern52(tuple(lengthscale)), outputscale=1.0)),
+        X=np.zeros((2, 2)),
         Y=np.zeros(2),
         x_scaler=scaler,
         y_scaler=scaler,
@@ -245,7 +246,8 @@ def test_summary_counts_runs_that_left_nothing_as_failed():
 
 def test_hyperparameters_has_one_row_per_fitted_entry():
     """Each iteration's fitted values, one row per hyperparameter entry (each
-    lengthscale of an ARD kernel is an entry); the baselines fit none."""
+    lengthscale of an ARD kernel is an entry), named by its path in the GP; the
+    baselines fit none."""
     frame = hb.hyperparameters(STUDY)
 
     assert frame.columns == [
@@ -261,7 +263,7 @@ def test_hyperparameters_has_one_row_per_fitted_entry():
     lengthscales = frame.filter(
         (pl.col("run") == 0)
         & (pl.col("iteration") == 2)
-        & (pl.col("hyperparameter") == "lengthscale")
+        & (pl.col("hyperparameter") == "kernel.kernel.lengthscale")
     )
     assert lengthscales["entry"].to_list() == [0, 1]
     assert lengthscales["value"].to_list() == pytest.approx([0.1, 0.2])

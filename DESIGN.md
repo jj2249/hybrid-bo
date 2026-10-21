@@ -27,7 +27,9 @@ The original code was hard to change for three reasons:
 
 1. **Data in, data out.** Functions return new values and never mutate their inputs.
 2. **Frozen dataclasses for data and settings; behavior in plain functions.** No strategy
-   classes and no kernel classes.
+   classes. Kernels and means are dataclasses from a closed set, with their behavior in
+   functions that match on the type (ADR 0008); their one operator,
+   `outputscale * kernel`, only builds data.
 3. **Functions take what they use.** There is no `Config`.
 4. **One way to do each thing.** One CasADi code path for symbolic and numeric use.
 5. **Explicit randomness.** Anything random takes an `rng: np.random.Generator`.
@@ -291,8 +293,8 @@ class Run:
 
 The **record** is built by the library (`run_record`, before the method draws
 anything), not the example: the variables with their bounds, `h_inputs`, `measured`,
-`g` and `f` as expression text, the measurement, the method and its settings, the GP
-spec and kernel expression (from #28), the seed, spawn key and generator state, and the
+`g` and `f` as expression text, the measurement, the method and its settings, the
+prior GP's repr (#119), the seed, spawn key and generator state, and the
 versions of `hybrid_bo` (with `git describe`), Python, CasADi, NumPy and SciPy. The
 measurement is recorded by its docstring, else its name; the oracle simulation's
 docstring is the oracle as text with its noise and solver settings, so a custom
@@ -334,74 +336,89 @@ is logged at debug level without a traceback. Starts that stopped at IPOPT's ite
 limit also get one warning per call, under the objective's name: they fail like any
 other start, but they are what makes a fit slow (#108).
 
-### GP (`gp.py`, `kernels.py`)
+### GP (`gp.py`)
+
+GPs are data ([ADR 0008](docs/adr/0008-gps-are-data.md)): the prior GP, its mean, its
+kernel and its hyperparameters are frozen dataclasses from a closed set.
 
 ```python
 @dataclass(frozen=True)
-class Hyper:
-    name: str
+class Param:  # a hyperparameter to fit
     init: float
-    bounds: tuple[float, float]
-    size: int = 1  # e.g. one lengthscale per input (ARD)
-    log: bool = True  # optimize in log space
+    bounds: tuple[float, float]  # hard limits; the fit's starts are drawn within them
+    log: bool = True  # fit in log space
 
 
 @dataclass(frozen=True)
-class PriorGP:  # the prior GP, before it sees any data
-    hyperparameters: tuple[Hyper, ...]  # declaration order is the optimization order
-    kernel: Callable  # (h, X1, X2) -> (n1, n2)
-    mean: Callable = zero_mean  # (h, X) -> (n, 1)
+class Matern52:  # also Matern12, Matern32, SquaredExponential
+    lengthscale: float | tuple[float, ...] | Param = Param(1.0, (1e-3, 1e2))
+    ard: bool = True  # a fitted lengthscale per input
+
+
+@dataclass(frozen=True)
+class Scale:
+    kernel: Kernel
+    outputscale: float | Param = Param(1.0, (0.1, 10.0))  # unsquared
+
+
+@dataclass(frozen=True)
+class GP:  # the prior GP, before it sees any data
+    mean: Mean  # Zero()
+    kernel: Kernel
+    noise_std: float = 0.0  # known, in measured units
     jitter: float = 1e-6
 
 
 @dataclass(frozen=True)
-class FittedGP:  # the fitted GP, data only (ADR 0003)
-    hyperparameters: dict[str, np.ndarray]  # each (size,)
+class FittedGP:  # the prior GP with every Param fitted, and its data
+    gp: GP  # no Param left
     X: np.ndarray  # training inputs, scaled
     Y: np.ndarray  # training outputs, scaled
     x_scaler: Scaler
     y_scaler: Scaler
 
 
-# noise-free outputscale * Matern-5/2, ARD
-def default_gp(n_inputs: int) -> PriorGP: ...
-
-
-@dataclass(frozen=True)
-class Scaler:  # scaled = slope * value + intercept, per column
-    slope: np.ndarray
-    intercept: np.ndarray
-
-
+def covariance(kernel, X1, X2): ...  # (n1, n2), a match over the kernel types
+def prior_mean(mean, X): ...  # (n, 1)
 def fit_gp(gp, X, Y, rng, n_starts=10, solver=Ipopt()) -> FittedGP: ...
-def predict(gp, fitted, X) -> tuple: ...  # noise-free (mean, std) in original units
-def log_marginal_likelihood(gp, fitted) -> float: ...  # on the scaled training data
+def predict(fitted, X) -> tuple: ...  # noise-free (mean, std) in measured units
+def log_marginal_likelihood(fitted) -> float: ...  # on the scaled training data
 ```
 
-The prior GP and the fitted GP (GLOSSARY.md) are separate types: `fit_gp` turns a
-`PriorGP` into a `FittedGP`, and `predict` takes both, since the fitted GP is data
-only and holds no kernel.
-
-Kernels are plain functions (`matern12/32/52`, `squared_exponential`, `linear`,
-`constant`) combined with arithmetic. The kernel and mean read the hyperparameters as
-`h.<name>`, a `(size, 1)` CasADi column:
+An experiment builds each method's GP; there is no default:
 
 ```python
-gp = hb.gp.PriorGP(
-    hyperparameters=(
-        hb.gp.Hyper("noise_std", 1e-2, bounds=(1e-6, 1.0)),
-        hb.gp.Hyper("outputscale", 1.0, bounds=(0.1, 10.0)),
-        hb.gp.Hyper("lengthscale", 1.0, bounds=(1e-3, 1e2), size=2),
-    ),
-    kernel=lambda h, X1, X2: h.outputscale * hb.kernels.matern52(X1, X2, h.lengthscale),
+gp = hb.gp.GP(
+    mean=hb.gp.Zero(),
+    kernel=hb.gp.Param(1.0, bounds=(0.1, 10.0)) * hb.gp.Matern52(),
+    noise_std=0.01,
 )
 ```
 
-- **Noise.** The hyperparameter named `noise_std`, if declared, is the observation
-  noise: `K = k(X, X) + (noise_std**2 + jitter) I`. Without it the fitted GP
-  nearly interpolates (see **Jitter**).
-  `default_gp` is noise-free, because the illustrative example (legacy
-  `noise_std.fix(0.0)`) is; add `noise_std` for noisy data.
+`outputscale * kernel` (a number or a `Param`, on either side) is shorthand that
+builds `Scale(kernel, outputscale)`: the experiment shows the output scale where the
+math has it, and the stored GP, its repr and its JSON hold the `Scale`. It is the
+only operator; `kernel * kernel` raises `TypeError` (the kernels share `_Scalable`).
+
+- **Hyperparameters.** A kernel's hyperparameters are its fields whose type admits a
+  `Param`; a number fixes one. They are fitted in a fixed order: a node's own
+  hyperparameters before those of the kernels it holds, so `Scale(Matern52())` fits the output scale, then the
+  lengthscales, as `default_gp` did. A lengthscale with `ard` (the default) has one
+  entry per input, the count taken from the training data at fit time; a fixed one
+  given as one number applies to every input. A fitted GP holds the numbers: a float,
+  or a tuple of one per input. `hb.hyperparameters(study)` names each by its dotted
+  path in the GP (`kernel.kernel.lengthscale`).
+- **Units.** Kernel hyperparameters are in scaled units, as the fit sees them
+  (lengthscales relative to inputs scaled onto [0, 1], the output scale relative to standardized
+  outputs). `noise_std` is in measured units, the units of the training outputs, so an
+  experiment states the noise of its measurement as it is: `fit_gp` and `predict`
+  convert it with the output scaler, `K = k(X, X) + ((noise_std * slope)**2 + jitter) I`.
+  With `noise_std = 0` the fitted GP nearly interpolates (see **Jitter**). A fitted
+  noise is out of scope: on a run's few points it sits at its lower bound; it can
+  later be `noise_std=Param(...)`.
+- **Closed set.** `Scale`, `Matern12`, `Matern32`, `Matern52`, `SquaredExponential`
+  and the `Zero` mean; no composition (`Sum`, a product of kernels) and no user kernels
+  until an experiment needs them. A new kernel is a dataclass and a case in `covariance`.
 - **Jitter** is 1e-6 (#107), a nugget in the sense of Gramacy & Lee (2012), "Cases
   for the nugget in modeling computer experiments". Once a run converges its inputs
   cluster, and with legacy's 1e-10 the training covariance reached cond(K) of about
@@ -411,14 +428,16 @@ gp = hb.gp.PriorGP(
   cond(K) at the kept hyperparameters exceeds 1e10 (`CONDITION_THRESHOLD`, #108),
   below the 1e11 that stalled the fit.
 - **Output scale** multiplies the kernel unsquared, as legacy `OutputScaleKernel` did,
-  so `default_gp` fits the same hyperparameters as the legacy GP.
-- `fit_gp` fits the scalers (`minmax` onto [0, 1] for X, `standard` for Y), calls
-  `kernel` and `mean` once with CasADi symbols for the hyperparameters, builds the
-  negative log marginal likelihood, draws starts with `lhs` over the (log-transformed)
-  hyperparameter bounds and calls `multistart`. If every start fails it keeps the
-  initial values and logs a warning. With the same data and generator its
-  hyperparameters matched the legacy GP bit for bit, and its predictions to rounding
-  (checked until #30; the regression baselines still pin the fit).
+  so `GP(Zero(), Scale(Matern52()))` fits the same hyperparameters as the legacy GP.
+- `fit_gp` fits the scalers (`minmax` onto [0, 1] for X, `standard` for Y), puts
+  CasADi symbols in place of each `Param`, builds the negative log marginal
+  likelihood, draws starts with `lhs` over the (log-transformed) bounds and calls
+  `multistart`. If every start fails it keeps the initial values and logs a warning.
+  A GP with no `Param` is only conditioned on the data, with no draws. With the same
+  data and generator its hyperparameters matched the legacy GP bit for bit, and its
+  predictions to rounding (checked until #30; the regression baselines still pin the
+  fit). Replacing `default_gp` with `GP(Zero(), Scale(Matern52()))` (#119) left every
+  run bit for bit the same.
 - `predict` traces the fitted GP's conditional mean and variance once as a
   `cas.Function` of X; a numpy X gives arrays `(n,)`, a symbolic X (SX or MX; the
   conditional mean and variance themselves are built in SX) gives `(n, 1)` columns.
@@ -610,7 +629,7 @@ states as one-row `x (1, M)` and `y (1, P)`.
 ```python
 @dataclass(frozen=True)
 class HybridBOSettings:
-    gp: PriorGP | None = None  # None: default_gp(len(h_inputs))
+    gp: GP  # required: the experiment states it
     acquisition: EI | LCB = EI()  # what is computed
     approximation: SAA | SoftSAA | Linearization = SAA()  # how it is computed
     n_starts: int = 10  # acquisition multistart
@@ -620,7 +639,7 @@ class HybridBOSettings:
 
 @dataclass(frozen=True)
 class StandardBOSettings:
-    gp: PriorGP | None = None  # None: default_gp(N)
+    gp: GP  # required
     acquisition: EI | LCB = EI()
     n_starts: int = 10
     n_starts_gp: int = 10
@@ -685,9 +704,9 @@ The baselines are named `*_sampling` because `hb.sampling.uniform` and
   `error.run` for every method: the points evaluated so far (also `error.history`) and
   one surrogate per evaluated trial point (a failed evaluation drops its surrogate). A method that adds fields to its `Run` (hybrid BO's scenarios)
   adds them to the returned run and to `error.run`.
-- The record holds the settings without the GP, plus `gp` (hyperparameters, jitter),
-  `kernel` and `mean` as expression text of the GP the run uses (the resolved
-  default), since a GP's repr only names its kernel function.
+- The record holds the settings without the GP, plus `gp`, the prior GP's repr. The
+  GP is required, so `hb.standard_bo` and `hb.hybrid_bo` go into `methods` as a
+  `functools.partial` with their settings, never bare.
 - The baselines are not sequential: they draw their whole design and `evaluate` it after
   the initial points.
 - `optimization_loop` is public, for new methods.
@@ -757,9 +776,10 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   The GP panel comes from the stored surrogate; the acquisition panels replay the
   method's acquisition problem with u fixed at each grid point, warm-started outwards
   from the stored solution (ADR 0005), so the curve passes through the stored
-  acquisition value. The settings are read from the run's record; `settings` is
-  needed only for a GP other than `default_gp`, since the record holds the GP as text,
-  not its kernel function. The fields the replay uses (acquisition function, and for
+  acquisition value. The GP is the run's stored fitted GP, so no GP is ever passed;
+  the other settings are read from the run's record, and `settings` is needed only
+  when they aren't the defaults the record parsing assumes (a custom solver, say;
+  #120 stores them as data). The fields the replay uses (acquisition function, and for
   hybrid BO the solver, the kind of approximation and its
   `unknown_states_as_variables`) must match the record. With linearization, the
   scenarios panel shows the nominal f ± s, with `s` recomputed from the stored
@@ -781,7 +801,9 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   figures/}` at the repo root. Running prints `hb.summary` and saves it as
   `summary.csv`; `plot` takes the study saved last by default, writes under
   `figures/`, and saves `summary.csv` only if the study has none (older studies).
-  The `hybrid-bo-experiments` skill has the details. The CLI stays in
+  `plot` passes the iteration figures nothing from the experiment's methods: each
+  run's GP comes from its stored fitted GPs (#119), so a study run with another GP
+  than the experiment's current one still plots. The `hybrid-bo-experiments` skill has the details. The CLI stays in
   `experiments/` for people who clone the repo; it is not part of the package.
 
 ## Order of random draws
@@ -822,7 +844,8 @@ scipy behavior.
 | `Problem.solve` (true optimum with `h` known) | called nowhere; would be a function on `multistart` | tag `pre-refactor` |
 | `Config` and `config.yaml` | functions take what they use; problems are Python | tag `pre-refactor` |
 | `hybrid_bo.legacy`: the `do_*` routines, `ResultsBO` pickles, the old `Problem`, GP and optimizers | replaced by the new API (#30); studies are saved as JSON (#53) | tag `pre-refactor` |
-| Kernel and mean classes, `Parameterized`, `JoinedParameters` | hyperparameters are named specs; kernels are functions | tag `pre-refactor` |
+| Kernel and mean classes, `Parameterized`, `JoinedParameters` | hyperparameters were named specs and kernels functions; since #119 kernels are dataclasses again, but data with no state or methods ([ADR 0008](docs/adr/0008-gps-are-data.md)) | tag `pre-refactor` |
+| `PriorGP`, `Hyper`, `default_gp`, `kernels.py` (with `linear` and `constant`) | GPs are data, from a closed set ([ADR 0008](docs/adr/0008-gps-are-data.md)); the linear and constant kernels were unused | git history before #119 |
 | Per-iteration plot callbacks | plots are functions of a finished run ([ADR 0003](docs/adr/0003-runs-are-pure-data.md)) | tag `pre-refactor` |
 | Strategy classes (planned, never built) | methods are settings plus functions | earlier DESIGN.md in git history |
 
@@ -830,7 +853,7 @@ scipy behavior.
 
 Not built now; the design leaves room for them.
 
-- **Bayesian hyperparameters.** MAP: an optional `prior` on `Hyper`, added to the
+- **Bayesian hyperparameters.** MAP: an optional `prior` on `Param` (#88), added to the
   negative log marginal likelihood. Sampling: a `log_posterior(gp, X, Y)` seam
   returning a `cas.Function` with its gradient over the log-space hyperparameters,
   usable by slice sampling or NUTS (pymc through a custom op, or a standalone sampler). Each scenario
