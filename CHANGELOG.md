@@ -5,6 +5,14 @@
 - A study's artifact gives each BO method's prior GP (#128): the run artifact's `gp`,
   on the line after the method's settings in `methods`, so the study artifact alone
   says how to run the study again. Studies saved before have it only in their runs.
+- `hb.plots.iteration` draws problems with two decision variables (#117): filled
+  contours over a 30 x 30 grid, a row of y and a row of f for hybrid BO (oracle, mean,
+  std, log10 EI with SAA-EI's zeros in gray), a row of f for standard BO. Three or more
+  still raise `ValueError`. `predict` maps a numpy input over its rows, so predicting at
+  many points is fast; its values don't change.
+- The experiment CLI's `--plot-runs` (run and `plot`) chooses the runs that get
+  iteration figures: indices or `all`, default `0`. Plotting a study now draws run 0's
+  iteration figures, not every run's. On the run command it implies `--plot`.
 
 ## 0.3.0 (2026-10-21)
 

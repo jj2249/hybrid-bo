@@ -13,8 +13,10 @@ import illustrative_example as ex
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
+import rosenbrock as rb
 import scipy
 from matplotlib.axes import Axes
+from matplotlib.collections import QuadMesh
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 
@@ -464,22 +466,17 @@ def test_iteration_must_exist(standard_run, i):
         plots.iteration(standard_run, ex.problem, i)
 
 
-def test_figure_needs_one_decision_variable(lhs_run):
-    """The panels are drawn over a grid of one decision variable."""
-    u1, u2 = Var("u1", lower=0.0, upper=1.0), Var("u2", lower=0.0, upper=1.0)
+def test_figure_needs_one_or_two_decision_variables(lhs_run):
+    """The panels are drawn over a grid of one or two decision variables."""
+    u = [Var(f"u{j}", lower=0.0, upper=1.0) for j in range(3)]
     x = Var("x", start=(-1.0, 1.0))
     y = Var("y", start=(-1.0, 1.0))
     system = System(
-        u=[u1, u2],
-        x=[x],
-        y=[y],
-        g=lambda v: [v.x - v.y],
-        h_inputs=[u1, u2],
-        measured=[y],
+        u=u, x=[x], y=[y], g=lambda v: [v.x - v.y], h_inputs=u, measured=[y]
     )
     problem = Problem(system, f=lambda v: v.x)
 
-    with pytest.raises(ValueError, match="one decision variable"):
+    with pytest.raises(ValueError, match="one or two decision variables"):
         plots.iteration(lhs_run, problem, 0)
 
 
@@ -500,3 +497,179 @@ def test_hybrid_bo_gp_panel_needs_h_to_take_only_u(hybrid_run):
 
     with pytest.raises(ValueError, match="h_inputs"):
         plots.iteration(hybrid_run, problem, 0)
+
+
+# The figure of one iteration with two decision variables, on the Rosenbrock problem
+
+
+def rosenbrock_run(
+    method: Callable[..., Run],
+    settings: HybridBOSettings | StandardBOSettings | None = None,
+) -> Run:
+    """A pickled run of `method` on the Rosenbrock problem: 2 initial points, then 2
+    iterations (or design points)."""
+    rng = np.random.default_rng(0)
+    u = initial_points(rb.system.u, 2, rng)
+    if settings is None:
+        return pickled(method(rb.problem, rb.measure, u, 2, rng))
+    return pickled(method(rb.problem, rb.measure, u, 2, rng, settings=settings))
+
+
+@pytest.fixture(scope="module")
+def hybrid_2d_run() -> Run:
+    """A pickled hybrid BO run on the Rosenbrock problem with SAA-EI over 10
+    scenarios, the GP's prediction substituted for the unknown state."""
+    approximation = SAA(n_scenarios=10, unknown_states_as_variables=False)
+    return rosenbrock_run(
+        hybrid_bo, HybridBOSettings(gp=rb.gp, approximation=approximation)
+    )
+
+
+@pytest.fixture(scope="module")
+def hybrid_soft_2d_run() -> Run:
+    """As `hybrid_2d_run`, with SoftSAA-EI at a temperature of 10."""
+    approximation = SoftSAA(10.0, n_scenarios=10, unknown_states_as_variables=False)
+    return rosenbrock_run(
+        hybrid_bo, HybridBOSettings(gp=rb.gp, approximation=approximation)
+    )
+
+
+@pytest.fixture(scope="module")
+def standard_2d_run() -> Run:
+    """A pickled standard BO run on the Rosenbrock problem."""
+    return rosenbrock_run(standard_bo, StandardBOSettings(gp=rb.gp))
+
+
+@pytest.fixture(scope="module")
+def lhs_2d_run() -> Run:
+    """A pickled Latin hypercube sampling run on the Rosenbrock problem."""
+    return rosenbrock_run(latin_hypercube_sampling)
+
+
+def titles(figure: Figure) -> list[str]:
+    """The titles of the figure's panels, row by row (colorbars have none)."""
+    return [ax.get_title() for ax in figure.axes if ax.get_title()]
+
+
+HYBRID_2D_TITLES = [
+    "oracle y",
+    "GP mean of y",
+    "GP std of y",
+    "oracle f",
+    "mean f over scenarios",
+    "std f over scenarios",
+    "log10 EI",
+]
+
+
+@pytest.mark.parametrize(
+    ("run_name", "expected"),
+    [
+        ("hybrid_2d_run", HYBRID_2D_TITLES),
+        ("hybrid_soft_2d_run", HYBRID_2D_TITLES),
+        ("standard_2d_run", ["oracle f", "GP mean of f", "GP std of f", "log10 EI"]),
+        ("lhs_2d_run", ["oracle f"]),
+    ],
+)
+def test_2d_figure_has_a_panel_per_quantity(request, run_name, expected, tmp_path):
+    """With two decision variables each panel is a map over u: hybrid BO has a row
+    for y (oracle, GP mean, GP std) and a row for f (oracle, the mean and std over
+    the scenarios, EI); standard BO the row for f with its GP; a baseline the oracle
+    f. Every panel shows the points, and the figure saves as a PNG."""
+    # Act: iteration 1, with the oracle
+    run = request.getfixturevalue(run_name)
+    figure = plots.iteration(run, rb.problem, 1, measure=rb.measure)
+
+    # Check: the titles, the points on every panel, one legend
+    assert titles(figure) == expected
+    assert figure.get_suptitle() == f"{run.method}, iteration 1"
+    panels = [ax for ax in figure.axes if ax.get_title()]
+    n_points = run.history.n_initial + 1
+    for ax in panels:
+        # The last four collections are the markers: initial points, points so far,
+        # incumbent, trial point
+        offsets = np.concatenate([c.get_offsets() for c in ax.collections[-4:]])
+        assert len(offsets) == n_points + 2  # the incumbent again, the trial point
+    assert {"initial points", "incumbent", "trial point"} <= set(legend_labels(figure))
+    figure.savefig(tmp_path / "figure.png")
+    plt.close("all")
+
+
+def test_2d_figure_without_measure_drops_the_oracle_column(hybrid_2d_run):
+    """Without a measurement there are no oracle values, so the oracle panels go."""
+    figure = plots.iteration(hybrid_2d_run, rb.problem, 0)
+
+    assert titles(figure) == [
+        title for title in HYBRID_2D_TITLES if not title.startswith("oracle")
+    ]
+    plt.close("all")
+
+
+def test_2d_flags_turn_panels_off(hybrid_2d_run):
+    """The flags drop the same parts as in 1D: `gp` the row of y, `scenarios` the
+    panels over the scenarios, `acquisition` the EI panel."""
+    no_gp = plots.iteration(hybrid_2d_run, rb.problem, 0, gp=False)
+    no_scenarios = plots.iteration(hybrid_2d_run, rb.problem, 0, scenarios=False)
+    nothing = plots.iteration(
+        hybrid_2d_run, rb.problem, 0, gp=False, scenarios=False, acquisition=False
+    )
+
+    assert titles(no_gp) == [
+        "mean f over scenarios",
+        "std f over scenarios",
+        "log10 EI",
+    ]
+    assert titles(no_scenarios) == ["GP mean of y", "GP std of y", "log10 EI"]
+    assert titles(nothing) == ["points"]
+    plt.close("all")
+
+
+def test_2d_ei_mask_covers_the_points_where_saa_ei_is_zero(hybrid_2d_run):
+    """The EI panel shades in gray the grid points (30 x 30 over the start bounds)
+    where SAA-EI is exactly 0: no scenario improves on the incumbent. On the
+    Rosenbrock problem x = u1 - 1, so SAA-EI has a closed form: f_s = 100 y_s^2 + x^2
+    with y_s the GP's scenario prediction."""
+    # Act: iteration 1's EI panel alone
+    run, i = hybrid_2d_run, 1
+    figure = plots.iteration(run, rb.problem, i, gp=False, scenarios=False)
+    (mesh,) = [c for c in figure.axes[0].collections if isinstance(c, QuadMesh)]
+    gray = mesh.get_array()
+    assert gray is not None
+    zero = ~np.ma.getmaskarray(np.ma.asarray(gray)).ravel()
+
+    # SAA-EI's improvement at each grid point, from the GP's scenario prediction
+    assert run.scenarios is not None
+    u1, u2 = (np.linspace(-2.048, 2.048, 30) for _ in range(2))
+    grid = np.column_stack([coordinate.ravel() for coordinate in np.meshgrid(u1, u2)])
+    mean, std = predict(run.surrogates[i], grid)
+    y = mean[:, np.newaxis] + std[:, np.newaxis] * run.scenarios.z[:, 0]
+    f = 100 * y**2 + (grid[:, [0]] - 1) ** 2
+    incumbent = run.history.f[: run.history.n_initial + i].min()
+    best_improvement = (incumbent - f).max(axis=1)
+
+    # Check: gray exactly where no scenario improves, away from the boundary of that
+    # region, where the replay's solver tolerance decides
+    clear = np.abs(best_improvement) > 1e-6
+    np.testing.assert_array_equal(zero[clear], (best_improvement <= 0)[clear])
+    assert zero.any() and not zero.all()
+    plt.close("all")
+
+
+@pytest.mark.parametrize(
+    "run_name", ["hybrid_2d_run", "hybrid_soft_2d_run", "standard_2d_run"]
+)
+def test_2d_acquisition_panel_checks_the_replay_at_the_trial_point(request, run_name):
+    """The acquisition panel notes the stored and the replayed log10 EI at the trial
+    point, and they agree: the replay solves the stored acquisition problem."""
+    # Act: iteration 1's EI panel alone
+    run = request.getfixturevalue(run_name)
+    figure = plots.iteration(run, rb.problem, 1, gp=False, scenarios=False)
+
+    # Check: the note's two numbers, against the stored value in log10 EI
+    (note,) = figure.axes[0].texts
+    stored, replayed = (float(part.split()[-1]) for part in note.get_text().split(","))
+    value = run.acquisitions[1].value
+    ei = np.exp(-value) if run_name == "hybrid_soft_2d_run" else -value
+    np.testing.assert_allclose(stored, np.log10(ei), rtol=1e-3)
+    np.testing.assert_allclose(replayed, stored, rtol=1e-3)
+    plt.close("all")

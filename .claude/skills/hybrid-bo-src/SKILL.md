@@ -167,7 +167,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `fit_gp(gp, X, Y, rng, ...) -> FittedGP` fits every `Param` (log ones in log
   space) by `multistart` from `lhs` starts over the bounds; with no `Param` it draws
   nothing. `predict(fitted, X)` (the noise-free conditional mean and std; numpy X ->
-  arrays `(n,)`, symbolic X -> `(n, 1)` columns) and `log_marginal_likelihood(fitted)`,
+  arrays `(n,)`, built at one row and mapped over the rows, symbolic X -> `(n, 1)`
+  columns) and `log_marginal_likelihood(fitted)`,
   which `fit_gp` maximizes. Kernel hyperparameters are in scaled units; `noise_std` is a
   known noise in **measured** units, scaled by the output scaler's slope:
   `K = k(X, X) + ((noise_std * slope)**2 + jitter) I`. Hyperparameters in the fit are SX
@@ -228,17 +229,24 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - `plots.py`: static figures, no widgets and no `rng`. `convergence(study, ax)` and
   `regret(study, optimum, ax)` draw `evaluations` (median and IQR per method over
   evaluations, `_over_evaluations`). `iteration(run, problem, i, *, measure, gp,
-  scenarios, acquisition) -> Figure` draws the state before trial point i
-  over a 101-point grid of one-dimensional `u` (start bounds) plus the trial point,
-  with one figure legend (`_figure_legend`). The GP is iteration i's stored fitted
+  scenarios, acquisition) -> Figure` draws the state before trial point i over the
+  `u` start bounds, with one figure legend (`_figure_legend`); it dispatches on
+  `n_u` (`ValueError` above 2). 1D (`_iteration_1d`): stacked curves over 101 points
+  plus the trial point. 2D (`_iteration_2d`): filled contours over a 30 x 30 grid, in
+  rows of `_Map` panels (oracle | mean | std | acquisition; empty rows and columns
+  dropped), oracle and mean sharing a color scale, panels of f log-scaled when
+  positive over more than two decades, EI as log10 EI with EI <= 0 in gray cells
+  (LCB linear); the acquisition panel notes the stored and replayed value at the
+  trial point. The GP is iteration i's stored fitted
   GP, for the GP panel and the replay alike; the rest of the replay comes from
   `run.settings` (its type says hybrid or standard BO; None draws the points only).
   The artifact's settings text is never read back.
   `_replay`: standard BO evaluates `standard_acquisition`'s NLP; hybrid BO rebuilds
   `hybrid_acquisition` and solves it over all of `w` with u fixed by equal bounds
-  (built with `_pack`), outwards from
-  the stored solution (NaN where a solve fails), then f per scenario at
-  `_scenario_states`, and with linearization `s` from `_sensitivity` (the scenarios
+  (built with `_pack`), in order of distance from the trial point, each from the
+  nearest solution so far, the stored one first (NaN where a solve fails), then f per
+  scenario in one mapped call of `_scenario_objective`, and with linearization `s`
+  from `_sensitivity` (the scenarios
   panel draws nominal f ± s, `_nominal_band`). Figures are drawn in `STYLE` (`hybrid_bo.mplstyle`).
   matplotlib and Polars are imported inside the functions.
 - `errors.py`: `HybridBOError` (with `.history`, the points evaluated before the
@@ -300,7 +308,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 
 ## Testing rules
 
-- `pixi run -e dev test` runs in about 6s. Run it for every change.
+- `pixi run -e dev test` runs in about 45s. Run it for every change.
 - `tests/test_regression.py` runs each method of `experiments/illustrative_example.py`
   (seed 0, 2 iterations) and compares with `tests/data/regression/*.json`. The
   baselines were recorded by the pre-refactor code, so the test maps each `Run` to

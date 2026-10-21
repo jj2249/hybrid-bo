@@ -41,7 +41,8 @@ points. ``pixi run experiment illustrative_example --help`` lists the flags:
   settings;
 - ``--name`` names the study (default the current UTC time); a name already taken
   is refused before anything runs;
-- ``--plot`` draws the figures straight after;
+- ``--plot`` draws the figures straight after, and ``--plot-runs 0 3`` (or ``all``)
+  chooses the runs that get a figure per iteration (default run 0 of each method);
 - ``--require-clean`` refuses to run with uncommitted or untracked files (without it,
   they get a warning), since the study wouldn't be reproducible.
 
@@ -62,7 +63,7 @@ The study is saved in ``results/illustrative_example/<study id>/``:
    runs/<method>/      one JSON file per run: every evaluated point, the GPs, ...
    summary.csv         the summary table printed above
    study.log           the study's progress: each run and iteration, times, warnings
-   figures/            convergence.png, regret.png and one figure per iteration
+   figures/            convergence.png, regret.png and a figure per iteration of run 0
 
 Open ``figures/regret.png``: the median regret of each method over the evaluations,
 with the interquartile range across runs shaded. Hybrid BO's median regret should fall
@@ -74,6 +75,7 @@ To draw the figures again later, or for an older study:
 
    pixi run plot illustrative_example            # the newest study
    pixi run plot illustrative_example <study id>
+   pixi run experiment illustrative_example plot <study id> --plot-runs all
 
 :doc:`reading_results` explains every file and figure, and how to load a study in
 Python.

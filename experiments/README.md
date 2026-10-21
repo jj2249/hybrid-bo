@@ -14,6 +14,7 @@ compare. `cli.py` is the shared command line, not an experiment.
 ```bash
 pixi run experiment <name> [--n-runs 3 --plot ...]   # run a study; --help lists the flags
 pixi run plot <name> [STUDY]                         # plot the newest (or named) study
+pixi run experiment <name> plot [STUDY] --plot-runs all   # iteration figures of every run
 ```
 
 A study shows its progress on the console and saves it as `study.log` in its folder;

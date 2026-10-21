@@ -18,6 +18,7 @@ newest study:
 
     pixi run experiment rosenbrock [--n-runs 3 --plot ...]
     pixi run plot rosenbrock
+    pixi run experiment rosenbrock plot --plot-runs all
 
 `pixi run experiment rosenbrock --help` lists the flags.
 """
@@ -102,8 +103,7 @@ methods = {
 study_settings = hb.StudySettings(n_runs=10, n_initial=5, n_iterations=20, seed=None)
 
 # Run or plot from the command line. The oracle measurement is cheap, so the
-# iteration figures would draw its true curves (they need one decision variable, so
-# plot skips them here for now)
+# iteration figures draw its oracle values over the grid of u
 if __name__ == "__main__":
     cli.main(
         "rosenbrock",
