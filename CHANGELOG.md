@@ -4,14 +4,16 @@
 
 - **Breaking:** GPs are data (#119, ADR 0008). A prior GP is
   `hb.gp.GP(mean, kernel, noise_std=0.0, jitter=1e-6)` built from a closed set of
-  frozen dataclasses: the `Zero` mean and the kernels `Scale` (an output scale,
-  unsquared), `Matern12`, `Matern32`, `Matern52` and `SquaredExponential`. A kernel's
-  hyperparameters are its fields: a number fixes one, `hb.gp.Param(init, bounds, log=True)`
-  fits it; a lengthscale has one entry per input unless `ard=False`. `noise_std` is a
+  frozen dataclasses: the `Zero` mean and the kernels `Matern12`, `Matern32`,
+  `Matern52`, `SquaredExponential` and `Scale` (an output scale, unsquared), which
+  `outputscale * kernel` builds. A kernel's hyperparameters are its fields: a number
+  fixes one, `hb.gp.Param(init, bounds, log=True)` fits it; a lengthscale has one
+  entry per input unless `ard=False`. `noise_std` is a
   known noise in measured units, so it is the same number as the measurement's
   noise. `HybridBOSettings.gp` and `StandardBOSettings.gp` are required, so
-  `hb.standard_bo` can't go into `methods` bare: `GP(Zero(), Scale(Matern52()))` is
-  the old default, with the same results bit for bit. A fitted GP is
+  `hb.standard_bo` can't go into `methods` bare:
+  `GP(Zero(), Param(1.0, (0.1, 10.0)) * Matern52())` is the old default, with the
+  same results bit for bit. A fitted GP is
   `FittedGP(gp, X, Y, x_scaler, y_scaler)`, the prior GP with every `Param` fitted;
   `predict(fitted, X)` and `log_marginal_likelihood(fitted)` take it alone, as do
   `standard_acquisition` and `hybrid_acquisition`. Runs save their fitted GPs whole,
@@ -22,7 +24,6 @@
   (with the unused `linear` and `constant` kernels) are removed, with no aliases.
   Studies saved before this change don't load: `hb.load` raises `StudyFormatError`;
   rerun them.
-
 - The experiment `rosenbrock` (`pixi run experiment rosenbrock`): the 2D
   Rosenbrock function as a hybrid model, the first experiment with two decision
   variables, comparing SAA-EI, SoftSAA-EI, standard BO and Latin hypercube

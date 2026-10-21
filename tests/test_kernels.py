@@ -72,6 +72,28 @@ def test_scale_multiplies_unsquared():
     )
 
 
+def test_a_number_or_param_times_a_kernel_is_scale():
+    """`*` with a number or a `Param` is shorthand for `Scale`, on either side; it
+    builds the same data, so the covariance is the scaled one."""
+    outputscale = Param(1.0, (0.1, 10.0))
+    kernel = Matern52(lengthscale=0.8)
+
+    assert outputscale * kernel == Scale(kernel, outputscale)
+    assert kernel * outputscale == Scale(kernel, outputscale)
+    assert 2.5 * kernel == Scale(kernel, 2.5)
+    assert 2 * kernel == Scale(kernel, 2.0)
+    np.testing.assert_allclose(
+        evaluate(2.5 * kernel), 2.5 * evaluate(kernel), rtol=RTOL, atol=ATOL
+    )
+
+
+def test_a_kernel_times_a_kernel_is_not_supported():
+    """There is no product of kernels: `*` between two kernels raises `TypeError`
+    saying what it takes."""
+    with pytest.raises(TypeError, match="number or a Param"):
+        Matern52() * Matern32()  # ty: ignore[unsupported-operator]
+
+
 def test_param_checks():
     """`Param` and the kernels reject invalid arguments."""
     # `pytest.raises` fails the test unless the block raises that exception, with a

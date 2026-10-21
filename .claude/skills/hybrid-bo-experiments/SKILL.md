@@ -32,8 +32,10 @@ a benchmark), `methods`, `study_settings`, then a `__main__` block calling `cli.
   `functools.partial(hb.hybrid_bo, settings=hb.HybridBOSettings(gp=gp, ...))`, never
   put `hb.hybrid_bo` or `hb.standard_bo` in `methods` bare. `settings` is
   keyword-only, after `rng`. Define the GP once as a module-level `gp`, e.g.
-  `hb.gp.GP(hb.gp.Zero(), hb.gp.Scale(hb.gp.Matern52()))`; the shipped experiments
-  share it between methods.
+  `hb.gp.GP(mean=hb.gp.Zero(), kernel=hb.gp.Param(1.0, bounds=(0.1, 10.0)) *
+  hb.gp.Matern52(lengthscale=hb.gp.Param(1.0, bounds=(1e-3, 1e2))))`, written out in
+  full so the experiment shows every fitted hyperparameter. The shipped experiments
+  share it between methods; each method fits its own GP to its own data.
 
 ## Randomness
 

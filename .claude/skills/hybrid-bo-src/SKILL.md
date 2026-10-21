@@ -145,7 +145,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - `gp.py` (ADR 0008): GPs are data, frozen dataclasses from a closed set. `Param(init,
   bounds, log=True)` is a hyperparameter to fit (checked: init inside the bounds, positive
   bounds for log). Kernels `Matern12/32/52` and `SquaredExponential` (`lengthscale:
-  float | tuple | Param`, `ard=True`) and `Scale(kernel, outputscale)` (unsquared),
+  float | tuple | Param`, `ard=True`) and `Scale(kernel, outputscale)` (unsquared;
+  `outputscale * kernel`, a number or a `Param` on either side, builds it through
+  `_Scalable`, the kernels' only operator: `kernel * kernel` raises `TypeError`),
   `Kernel` their union; the `Zero` mean (`Mean`); `TYPES` the closed set, which
   saving tags by name. `GP(mean, kernel, noise_std=0.0, jitter=1e-6)` is the prior
   GP; `FittedGP(gp, X, Y, x_scaler, y_scaler)` the fitted GP, its `gp` with no

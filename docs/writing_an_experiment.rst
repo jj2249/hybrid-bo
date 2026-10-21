@@ -211,16 +211,23 @@ state; standard BO's maps ``u`` to ``f``. The means and kernels are a fixed set 
 ``hb.gp``: the :py:class:`~hybrid_bo.gp.Zero` mean, the kernels
 :py:class:`~hybrid_bo.gp.Matern12`, :py:class:`~hybrid_bo.gp.Matern32`,
 :py:class:`~hybrid_bo.gp.Matern52` and :py:class:`~hybrid_bo.gp.SquaredExponential`,
-and :py:class:`~hybrid_bo.gp.Scale`, which multiplies a kernel by an output scale:
+which multiply by an output scale written in front of them:
 
 .. code-block:: python
 
-   gp = hb.gp.GP(hb.gp.Zero(), hb.gp.Scale(hb.gp.Matern52()))
+   gp = hb.gp.GP(
+       mean=hb.gp.Zero(),
+       kernel=hb.gp.Param(1.0, bounds=(0.1, 10.0))
+       * hb.gp.Matern52(lengthscale=hb.gp.Param(1.0, bounds=(1e-3, 1e2))),
+   )
 
-A kernel's hyperparameters are its fields. A number fixes one; a
+A kernel's hyperparameters are its fields, and the output scale is the factor in
+front. A number fixes one (``2.0 * hb.gp.Matern52(lengthscale=0.3)``); a
 :py:class:`~hybrid_bo.gp.Param` (an initial value and bounds) is fitted to the data
-in each iteration, and the defaults are ``Param``\ s. A lengthscale has one entry per
-input unless ``ard=False``. The hyperparameters are in *scaled units*: the GP sees its
+in each iteration. Each method fits its own GP to its own data, so methods can share
+one prior GP. Left out, a lengthscale is the ``Param`` above; without a factor there
+is no output scale. A lengthscale has one entry per input unless ``ard=False``. There
+is no product or sum of two kernels. The hyperparameters are in *scaled units*: the GP sees its
 inputs scaled onto [0, 1] and its outputs scaled to zero mean and unit standard
 deviation, so a lengthscale of 0.5 is half the range of the data.
 
@@ -231,7 +238,11 @@ of the measured variable, the same number as the measurement's noise. It default
 .. code-block:: python
 
    measure = hb.oracle_measure(system, oracle, noise_std=0.01)
-   gp = hb.gp.GP(hb.gp.Zero(), hb.gp.Scale(hb.gp.Matern52()), noise_std=0.01)
+   gp = hb.gp.GP(
+       mean=hb.gp.Zero(),
+       kernel=hb.gp.Param(1.0, bounds=(0.1, 10.0)) * hb.gp.Matern52(),
+       noise_std=0.01,
+   )
 
 A run saves its fitted GPs whole, so the iteration figures of a saved study need
 nothing from the experiment.

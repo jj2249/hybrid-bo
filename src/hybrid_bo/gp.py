@@ -67,6 +67,33 @@ class Param:
 Lengthscale = float | tuple[float, ...] | Param
 
 
+class _Scalable:
+    """Gives a kernel `*` with a number or a `Param`, on either side: shorthand for
+    `Scale`, which it builds (`Param(1.0, (0.1, 10.0)) * Matern52()` is
+    `Scale(Matern52(), Param(1.0, (0.1, 10.0)))`). There is no product of kernels."""
+
+    def __mul__(self, outputscale: "float | Param") -> "Scale":
+        """The kernel times an output scale, as a `Scale`.
+
+        Raises `TypeError` unless `outputscale` is a number or a `Param`.
+        """
+        is_number = isinstance(outputscale, int | float) and not isinstance(
+            outputscale, bool
+        )
+        if not (is_number or isinstance(outputscale, Param)):
+            msg = (
+                f"A kernel can be multiplied only by a number or a Param (an output "
+                f"scale), not {type(outputscale).__name__}"
+            )
+            raise TypeError(msg)
+        value = outputscale if isinstance(outputscale, Param) else float(outputscale)
+        return Scale(typing.cast("Kernel", self), value)
+
+    def __rmul__(self, outputscale: "float | Param") -> "Scale":
+        """`outputscale * kernel`, the same as `kernel * outputscale`."""
+        return self.__mul__(outputscale)
+
+
 def _check_lengthscale(kernel: Any) -> None:
     """Raises `ValueError` if a kernel without ARD has one lengthscale per input."""
     if isinstance(kernel.lengthscale, tuple) and not kernel.ard:
@@ -75,7 +102,7 @@ def _check_lengthscale(kernel: Any) -> None:
 
 
 @dataclass(frozen=True)
-class Matern12:
+class Matern12(_Scalable):
     """The Matern-1/2 (absolute exponential) kernel.
 
     With `ard`, a fitted lengthscale has one entry per input; without, one shared by
@@ -90,7 +117,7 @@ class Matern12:
 
 
 @dataclass(frozen=True)
-class Matern32:
+class Matern32(_Scalable):
     """The Matern-3/2 kernel. Its lengthscale is as `Matern12`'s."""
 
     lengthscale: Lengthscale = Param(1.0, (1e-3, 1e2))
@@ -101,7 +128,7 @@ class Matern32:
 
 
 @dataclass(frozen=True)
-class Matern52:
+class Matern52(_Scalable):
     """The Matern-5/2 kernel. Its lengthscale is as `Matern12`'s."""
 
     lengthscale: Lengthscale = Param(1.0, (1e-3, 1e2))
@@ -112,7 +139,7 @@ class Matern52:
 
 
 @dataclass(frozen=True)
-class SquaredExponential:
+class SquaredExponential(_Scalable):
     """The squared exponential (RBF, Gaussian) kernel. Its lengthscale is as
     `Matern12`'s."""
 
@@ -124,8 +151,8 @@ class SquaredExponential:
 
 
 @dataclass(frozen=True)
-class Scale:
-    """A kernel times an output scale, unsquared."""
+class Scale(_Scalable):
+    """A kernel times an output scale, unsquared; `outputscale * kernel` builds it."""
 
     kernel: "Kernel"
     outputscale: float | Param = Param(1.0, (0.1, 10.0))

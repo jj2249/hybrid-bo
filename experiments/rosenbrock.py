@@ -66,10 +66,16 @@ optimum = 0.0
 # number of iterations, or of design points for the baseline. Hybrid BO substitutes
 # the GP prediction for the unknown state, with SAA-EI and with SoftSAA-EI at a
 # temperature of 10, deliberately high so late-run improvements still have a gradient
-# (#113 scales it with f). Every BO method's GP is a Matern-5/2 kernel with a
-# lengthscale per input times an output scale, both fitted, with a zero mean and no
-# noise, as the measurement has none
-gp = hb.gp.GP(hb.gp.Zero(), hb.gp.Scale(hb.gp.Matern52()))
+# (#113 scales it with f). Every BO method has the same prior GP, and each fits its own
+# to its own data: a zero mean and an output scale times a Matern-5/2 kernel with a
+# lengthscale per input, with both fitted within these bounds (in scaled units), and
+# no noise, as the measurement has none
+gp = hb.gp.GP(
+    mean=hb.gp.Zero(),
+    kernel=hb.gp.Param(1.0, bounds=(0.1, 10.0))
+    * hb.gp.Matern52(lengthscale=hb.gp.Param(1.0, bounds=(1e-3, 1e2))),
+    noise_std=0.0,
+)
 methods = {
     "hybrid_bo": functools.partial(
         hb.hybrid_bo,

@@ -28,7 +28,8 @@ The original code was hard to change for three reasons:
 1. **Data in, data out.** Functions return new values and never mutate their inputs.
 2. **Frozen dataclasses for data and settings; behavior in plain functions.** No strategy
    classes. Kernels and means are dataclasses from a closed set, with their behavior in
-   functions that match on the type (ADR 0008).
+   functions that match on the type (ADR 0008); their one operator,
+   `outputscale * kernel`, only builds data.
 3. **Functions take what they use.** There is no `Config`.
 4. **One way to do each thing.** One CasADi code path for symbolic and numeric use.
 5. **Explicit randomness.** Anything random takes an `rng: np.random.Generator`.
@@ -387,19 +388,28 @@ def log_marginal_likelihood(fitted) -> float: ...  # on the scaled training data
 An experiment builds each method's GP; there is no default:
 
 ```python
-gp = hb.gp.GP(hb.gp.Zero(), hb.gp.Scale(hb.gp.Matern52()), noise_std=0.01)
+gp = hb.gp.GP(
+    mean=hb.gp.Zero(),
+    kernel=hb.gp.Param(1.0, bounds=(0.1, 10.0)) * hb.gp.Matern52(),
+    noise_std=0.01,
+)
 ```
 
-- **Parameters.** A kernel's hyperparameters are its fields whose type admits a `Param`; a
-  number fixes one. They are fitted in a fixed order: a node's own hyperparameters before
-  those of the kernels it holds, so `Scale(Matern52())` fits the output scale, then the
+`outputscale * kernel` (a number or a `Param`, on either side) is shorthand that
+builds `Scale(kernel, outputscale)`: the experiment shows the output scale where the
+math has it, and the stored GP, its repr and its JSON hold the `Scale`. It is the
+only operator; `kernel * kernel` raises `TypeError` (the kernels share `_Scalable`).
+
+- **Hyperparameters.** A kernel's hyperparameters are its fields whose type admits a
+  `Param`; a number fixes one. They are fitted in a fixed order: a node's own
+  hyperparameters before those of the kernels it holds, so `Scale(Matern52())` fits the output scale, then the
   lengthscales, as `default_gp` did. A lengthscale with `ard` (the default) has one
   entry per input, the count taken from the training data at fit time; a fixed one
   given as one number applies to every input. A fitted GP holds the numbers: a float,
   or a tuple of one per input. `hb.hyperparameters(study)` names each by its dotted
   path in the GP (`kernel.kernel.lengthscale`).
-- **Units.** Kernel hyperparameters are in scaled units, as the fit sees them (lengthscales
-  relative to inputs scaled onto [0, 1], the output scale relative to standardized
+- **Units.** Kernel hyperparameters are in scaled units, as the fit sees them
+  (lengthscales relative to inputs scaled onto [0, 1], the output scale relative to standardized
   outputs). `noise_std` is in measured units, the units of the training outputs, so an
   experiment states the noise of its measurement as it is: `fit_gp` and `predict`
   convert it with the output scaler, `K = k(X, X) + ((noise_std * slope)**2 + jitter) I`.
@@ -407,8 +417,8 @@ gp = hb.gp.GP(hb.gp.Zero(), hb.gp.Scale(hb.gp.Matern52()), noise_std=0.01)
   noise is out of scope: on a run's few points it sits at its lower bound; it can
   later be `noise_std=Param(...)`.
 - **Closed set.** `Scale`, `Matern12`, `Matern32`, `Matern52`, `SquaredExponential`
-  and the `Zero` mean; no composition (`Sum`, `Product`) and no user kernels until an
-  experiment needs them. A new kernel is a dataclass and a case in `covariance`.
+  and the `Zero` mean; no composition (`Sum`, a product of kernels) and no user kernels
+  until an experiment needs them. A new kernel is a dataclass and a case in `covariance`.
 - **Jitter** is 1e-6 (#107), a nugget in the sense of Gramacy & Lee (2012), "Cases
   for the nugget in modeling computer experiments". Once a run converges its inputs
   cluster, and with legacy's 1e-10 the training covariance reached cond(K) of about
