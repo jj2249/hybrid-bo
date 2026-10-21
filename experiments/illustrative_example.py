@@ -61,7 +61,7 @@ gp = hb.gp.GP(
 # Methods: each takes (problem, measure, initial_points, n, rng), where n is the
 # number of iterations, or of design points for the baselines. Hybrid BO substitutes
 # the GP prediction for the unknown states, as this experiment always has, with SAA-EI,
-# with Lin-EI and with SoftSAA-EI at a temperature of 1 (f is in the tens here)
+# with Lin-EI and with SoftSAA-EI at a temperature of 1e-6, as in rosenbrock.py
 methods = {
     "hybrid_bo": functools.partial(
         hb.hybrid_bo,
@@ -78,7 +78,7 @@ methods = {
     "hybrid_bo_soft": functools.partial(
         hb.hybrid_bo,
         settings=hb.HybridBOSettings(
-            gp=gp, approximation=hb.SoftSAA(1.0, unknown_states_as_variables=False)
+            gp=gp, approximation=hb.SoftSAA(1e-6, unknown_states_as_variables=False)
         ),
     ),
     "standard_bo": functools.partial(

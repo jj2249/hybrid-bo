@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- A study's artifact gives each BO method's prior GP (#128): the run artifact's `gp`,
+  on the line after the method's settings in `methods`, so the study artifact alone
+  says how to run the study again. Studies saved before have it only in their runs.
 - `hb.plots.iteration` draws problems with two decision variables (#117): filled
   contours over a 30 x 30 grid, a row of y and a row of f for hybrid BO (oracle, mean,
   std, log10 EI with SAA-EI's zeros in gray), a row of f for standard BO. Three or more
