@@ -593,7 +593,10 @@ SAA-EI stays the paper's and the two can be compared as settings of one study.
   are finite for any `a/τ`. Far below the incumbent the gradient is that of a
   softmax-weighted `−a_s/τ`, which points toward improvement.
 - **The temperature is explicit.** It is in units of the objective, so a default
-  would be wrong for most problems; it has none and is recorded in the run.
+  would be wrong for most problems; it has none and is recorded in the run. The
+  log already gives a gradient at any temperature, so it only needs to be small: a
+  measured point has no scenario spread and scores `τ log 2`, so a temperature
+  near the improvements makes the noise-free loop re-measure the incumbent.
 - **EI only.** LCB has no maximum to soften, so `LCB` with `SoftSAA` is a
   `ValueError`, not `NotImplementedError`.
 - **The stored value is −log SoftSAA-EI**, the objective the problem minimizes, as
