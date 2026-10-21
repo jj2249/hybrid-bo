@@ -127,19 +127,31 @@ def test_artifact_holds_the_problem_methods_and_stated_oracle_optimum(
     assert illustrative_study.settings == SETTINGS
 
 
-def test_artifact_holds_each_bo_methods_prior_gp(illustrative_study):
-    """The study's artifact gives each BO method's prior GP, the run artifact's `gp`,
-    on the line after the method's settings, so the study can be run again from it."""
-    methods = illustrative_study.artifact["methods"]
-    bo_runs = [run for run in illustrative_study.runs if "gp" in run.artifact]
-    assert bo_runs
-    for run in bo_runs:
-        artifact = run.artifact
-        lines = (
-            f"{run.method}: {artifact['method']}({artifact['settings']})\n"
-            f"  gp: {artifact['gp']}"
-        )
-        assert lines in methods
+def test_artifact_tells_apart_methods_that_differ_only_in_their_prior_gp(
+    illustrative_problem,
+):
+    """The study's artifact gives each BO method's prior GP on the line after its
+    settings, since the study can't be run again without it, so two configurations
+    that differ only in their prior GP get different entries."""
+    # Standard BO twice, the second with a known noise
+    noisy_gp = dataclasses.replace(ex.gp, noise_std=0.1)
+    methods = {
+        "noise_free": functools.partial(
+            hb.standard_bo, settings=hb.StandardBOSettings(gp=ex.gp)
+        ),
+        "noisy": functools.partial(
+            hb.standard_bo, settings=hb.StandardBOSettings(gp=noisy_gp)
+        ),
+    }
+    settings = hb.StudySettings(n_runs=1, n_initial=2, n_iterations=1, seed=0)
+
+    study = hb.study(methods, illustrative_problem, ex.measure, settings)
+
+    # Each method's entry is its settings line, then its prior GP
+    noise_free, noisy = study.artifact["methods"].split("\nnoisy: ")
+    assert noise_free.endswith(f")\n  gp: {ex.gp!r}")
+    assert noisy.endswith(f")\n  gp: {noisy_gp!r}")
+    assert "noise_std=0.1" in noisy
 
 
 def test_without_a_stated_optimum_the_study_has_none(illustrative_problem):
