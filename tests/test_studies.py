@@ -157,30 +157,15 @@ def test_an_optimum_beaten_by_an_evaluated_point_warns(illustrative_problem):
         )
 
 
-def test_bare_bo_methods_record_their_default_settings(illustrative_problem):
-    """A BO method passed without settings runs with the default settings, and the
-    study records it as it records the method given them explicitly."""
-    settings = hb.StudySettings(n_runs=1, n_initial=2, n_iterations=1, seed=0)
-    bare = {"hybrid_bo": hb.hybrid_bo, "standard_bo": hb.standard_bo}
-    explicit = {
-        "hybrid_bo": functools.partial(hb.hybrid_bo, settings=hb.HybridBOSettings()),
-        "standard_bo": functools.partial(
-            hb.standard_bo, settings=hb.StandardBOSettings()
-        ),
-    }
-
-    bare_study = hb.study(bare, illustrative_problem, ex.measure, settings)
-    explicit_study = hb.study(explicit, illustrative_problem, ex.measure, settings)
-
-    assert bare_study.artifact["methods"] == explicit_study.artifact["methods"]
-
-
 def test_two_configurations_of_one_method_keep_their_labels(illustrative_problem):
     """Each run carries the label it was run under, so one method can appear twice."""
     methods = {
-        "ei": hb.standard_bo,
+        "ei": functools.partial(
+            hb.standard_bo, settings=hb.StandardBOSettings(gp=ex.gp)
+        ),
         "lcb": functools.partial(
-            hb.standard_bo, settings=hb.StandardBOSettings(acquisition=hb.LCB())
+            hb.standard_bo,
+            settings=hb.StandardBOSettings(gp=ex.gp, acquisition=hb.LCB()),
         ),
     }
     settings = hb.StudySettings(n_runs=1, n_initial=2, n_iterations=1)
@@ -317,6 +302,77 @@ def test_save_and_load_keep_partial_runs_and_empty_arrays(tmp_path):
     loaded = hb.load(hb.save(study, tmp_path / "study"))
 
     assert_same(loaded, study)
+
+
+def test_a_loaded_run_draws_its_iterations_with_its_own_gp(tmp_path):
+    """A run saves its fitted GPs whole, so a loaded run whose GP isn't the
+    experiment's (a known noise, a fixed output scale) draws its iteration figures
+    with no settings passed, and its GP panel is that GP's prediction."""
+    # Setup: one hybrid BO run with its own GP, saved and loaded
+    gp = hb.gp.GP(
+        hb.gp.Zero(), hb.gp.Scale(hb.gp.Matern52(), outputscale=2.0), noise_std=0.05
+    )
+    approximation = hb.SAA(unknown_states_as_variables=False)
+    settings = hb.HybridBOSettings(gp=gp, approximation=approximation)
+    methods = {"noisy": functools.partial(hb.hybrid_bo, settings=settings)}
+    study_settings = hb.StudySettings(n_runs=1, n_initial=2, n_iterations=2, seed=0)
+    study = hb.study(methods, ex.problem, ex.measure, study_settings)
+    (run,) = hb.load(hb.save(study, tmp_path / "study")).runs
+
+    # Act: every iteration's figure, from the loaded run alone
+    figures = [hb.plots.iteration(run, ex.problem, i) for i in range(2)]
+
+    # Check: the stored GP is the prior GP with its Params filled in, and the GP
+    # panel draws its prediction
+    assert run.surrogates[1].gp.noise_std == 0.05
+    assert run.surrogates[1].gp.kernel == study.runs[0].surrogates[1].gp.kernel
+    (mean,) = [
+        line for line in figures[1].axes[0].get_lines() if line.get_label() == "GP mean"
+    ]
+    u = np.asarray(mean.get_xdata())[:, np.newaxis]
+    expected, _ = hb.gp.predict(study.runs[0].surrogates[1], u)
+    np.testing.assert_allclose(np.asarray(mean.get_ydata()), expected, rtol=1e-12)
+    assert all(len(figure.axes) == 3 for figure in figures)
+
+
+def test_save_and_load_keep_every_kind_of_gp_parameter(tmp_path):
+    """A fitted GP's parameters round-trip as they were given: a number, a tuple
+    (one per input) and, inside a kernel held by another, the right kernel type."""
+    gp = hb.gp.GP(
+        hb.gp.Zero(),
+        hb.gp.Scale(hb.gp.Matern32(lengthscale=0.3), outputscale=1.5),
+        noise_std=0.2,
+    )
+    ard = hb.gp.GP(hb.gp.Zero(), hb.gp.SquaredExponential(lengthscale=(0.1, 0.2)))
+    scaler = hb.gp.Scaler(np.ones(1), np.zeros(1))
+    surrogates = [
+        hb.gp.FittedGP(g, np.zeros((2, 1)), np.zeros(2), scaler, scaler)
+        for g in (gp, ard)
+    ]
+    run = hb.Run(history_of(2), record={"type": "a record entry"}, method="m")
+    study = hb.Study(
+        (dataclasses.replace(run, surrogates=surrogates),), SETTINGS, None, {}
+    )
+
+    loaded = hb.load(hb.save(study, tmp_path / "study"))
+
+    assert_same(loaded, study)
+
+
+def test_load_rejects_a_study_saved_before_gps_were_data(illustrative_study, tmp_path):
+    """A study whose fitted GPs were saved as named hyperparameters, before GPs were
+    data, raises `StudyFormatError` saying to rerun it."""
+    # Rewrite one run's fitted GPs in the old format: hyperparameters, no GP
+    path = hb.save(illustrative_study, tmp_path / "study")
+    run_path = path / "runs" / "standard_bo" / "run-000.json"
+    data = json.loads(run_path.read_text())
+    for surrogate in data["surrogates"]:
+        del surrogate["gp"]
+        surrogate["hyperparameters"] = {"outputscale": [1.0], "lengthscale": [0.5]}
+    run_path.write_text(json.dumps(data))
+
+    with pytest.raises(hb.errors.StudyFormatError, match="rerun"):
+        hb.load(path)
 
 
 def test_save_refuses_an_existing_folder(illustrative_study, tmp_path):

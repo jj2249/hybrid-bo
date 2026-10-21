@@ -66,21 +66,26 @@ optimum = 0.0
 # number of iterations, or of design points for the baseline. Hybrid BO substitutes
 # the GP prediction for the unknown state, with SAA-EI and with SoftSAA-EI at a
 # temperature of 10, deliberately high so late-run improvements still have a gradient
-# (#113 scales it with f)
+# (#113 scales it with f). Every BO method's GP is a Matern-5/2 kernel with a
+# lengthscale per input times an output scale, both fitted, with a zero mean and no
+# noise, as the measurement has none
+gp = hb.gp.GP(hb.gp.Zero(), hb.gp.Scale(hb.gp.Matern52()))
 methods = {
     "hybrid_bo": functools.partial(
         hb.hybrid_bo,
         settings=hb.HybridBOSettings(
-            approximation=hb.SAA(unknown_states_as_variables=False)
+            gp=gp, approximation=hb.SAA(unknown_states_as_variables=False)
         ),
     ),
     "hybrid_bo_soft": functools.partial(
         hb.hybrid_bo,
         settings=hb.HybridBOSettings(
-            approximation=hb.SoftSAA(10.0, unknown_states_as_variables=False)
+            gp=gp, approximation=hb.SoftSAA(10.0, unknown_states_as_variables=False)
         ),
     ),
-    "standard_bo": hb.standard_bo,
+    "standard_bo": functools.partial(
+        hb.standard_bo, settings=hb.StandardBOSettings(gp=gp)
+    ),
     "latin_hypercube_sampling": hb.latin_hypercube_sampling,
 }
 

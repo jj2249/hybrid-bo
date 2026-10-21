@@ -28,9 +28,12 @@ a benchmark), `methods`, `study_settings`, then a `__main__` block calling `cli.
   baselines: that is a *logic* change.
 - A custom measurement is `(u (N,), rng) -> measured (P,)`; its docstring (else its
   name) is its record.
-- A BO method with its default settings goes into `methods` bare (`hb.standard_bo`);
-  bind other settings with `functools.partial(hb.hybrid_bo, settings=...)`.
-  `settings` is keyword-only, after `rng`.
+- A BO method's settings are required, since they name its GP: bind them with
+  `functools.partial(hb.hybrid_bo, settings=hb.HybridBOSettings(gp=gp, ...))`, never
+  put `hb.hybrid_bo` or `hb.standard_bo` in `methods` bare. `settings` is
+  keyword-only, after `rng`. Define the GP once as a module-level `gp`, e.g.
+  `hb.gp.GP(hb.gp.Zero(), hb.gp.Scale(hb.gp.Matern52()))`; the shipped experiments
+  share it between methods.
 
 ## Randomness
 
@@ -54,12 +57,18 @@ oracle objective is below it.
 - `math.exp(v.x)` on a CasADi symbol silently returns `nan`; numpy functions mostly
   work but emit a CasADi `FutureWarning`. Always use `cas.*`.
 - Exactly one measured variable per unknown state, and only `P == 1` is supported.
-- With `noise_std > 0`, the GP needs a `noise_std` hyperparameter (`default_gp` is
-  noise-free).
+- With measurement noise, state it in the GP too, as the same number:
+  `GP(..., noise_std=0.01)` for `oracle_measure(..., noise_std=0.01)`. `noise_std`
+  is in measured units; kernel parameters (`Param` bounds, fixed lengthscales) are in
+  scaled units (inputs onto [0, 1], outputs standardized). Don't convert the noise by
+  hand.
 - `true_curves=True` runs the measurement over the plot grid: only for an oracle.
-- The iteration figures need one decision variable and read the settings from the
-  run's record, so a custom GP needs `settings=` in `hb.plots.iteration`; otherwise
-  `plot` prints why and skips that run's figures.
+- The iteration figures need one decision variable. They take the GP from the run's
+  stored fitted GPs, and read the other settings from the run's record, so only a
+  custom solver needs `settings=` in `hb.plots.iteration`; otherwise `plot` prints why
+  and skips that run's figures.
+- Studies saved before #119 (GPs as data) don't load: `hb.load` raises
+  `StudyFormatError`. Rerun them.
 
 ## Running
 

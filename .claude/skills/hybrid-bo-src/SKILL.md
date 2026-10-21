@@ -114,13 +114,18 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `rng`: the settings alone reproduce a study.
 - `saving.py`: `save(study, path)` / `load(path)` (ADR 0004): `artifact.json` lists the
   run files `runs/<method>/run-<index:03d>.json`; `load` also reads the older
-  `study.json` (with `record` for `artifact`). `_encode`/`_decode` convert any
-  dataclass by its type hints; arrays are nested lists of floats (an empty one is
-  `{"shape": ...}`). A new field on `Run` or its parts round-trips without changes if
-  its type is one `_decode` handles. `save` refuses an existing folder.
+  `study.json` (with `record` for `artifact`), but a run whose fitted GPs have no `gp`
+  (saved before #119) raises `StudyFormatError` (`_check_format`). `_encode`/`_decode`
+  convert any dataclass by its type hints; arrays are nested lists of floats (an empty
+  one is `{"shape": ...}`). The GP types (`gp.TYPES`) are saved with `"type"`, their
+  class name, and `_decode` picks a union's member by it (`_union_member` picks
+  untagged data by its JSON shape: a list, a dict or a plain value). A new field on
+  `Run` or its parts round-trips without changes if its type is one `_decode`
+  handles. `save` refuses an existing folder.
 - `views.py`: `evaluations(study, optimum=None)`, `summary(study)` and
   `hyperparameters(study)`, Polars data frames (one row per evaluation, per method,
-  per fitted hyperparameter entry); each docstring lists its columns. Variable
+  per hyperparameter entry of each fitted GP, named by its dotted path in the GP,
+  e.g. `kernel.kernel.lengthscale`); each docstring lists its columns. Variable
   columns are named from the study's artifact (`_names` reads `Var(name='...')`).
   Polars is imported inside the functions (`_polars`), so `import hybrid_bo` works
   without it; a missing Polars raises `ImportError` naming `hybrid-bo[analysis]`.
@@ -135,26 +140,36 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   stopped at IPOPT's iteration limit (`opti.stats()["return_status"]` is
   `Maximum_Iterations_Exceeded`) get one warning per call, giving their count and
   `nlp.f`'s name, before `NoSolutionError` if all fail. The caller draws the starts with `lhs`.
-- `kernels.py`: kernels as plain functions of CasADi matrices (`matern12/32/52`,
-  `squared_exponential`, `linear`, `constant`); a lengthscale or scale is a scalar or
-  a `(d, 1)` column (ARD).
-- `gp.py`: `Hyper` (named, `size`, `log`), `PriorGP`, the prior GP (hyperparameters
-  in optimization order, `kernel(h, X1, X2)`, `mean(h, X)`, `jitter`), `FittedGP`,
-  the fitted GP (data only), `default_gp(n)` (a noise-free `PriorGP`: `outputscale`,
-  unsquared, times Matern-5/2 with ARD), `Scaler` with
-  `minmax`/`standard`/`scale`/`unscale`, `fit_gp(gp, ...) -> FittedGP`,
-  `predict(gp, fitted, X)` (the noise-free conditional mean and std; numpy X ->
-  arrays `(n,)`, symbolic X -> `(n, 1)` columns) and `log_marginal_likelihood`, which
-  `fit_gp` maximizes. The `gp` fields and arguments hold a `PriorGP`. The
-  hyperparameter named `noise_std`, if declared, is the noise:
-  `K = k(X, X) + (noise_std**2 + jitter) I`; without it only `jitter` is added.
-  The jitter defaults to 1e-6, a nugget: much smaller and the fit stalls once the
-  inputs cluster (#107, DESIGN.md). After fitting, `fit_gp` warns if the condition
-  number of that `K` at the kept hyperparameters (numpy, scaled data) exceeds
+- `gp.py` (ADR 0008): GPs are data, frozen dataclasses from a closed set. `Param(init,
+  bounds, log=True)` is a parameter to fit (checked: init inside the bounds, positive
+  bounds for log). Kernels `Matern12/32/52` and `SquaredExponential` (`lengthscale:
+  float | tuple | Param`, `ard=True`) and `Scale(kernel, outputscale)` (unsquared),
+  `Kernel` their union; the `Zero` mean (`Mean`); `TYPES` the closed set, which
+  saving tags by name. `GP(mean, kernel, noise_std=0.0, jitter=1e-6)` is the prior
+  GP; `FittedGP(gp, X, Y, x_scaler, y_scaler)` the fitted GP, its `gp` with no
+  `Param` left (checked), scaled data and scalers. `covariance(kernel, X1, X2)` and
+  `prior_mean(mean, X)` match on the type; the formulas are the cases' bodies. A
+  parameter is a field whose type hint admits `Param`; `_parameters(node, n_inputs)`
+  lists them as (dotted path, value, entries or None) in fit order, a node's own
+  before those of the kernels it holds (so `Scale(Matern52())` fits outputscale,
+  then the lengthscales, as `default_gp` did: the baselines depend on that order),
+  and `_with_parameters` sets them by path. A fitted value is a float, or a tuple of
+  one per input for an ARD lengthscale; a fixed number applies to every input.
+  `fit_gp(gp, X, Y, rng, ...) -> FittedGP` fits every `Param` (log ones in log
+  space) by `multistart` from `lhs` starts over the bounds; with no `Param` it draws
+  nothing. `predict(fitted, X)` (the noise-free conditional mean and std; numpy X ->
+  arrays `(n,)`, symbolic X -> `(n, 1)` columns) and `log_marginal_likelihood(fitted)`,
+  which `fit_gp` maximizes. Kernel parameters are in scaled units; `noise_std` is a
+  known noise in **measured** units, scaled by the output scaler's slope:
+  `K = k(X, X) + ((noise_std * slope)**2 + jitter) I`. Parameters in the fit are SX
+  slices put in the dataclass fields. `Scaler` with `minmax`/`standard`/`scale`/
+  `unscale`. The jitter defaults to 1e-6, a nugget: much smaller and the fit stalls
+  once the inputs cluster (#107, DESIGN.md). After fitting, `fit_gp` warns if the
+  condition number of that `K` at the kept values (numpy, scaled data) exceeds
   `CONDITION_THRESHOLD` (1e10), giving it and the jitter.
   Numeric data enter CasADi as `Symbolic` constants. Keep the `minmax` operation
   order: it reproduces the pre-refactor values bit for bit for [0, 1], which the
-  baselines depend on. `_gp_record` gives the prior GP as text for a run's record.
+  baselines depend on.
 - `acquisition.py`: `EI`, `LCB(std_factor)` and `standard_acquisition` (analytic EI
   or LCB over `u`). Both builders return an `AcquisitionProblem` (`nlp`,
   `start_bounds`, and the variable order: `n_u`, `n_x`, `n_scenarios`,
@@ -171,7 +186,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `NotImplementedError` for `LCB` with `Linearization`, `ValueError` for `LCB` with
   `SoftSAA`). `nominal_scenario(n_y)` is linearization's one scenario, which
   `hybrid_acquisition` requires with it (`ValueError` otherwise);
-  `_sensitivity(problem, gp, fitted)` is the `cas.Function` `(x, y, u) -> a (1, P)`.
+  `_sensitivity(problem, fitted)` is the `cas.Function` `(x, y, u) -> a (1, P)`.
   `Scenarios` (`z (S, P)`,
   `w (S,)`, checked), `saa_scenarios(n, n_y, rng)` and `hybrid_acquisition(..., acquisition,
   approximation)` (variables
@@ -181,7 +196,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   prediction (mean + std * z_s), symbolic or numeric.
   `AcquisitionSolution(value, x, y)` is one iteration's solution: the minimized
   objective at the trial point and, for hybrid BO, the scenario states `(S, M)`,
-  `(S, P)`, which `_scenario_states(system, gp, fitted, scenarios,
+  `(S, P)`, which `_scenario_states(system, fitted, scenarios,
   acquisition_problem, w)` reads from the solution (or predicts, when the y_s are
   substituted).
 - `bo.py`: `optimization_loop(problem, measure, initial_points, n_iterations,
@@ -189,26 +204,26 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `trial_point(problem, history, rng) -> (u, surrogate, acquisition solution)` and
   evaluate u; a
   `HybridBOError` gets the partial run as `error.run`). `standard_bo` and
-  `hybrid_bo` take `rng` last positionally and `settings` keyword-only, defaulting to
-  `StandardBOSettings()` / `HybridBOSettings()`. `StandardBOSettings` and
+  `hybrid_bo` take `rng` last positionally and `settings` keyword-only and required:
+  both settings require `gp`, the prior GP. `StandardBOSettings` and
   `standard_bo` (fit `u -> f`, `standard_acquisition`, `multistart` from `lhs` over
   the `u` start bounds), `HybridBOSettings` and `hybrid_bo` (record, then
   `saa_scenarios` or `nominal_scenario`, then the loop; fit `h_inputs -> y`,
   `hybrid_acquisition`; adds the
   scenarios to the run and to `error.run`). `_method_record` builds both methods'
-  records.
+  records: the settings without the GP, and `gp`, the prior GP's repr.
 - `plots.py`: static figures, no widgets and no `rng`. `convergence(study, ax)` and
   `regret(study, optimum, ax)` draw `evaluations` (median and IQR per method over
   evaluations, `_over_evaluations`). `iteration(run, problem, i, *, measure, gp,
   scenarios, acquisition, settings) -> Figure` draws the state before trial point i
   over a 101-point grid of one-dimensional `u` (start bounds) plus the trial point,
-  with one figure legend (`_figure_legend`). `_replay_settings` reads the acquisition
+  with one figure legend (`_figure_legend`). The GP is iteration i's stored fitted
+  GP, for the GP panel and the replay alike. `_replay_settings` reads the acquisition
   function and the approximation (its kind, `unknown_states_as_variables` and
   SoftSAA's temperature) from the record's settings text; the fields the replay uses
   (`_REPLAYED`, a dotted name for a field of a field), the kind of approximation and
   SoftSAA's temperature must appear in that text,
-  so a custom solver
-  or a non-default GP needs `settings`.
+  so a custom solver needs `settings` (whose GP is ignored).
   `_replay`: standard BO evaluates `standard_acquisition`'s NLP; hybrid BO rebuilds
   `hybrid_acquisition` and solves it over all of `w` with u fixed by equal bounds
   (built with `_pack`), outwards from
@@ -218,7 +233,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   matplotlib and Polars are imported inside the functions.
 - `errors.py`: `HybridBOError` (with `.history`, the points evaluated before the
   error, and `.run`, the partial run when raised in a method), `RootFindingError`,
-  `NoSolutionError`, `ReconstructionWarning`, `OracleOptimumWarning`. The library
+  `NoSolutionError`, `ReconstructionWarning`, `OracleOptimumWarning`, and
+  `StudyFormatError` (a `ValueError`: a saved study this version can't load). The library
   raises these, never bare `Exception` (ruff `TRY002`/`BLE001` apply everywhere).
   It imports `History` and `Run` only for type checking, since `run.py` imports
   `gp.py`, which imports `errors.py`.

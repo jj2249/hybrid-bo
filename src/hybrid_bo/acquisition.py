@@ -15,7 +15,7 @@ from typing import Any, assert_never
 import casadi as cas
 import numpy as np
 
-from hybrid_bo.gp import FittedGP, PriorGP, predict
+from hybrid_bo.gp import FittedGP, predict
 from hybrid_bo.problem import Problem, Symbolic, System, Var, _h_inputs
 from hybrid_bo.sampling import _start_bounds
 from hybrid_bo.solvers import NLP
@@ -218,7 +218,6 @@ def _unpack(
 
 def standard_acquisition(
     problem: Problem,
-    gp: PriorGP,
     fitted: FittedGP,
     incumbent: float,
     acquisition: EI | LCB,
@@ -233,7 +232,7 @@ def standard_acquisition(
     _check_acquisition(acquisition)
     u_vars = problem.system.u
     u = Symbolic.sym("u", len(u_vars))
-    mean, std = predict(gp, fitted, u.T)
+    mean, std = predict(fitted, u.T)
     match acquisition:
         case LCB(std_factor=std_factor):
             objective = mean - std_factor * std
@@ -306,7 +305,6 @@ def nominal_scenario(n_y: int) -> Scenarios:
 
 def _scenario_unknown_states(
     system: System,
-    gp: PriorGP,
     fitted: FittedGP,
     scenarios: Scenarios,
     u: Any,
@@ -320,14 +318,14 @@ def _scenario_unknown_states(
     n_scenarios = len(scenarios.w)
     if isinstance(x, np.ndarray):
         inputs = np.column_stack(_h_inputs(system, np.tile(u, (n_scenarios, 1)), x))
-        mean, std = predict(gp, fitted, inputs)
+        mean, std = predict(fitted, inputs)
         return mean[:, np.newaxis] + std[:, np.newaxis] * scenarios.z
     inputs = cas.horzcat(*_h_inputs(system, cas.repmat(u.T, n_scenarios, 1), x))
-    mean, std = predict(gp, fitted, inputs)
+    mean, std = predict(fitted, inputs)
     return mean + std * Symbolic(scenarios.z)
 
 
-def _sensitivity(problem: Problem, gp: PriorGP, fitted: FittedGP) -> cas.Function:
+def _sensitivity(problem: Problem, fitted: FittedGP) -> cas.Function:
     """The total derivative df/dz of the objective in the scenario draws at the
     nominal scenario (z = 0), as a function of columns x (M, 1), y (P, 1) and u
     (N, 1) to a row a (1, P).
@@ -341,7 +339,7 @@ def _sensitivity(problem: Problem, gp: PriorGP, fitted: FittedGP) -> cas.Functio
     x = Symbolic.sym("x", system.n_x)
     y = Symbolic.sym("y", system.n_y)
     u = Symbolic.sym("u", system.n_u)
-    mean, std = predict(gp, fitted, cas.horzcat(*_h_inputs(system, u.T, x.T)))
+    mean, std = predict(fitted, cas.horzcat(*_h_inputs(system, u.T, x.T)))
 
     # How the states move with the draws, then the objective
     g, f, L = system.g(x, y, u), problem.f(x, y, u), cas.diag(std)
@@ -354,7 +352,6 @@ def _sensitivity(problem: Problem, gp: PriorGP, fitted: FittedGP) -> cas.Functio
 
 def hybrid_acquisition(
     problem: Problem,
-    gp: PriorGP,
     fitted: FittedGP,
     scenarios: Scenarios,
     incumbent: float,
@@ -409,7 +406,7 @@ def hybrid_acquisition(
     x = Symbolic.sym("x", n_scenarios, system.n_x)
 
     # The scenarios of the unknown states: variables tied to the GP, or the GP itself
-    predicted = _scenario_unknown_states(system, gp, fitted, scenarios, u, x)
+    predicted = _scenario_unknown_states(system, fitted, scenarios, u, x)
     y = predicted
     if unknown_states_as_variables:
         y = Symbolic.sym("y", n_scenarios, system.n_y)
@@ -429,7 +426,7 @@ def hybrid_acquisition(
     # checked)
     match approximation:
         case Linearization():
-            a = _sensitivity(problem, gp, fitted)(x[0, :].T, y[0, :].T, u)
+            a = _sensitivity(problem, fitted)(x[0, :].T, y[0, :].T, u)
             objective = -_expected_improvement(f[0], cas.sqrt(a @ a.T), incumbent)
         case SoftSAA(temperature=temperature):
             log_smooth = np.log(temperature) + _log_softplus(
@@ -476,7 +473,6 @@ def hybrid_acquisition(
 
 def _scenario_states(
     system: System,
-    gp: PriorGP,
     fitted: FittedGP,
     scenarios: Scenarios,
     problem: AcquisitionProblem,
@@ -490,5 +486,5 @@ def _scenario_states(
     """
     u, x, y = _unpack(problem, w)
     if y is None:
-        y = _scenario_unknown_states(system, gp, fitted, scenarios, u, x)
+        y = _scenario_unknown_states(system, fitted, scenarios, u, x)
     return x, y

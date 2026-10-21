@@ -29,21 +29,21 @@ hybrid BO, the whole map from decision variables to objective in standard BO.
 _Avoid_: GP model, emulator
 
 **Prior GP**:
-A surrogate model before it sees any data: its hyperparameters with their initial
-values and bounds, its kernel and its mean, all written as functions of the
-hyperparameters.
+A surrogate model before it sees any data: its mean, its kernel with each
+hyperparameter fixed or to be fitted, and its observation noise (`hb.gp.GP`).
 _Avoid_: GP spec, GP (on its own, when the prior is meant)
 
 **Fitted GP**:
-A prior GP conditioned on its training data, at hyperparameters fitted by maximizing
-the marginal likelihood. Its predictions are the conditional mean and standard
-deviation of the noise-free output.
+A prior GP with every hyperparameter fitted to its training data, held with that data
+(`hb.gp.FittedGP`). The hyperparameters are fitted by maximizing the marginal
+likelihood. Its predictions are the conditional mean and standard deviation of the
+noise-free output.
 _Avoid_: trained GP, conditioned GP, posterior
 
 **Jitter** or **nugget** (`jitter`):
 A small constant added to the diagonal of a GP's training covariance so it stays
-well conditioned. It is a numerical safeguard, not observation
-noise, which a `noise_std` hyperparameter models.
+well conditioned. It is a numerical safeguard, not observation noise, which the prior
+GP states.
 _Avoid_: epsilon
 
 **Hybrid model**:

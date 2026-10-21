@@ -50,27 +50,32 @@ optimum = -50.4608044704652
 # Methods: each takes (problem, measure, initial_points, n, rng), where n is the
 # number of iterations, or of design points for the baselines. Hybrid BO substitutes
 # the GP prediction for the unknown states, as this experiment always has, with SAA-EI,
-# with Lin-EI and with SoftSAA-EI at a temperature of 1 (f is in the tens here)
+# with Lin-EI and with SoftSAA-EI at a temperature of 1 (f is in the tens here).
+# Every BO method's GP is a Matern-5/2 kernel times an output scale, both fitted, with
+# a zero mean and no noise, as the measurement has none
+gp = hb.gp.GP(hb.gp.Zero(), hb.gp.Scale(hb.gp.Matern52()))
 methods = {
     "hybrid_bo": functools.partial(
         hb.hybrid_bo,
         settings=hb.HybridBOSettings(
-            approximation=hb.SAA(unknown_states_as_variables=False)
+            gp=gp, approximation=hb.SAA(unknown_states_as_variables=False)
         ),
     ),
     "hybrid_bo_lin": functools.partial(
         hb.hybrid_bo,
         settings=hb.HybridBOSettings(
-            approximation=hb.Linearization(unknown_states_as_variables=False)
+            gp=gp, approximation=hb.Linearization(unknown_states_as_variables=False)
         ),
     ),
     "hybrid_bo_soft": functools.partial(
         hb.hybrid_bo,
         settings=hb.HybridBOSettings(
-            approximation=hb.SoftSAA(1.0, unknown_states_as_variables=False)
+            gp=gp, approximation=hb.SoftSAA(1.0, unknown_states_as_variables=False)
         ),
     ),
-    "standard_bo": hb.standard_bo,
+    "standard_bo": functools.partial(
+        hb.standard_bo, settings=hb.StandardBOSettings(gp=gp)
+    ),
     "latin_hypercube_sampling": hb.latin_hypercube_sampling,
     "uniform_sampling": hb.uniform_sampling,
 }

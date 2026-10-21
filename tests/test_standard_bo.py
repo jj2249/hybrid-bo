@@ -31,7 +31,10 @@ from hybrid_bo.acquisition import (
     standard_acquisition,
 )
 from hybrid_bo.bo import optimization_loop
-from hybrid_bo.gp import FittedGP, default_gp, fit_gp, predict
+from hybrid_bo.gp import GP, FittedGP, Matern52, Scale, Zero, fit_gp, predict
+
+# The prior GP of the experiments: an output scale times Matern-5/2, both fitted
+PRIOR_GP = GP(Zero(), Scale(Matern52()))
 from hybrid_bo.run import run_record
 
 
@@ -43,7 +46,7 @@ def illustrative_measure(problem):
 def illustrative_run(problem, settings=None) -> Run:
     """A standard BO run on the illustrative example: 2 initial points, 2 iterations,
     with the default settings unless `settings` is given."""
-    settings = StandardBOSettings() if settings is None else settings
+    settings = StandardBOSettings(gp=PRIOR_GP) if settings is None else settings
     rng = np.random.default_rng(0)
     u = initial_points(problem.system.u, 2, rng)
     measure = illustrative_measure(problem)
@@ -54,8 +57,7 @@ def fitted_illustrative_gp():
     """The default GP and its fit to four points of u -> f."""
     u = np.array([[-1.5], [-0.5], [0.4], [1.7]])
     f = np.array([0.3, -1.2, 2.0, 0.8])
-    gp = default_gp(1)
-    return gp, fit_gp(gp, u, f, np.random.default_rng(0))
+    return fit_gp(PRIOR_GP, u, f, np.random.default_rng(0))
 
 
 def acquisition_values(nlp, u):
@@ -94,14 +96,14 @@ class _DataOnlyUnpickler(pickle.Unpickler):
 def test_ei_matches_the_closed_form(illustrative_problem):
     """The EI acquisition problem minimizes minus the closed-form expected
     improvement, computed here with scipy from the GP's mean and std."""
-    gp, fitted = fitted_illustrative_gp()
+    fitted = fitted_illustrative_gp()
     u = np.linspace(-2.0, 2.0, 7)[:, np.newaxis]
     incumbent = -1.2
 
-    nlp = standard_acquisition(illustrative_problem, gp, fitted, incumbent, EI()).nlp
+    nlp = standard_acquisition(illustrative_problem, fitted, incumbent, EI()).nlp
 
     # Reference: EI = (incumbent - mean) Phi(gamma) + std phi(gamma)
-    mean, std = predict(gp, fitted, u)
+    mean, std = predict(fitted, u)
     gamma = (incumbent - mean) / std
     improvement = incumbent - mean
     expected = improvement * scipy.stats.norm.cdf(gamma) + std * scipy.stats.norm.pdf(
@@ -114,23 +116,21 @@ def test_ei_matches_the_closed_form(illustrative_problem):
 
 def test_lcb_is_mean_minus_std_factor_times_std(illustrative_problem):
     """The LCB acquisition problem minimizes mean - std_factor * std of the GP."""
-    gp, fitted = fitted_illustrative_gp()
+    fitted = fitted_illustrative_gp()
     u = np.linspace(-2.0, 2.0, 7)[:, np.newaxis]
 
-    nlp = standard_acquisition(illustrative_problem, gp, fitted, 0.0, LCB(2.0)).nlp
+    nlp = standard_acquisition(illustrative_problem, fitted, 0.0, LCB(2.0)).nlp
 
-    mean, std = predict(gp, fitted, u)
+    mean, std = predict(fitted, u)
     np.testing.assert_allclose(acquisition_values(nlp, u), mean - 2.0 * std, rtol=1e-12)
 
 
 def test_acquisition_problem_is_over_u_within_its_bounds(illustrative_problem):
     """The acquisition problem's variables are the decision variables, boxed by their
     bounds, with no equality constraints; its starts come from their start bounds."""
-    gp, fitted = fitted_illustrative_gp()
+    fitted = fitted_illustrative_gp()
 
-    acquisition_problem = standard_acquisition(
-        illustrative_problem, gp, fitted, 0.0, EI()
-    )
+    acquisition_problem = standard_acquisition(illustrative_problem, fitted, 0.0, EI())
 
     nlp, (lower, upper) = acquisition_problem.nlp, acquisition_problem.start_bounds
     np.testing.assert_array_equal(nlp.lower, [-2.0])
@@ -154,15 +154,15 @@ def test_lcb_needs_a_finite_nonnegative_std_factor(std_factor):
 def test_settings_reject_anything_but_ei_or_lcb(acquisition):
     """The settings accept only an EI or LCB instance, not a name or the class."""
     with pytest.raises(TypeError, match=r"EI\(\) or LCB"):
-        StandardBOSettings(acquisition=acquisition)
+        StandardBOSettings(gp=PRIOR_GP, acquisition=acquisition)
 
 
 def test_acquisition_builder_rejects_anything_but_ei_or_lcb(illustrative_problem):
     """The acquisition builder checks its acquisition function as the settings do."""
-    gp, fitted = fitted_illustrative_gp()
+    fitted = fitted_illustrative_gp()
 
     with pytest.raises(TypeError, match=r"EI\(\) or LCB"):
-        standard_acquisition(illustrative_problem, gp, fitted, 0.0, "lcb")  # ty: ignore[invalid-argument-type]
+        standard_acquisition(illustrative_problem, fitted, 0.0, "lcb")  # ty: ignore[invalid-argument-type]
 
 
 # Standard BO
@@ -195,10 +195,10 @@ def test_run_pickles_without_the_code_that_produced_it(illustrative_problem):
     np.testing.assert_array_equal(loaded.surrogates[-1].X, run.surrogates[-1].X)
 
 
-def test_record_holds_the_settings_and_the_resolved_gp(illustrative_problem):
-    """The record holds the settings, and the GP the run used (the default GP here)
-    as text, since the settings only say None."""
-    settings = StandardBOSettings(acquisition=LCB(2.0))
+def test_record_holds_the_settings_and_the_gp(illustrative_problem):
+    """The record holds the settings, and the prior GP as its repr in an entry of
+    its own."""
+    settings = StandardBOSettings(gp=PRIOR_GP, acquisition=LCB(2.0))
 
     record = illustrative_run(illustrative_problem, settings).record
 
@@ -209,39 +209,30 @@ def test_record_holds_the_settings_and_the_resolved_gp(illustrative_problem):
     assert "n_starts=10" in record["settings"]
     assert "GP(" not in record["settings"]
 
-    # The GP: its hyperparameters, and its kernel and mean as expressions
-    assert "Hyper(name='lengthscale'" in record["gp"]
-    assert "outputscale" in record["kernel"]
-    assert "lengthscale" in record["kernel"]
-    assert record["mean"] == "0"
+    # The GP: its repr, which names its parts and their Params
+    assert record["gp"] == repr(PRIOR_GP)
+    assert "Matern52(lengthscale=Param(init=1.0" in record["gp"]
 
 
-def test_settings_default_to_the_default_settings(illustrative_problem):
-    """Without `settings`, a run records the same as one given the default settings
-    explicitly. Settings are keyword-only, so they can't be passed in `rng`'s place."""
-    # Initial points only (0 iterations): the record doesn't depend on the iterations
+def test_settings_are_required_and_keyword_only(illustrative_problem):
+    """Standard BO has no default settings, since its GP is stated by the
+    experiment, and the settings are keyword-only, so they can't be passed in
+    `rng`'s place."""
     measure = illustrative_measure(illustrative_problem)
     u = np.array([[-0.5], [0.5]])
 
-    default = standard_bo(illustrative_problem, measure, u, 0, np.random.default_rng(0))
-    explicit = standard_bo(
-        illustrative_problem,
-        measure,
-        u,
-        0,
-        np.random.default_rng(0),
-        settings=StandardBOSettings(),
-    )
-
-    assert default.record == explicit.record
+    with pytest.raises(TypeError, match="gp"):
+        StandardBOSettings()  # ty: ignore[missing-argument]
+    with pytest.raises(TypeError, match="settings"):
+        standard_bo(illustrative_problem, measure, u, 0, np.random.default_rng(0))  # ty: ignore[missing-argument]
     with pytest.raises(TypeError):
-        standard_bo(
+        standard_bo(  # ty: ignore[missing-argument]
             illustrative_problem,
             measure,
             u,
             0,
             np.random.default_rng(0),
-            StandardBOSettings(),  # ty: ignore[too-many-positional-arguments]
+            StandardBOSettings(gp=PRIOR_GP),  # ty: ignore[too-many-positional-arguments]
         )
 
 
@@ -263,6 +254,7 @@ def test_failed_evaluation_carries_the_partial_run(illustrative_problem):
             np.array([[-0.5], [0.5]]),
             2,
             np.random.default_rng(0),
+            settings=StandardBOSettings(gp=PRIOR_GP),
         )
 
     # The partial run: the initial points, and no surrogate (the surrogate behind the
@@ -283,16 +275,14 @@ def test_stored_acquisition_value_is_the_objective_at_the_trial_point(
     point; standard BO has no scenario states."""
     run = illustrative_run(illustrative_problem)
 
-    history, gp = run.history, default_gp(1)
+    history = run.history
     assert len(run.acquisitions) == 2
     for i, (solution, fitted) in enumerate(
         zip(run.acquisitions, run.surrogates, strict=True)
     ):
         point = history.n_initial + i
         incumbent = float(incumbents(history)[point - 1])
-        nlp = standard_acquisition(
-            illustrative_problem, gp, fitted, incumbent, EI()
-        ).nlp
+        nlp = standard_acquisition(illustrative_problem, fitted, incumbent, EI()).nlp
         expected = acquisition_values(nlp, history.u[point : point + 1])[0]
         assert solution.value == pytest.approx(expected, abs=1e-12)
         assert solution.x is None and solution.y is None

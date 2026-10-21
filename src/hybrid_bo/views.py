@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from hybrid_bo.gp import _parameters
 from hybrid_bo.history import incumbents, n_iterations, oracle_incumbents
 from hybrid_bo.run import Run
 from hybrid_bo.studies import Study
@@ -158,20 +159,21 @@ def summary(study: Study) -> "pl.DataFrame":
 
 
 def hyperparameters(study: Study) -> "pl.DataFrame":
-    """The fitted hyperparameters over the iterations: one row per run, iteration and
-    hyperparameter entry, with columns `method`, `run`, `iteration` (from 1, as in
-    `evaluations`), `hyperparameter` (its name), `entry` (its position in the
-    hyperparameter, from 0; e.g. one lengthscale per input) and `value`. The
-    baselines fit nothing, so they have no rows. Raises `ImportError` without
+    """The fitted GPs' hyperparameters over the iterations: one row per run,
+    iteration and hyperparameter entry, with columns `method`, `run`, `iteration`
+    (from 1, as in `evaluations`), `hyperparameter` (its dotted path in the GP, e.g.
+    `kernel.outputscale`), `entry` (its position in the hyperparameter, from 0; e.g.
+    one lengthscale per input) and `value`. Fixed hyperparameters are listed too.
+    The baselines fit nothing, so they have no rows. Raises `ImportError` without
     Polars.
     """
     pl = _polars()
     rows = [
-        (run.method, run.index, iteration, name, entry, float(value))
+        (run.method, run.index, iteration, path, entry, float(value))
         for run in study.runs
         for iteration, surrogate in enumerate(run.surrogates, start=1)
-        for name, values in surrogate.hyperparameters.items()
-        for entry, value in enumerate(values)
+        for path, values, _ in _parameters(surrogate.gp, surrogate.X.shape[1])
+        for entry, value in enumerate(values if isinstance(values, tuple) else [values])
     ]
     schema = {
         "method": pl.String,

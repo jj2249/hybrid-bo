@@ -3,9 +3,11 @@
 `save(study, path)` writes `path/artifact.json` (the study's name, settings and
 artifact, and the list of run files) and one file per run,
 `path/runs/<method>/run-000.json`, holding every field of the run. `load` also reads
-a study saved before the artifact was named: `study.json` with a `record` key. Arrays
-are nested lists; float64 values round-trip exactly. The library never calls `save`
-itself.
+a study saved before the artifact was named: `study.json` with a `record` key, but not
+one saved before GPs were data (ADR 0008). Arrays are nested lists; float64 values
+round-trip exactly. A GP's means, kernels and parameters are saved with their type's
+name (`"type"`), so a field that holds one of several kernels loads as the right one.
+The library never calls `save` itself.
 """
 
 import dataclasses
@@ -17,6 +19,8 @@ from typing import Any
 
 import numpy as np
 
+from hybrid_bo.errors import StudyFormatError
+from hybrid_bo.gp import TYPES
 from hybrid_bo.run import Run
 from hybrid_bo.studies import Study, StudySettings
 
@@ -24,12 +28,17 @@ from hybrid_bo.studies import Study, StudySettings
 ARTIFACT_FILE = "artifact.json"
 OLD_ARTIFACT_FILE = "study.json"
 
+# The types saved with their name, by name: the closed set of a GP's parts
+_TAGGED = {cls.__name__: cls for cls in TYPES}
+
 
 def _encode(value: Any) -> Any:
-    """`value` as JSON data: a dataclass as a dict of its fields, an array as nested
-    lists (an empty one as its shape, which nested lists would lose)."""
+    """`value` as JSON data: a dataclass as a dict of its fields (with its type's
+    name if it is one of a GP's parts), an array as nested lists (an empty one as its
+    shape, which nested lists would lose)."""
     if dataclasses.is_dataclass(value) and not isinstance(value, type):
-        return {
+        tag = {"type": type(value).__name__} if type(value) in TYPES else {}
+        return tag | {
             field.name: _encode(getattr(value, field.name))
             for field in dataclasses.fields(value)
         }
@@ -48,14 +57,17 @@ def _decode(value: Any, annotation: Any) -> Any:
     """The JSON data `value` as the type `annotation`, the inverse of `_encode`.
 
     Handles what runs and studies hold: dataclasses, arrays of floats, lists,
-    tuples, dicts with string keys, optional values and plain values.
+    tuples, dicts with string keys, optional values, unions and plain values. A
+    union's member is the type a tagged dict names, else the one that fits the data.
     """
     origin, args = typing.get_origin(annotation), typing.get_args(annotation)
     if value is None:
         return None
+    if isinstance(value, dict) and "type" in value and origin is not dict:
+        value = dict(value)
+        return _decode(value, _TAGGED[value.pop("type")])
     if origin in (types.UnionType, typing.Union):
-        (inner,) = [arg for arg in args if arg is not type(None)]
-        return _decode(value, inner)
+        return _decode(value, _union_member(value, args))
     if annotation is np.ndarray:
         if isinstance(value, dict):
             return np.zeros(value["shape"])
@@ -72,6 +84,32 @@ def _decode(value: Any, annotation: Any) -> Any:
     if origin is dict:
         return {key: _decode(item, args[1]) for key, item in value.items()}
     return value
+
+
+def _union_member(value: Any, members: tuple[Any, ...]) -> Any:
+    """The member of a union that untagged JSON data `value` decodes as: the
+    sequence type for a list, the one dataclass for a dict, else the plain type."""
+    members = tuple(member for member in members if member is not type(None))
+    if isinstance(value, list):
+        kinds = (list, tuple, np.ndarray)
+        fits = [m for m in members if (typing.get_origin(m) or m) in kinds]
+    elif isinstance(value, dict):
+        fits = [m for m in members if dataclasses.is_dataclass(m)]
+    else:
+        fits = [m for m in members if isinstance(value, typing.get_origin(m) or m)]
+    return fits[0]
+
+
+def _check_format(run_data: dict[str, Any], run_path: Path) -> None:
+    """Raises `StudyFormatError` if a saved run's fitted GPs predate GPs as data
+    (named hyperparameters, no GP)."""
+    if any("gp" not in surrogate for surrogate in run_data.get("surrogates", [])):
+        msg = (
+            f"{run_path} was saved before GPs were data (its fitted GPs hold named "
+            "hyperparameters, not their GP), so it can't be loaded: rerun the study, "
+            "or load it with the version that saved it"
+        )
+        raise StudyFormatError(msg)
 
 
 def _run_path(run: Run) -> Path:
@@ -116,7 +154,10 @@ def save(study: Study, path: str | Path) -> Path:
 
 
 def load(path: str | Path) -> Study:
-    """Reads the study saved in the folder `path` by `save`."""
+    """Reads the study saved in the folder `path` by `save`.
+
+    Raises `StudyFormatError` for a study saved before GPs were data.
+    """
     # The artifact, else the older `study.json`, which named it `record`
     path = Path(path)
     if (path / ARTIFACT_FILE).exists():
@@ -126,12 +167,13 @@ def load(path: str | Path) -> Study:
         study_data["artifact"] = study_data.pop("record")
 
     # The runs, in the order the artifact lists them
-    runs = tuple(
-        _decode(json.loads((path / run_path).read_text()), Run)
-        for run_path in study_data["runs"]
-    )
+    runs = []
+    for run_path in study_data["runs"]:
+        run_data = json.loads((path / run_path).read_text())
+        _check_format(run_data, path / run_path)
+        runs.append(_decode(run_data, Run))
     return Study(
-        runs,
+        tuple(runs),
         _decode(study_data["settings"], StudySettings),
         study_data["name"],
         study_data["artifact"],

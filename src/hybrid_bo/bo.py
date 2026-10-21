@@ -8,7 +8,7 @@ iteration asks the trial-point function for the next trial point and evaluates i
 
 import logging
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass, field, fields, replace
 from typing import assert_never
 
@@ -32,9 +32,9 @@ from hybrid_bo.acquisition import (
 )
 from hybrid_bo.errors import HybridBOError
 from hybrid_bo.evaluation import Measure, evaluate
-from hybrid_bo.gp import FittedGP, PriorGP, _gp_record, default_gp, fit_gp
+from hybrid_bo.gp import GP, FittedGP, fit_gp
 from hybrid_bo.history import History, _concatenate, incumbents
-from hybrid_bo.problem import Problem, Var, _h_inputs
+from hybrid_bo.problem import Problem, _h_inputs
 from hybrid_bo.run import Run, run_record
 from hybrid_bo.sampling import lhs
 from hybrid_bo.solvers import Ipopt, multistart
@@ -128,14 +128,14 @@ def optimization_loop(
 
 @dataclass(frozen=True)
 class StandardBOSettings:
-    """Settings of standard BO: the GP of u -> f (None: `default_gp` over the
-    decision variables), the acquisition function, the number of multistart starts
-    for the acquisition problem and for fitting the GP, and the solver for both.
+    """Settings of standard BO: the prior GP of u -> f, the acquisition function,
+    the number of multistart starts for the acquisition problem and for fitting the
+    GP, and the solver for both.
 
     Raises `TypeError` unless `acquisition` is an `EI` or an `LCB`.
     """
 
-    gp: PriorGP | None = None
+    gp: GP
     acquisition: EI | LCB = field(default_factory=EI)
     n_starts: int = 10
     n_starts_gp: int = 10
@@ -147,18 +147,18 @@ class StandardBOSettings:
 
 @dataclass(frozen=True)
 class HybridBOSettings:
-    """Settings of hybrid BO: the GP of the unknown states over the arguments of h
-    (None: `default_gp` over `h_inputs`), the acquisition function (what is
-    computed), its approximation (how it is computed, with its own settings), the
-    number of multistart starts for the acquisition problem and for fitting the GP,
-    and the solver for both.
+    """Settings of hybrid BO: the prior GP of the unknown states over the arguments
+    of h (`h_inputs`), the acquisition function (what is computed), its
+    approximation (how it is computed, with its own settings), the number of
+    multistart starts for the acquisition problem and for fitting the GP, and the
+    solver for both.
 
     Raises `TypeError` unless `acquisition` is an `EI` or an `LCB` and
     `approximation` an `SAA`, a `SoftSAA` or a `Linearization`, `ValueError` for
     `LCB` with `SoftSAA`, and `NotImplementedError` for `LCB` with `Linearization`.
     """
 
-    gp: PriorGP | None = None
+    gp: GP
     acquisition: EI | LCB = field(default_factory=EI)
     approximation: SAA | SoftSAA | Linearization = field(default_factory=SAA)
     n_starts: int = 10
@@ -177,12 +177,9 @@ def _method_record(
     method: str,
     n_iterations: int,
     settings: StandardBOSettings | HybridBOSettings,
-    gp: PriorGP,
-    gp_inputs: Sequence[Var],
 ) -> dict[str, str]:
     """The record of a BO run: `run_record` with the settings except the prior GP,
-    which is recorded as text in its own entries (its repr would only name the
-    kernel's function), over the names of its inputs."""
+    whose repr is its own entry, `gp`."""
     settings_text = ", ".join(
         [f"n_iterations={n_iterations}"]
         + [
@@ -192,7 +189,7 @@ def _method_record(
         ]
     )
     record = run_record(problem, measure, rng, method, settings_text)
-    return record | _gp_record(gp, [var.name for var in gp_inputs])
+    return record | {"gp": repr(settings.gp)}
 
 
 def standard_bo(
@@ -202,7 +199,7 @@ def standard_bo(
     n_iterations: int,
     rng: np.random.Generator,
     *,
-    settings: StandardBOSettings = StandardBOSettings(),
+    settings: StandardBOSettings,
 ) -> Run:
     """Standard BO: a GP of the objective over the decision variables, u -> f, with
     the acquisition function computed analytically.
@@ -211,16 +208,15 @@ def standard_bo(
     measured objective so far, solves the acquisition problem by multistart from
     Latin hypercube starts over the start bounds of `u`, and evaluates the solution.
     Each iteration's acquisition solution holds the acquisition value only.
-    `settings` (keyword-only) defaults to `StandardBOSettings()`.
+    `settings` are keyword-only.
 
     Raises what `evaluate` and `multistart` raise; a `HybridBOError` carries the
     partial run as `error.run`.
     """
-    # The GP and the record
-    u_vars = problem.system.u
-    gp = default_gp(len(u_vars)) if settings.gp is None else settings.gp
+    # The record
+    gp = settings.gp
     record = _method_record(
-        problem, measure, rng, "standard_bo", n_iterations, settings, gp, u_vars
+        problem, measure, rng, "standard_bo", n_iterations, settings
     )
 
     def trial_point(
@@ -232,7 +228,7 @@ def standard_bo(
         )
         incumbent = float(incumbents(history)[-1])
         acquisition_problem = standard_acquisition(
-            problem, gp, fitted, incumbent, settings.acquisition
+            problem, fitted, incumbent, settings.acquisition
         )
         starts = lhs(*acquisition_problem.start_bounds, settings.n_starts, rng)
         solution = multistart(acquisition_problem.nlp, starts, settings.solver)
@@ -251,7 +247,7 @@ def hybrid_bo(
     n_iterations: int,
     rng: np.random.Generator,
     *,
-    settings: HybridBOSettings = HybridBOSettings(),
+    settings: HybridBOSettings,
 ) -> Run:
     """Hybrid BO: a GP of the unknown states over the arguments of h, combined with
     the known equations in the acquisition problem (paper, Problems 8 and 9).
@@ -264,24 +260,14 @@ def hybrid_bo(
     starts over the start bounds of its variables, and evaluates the decision
     variables of the solution. The run holds the scenarios, and each iteration's
     acquisition solution holds the scenario states at its trial point. `settings`
-    (keyword-only) defaults to `HybridBOSettings()`.
+    are keyword-only.
 
     Raises what `evaluate` and `multistart` raise; a `HybridBOError` carries the
     partial run, with the scenarios, as `error.run`.
     """
-    # The GP and the record, before the scenarios are drawn
-    system = problem.system
-    gp = default_gp(len(system.h_inputs)) if settings.gp is None else settings.gp
-    record = _method_record(
-        problem,
-        measure,
-        rng,
-        "hybrid_bo",
-        n_iterations,
-        settings,
-        gp,
-        system.h_inputs,
-    )
+    # The record, before the scenarios are drawn
+    system, gp = problem.system, settings.gp
+    record = _method_record(problem, measure, rng, "hybrid_bo", n_iterations, settings)
     # The scenarios: SAA and SoftSAA draw them, linearization has the nominal
     # scenario alone
     approximation = settings.approximation
@@ -305,7 +291,6 @@ def hybrid_bo(
         incumbent = float(incumbents(history)[-1])
         acquisition_problem = hybrid_acquisition(
             problem,
-            gp,
             fitted,
             scenarios,
             incumbent,
@@ -318,7 +303,7 @@ def hybrid_bo(
         # The trial point, and the scenario states at the solution
         u, _, _ = _unpack(acquisition_problem, solution.w)
         x, y = _scenario_states(
-            system, gp, fitted, scenarios, acquisition_problem, solution.w
+            system, fitted, scenarios, acquisition_problem, solution.w
         )
         return u, fitted, AcquisitionSolution(solution.f, x, y)
 
