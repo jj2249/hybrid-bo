@@ -69,53 +69,53 @@ def test_initial_points_come_first(illustrative_problem, method):
 @pytest.mark.parametrize("method", METHODS)
 def test_run_pickles_without_the_code_that_produced_it(illustrative_problem, method):
     """A pickled run loads with only the library's data classes, numpy and builtins,
-    and keeps its record and history."""
+    and keeps its artifact and history."""
     run = illustrative_run(illustrative_problem, method)
 
     loaded = _DataOnlyUnpickler(io.BytesIO(pickle.dumps(run))).load()
 
-    assert loaded.record == run.record
+    assert loaded.artifact == run.artifact
     assert loaded.surrogates == []
     np.testing.assert_array_equal(loaded.history.u, run.history.u)
     np.testing.assert_array_equal(loaded.history.f, run.history.f)
     assert loaded.history.n_initial == run.history.n_initial
 
 
-def test_record_describes_the_problem_method_and_versions(illustrative_problem):
-    """The run's record holds, as strings, the equations, the measurement, the
+def test_artifact_describes_the_problem_method_and_versions(illustrative_problem):
+    """The run's artifact holds, as strings, the equations, the measurement, the
     variables, the method and its settings, and the package versions."""
     run = illustrative_run(illustrative_problem, latin_hypercube_sampling)
-    record = run.record
+    artifact = run.artifact
 
     # The problem and the measurement
-    assert all(isinstance(value, str) for value in record.values())
-    assert "exp(x)" in record["g"]
-    assert "sin(((12*x)-4))" in record["f"]
-    assert "sin(u)" in record["measure"]
-    assert "lower=-2.0" in record["u"]
-    assert record["h_inputs"] == "u"
-    assert record["measured"] == "y"
+    assert all(isinstance(value, str) for value in artifact.values())
+    assert "exp(x)" in artifact["g"]
+    assert "sin(((12*x)-4))" in artifact["f"]
+    assert "sin(u)" in artifact["measure"]
+    assert "lower=-2.0" in artifact["u"]
+    assert artifact["h_inputs"] == "u"
+    assert artifact["measured"] == "y"
 
     # The method and its settings
-    assert record["method"] == "latin_hypercube_sampling"
-    assert record["settings"] == "n_points=3"
+    assert artifact["method"] == "latin_hypercube_sampling"
+    assert artifact["settings"] == "n_points=3"
 
     # The versions of the code that produced it
     for package in ("casadi", "numpy", "scipy"):
-        assert record[package] == importlib.metadata.version(package)
-    assert record["hybrid_bo"] == importlib.metadata.version("hybrid-bo")
-    assert record["git"]
+        assert artifact[package] == importlib.metadata.version(package)
+    assert artifact["hybrid_bo"] == importlib.metadata.version("hybrid-bo")
+    assert artifact["git"]
 
 
-def test_record_holds_the_seed_and_spawn_key(illustrative_problem):
-    """The record holds the seed and spawn key of the run's generator, so the run can
+def test_artifact_holds_the_seed_and_spawn_key(illustrative_problem):
+    """The artifact holds the seed and spawn key of the run's generator, so the run can
     be reproduced."""
     rng = np.random.default_rng(7).spawn(3)[2]
 
-    record = illustrative_run(illustrative_problem, uniform_sampling, rng).record
+    artifact = illustrative_run(illustrative_problem, uniform_sampling, rng).artifact
 
-    assert record["seed"] == "7"
-    assert record["spawn_key"] == "(2,)"
+    assert artifact["seed"] == "7"
+    assert artifact["spawn_key"] == "(2,)"
 
 
 def test_custom_measure_is_recorded_by_docstring_or_name(illustrative_problem):
@@ -131,19 +131,19 @@ def test_custom_measure_is_recorded_by_docstring_or_name(illustrative_problem):
         return np.sin(u)
 
     # One run with each
-    records = [
+    artifacts = [
         latin_hypercube_sampling(
             illustrative_problem,
             measure,
             np.array([[0.5]]),
             1,
             np.random.default_rng(0),
-        ).record
+        ).artifact
         for measure in (plant, described_plant)
     ]
 
-    assert records[0]["measure"].endswith("plant")
-    assert records[1]["measure"] == "Pilot plant, sensor on y."
+    assert artifacts[0]["measure"].endswith("plant")
+    assert artifacts[1]["measure"] == "Pilot plant, sensor on y."
 
 
 @pytest.mark.parametrize("method", METHODS)
@@ -173,4 +173,4 @@ def test_failed_evaluation_carries_the_partial_run(illustrative_problem, method)
     assert isinstance(run, hybrid_bo.Run)
     assert run.history.u.shape == (2, 1)
     assert run.history.n_initial == 2
-    assert run.record["method"] == method.__name__
+    assert run.artifact["method"] == method.__name__

@@ -117,9 +117,9 @@ def test_artifact_holds_the_problem_methods_and_stated_oracle_optimum(
     """The study's artifact holds the problem, each method with its settings and the
     stated oracle optimum."""
     artifact = illustrative_study.artifact
-    run_record = illustrative_study.runs[0].record
+    run_artifact = illustrative_study.runs[0].artifact
     for key in ("u", "x", "y", "h_inputs", "measured", "g", "f", "measure"):
-        assert artifact[key] == run_record[key]
+        assert artifact[key] == run_artifact[key]
     assert "hybrid_bo: hybrid_bo(" in artifact["methods"]
     assert "uniform_sampling: uniform_sampling(n_points=1)" in artifact["methods"]
     assert artifact["oracle_optimum"] == repr(ex.optimum)
@@ -178,7 +178,7 @@ def test_two_configurations_of_one_method_keep_their_labels(illustrative_problem
     )
 
     assert [run.method for run in study.runs] == ["ei", "lcb"]
-    assert [run.record["method"] for run in study.runs] == ["standard_bo"] * 2
+    assert [run.artifact["method"] for run in study.runs] == ["standard_bo"] * 2
 
 
 def test_repeat_keeps_a_failed_run_as_far_as_it_got(illustrative_problem, caplog):
@@ -293,10 +293,35 @@ def test_load_reads_a_study_saved_before_artifacts(illustrative_study, tmp_path)
     assert_same(loaded, illustrative_study)
 
 
+def test_a_saved_run_holds_its_artifact(illustrative_study, tmp_path):
+    """A saved run's JSON has the run's artifact under `artifact`, and no `record`,
+    and loading gives the artifact back."""
+    path = hb.save(illustrative_study, tmp_path / "study")
+    run_json = json.loads((path / "runs" / "hybrid_bo" / "run-000.json").read_text())
+
+    assert "record" not in run_json
+    assert run_json["artifact"] == illustrative_study.runs[0].artifact
+    assert hb.load(path).runs[0].artifact == illustrative_study.runs[0].artifact
+
+
+def test_load_rejects_a_run_saved_with_a_record(illustrative_study, tmp_path):
+    """A run saved before runs had an artifact (its JSON names it `record`) raises
+    `StudyFormatError`."""
+    # Save, then rename one run's artifact to `record`
+    path = hb.save(illustrative_study, tmp_path / "study")
+    run_path = path / "runs" / "hybrid_bo" / "run-000.json"
+    data = json.loads(run_path.read_text())
+    data["record"] = data.pop("artifact")
+    run_path.write_text(json.dumps(data))
+
+    with pytest.raises(hb.errors.StudyFormatError, match="record"):
+        hb.load(path)
+
+
 def test_save_and_load_keep_partial_runs_and_empty_arrays(tmp_path):
     """A run that failed at its first point (no evaluated points) round-trips too,
     with its arrays' shapes."""
-    run = hb.Run(history_of(0), record={"method": "m"}, method="m")
+    run = hb.Run(history_of(0), artifact={"method": "m"}, method="m")
     study = hb.Study((run,), SETTINGS, None, {})
 
     loaded = hb.load(hb.save(study, tmp_path / "study"))
@@ -392,7 +417,7 @@ def test_save_and_load_keep_every_kind_of_gp_parameter(tmp_path):
         hb.gp.FittedGP(g, np.zeros((2, 1)), np.zeros(2), scaler, scaler)
         for g in (gp, ard)
     ]
-    run = hb.Run(history_of(2), record={"type": "a record entry"}, method="m")
+    run = hb.Run(history_of(2), artifact={"type": "an artifact entry"}, method="m")
     study = hb.Study(
         (dataclasses.replace(run, surrogates=surrogates),), SETTINGS, None, {}
     )
@@ -434,12 +459,13 @@ def test_save_and_load_keep_every_kind_of_method_settings(tmp_path):
 
 
 def test_load_rejects_a_bo_run_saved_without_its_settings(illustrative_study, tmp_path):
-    """A BO run saved before runs held their settings (only the record's text) raises
+    """A BO run saved before runs held their settings (only its record's text) raises
     `StudyFormatError`: the plots replay from the settings."""
-    # Save, then remove one BO run's settings
+    # Save, then rewrite one BO run in the old format: a record and no settings
     path = hb.save(illustrative_study, tmp_path / "study")
     run_path = path / "runs" / "hybrid_bo" / "run-000.json"
     data = json.loads(run_path.read_text())
+    data["record"] = data.pop("artifact")
     del data["settings"]
     run_path.write_text(json.dumps(data))
 
@@ -467,10 +493,12 @@ def test_load_rejects_an_old_bo_run_without_iterations(illustrative_study, tmp_p
     """An old BO run that stopped before its first iteration has no fitted GP to
     show its format, but its record held the GP's kernel as text: it raises
     `StudyFormatError` too."""
+    # Save, then rewrite one run in the old format: no iterations, a record
     path = hb.save(illustrative_study, tmp_path / "study")
     run_path = path / "runs" / "standard_bo" / "run-000.json"
     data = json.loads(run_path.read_text())
     data["surrogates"], data["acquisitions"] = [], []
+    data["record"] = data.pop("artifact")
     data["record"]["kernel"] = "outputscale*matern52(u, u')"
     run_path.write_text(json.dumps(data))
 
@@ -499,7 +527,7 @@ def test_save_refuses_an_existing_folder(illustrative_study, tmp_path):
 
 def test_save_refuses_a_label_that_is_not_a_folder_name(tmp_path):
     """A method label is a folder name, so it can't contain a path separator."""
-    run = hb.Run(history_of(1), record={}, method="a/b")
+    run = hb.Run(history_of(1), artifact={}, method="a/b")
     study = hb.Study((run,), SETTINGS, None, {})
 
     with pytest.raises(ValueError, match="a/b"):

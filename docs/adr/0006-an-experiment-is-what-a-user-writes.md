@@ -23,5 +23,5 @@ as examples.
 ## Consequences
 
 The rename lands before students fork the repo; after that it would break their code.
-A run's record now holds the measurement under `measure`. Records are text, so studies
+A run's record (its artifact since #123) now holds the measurement under `measure`. Records are text, so studies
 saved with the old `experiment` key still load.

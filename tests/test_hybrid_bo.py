@@ -815,22 +815,22 @@ def test_gp_inputs_are_the_arguments_of_h():
     assert len(kernel.kernel.lengthscale) == 2
 
 
-def test_record_holds_the_settings_and_the_gp_over_the_arguments_of_h(
+def test_artifact_holds_the_settings_and_the_gp_over_the_arguments_of_h(
     illustrative_problem,
 ):
-    """The record names the method and its settings, and the prior GP as its repr."""
+    """The artifact names the method and its settings, and the prior GP as its repr."""
     approximation = SAA(n_scenarios=5, unknown_states_as_variables=False)
     settings = HybridBOSettings(gp=ex.gp, approximation=approximation)
 
-    record = illustrative_run(illustrative_problem, settings).record
+    artifact = illustrative_run(illustrative_problem, settings).artifact
 
-    assert record["method"] == "hybrid_bo"
+    assert artifact["method"] == "hybrid_bo"
     assert (
         "approximation=SAA(n_scenarios=5, unknown_states_as_variables=False)"
-        in record["settings"]
+        in artifact["settings"]
     )
-    assert "GP(" not in record["settings"]
-    assert record["gp"] == repr(ex.gp)
+    assert "GP(" not in artifact["settings"]
+    assert artifact["gp"] == repr(ex.gp)
 
 
 def test_settings_are_required_and_keyword_only(illustrative_problem):
@@ -904,4 +904,4 @@ def test_failed_evaluation_carries_the_partial_run_with_its_scenarios(
     assert run.history.u.shape == (2, 1)
     assert run.surrogates == []
     assert run.scenarios is not None and run.scenarios.z.shape == (5, 1)
-    assert run.record["method"] == "hybrid_bo"
+    assert run.artifact["method"] == "hybrid_bo"

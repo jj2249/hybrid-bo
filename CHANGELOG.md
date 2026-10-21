@@ -2,11 +2,15 @@
 
 ## Unreleased
 
+- **Breaking:** A run has an artifact (#123): `Run.record` is `Run.artifact`, with the
+  same content, and a saved run's JSON names it `artifact`. `run_record` is
+  `run_artifact`, and `optimization_loop` takes `artifact` for `record`. Studies whose
+  run files hold `record` don't load: `hb.load` raises `StudyFormatError`; rerun them.
 - **Breaking:** Runs hold their method's settings (#120): `Run.settings` is the
   `StandardBOSettings` or `HybridBOSettings` a BO run ran with (None for the
   baselines), saved in full. `hb.plots.iteration` replays from them and loses its
   `settings=` argument, so a run with a custom solver plots with nothing passed.
-  The record keeps the settings as text, for people. `optimization_loop` takes the
+  The run's artifact keeps the settings as text, for people. `optimization_loop` takes the
   settings as a required keyword, `settings=` (None for a method the plots can't
   replay). The settings classes moved to `hybrid_bo.settings`
   (still `hb.HybridBOSettings` and `hb.StandardBOSettings`). Studies saved before
@@ -26,7 +30,7 @@
   `FittedGP(gp, X, Y, x_scaler, y_scaler)`, the prior GP with every `Param` fitted;
   `predict(fitted, X)` and `log_marginal_likelihood(fitted)` take it alone, as do
   `standard_acquisition` and `hybrid_acquisition`. Runs save their fitted GPs whole,
-  so `hb.plots.iteration` draws a run with any GP without `settings=`. A run's record
+  so `hb.plots.iteration` draws a run with any GP without `settings=`. A run's artifact
   holds the prior GP's repr as `gp` (no `kernel` and `mean` entries), and
   `hb.hyperparameters` names each by its path in the GP (`kernel.outputscale`,
   `kernel.kernel.lengthscale`). `PriorGP`, `Hyper`, `default_gp` and `hb.kernels`

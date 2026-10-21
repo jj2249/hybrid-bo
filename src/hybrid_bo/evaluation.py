@@ -154,7 +154,7 @@ def oracle_measure(
             y=root[system.n_x :],
         )
 
-    # The run's record describes a measurement by its docstring
+    # The run's artifact describes a measurement by its docstring
     oracle_text = _as_text(oracle_function, system.x, system.y, system.u)
     measure.__doc__ = (
         f"oracle simulation: y = {oracle_text}, noise_std={noise_std}, "

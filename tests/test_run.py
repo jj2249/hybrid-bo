@@ -1,5 +1,5 @@
-"""The code version a run and its study's artifact record, which says whether the
-study is reproducible: checked in temporary git repositories."""
+"""The code version that a run's and its study's artifacts record, which says
+whether the study is reproducible: checked in temporary git repositories."""
 
 import subprocess
 

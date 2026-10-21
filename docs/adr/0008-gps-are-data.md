@@ -25,7 +25,7 @@ measured units, so an experiment states the noise of its measurement as it is.
   what this replaces): any kernel could be written in an experiment, but a GP couldn't
   be saved, so a run held only the hyperparameter values and every prediction, plot and
   replay needed the prior GP from the experiment. A plot then had to match the record's
-  text of the GP against `default_gp`, and a known noise took a pinned `Hyper` and a
+  (now the run's artifact's) text of the GP against `default_gp`, and a known noise took a pinned `Hyper` and a
   hand conversion to scaled units.
 - **Kernel composition** (`Sum`, a product of kernels, `+` and `kernel * kernel`): more
   kernels from the same set, but no experiment needs one yet; it can be added to the

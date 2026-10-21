@@ -4,7 +4,8 @@
 artifact, and the list of run files) and one file per run,
 `path/runs/<method>/run-000.json`, holding every field of the run. `load` also reads
 a study saved before the artifact was named: `study.json` with a `record` key, but not
-one saved before GPs were data (ADR 0008) or before runs held their settings. Arrays are
+one saved before GPs were data (ADR 0008), before runs held their settings or before
+runs had an artifact (a run's JSON with `record`, not `artifact`). Arrays are
 nested lists; float64 values round-trip exactly. A GP's means, kernels and
 hyperparameters, and the methods' settings and their parts, are saved with their type's
 name (`"type"`), so a field that holds one of several types (kernels, approximations)
@@ -120,9 +121,11 @@ def _union_member(value: Any, members: tuple[Any, ...]) -> Any:
 
 def _check_format(run_data: dict[str, Any], run_path: Path) -> None:
     """Raises `StudyFormatError` if a saved run predates GPs as data (its fitted GPs
-    hold named hyperparameters and no GP, or, with no iterations, its record holds
-    the GP's kernel as text), or is a BO run (its record has the prior GP) saved
-    before runs held their settings."""
+    hold named hyperparameters and no GP, or, with no iterations, its `record` holds
+    the GP's kernel as text), is a BO run (its `record` has the prior GP) saved
+    before runs held their settings, or was saved before runs had an artifact (it
+    has `record`, the artifact's old name)."""
+    # The older formats first, for their specific messages: their runs had `record` too
     surrogates = run_data.get("surrogates", [])
     has_old_surrogates = any("gp" not in surrogate for surrogate in surrogates)
     if has_old_surrogates or "kernel" in run_data.get("record", {}):
@@ -137,6 +140,13 @@ def _check_format(run_data: dict[str, Any], run_path: Path) -> None:
             f"{run_path} was saved before runs held their settings (its record holds "
             "them as text only), so it can't be loaded: rerun the study, or load it "
             "with the version that saved it"
+        )
+        raise StudyFormatError(msg)
+    if "record" in run_data:
+        msg = (
+            f"{run_path} was saved before runs had an artifact (it has `record`), so "
+            "it can't be loaded: rerun the study, or load it with the version that "
+            "saved it"
         )
         raise StudyFormatError(msg)
 
@@ -185,8 +195,8 @@ def save(study: Study, path: str | Path) -> Path:
 def load(path: str | Path) -> Study:
     """Reads the study saved in the folder `path` by `save`.
 
-    Raises `StudyFormatError` for a study saved before GPs were data or before runs
-    held their settings.
+    Raises `StudyFormatError` for a study saved before GPs were data, before runs
+    held their settings or before runs had an artifact.
     """
     # The artifact, else the older `study.json`, which named it `record`
     path = Path(path)

@@ -117,7 +117,7 @@ Each :py:class:`~hybrid_bo.run.Run` in ``study.runs`` is plain data:
   (``fitted.gp``), for :py:func:`~hybrid_bo.gp.predict`; and ``run.acquisitions``: the acquisition problem's solution at each
   trial point. Both are empty for the baselines.
 - ``run.scenarios``: hybrid BO's scenario draws and weights.
-- ``run.record``: how the run was produced, as text, including its seed.
+- ``run.artifact``: how the run was produced, as text, including its seed.
 
 A run that failed, with a :py:class:`~hybrid_bo.errors.HybridBOError`, is kept up to
 the point where it stopped, so it is shorter than the others; ``summary`` counts it

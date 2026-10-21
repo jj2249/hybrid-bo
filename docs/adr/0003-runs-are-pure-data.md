@@ -1,9 +1,9 @@
 # Runs are pure data
 
 A `Run` holds only arrays, numbers, strings and plain dataclasses: the history, one
-fitted surrogate per iteration, the scenario set, and a text `record` of how the run was
-produced (problem structure and equations as text, method settings, seeds, package and
-code versions). It never holds the `Problem`, the GP spec or any user callable, because
+fitted surrogate per iteration, the scenario set, and a text `artifact` (named `record`
+before #123) of how the run was produced (problem structure and equations as text,
+method settings, seeds, package and code versions). It never holds the `Problem`, the GP spec or any user callable, because
 those contain lambdas that cannot be pickled and would tie saved results to the code
 that produced them.
 

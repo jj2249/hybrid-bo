@@ -33,15 +33,15 @@ def _polars() -> ModuleType:
     return pl
 
 
-def _names(record: dict[str, str], block: str, n: int) -> list[str]:
-    """The names of the n variables of `block` ("u", "x" or "y") in a study's record,
-    or their positions as text when the record doesn't name n of them."""
-    names = re.findall(r"Var\(name='([^']*)'", record.get(block, ""))
+def _names(artifact: dict[str, str], block: str, n: int) -> list[str]:
+    """The names of the n variables of `block` ("u", "x" or "y") in a study's artifact,
+    or their positions as text when the artifact doesn't name n of them."""
+    names = re.findall(r"Var\(name='([^']*)'", artifact.get(block, ""))
     return names if len(names) == n else [str(i) for i in range(n)]
 
 
 def _run_evaluations(
-    run: Run, record: dict[str, str], optimum: float | None
+    run: Run, artifact: dict[str, str], optimum: float | None
 ) -> "pl.DataFrame":
     """The rows of `evaluations` for one run."""
     pl = _polars()
@@ -72,12 +72,12 @@ def _run_evaluations(
     # The variables and f, then their oracle values (null without an oracle)
     blocks = {"u": history.u, "x": history.x, "y": history.y}
     for block, values in blocks.items():
-        for name, column in zip(_names(record, block, values.shape[1]), values.T):
+        for name, column in zip(_names(artifact, block, values.shape[1]), values.T):
             columns[f"{block}_{name}"] = floats(column)
     columns["f"] = floats(history.f)
     oracle_blocks = {"x": history.x_oracle, "y": history.y_oracle}
     for block, values in oracle_blocks.items():
-        for i, name in enumerate(_names(record, block, blocks[block].shape[1])):
+        for i, name in enumerate(_names(artifact, block, blocks[block].shape[1])):
             columns[f"{block}_oracle_{name}"] = floats(
                 None if values is None else values[:, i]
             )

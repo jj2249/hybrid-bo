@@ -30,7 +30,7 @@ from hybrid_bo.acquisition import (
 )
 from hybrid_bo.bo import optimization_loop
 from hybrid_bo.gp import FittedGP, fit_gp, predict
-from hybrid_bo.run import run_record
+from hybrid_bo.run import run_artifact
 
 
 def illustrative_measure(problem):
@@ -60,9 +60,9 @@ def acquisition_values(nlp, u):
     return np.array([nlp.f(_pack(point)).full().item() for point in u])
 
 
-def loop_record(problem, rng):
-    """A record for runs of the optimization loop with a test trial-point function."""
-    return run_record(problem, None, rng, "test", "")
+def loop_artifact(problem, rng):
+    """An artifact for runs of the optimization loop with a test trial-point function."""
+    return run_artifact(problem, None, rng, "test", "")
 
 
 # Acquisition functions
@@ -168,29 +168,29 @@ def test_run_pickles_without_the_code_that_produced_it(
 
     loaded = data_only_pickle(run)
 
-    assert loaded.record == run.record
+    assert loaded.artifact == run.artifact
     np.testing.assert_array_equal(loaded.history.u, run.history.u)
     np.testing.assert_array_equal(loaded.surrogates[-1].X, run.surrogates[-1].X)
     assert loaded.settings == run.settings
 
 
-def test_record_holds_the_settings_and_the_gp(illustrative_problem):
-    """The record holds the settings, and the prior GP as its repr in an entry of
+def test_artifact_holds_the_settings_and_the_gp(illustrative_problem):
+    """The artifact holds the settings, and the prior GP as its repr in an entry of
     its own."""
     settings = StandardBOSettings(gp=ex.gp, acquisition=LCB(2.0))
 
-    record = illustrative_run(illustrative_problem, settings).record
+    artifact = illustrative_run(illustrative_problem, settings).artifact
 
     # The method and its settings, without the GP
-    assert record["method"] == "standard_bo"
-    assert "n_iterations=2" in record["settings"]
-    assert "acquisition=LCB(std_factor=2.0)" in record["settings"]
-    assert "n_starts=10" in record["settings"]
-    assert "GP(" not in record["settings"]
+    assert artifact["method"] == "standard_bo"
+    assert "n_iterations=2" in artifact["settings"]
+    assert "acquisition=LCB(std_factor=2.0)" in artifact["settings"]
+    assert "n_starts=10" in artifact["settings"]
+    assert "GP(" not in artifact["settings"]
 
     # The GP: its repr, which names its parts and their Params
-    assert record["gp"] == repr(ex.gp)
-    assert "Matern52(lengthscale=Param(init=1.0" in record["gp"]
+    assert artifact["gp"] == repr(ex.gp)
+    assert "Matern52(lengthscale=Param(init=1.0" in artifact["gp"]
 
 
 def test_settings_are_required_and_keyword_only(illustrative_problem):
@@ -243,7 +243,7 @@ def test_failed_evaluation_carries_the_partial_run(illustrative_problem):
     assert run.history.u.shape == (2, 1)
     assert run.history.n_initial == 2
     assert run.surrogates == []
-    assert run.record["method"] == "standard_bo"
+    assert run.artifact["method"] == "standard_bo"
     assert info.value.history is run.history
 
 
@@ -291,7 +291,7 @@ def test_loop_evaluates_each_trial_point_after_the_initial_points(
         2,
         trial_point,
         rng,
-        loop_record(problem, rng),
+        loop_artifact(problem, rng),
         settings=None,
     )
 
@@ -324,7 +324,7 @@ def test_failed_trial_point_carries_the_partial_run(illustrative_problem):
             5,
             trial_point,
             rng,
-            loop_record(problem, rng),
+            loop_artifact(problem, rng),
             settings=None,
         )
 
@@ -359,7 +359,7 @@ def test_failed_initial_point_carries_the_points_before_it(illustrative_problem)
             2,
             trial_point,
             rng,
-            loop_record(problem, rng),
+            loop_artifact(problem, rng),
             settings=None,
         )
 

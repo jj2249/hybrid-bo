@@ -72,7 +72,7 @@ The original code was hard to change for three reasons:
   ([ADR 0004](docs/adr/0004-studies-are-saved-as-json.md)). Examples call them; the
   library never does.
 - **Reproducibility is recorded, not enforced** (#85). The code version in every run's
-  record and in the study's artifact is `-dirty` or `-untracked` when the tree isn't
+  artifact and in the study's artifact is `-dirty` or `-untracked` when the tree isn't
   clean, so the artifact says whether the study is reproducible. The library never
   refuses to run on a tree that isn't clean: during development it almost never is,
   and taking the decision from the caller would push people to commit junk or bypass
@@ -283,7 +283,7 @@ class AcquisitionSolution:  # acquisition.py (#53)
 @dataclass(frozen=True)
 class Run:
     history: History
-    record: dict[str, str]  # how the run was produced, as text
+    artifact: dict[str, str]  # how the run was produced, as text (#123)
     method: str  # its label: the key in the study's methods (#53)
     index: int = 0  # its position among that method's runs (#53)
     surrogates: list[FittedGP]  # one per iteration; empty for baselines (default)
@@ -293,12 +293,12 @@ class Run:
 ```
 
 A BO run holds its method's **settings** in full (#120), the data the iteration plots
-replay; the record holds them as text, for people, and nothing reads that text back.
+replay; the artifact holds them as text, for people, and nothing reads that text back.
 The settings dataclasses live in `settings.py`, not with their methods in `bo.py`,
 because `run.py` needs them and `bo.py` imports `run.py`. `MethodSettings` is their
 union, the one place a new method's settings join.
 
-The **record** is built by the library (`run_record`, before the method draws
+The run's **artifact** is built by the library (`run_artifact`, before the method draws
 anything), not the example: the variables with their bounds, `h_inputs`, `measured`,
 `g` and `f` as expression text, the measurement, the method and its settings, the
 prior GP's repr (#119), the seed, spawn key and generator state, and the
@@ -306,6 +306,12 @@ versions of `hybrid_bo` (with `git describe`), Python, CasADi, NumPy and SciPy. 
 measurement is recorded by its docstring, else its name; the oracle simulation's
 docstring is the oracle as text with its noise and solver settings, so a custom
 measurement adds a description by writing a docstring.
+
+A run's artifact has the study's name for the same thing, what was run and how (#123;
+it was `record` before). In a study it mostly repeats the study's artifact, but a run
+made without a study (`hb.hybrid_bo(...)` called directly, or a partial run in
+`error.run`) has no other description of its setup. It is text for people; the
+settings beside it are data for the plots.
 
 A column is found by name with `system.column("x1")`.
 
@@ -666,7 +672,7 @@ def optimization_loop(
     n_iterations,
     trial_point: TrialPoint,
     rng,
-    record,  # from run_record, before the method draws
+    artifact,  # from run_artifact, before the method draws
     *,
     settings,  # the method's, kept in the run (#120); None if not replayable
 ) -> Run: ...
@@ -708,12 +714,12 @@ The baselines are named `*_sampling` because `hb.sampling.uniform` and
 - `standard_bo` fits on `u -> f` (measured), with the incumbent the best measured `f`,
   and solves `standard_acquisition` by `multistart` from `lhs` starts over the `u` start
   bounds. With the defaults it reproduces the legacy illustrative baseline.
-- `optimization_loop` takes the record and returns the `Run`, so a `HybridBOError` in
+- `optimization_loop` takes the artifact and returns the `Run`, so a `HybridBOError` in
   the loop (an evaluation, or the trial-point function) carries the partial run as
   `error.run` for every method: the points evaluated so far (also `error.history`) and
   one surrogate per evaluated trial point (a failed evaluation drops its surrogate). A method that adds fields to its `Run` (hybrid BO's scenarios)
   adds them to the returned run and to `error.run`.
-- The record holds the settings without the GP, plus `gp`, the prior GP's repr. The
+- The artifact holds the settings without the GP, plus `gp`, the prior GP's repr. The
   GP is required, so `hb.standard_bo` and `hb.hybrid_bo` go into `methods` as a
   `functools.partial` with their settings, never bare.
 - The baselines are not sequential: they draw their whole design and `evaluate` it after
@@ -743,7 +749,7 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
 - **Data** (#53; `studies.py`). `Run` has `method` (its label in the study),
   `index` and `acquisitions`, one `AcquisitionSolution` per iteration (the
   acquisition value at the trial point and, for hybrid BO, the scenario states
-  there), and keeps its full `record`.
+  there), and keeps its full artifact.
   `StudySettings(n_runs, n_initial, n_iterations, seed=None)`; every draw of a study
   comes from the seed, so the same settings give the same study.
   `Study(runs: tuple[Run, ...], settings, name, artifact)` is a flat collection; its
@@ -791,7 +797,7 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   from the stored solution (ADR 0005), so the curve passes through the stored
   acquisition value. The GP is the run's stored fitted GP and the rest of the replay
   (acquisition function, approximation, solver) the run's stored settings (#120), so
-  nothing is passed: until #120 the plots rebuilt the settings from the record's text
+  nothing is passed: until #120 the plots rebuilt the settings from the artifact's text
   with regular expressions, and a custom solver had to be passed. With linearization, the
   scenarios panel shows the nominal f ± s, with `s` recomputed from the stored
   surrogate, in place of the scenario band.
