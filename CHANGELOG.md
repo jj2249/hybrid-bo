@@ -7,6 +7,10 @@
   equations and five unknown states, comparing SAA-EI, SoftSAA-EI, standard BO and
   Latin hypercube sampling (#132). The experiment `rosenbrock` is now D.2 adapted to
   2D, with no known equations and two unknown states, y1 = u2 - u1^2 and y2 = u1.
+- The experiment `illustrative_example_2d`: the illustrative example with two decision
+  variables and the unknown equation y = sin(u1) cos(u2), whose iteration figures
+  show every 2D panel, the GP of y included, now that `rosenbrock` has two unknown
+  states (#132).
 - The experiment CLI draws the iteration figures of a hybrid BO run with more than
   one unknown state without the GP panels, instead of skipping them (#132).
 
