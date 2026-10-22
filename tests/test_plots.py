@@ -7,6 +7,7 @@ tests read the drawn data back from the matplotlib axes by their labels.
 
 import pickle
 from collections.abc import Callable
+from dataclasses import replace
 
 import casadi as cas
 import illustrative_example as ex
@@ -16,6 +17,7 @@ import pytest
 import scipy
 from matplotlib.axes import Axes
 from matplotlib.collections import QuadMesh
+from matplotlib.contour import ContourSet
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 
@@ -550,6 +552,16 @@ def hybrid_soft_2d_run() -> Run:
 
 
 @pytest.fixture(scope="module")
+def hybrid_cold_soft_2d_run() -> Run:
+    """As `hybrid_soft_2d_run`, at a temperature of 0.01, where SoftSAA-EI underflows
+    to 0 in float64 over most of the grid."""
+    approximation = SoftSAA(0.01, n_scenarios=10, unknown_states_as_variables=False)
+    return rosenbrock_run(
+        hybrid_bo, HybridBOSettings(gp=ex.gp, approximation=approximation)
+    )
+
+
+@pytest.fixture(scope="module")
 def standard_2d_run() -> Run:
     """A pickled standard BO run on the Rosenbrock problem."""
     return rosenbrock_run(standard_bo, StandardBOSettings(gp=ex.gp))
@@ -670,6 +682,42 @@ def test_2d_ei_mask_covers_the_points_where_saa_ei_is_zero(hybrid_2d_run):
     plt.close("all")
 
 
+def test_2d_softsaa_ei_has_no_gray_cells(hybrid_cold_soft_2d_run):
+    """SoftSAA-EI is never 0, so its EI panel has no gray cells and no "EI = 0"
+    legend entry, even at a low temperature, where EI underflows in float64."""
+    # Act: iteration 1's EI panel alone
+    figure = plots.iteration(
+        hybrid_cold_soft_2d_run, ROSENBROCK, 1, gp=False, scenarios=False
+    )
+
+    # Check: no gray mesh, no legend entry for it
+    meshes = [c for c in figure.axes[0].collections if isinstance(c, QuadMesh)]
+    assert meshes == []
+    assert "EI = 0" not in legend_labels(figure)
+    plt.close("all")
+
+
+def test_2d_ei_color_scale_spans_ten_decades_below_the_largest_ei(
+    hybrid_cold_soft_2d_run,
+):
+    """Without gray cells SoftSAA's log10 EI can span thousands of decades, which
+    would flatten the color scale, so the scale stops 10 decades below the largest
+    EI: smaller EI takes the lowest color and the colorbar gets a `min` arrow."""
+    # Act: iteration 1's EI panel alone
+    figure = plots.iteration(
+        hybrid_cold_soft_2d_run, ROSENBROCK, 1, gp=False, scenarios=False
+    )
+
+    # Check: the levels span 10 decades, with the arrow on the contours and colorbar
+    (contours,) = [c for c in figure.axes[0].collections if isinstance(c, ContourSet)]
+    levels = np.asarray(contours.levels)
+    np.testing.assert_allclose(levels[-1] - levels[0], 10)
+    assert contours.extend == "min"
+    assert contours.colorbar is not None
+    assert contours.colorbar.extend == "min"
+    plt.close("all")
+
+
 @pytest.mark.parametrize(
     "run_name", ["hybrid_2d_run", "hybrid_soft_2d_run", "standard_2d_run"]
 )
@@ -684,7 +732,27 @@ def test_2d_acquisition_panel_checks_the_replay_at_the_trial_point(request, run_
     (note,) = figure.axes[0].texts
     stored, replayed = (float(part.split()[-1]) for part in note.get_text().split(","))
     value = run.acquisitions[1].value
-    ei = np.exp(-value) if run_name == "hybrid_soft_2d_run" else -value
-    np.testing.assert_allclose(stored, np.log10(ei), rtol=1e-3)
+    soft = run_name == "hybrid_soft_2d_run"
+    log10_ei = -value / np.log(10) if soft else np.log10(-value)
+    np.testing.assert_allclose(stored, log10_ei, rtol=1e-3)
     np.testing.assert_allclose(replayed, stored, rtol=1e-3)
+    plt.close("all")
+
+
+def test_2d_softsaa_note_is_finite_where_its_ei_underflows(hybrid_soft_2d_run):
+    """SoftSAA stores -log EI, which can exceed 745, where EI underflows to 0 in
+    float64; the note's log10 EI is still finite: -value / ln 10."""
+    # Setup: iteration 1's stored -log EI replaced with 1e6 (EI = e^-1e6)
+    run = hybrid_soft_2d_run
+    acquisitions = list(run.acquisitions)
+    acquisitions[1] = replace(acquisitions[1], value=1e6)
+    run = replace(run, acquisitions=acquisitions)
+
+    # Act: iteration 1's EI panel alone
+    figure = plots.iteration(run, ROSENBROCK, 1, gp=False, scenarios=False)
+
+    # Check: the stored number in the note, log10 EI = -1e6 / ln 10
+    (note,) = figure.axes[0].texts
+    stored = float(note.get_text().split(",")[0].split()[-1])
+    np.testing.assert_allclose(stored, -1e6 / np.log(10), rtol=1e-3)
     plt.close("all")

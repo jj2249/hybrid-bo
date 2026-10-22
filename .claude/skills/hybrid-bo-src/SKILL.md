@@ -254,10 +254,12 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   1D (`_iteration_1d`): stacked curves over 101 points plus the trial point. 2D (`_iteration_2d`): filled contours over a 30 x 30 grid, in
   rows of `_Map` panels (oracle | mean | std | acquisition; empty rows and columns
   dropped), oracle and mean sharing a color scale, panels of f log-scaled when
-  positive over more than two decades, EI as log10 EI with EI <= 0 in gray cells
-  (LCB linear); the acquisition panel notes the stored and replayed value at the
-  trial point. The GP is iteration i's stored fitted
-  GP, for the GP panel and the replay alike; the rest of the replay comes from
+  positive over more than two decades, EI as log10 EI (`_log10_ei`: SoftSAA's
+  `-value / ln 10`, never -inf; else `log10(-value)`, -inf where EI <= 0) with -inf
+  in gray cells and the color scale at most `_EI_DECADES` (10) decades below the
+  largest EI, a `min` arrow if values fall below (LCB linear); the acquisition
+  panel notes the stored and replayed value at the trial point. The GP is
+  iteration i's stored fitted GP, for the GP panel and the replay alike; the rest of the replay comes from
   `run.settings` (its type says hybrid or standard BO; None draws the points only).
   The artifact's settings text is never read back.
   `_replay`: standard BO evaluates `standard_acquisition`'s NLP; hybrid BO rebuilds
