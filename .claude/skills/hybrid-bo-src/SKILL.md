@@ -155,7 +155,11 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   one call.
 - `solvers.py`: `NLP` (`f`, bounds `(n,)`, optional `g(w) = 0`; a `g` of no rows is
   no constraint, since `cas.Opti` refuses an empty one), `Ipopt` settings and
-  `multistart(nlp, starts, solver) -> Solution` (`w`, `f`), the best start. It uses
+  `multistart(nlp, starts, solver) -> Solution` (`w`, `f`), the best start; objectives
+  within `_TIE_TOLERANCE` (1e-13, relative or absolute below 1) tie and the earlier
+  start wins, since acquisition problems can have symmetric or flat optima whose
+  values differ only by platform-dependent rounding. Loosening it moves the GP fits'
+  hyperparameters and every BO baseline. It uses
   `cas.Opti` with bounds as constraints, as the pre-refactor code did, so IPOPT takes
   the steps the baselines record; failed starts, and each call's number of failed
   starts and time under `nlp.f`'s name, are logged at debug level; starts that

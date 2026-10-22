@@ -27,6 +27,23 @@ def test_best_start_wins():
     np.testing.assert_allclose(solution.f, DOUBLE_WELL.f(solution.w).full().item())
 
 
+def test_a_tie_keeps_the_earlier_start():
+    """When two starts reach minima whose objectives differ only by rounding,
+    multistart keeps the earlier start, so the result doesn't depend on the last bits
+    of the platform's arithmetic (the illustrative example's standard BO has such a
+    tie, which macOS and Windows broke differently)."""
+    # Two wells, at -1 and +1, the later one lower by 2e-14
+    tied = NLP(
+        cas.Function("f", [w], [(w**2 - 1) ** 2 - 1e-14 * w]),
+        lower=np.array([-2.0]),
+        upper=np.array([2.0]),
+    )
+
+    solution = multistart(tied, np.array([[-1.5], [1.5]]), Ipopt())
+
+    assert solution.w[0] < 0
+
+
 def test_one_start_finds_its_local_minimum():
     """A single start in the right well stays there, at the local minimum."""
     solution = multistart(DOUBLE_WELL, np.array([[1.5]]), Ipopt())

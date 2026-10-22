@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Changes results:** `multistart` breaks ties toward the earlier start (#136): a
+  later start replaces the best only when its objective is lower by more than 1e-13
+  (relative, or absolute below 1), so objectives that differ only by rounding give
+  the same solution on every platform. Before, macOS and Windows could pick different
+  optima of a symmetric or flat acquisition problem. Hybrid BO's illustrative example
+  results change; standard BO's match the macOS results.
+
 ## 0.4.0 (2026-10-21)
 
 - **Breaking:** A system may have no mechanistic states or known equations (#115):
