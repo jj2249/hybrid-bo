@@ -50,6 +50,7 @@ _N_GRID_2D = 30  # grid points over each of two decision variables
 _N_LEVELS = 21  # levels of a filled contour
 _DECADES = 2  # a panel of f spanning more decades than this has a log color scale
 _ZERO_EI_COLOR = "lightgray"
+_EI_DECADES = 10  # the EI color scale stops this many decades below the largest EI
 _CONFIDENCE = 0.9  # probability inside the confidence bands
 
 
@@ -163,8 +164,10 @@ def iteration(
     far, the incumbent and the trial point in the plane of u. An oracle panel shares
     the color scale of the mean beside it. Panels of f are on a log color scale when
     their values are positive and span more than two decades. EI is drawn as log10
-    EI, with the grid points where it is 0 (SAA-EI's flat regions) in gray;
-    LCB is drawn as it is. The acquisition panel notes the stored and the replayed
+    EI, with the grid points where it is 0 (SAA-EI's flat regions) in gray, over at
+    most 10 decades below the largest EI (smaller EI in the lowest color; SoftSAA's
+    is computed from its -log EI, so it never underflows to 0); LCB is drawn as it
+    is. The acquisition panel notes the stored and the replayed
     value at the trial point, which check the replay.
 
     `measure` adds the oracle values (curves, or the oracle panels in 2D); it runs at
@@ -450,17 +453,14 @@ def _acquisition_panel(
     settings: MethodSettings, curve: np.ndarray, stored: float, replayed: float
 ) -> _Panel:
     """The acquisition panel of the 2D figure from the replayed acquisition values
-    over the grid: LCB as it is (linear), else EI (-value, or exp(-value) for
-    SoftSAA's -log EI). Its note gives the stored and the replayed value at the trial
-    point in the panel's units."""
+    over the grid: LCB as it is (linear), else log10 EI (`_log10_ei`). Its note gives
+    the stored and the replayed value at the trial point in the panel's units."""
     if isinstance(settings.acquisition, LCB):
         title, values, at_trial = "LCB", curve, np.array([stored, replayed])
     else:
         title = "log10 EI"
-        to_ei = (lambda v: np.exp(-v)) if _is_soft(settings) else np.negative
-        values, at_trial = to_ei(curve), to_ei(np.array([stored, replayed]))
-        with np.errstate(divide="ignore", invalid="ignore"):
-            at_trial = np.log10(at_trial)
+        values = _log10_ei(settings, curve)
+        at_trial = _log10_ei(settings, np.array([stored, replayed]))
     note = f"trial point: stored {at_trial[0]:.4g}, replayed {at_trial[1]:.4g}"
     return _Panel(title, values, ei=title != "LCB", note=note)
 
@@ -472,10 +472,13 @@ def _contours(
     values: np.ndarray,
     scale: np.ndarray,
     in_f_units: bool,
+    extend: str = "neither",
 ) -> None:
     """Filled contours of values (n_grid,) over the grid (U1, U2), with a colorbar.
     The color scale spans the finite values of `scale`; it is log if `in_f_units`
-    and they are positive and span more than `_DECADES` decades. NaN leaves gaps."""
+    and they are positive and span more than `_DECADES` decades. NaN leaves gaps.
+    `extend` is matplotlib's: "min" colors values below the scale with its lowest
+    color and puts an arrow on the colorbar."""
     from matplotlib.colors import LogNorm, Normalize
     from matplotlib.ticker import LogLocator, MaxNLocator
 
@@ -493,26 +496,46 @@ def _contours(
         levels, norm = np.linspace(low, high, _N_LEVELS), Normalize(low, high)
         ticks = MaxNLocator()
     Z = np.ma.masked_invalid(values.reshape(U1.shape))
-    contours = ax.contourf(U1, U2, Z, levels=levels, norm=norm)
+    contours = ax.contourf(U1, U2, Z, levels=levels, norm=norm, extend=extend)
     ax.figure.colorbar(contours, ax=ax, ticks=ticks)
 
 
-def _ei_contours(ax: "Axes", U1: np.ndarray, U2: np.ndarray, ei: np.ndarray) -> None:
+def _log10_ei(settings: MethodSettings, values: np.ndarray) -> np.ndarray:
+    """log10 EI from acquisition values: SoftSAA stores -log EI, so -value / ln 10,
+    finite even where EI underflows in float64; the other EI approximations store
+    -EI, so log10(-value), -inf where EI <= 0. NaN (a failed replay) stays NaN."""
+    if _is_soft(settings):
+        return -values / np.log(10)
+    with np.errstate(divide="ignore"):
+        return np.log10(np.maximum(-values, 0))
+
+
+def _ei_contours(
+    ax: "Axes", U1: np.ndarray, U2: np.ndarray, log_ei: np.ndarray
+) -> None:
     """log10 EI (n_grid,) over the grid as filled contours, with the grid points where
-    EI is 0 in gray cells; NaN leaves gaps. SAA-EI is exactly 0 where no scenario
-    improves; analytic EI rounds to just below 0 far from the data, which counts as 0.
-    """
+    it is -inf (EI = 0) in gray cells; NaN leaves gaps. SAA-EI is exactly 0 where no
+    scenario improves; analytic EI rounds to just below 0 far from the data, which
+    counts as 0. SoftSAA-EI is never 0, so it has no gray cells. The color scale
+    stops `_EI_DECADES` decades below the largest EI, with the smaller EI in the
+    lowest color."""
     from matplotlib.colors import ListedColormap
 
-    zero = ei <= 0
+    # Gray cells where EI is 0, with a legend entry
+    zero = np.isneginf(log_ei)
     if zero.any():
         gray = np.ma.masked_array(np.ones(U1.shape), mask=~zero.reshape(U1.shape))
         cmap = ListedColormap([_ZERO_EI_COLOR])
         ax.pcolormesh(U1, U2, gray, cmap=cmap, shading="nearest")
         ax.fill([], [], color=_ZERO_EI_COLOR, label="EI = 0")
-    with np.errstate(divide="ignore", invalid="ignore"):
-        log_ei = np.where(ei > 0, np.log10(ei), np.nan)
-    _contours(ax, U1, U2, log_ei, log_ei, in_f_units=False)
+
+    # The color scale: at most `_EI_DECADES` decades, an arrow if values fall below
+    finite = log_ei[np.isfinite(log_ei)]
+    floor = finite.max() - _EI_DECADES if finite.size else -np.inf
+    below = finite.size > 0 and finite.min() < floor
+    scale = np.where(np.isfinite(log_ei), np.maximum(log_ei, floor), np.nan)
+    extend = "min" if below else "neither"
+    _contours(ax, U1, U2, log_ei, scale, in_f_units=False, extend=extend)
 
 
 def _is_soft(settings: MethodSettings) -> bool:

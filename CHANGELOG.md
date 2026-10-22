@@ -13,6 +13,10 @@
   states (#132).
 - The experiment CLI draws the iteration figures of a hybrid BO run with more than
   one unknown state without the GP panels, instead of skipping them (#132).
+- The 2D iteration figure's EI panel computes SoftSAA's log10 EI from its -log EI,
+  so where SoftSAA-EI underflows in float64 the note no longer reads `-inf` and the
+  map has no gray "EI = 0" cells. The EI color scale covers at most 10 decades below
+  the largest EI (#138).
 
 ## 0.4.0 (2026-10-21)
 
