@@ -30,7 +30,8 @@ a benchmark), the BO methods' prior GP (`gp`), `methods`, `study_settings`, then
   illustrative experiment's problem, measurement or settings moves the regression
   baselines: that is a *logic* change.
 - A custom measurement is `(u (N,), rng) -> measured (P,)`; its docstring (else its
-  name) describes it in each run's artifact.
+  name) describes it in each run's artifact; a dataclass measurement is described by
+  its repr.
 - A BO method's settings are required, since they name its GP: bind them with
   `functools.partial(hb.hybrid_bo, settings=hb.HybridBOSettings(gp=gp, ...))`, never
   put `hb.hybrid_bo` or `hb.standard_bo` in `methods` bare. `settings` is
