@@ -100,9 +100,16 @@ methods = {
     "latin_hypercube_sampling": hb.latin_hypercube_sampling,
 }
 
+# Configurations: every method with the same budget, 25 evaluations, the first 5 of
+# them initial points (so 20 iterations)
+configurations = {
+    label: hb.Configuration(method=method, n_evaluations=25, n_initial=5)
+    for label, method in methods.items()
+}
+
 # The study, which the command line's flags override. Seed None draws a fresh seed,
 # which the saved study keeps, so it can be run again exactly
-study_settings = hb.StudySettings(n_runs=10, n_initial=5, n_iterations=20, seed=None)
+study_settings = hb.StudySettings(n_runs=10, seed=None)
 
 # Run or plot from the command line. The oracle measurement is cheap, so the
 # iteration figures draw its oracle values over the grid of u
@@ -111,7 +118,7 @@ if __name__ == "__main__":
         "rosenbrock",
         problem,
         measure,
-        methods,
+        configurations,
         study_settings,
         optimum=optimum,
         true_curves=True,

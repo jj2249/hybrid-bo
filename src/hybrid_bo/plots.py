@@ -55,9 +55,10 @@ _CONFIDENCE = 0.9  # probability inside the confidence bands
 
 
 def convergence(study: Study, ax: "Axes | None" = None) -> "Axes":
-    """Per method, the median over its runs of the oracle incumbent (or, in a study
-    without an oracle, the incumbent) at each evaluation, with the interquartile
-    range shaded, a dotted line after the initial points, and a legend.
+    """Per configuration, the median over its runs of the oracle incumbent (or, in a
+    study without an oracle, the incumbent) at each evaluation, with the
+    interquartile range shaded, a dotted line after the initial points (one for each
+    number of initial points the configurations have), and a legend.
 
     Raises `ValueError` if the study has no evaluations, and `ImportError` without
     Polars.
@@ -65,7 +66,7 @@ def convergence(study: Study, ax: "Axes | None" = None) -> "Axes":
     rows = evaluations(study)
     has_oracle = not rows.is_empty() and rows["oracle_incumbent"].null_count() == 0
     column = "oracle_incumbent" if has_oracle else "incumbent"
-    return _over_evaluations(rows, column, study.settings.n_initial, ax)
+    return _over_evaluations(rows, column, _n_initials(study), ax)
 
 
 def regret(
@@ -78,16 +79,23 @@ def regret(
     `ImportError` without Polars.
     """
     rows = evaluations(study, optimum)
-    ax = _over_evaluations(rows, "regret", study.settings.n_initial, ax)
+    ax = _over_evaluations(rows, "regret", _n_initials(study), ax)
     ax.set_yscale("log")
     return ax
 
 
+def _n_initials(study: Study) -> list[int]:
+    """The numbers of initial points of the study's configurations, each once, in
+    increasing order."""
+    return sorted({budget.n_initial for budget in study.budgets.values()})
+
+
 def _over_evaluations(
-    rows: "pl.DataFrame", column: str, n_initial: int, ax: "Axes | None"
+    rows: "pl.DataFrame", column: str, n_initials: list[int], ax: "Axes | None"
 ) -> "Axes":
-    """`convergence`'s figure of `column`, on `ax` or a new figure's axes. A shorter
-    run counts up to its last evaluation.
+    """`convergence`'s figure of `column`, on `ax` or a new figure's axes, with a
+    dotted line after each of `n_initials` initial points. A shorter run counts up to
+    its last evaluation.
 
     Raises `ValueError` if the column has no values.
     """
@@ -120,7 +128,8 @@ def _over_evaluations(
         lower, upper = curve["lower"].to_numpy(), curve["upper"].to_numpy()
         ax.fill_between(n, lower, upper, color=drawn.get_color(), alpha=0.2)
 
-    ax.axvline(n_initial + 0.5, color="grey", linestyle=":")
+    for n_initial in n_initials:
+        ax.axvline(n_initial + 0.5, color="grey", linestyle=":")
     ax.set_xlabel("evaluations")
     ax.set_ylabel(column.replace("_", " "))
     ax.legend()

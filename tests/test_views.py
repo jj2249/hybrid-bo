@@ -25,7 +25,11 @@ ARTIFACT = {
     "y": "Var(name='rate', lower=-inf, upper=inf, start=(0.0, 1.0))",
     "oracle_optimum": repr(OPTIMUM),
 }
-SETTINGS = hb.StudySettings(n_runs=2, n_initial=2, n_iterations=2, seed=0)
+SETTINGS = hb.StudySettings(n_runs=2, seed=0)
+# Every method of the study by hand: 2 initial points and 2 iterations
+BUDGETS = {
+    method: hb.studies.Budget(n_evaluations=4, n_initial=2) for method in ("bo", "lhs")
+}
 
 
 def history(f: list[float], f_oracle: list[float] | None) -> hb.History:
@@ -93,7 +97,7 @@ RUNS = (
     baseline_run(0, [2.0, 3.0, 1.0, 4.0], [2.0, 3.0, 1.0, 4.0]),
     baseline_run(1, [2.0, 3.0], [2.0, 3.0]),
 )
-STUDY = hb.Study(RUNS, SETTINGS, name="by hand", artifact=ARTIFACT)
+STUDY = hb.Study(RUNS, SETTINGS, BUDGETS, name="by hand", artifact=ARTIFACT)
 
 
 def rows_of(frame: pl.DataFrame, method: str, run: int) -> pl.DataFrame:
@@ -175,7 +179,7 @@ def test_a_given_optimum_overrides_the_recorded_one():
 def test_regret_is_null_without_an_optimum():
     """A study without an oracle optimum and no `optimum` given has no regret."""
     artifact = {k: v for k, v in ARTIFACT.items() if k != "oracle_optimum"}
-    study = hb.Study(RUNS, SETTINGS, name=None, artifact=artifact)
+    study = hb.Study(RUNS, SETTINGS, BUDGETS, name=None, artifact=artifact)
 
     regret = hb.evaluations(study)["regret"]
 
@@ -186,7 +190,7 @@ def test_oracle_columns_are_null_without_oracle_values():
     """A run without oracle values has null oracle values, oracle incumbents and
     regret, with the same columns as a run that has them."""
     run = hb.Run(history([1.0, 0.0], None), artifact={}, method="lhs")
-    study = hb.Study((run,), SETTINGS, name=None, artifact=ARTIFACT)
+    study = hb.Study((run,), SETTINGS, BUDGETS, name=None, artifact=ARTIFACT)
 
     frame = hb.evaluations(study)
 
@@ -206,7 +210,7 @@ def test_acquisition_is_the_stored_value_at_each_iteration():
 
 def test_variables_are_numbered_when_the_artifact_has_no_names():
     """Without variables in the artifact, the columns are numbered from 0."""
-    study = hb.Study(RUNS[:1], SETTINGS, name=None, artifact={})
+    study = hb.Study(RUNS[:1], SETTINGS, BUDGETS, name=None, artifact={})
 
     columns = hb.evaluations(study).columns
 
@@ -241,12 +245,25 @@ def test_summary_has_one_row_per_method_with_medians_and_iqrs():
 def test_summary_counts_runs_that_left_nothing_as_failed():
     """A run that failed before evaluating anything is missing from the study; the
     summary counts it as failed against the settings' number of runs."""
-    study = hb.Study(RUNS[:1], SETTINGS, name=None, artifact=ARTIFACT)
+    study = hb.Study(RUNS[:1], SETTINGS, BUDGETS, name=None, artifact=ARTIFACT)
 
     summary = hb.summary(study)
 
     assert summary["runs"].to_list() == [1]
     assert summary["failed"].to_list() == [1]
+
+
+def test_summary_counts_failed_runs_against_each_configurations_budget():
+    """A run is finished when it has its own configuration's evaluations: with a
+    budget of only its initial points, the baseline run that stopped after them
+    finished, as did the BO runs, whose budget is 4."""
+    budgets = BUDGETS | {"lhs": hb.studies.Budget(n_evaluations=2, n_initial=2)}
+    runs = (*RUNS[:2], baseline_run(0, [2.0, 3.0], [2.0, 3.0]), RUNS[3])
+    study = hb.Study(runs, SETTINGS, budgets, name=None, artifact=ARTIFACT)
+
+    summary = hb.summary(study)
+
+    assert summary["failed"].to_list() == [0, 0]
 
 
 # hyperparameters
@@ -300,7 +317,7 @@ def test_hyperparameters_name_the_unknown_state_each_gp_models():
             approximation=hb.SAA(n_scenarios=25),
         ),
     )
-    study = hb.Study((run,), SETTINGS, name="two states", artifact=artifact)
+    study = hb.Study((run,), SETTINGS, BUDGETS, name="two states", artifact=artifact)
 
     frame = hb.hyperparameters(study)
 
@@ -332,8 +349,11 @@ system = hb.System(
 )
 problem = hb.Problem(system, f=lambda v: v.x**2)
 measure = hb.oracle_measure(system, lambda v: [v.u], noise_std=0.0)
-settings = hb.StudySettings(n_runs=1, n_initial=2, n_iterations=1, seed=0)
-study = hb.study({"lhs": hb.latin_hypercube_sampling}, problem, measure, settings)
+settings = hb.StudySettings(n_runs=1, seed=0)
+configuration = hb.Configuration(
+    method=hb.latin_hypercube_sampling, n_evaluations=3, n_initial=2
+)
+study = hb.study({"lhs": configuration}, problem, measure, settings)
 assert "polars" not in [name for name, module in sys.modules.items() if module]
 try:
     hb.evaluations(study)

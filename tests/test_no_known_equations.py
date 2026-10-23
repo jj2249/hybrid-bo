@@ -50,7 +50,15 @@ METHODS = {
     "lhs": hb.latin_hypercube_sampling,
     "uniform": hb.uniform_sampling,
 }
-SETTINGS = hb.StudySettings(n_runs=1, n_initial=2, n_iterations=2, seed=0)
+SETTINGS = hb.StudySettings(n_runs=1, seed=0)
+
+
+def configurations_of(methods: dict) -> dict[str, hb.Configuration]:
+    """Each method by its label, with 2 initial points and 2 iterations."""
+    return {
+        label: hb.Configuration(method=method, n_evaluations=4, n_initial=2)
+        for label, method in methods.items()
+    }
 
 
 def composite_problem(n_u: int) -> tuple[hb.Problem, hb.Measure]:
@@ -77,7 +85,7 @@ def composite_problem(n_u: int) -> tuple[hb.Problem, hb.Measure]:
 def study_1d() -> hb.Study:
     """Every method on the test system with one decision variable."""
     problem, measure = composite_problem(1)
-    return hb.study(METHODS, problem, measure, SETTINGS)
+    return hb.study(configurations_of(METHODS), problem, measure, SETTINGS)
 
 
 def test_every_method_runs_without_known_equations(study_1d):
@@ -148,7 +156,7 @@ def test_2d_iteration_figure_draws_without_known_equations():
     # Setup: one SAA run with two decision variables
     problem, measure = composite_problem(2)
     methods = {"saa": METHODS["saa-False"]}
-    (run,) = hb.study(methods, problem, measure, SETTINGS).runs
+    (run,) = hb.study(configurations_of(methods), problem, measure, SETTINGS).runs
 
     figure = hb.plots.iteration(run, problem, 1, measure=measure)
 

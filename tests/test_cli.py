@@ -18,6 +18,7 @@ import pytest
 from hybrid_bo import (
     EI,
     SAA,
+    Configuration,
     HybridBOSettings,
     Problem,
     StudySettings,
@@ -40,13 +41,23 @@ def summary_of(study):
 EXPERIMENTS_DIR = Path(__file__).parent.parent / "experiments"
 
 
-def run_cli(argv, true_curves=False):
-    """`cli.main` as the illustrative example calls it, with the command line `argv`."""
+def small(n_iterations=1):
+    """A small test experiment: every method of the illustrative example, with its 2
+    initial points but only `n_iterations` iterations."""
+    return {
+        label: Configuration(method=method, n_evaluations=2 + n_iterations, n_initial=2)
+        for label, method in ex.methods.items()
+    }
+
+
+def run_cli(argv, true_curves=False, configurations=None):
+    """`cli.main` as the illustrative example calls it, with the command line `argv`,
+    on the small test experiment (`configurations`, default `small()`)."""
     cli.main(
         "illustrative_example",
         ex.problem,
         ex.measure,
-        ex.methods,
+        small() if configurations is None else configurations,
         ex.study_settings,
         optimum=ex.optimum,
         true_curves=true_curves,
@@ -64,7 +75,7 @@ def test_run_then_plot_the_newest_study(tmp_path):
     # Run two methods, two runs each, into a temporary results root
     run_cli(
         ["--method", "standard_bo", "--method", "uniform_sampling"]
-        + ["--n-runs", "2", "--seed", "0", "--n-iterations", "1"]
+        + ["--n-runs", "2", "--seed", "0"]
         + ["--results-root", str(tmp_path)]
     )
 
@@ -77,7 +88,7 @@ def test_run_then_plot_the_newest_study(tmp_path):
     runs = [run for run in study.runs if run.method == "standard_bo"]
     assert len(runs) == 2
     assert runs[0].artifact["seed"] == "0"
-    n_initial = study.settings.n_initial
+    n_initial = study.budgets["standard_bo"].n_initial
     rng = np.random.default_rng(0).spawn(2)[1]
     expected = initial_points(ex.system.u, n_initial, rng)
     np.testing.assert_array_equal(runs[1].history.u[:n_initial], expected)
@@ -124,7 +135,7 @@ def test_plot_runs_chooses_the_runs_with_iteration_figures(tmp_path):
     `--plot`; on `plot` it draws the runs given. Convergence is always drawn."""
     # Run three runs, plotting runs 1 and 2 without `--plot`
     run_cli(
-        ["--method", "uniform_sampling", "--n-runs", "3", "--n-iterations", "1"]
+        ["--method", "uniform_sampling", "--n-runs", "3"]
         + ["--name", "demo", "--plot-runs", "1", "2"]
         + ["--results-root", str(tmp_path)]
     )
@@ -158,7 +169,7 @@ def test_plot_takes_the_study_saved_last(tmp_path):
     """Without a study id, `plot` draws the study saved last, even when an older one
     has a name that sorts after it."""
     # Two studies: "zeta" first, then "alpha"
-    command = ["--method", "uniform_sampling", "--n-runs", "1", "--n-iterations", "1"]
+    command = ["--method", "uniform_sampling", "--n-runs", "1"]
     command += ["--results-root", str(tmp_path)]
     run_cli([*command, "--name", "zeta"])
     run_cli([*command, "--name", "alpha"])
@@ -183,7 +194,7 @@ def test_a_relative_results_root_is_relative_to_where_pixi_started(
     monkeypatch.setenv("INIT_CWD", str(tmp_path))
 
     run_cli(
-        ["--method", "uniform_sampling", "--n-runs", "1", "--n-iterations", "1"]
+        ["--method", "uniform_sampling", "--n-runs", "1"]
         + ["--name", "here", "--results-root", "out"]
     )
 
@@ -193,8 +204,8 @@ def test_a_relative_results_root_is_relative_to_where_pixi_started(
     ).exists()
 
 
-def test_help_names_the_methods_and_the_plot_command(capsys):
-    """`--help` names every method of the experiment and how to plot.
+def test_help_names_the_configurations_and_the_plot_command(capsys):
+    """`--help` names every configuration of the experiment and how to plot.
 
     `capsys` is a pytest fixture that captures what the test prints.
     """
@@ -203,7 +214,7 @@ def test_help_names_the_methods_and_the_plot_command(capsys):
         run_cli(["--help"])
 
     printed = " ".join(capsys.readouterr().out.split())
-    assert ", ".join(ex.methods) in printed
+    assert ", ".join(ex.configurations) in printed
     assert "pixi run plot illustrative_example" in printed
 
 
@@ -214,7 +225,7 @@ def test_a_tree_that_is_not_clean_warns_but_still_runs(tmp_path, monkeypatch, ca
     monkeypatch.setattr(cli, "code_version", lambda path: "abc1234-untracked")
 
     run_cli(
-        ["--method", "uniform_sampling", "--n-runs", "1", "--n-iterations", "1"]
+        ["--method", "uniform_sampling", "--n-runs", "1"]
         + ["--results-root", str(tmp_path)]
     )
 
@@ -225,7 +236,7 @@ def test_a_tree_that_is_not_clean_warns_but_still_runs(tmp_path, monkeypatch, ca
 def test_require_clean_refuses_a_tree_that_is_not_clean(tmp_path, monkeypatch):
     """`--require-clean` refuses to run from a tree that isn't clean, saving nothing,
     and runs from a clean one."""
-    command = ["--method", "uniform_sampling", "--n-runs", "1", "--n-iterations", "1"]
+    command = ["--method", "uniform_sampling", "--n-runs", "1"]
     command += ["--require-clean", "--results-root", str(tmp_path)]
 
     # A changed file: a usage error, before anything runs
@@ -245,6 +256,15 @@ def test_run_rejects_a_method_the_experiment_lacks(tmp_path):
     """An unknown method name is a usage error, before anything runs."""
     with pytest.raises(SystemExit):
         run_cli(["--method", "nope", "--results-root", str(tmp_path)])
+    assert not (tmp_path / "illustrative_example").exists()
+
+
+def test_run_has_no_n_iterations_flag(tmp_path):
+    """Each configuration has its own budget, so there is no study-wide number of
+    iterations to override: `--n-iterations` is a usage error, before anything
+    runs."""
+    with pytest.raises(SystemExit):
+        run_cli(["--n-iterations", "1", "--results-root", str(tmp_path)])
     assert not (tmp_path / "illustrative_example").exists()
 
 
@@ -275,8 +295,9 @@ def test_the_study_log_records_each_run_and_iteration(tmp_path, capsys):
     GP fit and multistart at DEBUG. The console shows the INFO records only."""
     # One method, two runs of two iterations
     run_cli(
-        ["--method", "standard_bo", "--n-runs", "2", "--n-iterations", "2"]
-        + ["--name", "logged", "--results-root", str(tmp_path)]
+        ["--method", "standard_bo", "--n-runs", "2"]
+        + ["--name", "logged", "--results-root", str(tmp_path)],
+        configurations=small(n_iterations=2),
     )
 
     # The log was moved into the study's folder
@@ -285,7 +306,10 @@ def test_the_study_log_records_each_run_and_iteration(tmp_path, capsys):
     log = (experiment_dir / "logged" / "study.log").read_text()
 
     # INFO: the method, each run, the initial points and each iteration
-    assert "INFO hybrid_bo.studies: Method standard_bo: 2 runs" in log
+    assert (
+        "INFO hybrid_bo.studies: Configuration standard_bo: 2 runs of 4 evaluations"
+        in log
+    )
     assert "Run 1 of 2 finished in" in log
     assert "Run 2 of 2 finished in" in log
     assert "standard_bo: evaluated 2 initial points in" in log
@@ -308,7 +332,7 @@ def test_a_taken_name_is_refused_before_running(tmp_path, capsys):
     log of a study that didn't finish, is a usage error before anything runs, and
     the message says which holds it."""
     # One quick method into a temporary results root
-    command = ["--method", "uniform_sampling", "--n-runs", "1", "--n-iterations", "1"]
+    command = ["--method", "uniform_sampling", "--n-runs", "1"]
     command += ["--results-root", str(tmp_path)]
     experiment_dir = tmp_path / "illustrative_example"
 
@@ -350,7 +374,7 @@ def test_a_taken_default_id_gets_a_suffix(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "datetime", StoppedClock)
 
     # Two studies without a name, in the same second
-    command = ["--method", "uniform_sampling", "--n-runs", "1", "--n-iterations", "1"]
+    command = ["--method", "uniform_sampling", "--n-runs", "1"]
     command += ["--results-root", str(tmp_path)]
     run_cli(command)
     run_cli(command)
@@ -366,7 +390,7 @@ def test_a_taken_default_id_gets_a_suffix(tmp_path, monkeypatch):
 def test_plot_flag_plots_straight_after_the_run(tmp_path):
     """`--plot` saves the figures straight after the run."""
     run_cli(
-        ["--method", "uniform_sampling", "--n-runs", "1", "--n-iterations", "1"]
+        ["--method", "uniform_sampling", "--n-runs", "1"]
         + ["--name", "demo", "--plot", "--results-root", str(tmp_path)]
     )
 
@@ -391,15 +415,21 @@ def test_hybrid_bo_with_two_unknown_states_gets_iteration_figures_without_gps(
         acquisition=EI(),
         approximation=SAA(n_scenarios=5, unknown_states_as_variables=False),
     )
-    methods = {"hybrid_bo": functools.partial(hybrid_bo, settings=settings)}
+    configurations = {
+        "hybrid_bo": Configuration(
+            method=functools.partial(hybrid_bo, settings=settings),
+            n_evaluations=3,
+            n_initial=2,
+        )
+    }
 
     # Act: run one iteration and plot it with the oracle
     cli.main(
         "two_states",
         problem,
         measure,
-        methods,
-        StudySettings(n_runs=1, n_initial=2, n_iterations=1, seed=0),
+        configurations,
+        StudySettings(n_runs=1, seed=0),
         optimum=0.0,
         true_curves=True,
         argv=["--name", "demo", "--plot", "--results-root", str(tmp_path)],
@@ -425,10 +455,13 @@ def test_warnings_reach_the_study_log(tmp_path):
         "illustrative_example",
         ex.problem,
         ex.measure,
-        {"warning_sampling": warning_sampling},
+        {
+            "warning_sampling": Configuration(
+                method=warning_sampling, n_evaluations=3, n_initial=2
+            )
+        },
         ex.study_settings,
-        argv=["--n-runs", "1", "--n-iterations", "1", "--name", "warned"]
-        + ["--results-root", str(tmp_path)],
+        argv=["--n-runs", "1", "--name", "warned"] + ["--results-root", str(tmp_path)],
     )
 
     # The warning, logged through `py.warnings`
@@ -453,7 +486,7 @@ def test_a_study_that_does_not_finish_leaves_its_log(tmp_path, capsys):
             "illustrative_example",
             ex.problem,
             ex.measure,
-            {"failing": failing},
+            {"failing": Configuration(method=failing, n_evaluations=3, n_initial=2)},
             ex.study_settings,
             argv=["--n-runs", "1", "--name", "broken", "--results-root", str(tmp_path)],
         )
@@ -461,7 +494,9 @@ def test_a_study_that_does_not_finish_leaves_its_log(tmp_path, capsys):
     # Only the log, holding the study's start, with its path printed
     experiment_dir = tmp_path / "illustrative_example"
     assert [path.name for path in experiment_dir.iterdir()] == ["broken.log"]
-    assert "Method failing: 1 runs" in (experiment_dir / "broken.log").read_text()
+    assert (
+        "Configuration failing: 1 runs" in (experiment_dir / "broken.log").read_text()
+    )
     assert str(experiment_dir / "broken.log") in capsys.readouterr().err
 
 
@@ -471,7 +506,7 @@ def test_running_twice_in_one_process_logs_each_record_once(tmp_path):
     # The root logger's handlers before, to compare after; one quick method
     root = logging.getLogger()
     handlers = list(root.handlers)
-    command = ["--method", "uniform_sampling", "--n-runs", "1", "--n-iterations", "1"]
+    command = ["--method", "uniform_sampling", "--n-runs", "1"]
     command += ["--results-root", str(tmp_path)]
 
     # Two studies in a row
@@ -482,7 +517,7 @@ def test_running_twice_in_one_process_logs_each_record_once(tmp_path):
     experiment_dir = tmp_path / "illustrative_example"
     first = (experiment_dir / "first" / "study.log").read_text()
     second = (experiment_dir / "second" / "study.log").read_text()
-    assert first.count("Method uniform_sampling") == 1
-    assert second.count("Method uniform_sampling") == 1
+    assert first.count("Configuration uniform_sampling") == 1
+    assert second.count("Configuration uniform_sampling") == 1
     assert "second" not in first
     assert root.handlers == handlers

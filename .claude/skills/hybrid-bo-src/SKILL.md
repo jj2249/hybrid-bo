@@ -117,20 +117,31 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   checks it before running). A measurement is recorded by
   its docstring, else its name; a dataclass measurement (`OracleSimulation`) by its
   repr.
-- `studies.py`: `StudySettings(n_runs, n_initial, n_iterations, seed)`, `Study(runs,
-  settings, name, artifact)`, `Method` (called as `method(problem, measure,
-  initial_points, n, rng=rng)`), `repeat` (run i from
+- `studies.py`: `Configuration(method, n_evaluations, n_initial)` (a method with
+  its own budget, `ValueError` unless 1 <= n_initial <= n_evaluations; it runs
+  `n_evaluations - n_initial` iterations), `Budget(n_evaluations, n_initial)` (its
+  saveable part), `StudySettings(n_runs, seed)`, `Study(runs, settings, budgets,
+  name, artifact)` (`budgets` by label), `Method` (called as `method(problem,
+  measure, initial_points, n, rng=rng)`), `repeat(configuration, ...)` (run i from
   `default_rng(SeedSequence(seed).spawn(n_runs)[i])`, initial points then the method;
-  catches `HybridBOError`, logs it and keeps `error.run`) and `study` (resolves a
-  None seed to fresh entropy kept in its settings, then each method's `repeat` from
-  that seed; relabels runs with their key; its artifact records a stated `optimum` as
+  catches `HybridBOError`, logs it and keeps `error.run`) and `study(configurations,
+  ...)` (resolves a None seed to fresh entropy kept in its settings, then each
+  configuration's `repeat` from that seed, so run i of configurations with the same
+  `n_initial` shares initial points; relabels runs with their key; its artifact records a stated `optimum` as
   `oracle_optimum`, never computes one, gives a BO method's prior GP (the run
   artifact's `gp`) on the line after its settings in `methods`, and warns with
   `OracleOptimumWarning` if an evaluated point's `f_oracle` is below it). Studies take a seed, not an
-  `rng`: the settings alone reproduce a study.
+  `rng`: the settings alone reproduce a study. **Prefix property**: no BO method
+  depends on its remaining budget, so with the same seed and `n_initial` a longer
+  run starts with exactly the shorter run's evaluations, fitted GPs and acquisition
+  solutions (`tests/test_studies.py` pins it for hybrid and standard BO; the
+  baselines lack it, as they draw their whole design first). Keep it: a budget sweep
+  reads every budget from the longest run.
 - `saving.py`: `save(study, path)` / `load(path)` (ADR 0004): `artifact.json` lists the
-  run files `runs/<method>/run-<index:03d>.json`; `load` also reads the older
-  `study.json` (with `record` for `artifact`), and a run saved before #114, whose
+  run files `runs/<method>/run-<index:03d>.json` and holds the budgets; `load` also
+  reads the older `study.json` (with `record` for `artifact`), a study saved before
+  #144 (`n_initial`, `n_iterations` in its settings) with that budget for each method
+  label (`_with_budgets`), and a run saved before #114, whose
   surrogates are single fitted GPs, as 1-tuples (`_with_surrogate_tuples`, before
   `_check_format`); but a run saved before #119 (fitted
   GPs without `gp`, or a `record` with a `kernel` entry), a BO run saved before #120
@@ -297,7 +308,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `solver`, `jitter`, kernel priors and `ard`, `Var` bounds, `seed`, plot flags, and
   `unknown_states_as_variables=True`, a formulation with the same optimum). The
   settings and choice dataclasses (`EI`, `LCB`, `SAA`, `SoftSAA`, `Linearization`,
-  both settings, `GP`, `StudySettings`) are `kw_only=True`;
+  both settings, `GP`, `Configuration`, `StudySettings`) are `kw_only=True`;
   `tests/test_required_arguments.py` pins both. A new setting that chooses the method
   gets no default.
 - **Shapes.** Rows are points: a point is `(n,)`, a set `(n_points, n)`, `f`

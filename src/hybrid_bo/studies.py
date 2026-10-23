@@ -1,10 +1,11 @@
-"""Studies: runs of one or more methods on one problem, where run i of every method
-starts from the same initial points.
+"""Studies: runs of one or more configurations on one problem, where run i of every
+configuration with the same number of initial points starts from the same initial
+points.
 
-`repeat` runs one method `n_runs` times from generators spawned from one seed; `study`
-runs every method from the same seed, and its artifact records the problem, the
-methods and the stated oracle optimum once. Save and load a study with `hb.save` and
-`hb.load`.
+A configuration is a method with its own evaluation budget. `repeat` runs one
+configuration `n_runs` times from generators spawned from one seed; `study` runs every
+configuration from the same seed, and its artifact records the problem, the methods and
+the stated oracle optimum once. Save and load a study with `hb.save` and `hb.load`.
 """
 
 import logging
@@ -24,15 +25,47 @@ from hybrid_bo.sampling import initial_points
 _logger = logging.getLogger(__name__)
 
 # A method, called as `method(problem, measure, initial_points, n, rng=rng)`, where
-# n is the number of iterations (of design points for the baselines). A BO method
-# runs with its default settings; bind others with
-# `functools.partial(hb.hybrid_bo, settings=...)`
+# n is the number of iterations (of design points for the baselines). Bind a BO
+# method's settings with `functools.partial(hb.hybrid_bo, settings=...)`
 Method = Callable[..., Run]
 
 
 @dataclass(frozen=True, kw_only=True)
+class Configuration:
+    """A method with its own evaluation budget: `n_evaluations` evaluations in all,
+    the first `n_initial` of them initial points, so it runs `n_evaluations -
+    n_initial` iterations (design points for the baselines).
+
+    Raises `ValueError` unless 1 <= `n_initial` <= `n_evaluations`.
+    """
+
+    method: Method
+    n_evaluations: int
+    n_initial: int
+
+    def __post_init__(self) -> None:
+        if not 1 <= self.n_initial <= self.n_evaluations:
+            msg = (
+                "A configuration needs 1 <= n_initial <= n_evaluations, not "
+                f"n_initial={self.n_initial}, n_evaluations={self.n_evaluations}"
+            )
+            raise ValueError(msg)
+
+
+@dataclass(frozen=True, kw_only=True)
+class Budget:
+    """A configuration's evaluation budget, as its study keeps it: `n_evaluations`
+    evaluations in all, the first `n_initial` of them initial points."""
+
+    n_evaluations: int
+    n_initial: int
+
+
+@dataclass(frozen=True, kw_only=True)
 class StudySettings:
-    """How many runs of each method, with how many initial points and iterations.
+    """How many runs of each configuration, and the seed they come from. Both are
+    the same for every configuration, so run i of one is paired with run i of the
+    others.
 
     `seed` is where every random draw of the study comes from: the same seed gives
     the same runs. None draws a fresh seed, which `study` keeps in its settings and
@@ -40,52 +73,57 @@ class StudySettings:
     """
 
     n_runs: int
-    n_initial: int
-    n_iterations: int
     seed: int | None = None
 
 
 @dataclass(frozen=True)
 class Study:
-    """Runs of one or more methods on one problem, as a flat collection: each run
-    names its method (`run.method`) and its position among that method's runs
-    (`run.index`), and run i of every method starts from the same initial points.
+    """Runs of one or more configurations on one problem, as a flat collection: each
+    run names its configuration (`run.method`, the configuration's label) and its
+    position among that configuration's runs (`run.index`), and run i of every
+    configuration with the same number of initial points starts from the same
+    initial points.
 
-    `artifact` says, as text, what the study ran and how: the problem, the
-    measurement, each method with its settings (a BO method's prior GP included,
-    never the fitted GPs, which are in the runs), the oracle optimum (if stated) and
-    the versions. The seed is in `settings`.
+    `budgets` holds each configuration's budget by its label. `artifact` says, as
+    text, what the study ran and how: the problem, the measurement, each method with
+    its settings (a BO method's prior GP included, never the fitted GPs, which are in
+    the runs), the oracle optimum (if stated) and the versions. The seed is in
+    `settings`.
     """
 
     runs: tuple[Run, ...]
     settings: StudySettings
+    budgets: dict[str, Budget]
     name: str | None
     artifact: dict[str, str]
 
 
 def repeat(
-    method: Method,
+    configuration: Configuration,
     problem: Problem,
     measure: Measure,
     settings: StudySettings,
 ) -> tuple[Run, ...]:
-    """Runs `method` `settings.n_runs` times and returns the runs with their indices.
+    """Runs the configuration `settings.n_runs` times and returns the runs with their
+    indices.
 
     Run i draws its initial points and runs the method with the ith generator spawned
     from `settings.seed` (`SeedSequence(seed).spawn(n_runs)[i]`), so the same seed
-    gives the same runs, and run i of any method starts from the same initial points.
-    Seed None draws a fresh seed, which every run records. A run that raises a
-    `HybridBOError` is logged as a warning and kept as far as it got (`error.run`);
-    the next run goes on. Each finished run is logged at info level with its time.
+    gives the same runs, and run i of any configuration with the same `n_initial`
+    starts from the same initial points. Seed None draws a fresh seed, which every
+    run records. A run that raises a `HybridBOError` is logged as a warning and kept
+    as far as it got (`error.run`); the next run goes on. Each finished run is logged
+    at info level with its time.
     """
     runs = []
+    n_iterations = configuration.n_evaluations - configuration.n_initial
     children = np.random.SeedSequence(settings.seed).spawn(settings.n_runs)
     for index, child in enumerate(children):
         start = time.perf_counter()
         rng = np.random.default_rng(child)
-        u = initial_points(problem.system.u, settings.n_initial, rng)
+        u = initial_points(problem.system.u, configuration.n_initial, rng)
         try:
-            run = method(problem, measure, u, settings.n_iterations, rng=rng)
+            run = configuration.method(problem, measure, u, n_iterations, rng=rng)
         except HybridBOError as error:
             _logger.warning(
                 "Run %d of %d failed after %.2fs: %r",
@@ -109,17 +147,18 @@ def repeat(
 
 
 def study(
-    methods: Mapping[str, Method],
+    configurations: Mapping[str, Configuration],
     problem: Problem,
     measure: Measure,
     settings: StudySettings,
     name: str | None = None,
     optimum: float | None = None,
 ) -> Study:
-    """Runs every method with `repeat` from the same seed, so run i of every method
-    starts from the same initial points, and the same seed gives the same study.
-    Each run is labeled with its key in `methods`, so two configurations of one
-    method can share a study. Logs each key at info level as its runs start.
+    """Runs every configuration with `repeat` from the same seed, so run i of every
+    configuration with the same `n_initial` starts from the same initial points, and
+    the same seed gives the same study. Each run is labeled with its configuration's
+    key, so one method can appear under several labels, with different settings or
+    budgets. Logs each label at info level as its runs start.
 
     Seed None draws a fresh seed first, and the study's settings hold it, so the
     saved study can be run again exactly. `optimum` is the oracle optimum of a test
@@ -127,23 +166,29 @@ def study(
     can miss it (`oracle_optimum` helps find it once); the artifact records it. Warns
     with `OracleOptimumWarning` if an evaluated point's oracle objective is below it.
     """
-    # One seed for every method; a fresh one is kept in the settings
+    # One seed for every configuration; a fresh one is kept in the settings
     seed = np.random.SeedSequence(settings.seed).entropy
     settings = replace(settings, seed=seed)
 
-    # Every method's runs, labeled with their key
+    # Every configuration's runs, labeled with their key
     runs: list[Run] = []
-    for label, method in methods.items():
-        _logger.info("Method %s: %d runs", label, settings.n_runs)
-        method_runs = repeat(method, problem, measure, settings)
-        runs += [replace(run, method=label) for run in method_runs]
+    for label, configuration in configurations.items():
+        _logger.info(
+            "Configuration %s: %d runs of %d evaluations, %d of them initial points",
+            label,
+            settings.n_runs,
+            configuration.n_evaluations,
+            configuration.n_initial,
+        )
+        configuration_runs = repeat(configuration, problem, measure, settings)
+        runs += [replace(run, method=label) for run in configuration_runs]
 
     # Each method with its settings, from the artifact of one of its runs; a BO
     # method's prior GP follows on its own line
     artifact = _problem_artifact(problem, measure)
     run_artifacts = {run.method: run.artifact for run in runs}
     method_lines = []
-    for label in methods:
+    for label in configurations:
         if label in run_artifacts:
             run_artifact = run_artifacts[label]
             text = f"{run_artifact['method']}({run_artifact['settings']})"
@@ -159,7 +204,14 @@ def study(
         artifact["oracle_optimum"] = repr(float(optimum))
         _check_optimum(runs, float(optimum))
 
-    return Study(tuple(runs), settings, name, artifact | _versions_artifact())
+    budgets = {
+        label: Budget(
+            n_evaluations=configuration.n_evaluations,
+            n_initial=configuration.n_initial,
+        )
+        for label, configuration in configurations.items()
+    }
+    return Study(tuple(runs), settings, budgets, name, artifact | _versions_artifact())
 
 
 def _check_optimum(runs: list[Run], optimum: float) -> None:
