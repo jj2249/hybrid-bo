@@ -105,13 +105,17 @@ oracle objective is below it.
 
 ## Running
 
-    pixi run experiment <name> [--method M ...] [--n-runs 10] [--seed 0] [--name ID] [--plot] [--plot-runs 0 3] [--require-clean]
+    pixi run experiment <name> [--method M ...] [--n-runs 10] [--seed 0] [--n-workers 4] [--name ID] [--plot] [--plot-runs 0 3] [--require-clean]
     pixi run plot <name> [STUDY]
     pixi run experiment <name> plot [STUDY] [--plot-runs all] [--results-root DIR]
 
 `--method` takes configuration labels. There is no `--n-iterations`: budgets belong
 to configurations, so change them in the experiment (tests define small test
-experiments, as `tests/test_cli.py`'s `small` does).
+experiments, as `tests/test_cli.py`'s `small` does). `--n-workers N` runs the runs
+in N worker processes (default 1, this process) with the same results; the
+measurement and any method of your own must then be module-level functions (or
+data), not lambdas or nested functions, else the study raises `TypeError` naming it.
+`hb.oracle_measure` pickles whatever its oracle is.
 The tasks run `python -m <name>` from `experiments/` in the `experiments` environment.
 No command lists every experiment, and a typo in the name fails with "No module named
 ...". A relative `--results-root` is relative to where pixi was started (`INIT_CWD`),
@@ -121,9 +125,12 @@ start. It is reserved before anything runs by creating the study log
 if that log or its folder exists. A taken `--name` is a usage error; a taken UTC time
 gets `-2`, `-3`, ... appended. The study log gets the library's records (DEBUG and
 above: every run, iteration, GP fit and multistart with its time) and every warning;
-the console shows INFO and above. Once saved, the log moves into the study folder as
-`study.log`; a study that doesn't finish leaves `<id>.log` in place, which keeps the id
-taken until it is deleted. `plot` loads the study given, else the one whose
+the console shows INFO and above. A line a run logs starts with its tag,
+`<label>/run-003`, so the lines of parallel runs can be told apart, and also goes to
+the run's per-run log. Once saved, the log moves into the study folder as `study.log`, and
+the per-run logs from `<id>.logs/` to `logs/<label>/run-003.log`; a study that doesn't
+finish leaves `<id>.log` (and `<id>.logs/`) in place, which keeps the id taken until
+it is deleted. `plot` loads the study given, else the one whose
 artifact was written last (`artifact.json`, or `study.json` in older studies), and
 saves `summary.csv` if the study has none (studies saved before summaries). Plotting
 draws the study figures `cli.main`'s `figures` names (default convergence and

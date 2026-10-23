@@ -19,7 +19,8 @@ Run every method on the illustrative example of the paper and plot the results:
 pixi run experiment illustrative_example --n-runs 3 --plot
 ```
 
-The study and its figures are saved in `results/illustrative_example/`.
+The study and its figures are saved in `results/illustrative_example/`. Add
+`--n-workers 4` to run the runs in 4 processes at once, with the same results.
 
 ## Docs
 

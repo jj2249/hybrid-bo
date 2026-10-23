@@ -26,8 +26,10 @@ pixi run plot <name> [STUDY]                         # plot the newest (or named
 pixi run experiment <name> plot [STUDY] --plot-runs all   # iteration figures of every run
 ```
 
-A study shows its progress on the console and saves it as `study.log` in its folder;
-a study that doesn't finish leaves `<study id>.log` beside the study folders. A
+A study shows its progress on the console and saves it as `study.log` in its folder,
+and each run's part of it in `logs/<method>/run-000.log`; a study that doesn't finish
+leaves `<study id>.log` beside the study folders. `--n-workers 4` runs the runs in 4
+processes, with the same results. A
 `--name` that is already taken is refused before anything runs.
 
 To write your own, see

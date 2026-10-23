@@ -41,6 +41,8 @@ initial points, run ``i`` of every method from the same initial points. ``pixi r
 - ``--n-runs`` and ``--seed`` override the experiment's study settings. Each
   configuration has its own budget, set in the experiment, so no flag changes the
   number of iterations;
+- ``--n-workers 4`` runs the runs in 4 processes at once, with the same results
+  (default 1);
 - ``--name`` names the study (default the current UTC time); a name already taken
   is refused before anything runs;
 - ``--plot`` draws the figures straight after, and ``--plot-runs 0 3`` (or ``all``)
@@ -65,6 +67,7 @@ The study is saved in ``results/illustrative_example/<study id>/``:
    runs/<method>/      one JSON file per run: every evaluated point, the GPs, ...
    summary.csv         the summary table printed above
    study.log           the study's progress: each run and iteration, times, warnings
+   logs/<method>/      the same, one log per run: run-000.log, ...
    figures/            convergence.png, regret.png and a figure per iteration of run 0
 
 Open ``figures/regret.png``: the median regret of each method over the evaluations,

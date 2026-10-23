@@ -132,7 +132,19 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `n_initial` shares initial points; relabels runs with their key; its artifact records a stated `optimum` as
   `oracle_optimum`, never computes one, gives a BO method's prior GP (the run
   artifact's `gp`) on the line after its settings in `methods`, and warns with
-  `OracleOptimumWarning` if an evaluated point's `f_oracle` is below it). Studies take a seed, not an
+  `OracleOptimumWarning` if an evaluated point's `f_oracle` is below it). With
+  `n_workers` > 1, `study` runs one task per (configuration, run) on a `spawn`
+  process pool, same runs in the same order; it checks that the problem, measurement
+  and methods pickle (`TypeError` otherwise), starts workers with single-threaded
+  BLAS, re-emits workers' records through the parent's loggers and raises their
+  warnings again after each run. Workers ignore SIGINT; on an error or Ctrl-C the
+  parent terminates them (`_stop_workers`, which survives a second Ctrl-C: pixi
+  delivers each one twice). A serial study doesn't stop on Ctrl-C while IPOPT runs,
+  since CasADi catches the interrupt there. `run_of(record)` gives the `(label, index)` of the
+  study run that logged a record (a context variable, or the attribute a worker's
+  record carries); `repeat` alone tags nothing. Each configuration spawns its own
+  `SeedSequence` children: `lhs` spawns from them, so sharing them across
+  configurations changes the later ones' initial points. Studies take a seed, not an
   `rng`: the settings alone reproduce a study. **Prefix property**: no BO method
   depends on its remaining budget, so with the same seed and `n_initial` a longer
   run starts with exactly the shorter run's evaluations, fitted GPs and acquisition
@@ -361,8 +373,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   run, `optimization_loop` the initial points and each iteration (with the incumbent)
   at INFO; `fit_gp` and `multistart` log their times at DEBUG, and warn about a
   nearly singular training covariance and starts at the iteration limit. Times come from
-  `time.perf_counter`. The library adds no handlers; the experiment CLI saves the
-  records as the study log.
+  `time.perf_counter`. The library adds no handlers to the caller's process (a
+  worker's only handler sends its records to the parent); the experiment CLI saves
+  the records as the study log, tagged with `run_of`, and one log per run.
 - **Oracle incumbents.** `incumbents(history)` is the running minimum of the measured
   `f`. The benchmark metric `oracle_incumbents(history)` is `f_oracle` at the
   incumbent's point, not the running minimum of `f_oracle`; they agree only
