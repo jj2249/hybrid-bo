@@ -58,9 +58,9 @@ class ReplayWarning(UserWarning):
     """An iteration figure's replay of hybrid BO's acquisition function didn't find
     the stored solution at the trial point.
 
-    The replay root-finds each scenario's states with u fixed, starting at the trial
-    point from the stored solution. A warning means the root it found there has other
-    states or another acquisition value, or none was found: the root-finder left the
+    The replay solves each scenario's equations with u fixed by Newton's method,
+    starting at the trial point from the stored solution. A warning means the root it
+    found there has other states or another acquisition value, or none was found: the root-finder left the
     branch the optimizer chose, so the panel may not show the acquisition function the
     run optimized. Silence it with `warnings.filterwarnings("ignore",
     category=ReplayWarning)`.

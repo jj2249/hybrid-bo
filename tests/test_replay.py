@@ -1,8 +1,8 @@
 """Hybrid BO's replay of an iteration's acquisition function over a grid of u, which
 the iteration figures draw.
 
-The replay root-finds each scenario's states with u fixed and evaluates the
-acquisition problem's objective there. The reference values in `tests/data/replay/`
+The replay solves each scenario's equations with u fixed by Newton's method and
+evaluates the acquisition problem's objective there. The reference values in `tests/data/replay/`
 were recorded from the replay it replaced (#154), which solved the acquisition problem
 with IPOPT at each grid point, so they check the root-finder against an independent
 solver on the same runs.
@@ -97,10 +97,12 @@ CASES = [
 @pytest.mark.parametrize(("example", "approximation", "i"), CASES)
 def test_replay_matches_the_ipopt_replay(example, approximation, i):
     """The replayed acquisition values, f under each scenario and Lin-EI's std match
-    the values the IPOPT replay recorded, with NaN at the same grid points. They
-    agree to 1e-6 relative or 1e-5 absolute: IPOPT met the known equations only to
-    its tolerance, which moves f by up to about 1e-5 where it is steep (Newton's
-    roots match scipy's brentq on x + exp(x) = y to 1e-9)."""
+    the values the IPOPT replay recorded, with NaN at the same grid points (the
+    recorded values have none; `test_a_root_outside_the_bounds_leaves_a_gap` checks
+    the gaps). The values and the std agree to 1e-5 relative, f to 1e-6 relative or
+    1e-5 absolute: IPOPT met the known equations only to its tolerance, which moves f
+    by up to about 1e-5 where it is steep (Newton's roots match scipy's brentq on
+    x + exp(x) = y to 1e-9)."""
     # Setup: the run and the recorded values
     problem = EXAMPLES[example][0]
     run = hybrid_run(example, approximation)
@@ -114,11 +116,11 @@ def test_replay_matches_the_ipopt_replay(example, approximation, i):
 
     # Check: the values, and Lin-EI's std only with linearization
     assert f is not None
-    np.testing.assert_allclose(values, reference["values"], rtol=1e-6, atol=1e-5)
+    np.testing.assert_allclose(values, reference["values"], rtol=1e-5, atol=1e-12)
     np.testing.assert_allclose(f, reference["f"], rtol=1e-6, atol=1e-5)
     if approximation == "lin":
         assert f_std is not None
-        np.testing.assert_allclose(f_std, reference["f_std"], rtol=1e-6, atol=1e-5)
+        np.testing.assert_allclose(f_std, reference["f_std"], rtol=1e-5, atol=1e-12)
     else:
         assert f_std is None
 

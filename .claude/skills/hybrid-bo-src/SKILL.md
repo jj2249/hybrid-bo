@@ -313,7 +313,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `_RESIDUAL_TOLERANCE` (1e-8; mapped calls report no per-instance success, so
   Newton runs with `error_on_fail: False`) or its root is outside a state's bounds
   (solved without bounds, then rejected: IPOPT could have found another root inside
-  them). With M = 0 and the GP substituted nothing is solved. The value is `nlp.f`
+  them; and past a fold of the branch Newton stalls where IPOPT could jump to
+  another root, so a gap there is by design). With M = 0 and the GP substituted
+  nothing is solved. The value is `nlp.f`
   at the packed (u, x, y), mapped over the solved points, so it covers every
   approximation. `_check_trial_point` warns with `ReplayWarning` unless the trial
   point's states and value are the stored solution's (`_REPLAY_RTOL` 1e-4,

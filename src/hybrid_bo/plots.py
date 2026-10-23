@@ -865,7 +865,7 @@ def _replay(
     replayed = None
     if solved[at_trial]:
         y_trial = y_solved[np.searchsorted(points, at_trial)]
-        replayed = (x[at_trial], y_trial, float(values[at_trial]))
+        replayed = AcquisitionSolution(float(values[at_trial]), x[at_trial], y_trial)
     _check_trial_point(replayed, solution)
     if sensitivity is None:
         return values, f, None
@@ -919,9 +919,11 @@ def _scenario_roots(
     start bounds), each point started from the nearest point solved in an earlier ring,
     the trial point's ring from the stored solution. That follows the branch the
     optimizer chose. A pair fails, and so its point, if Newton's residual is above
-    `_RESIDUAL_TOLERANCE` or the root is outside a state's bounds. IPOPT would stay
-    within the bounds, so where the equations have several roots it could find one
-    inside them where Newton found one outside, leaving no gap.
+    `_RESIDUAL_TOLERANCE` or the root is outside a state's bounds (y's only when they
+    are variables, as in the acquisition problem). Where the equations have several
+    roots this can leave gaps IPOPT wouldn't: it stays within the bounds, so it could
+    find a root inside them where Newton found one outside, and past a fold, where
+    the branch ends, it could jump to another branch where Newton stalls.
     """
     # The unknowns of each pair, their bounds, and the stored solution as a start
     assert solution.x is not None and solution.y is not None
@@ -944,15 +946,19 @@ def _scenario_roots(
     if roots.shape[2] == 0:
         return roots, None, ~solved
 
-    # The rings: the distance from the trial point in units of the median distance
-    # between nearest points
+    # The equations and Newton's method on them; a mapped call reports no success per
+    # instance, so failures are found from the residual
     equations = _scenario_equations(problem, fitted, as_variables)
     newton = cas.rootfinder("replay", "newton", equations, {"error_on_fail": False})
+
+    # The rings: the distance from the trial point in units of the median distance
+    # between nearest points (1 if that is 0 or there is one point)
     lower, upper = _start_bounds(system.u)
     scaled = (u - lower) / (upper - lower)
-    between = np.linalg.norm(scaled[:, np.newaxis] - scaled[np.newaxis], axis=2)
-    np.fill_diagonal(between, np.inf)
-    spacing = float(np.median(between.min(axis=1))) or 1.0
+    distances = np.linalg.norm(scaled[:, np.newaxis] - scaled[np.newaxis], axis=2)
+    np.fill_diagonal(distances, np.inf)
+    spacing = float(np.median(distances.min(axis=1)))
+    spacing = spacing if 0 < spacing < np.inf else 1.0
     from_trial = np.linalg.norm(scaled - scaled[at_trial], axis=1)
     ring = np.floor(from_trial / spacing).astype(int)
 
@@ -962,23 +968,23 @@ def _scenario_roots(
     for r in np.unique(ring):
         points = np.flatnonzero(ring == r)
         known = np.flatnonzero(has_start)
-        nearest = known[np.argmin(between[np.ix_(points, known)], axis=1)]
+        nearest = known[np.argmin(distances[np.ix_(points, known)], axis=1)]
         nearest[points == at_trial] = at_trial
-        pairs = len(points) * n_scenarios
-        start = roots[nearest].reshape(pairs, -1).T
+        n_pairs = len(points) * n_scenarios
+        start = roots[nearest].reshape(n_pairs, -1).T
         u_pairs = np.repeat(u[points], n_scenarios, axis=0).T
         z_pairs = np.tile(scenarios.z, (len(points), 1)).T
-        v = newton.map(pairs)(start, u_pairs, z_pairs).full()
-        residual = equations.map(pairs)(v, u_pairs, z_pairs).full()
+        v = newton.map(n_pairs)(start, u_pairs, z_pairs).full()
+        residual = equations.map(n_pairs)(v, u_pairs, z_pairs).full()
 
         # A point is solved if every scenario converged within the bounds
         v = v.T.reshape(len(points), n_scenarios, -1)
         residual = np.abs(residual.T).reshape(len(points), n_scenarios, -1)
         converged = np.all(residual <= _RESIDUAL_TOLERANCE, axis=(1, 2))
         inside = np.all((v >= v_lower) & (v <= v_upper), axis=(1, 2))
-        ok = converged & inside
-        roots[points[ok]] = v[ok]
-        solved[points[ok]] = has_start[points[ok]] = True
+        ring_solved = points[converged & inside]
+        roots[ring_solved] = v[converged & inside]
+        solved[ring_solved] = has_start[ring_solved] = True
 
     # The roots of the points not solved are no roots
     roots[~solved] = np.nan
@@ -986,12 +992,12 @@ def _scenario_roots(
 
 
 def _check_trial_point(
-    replayed: tuple[np.ndarray, np.ndarray, float] | None,
-    solution: AcquisitionSolution,
+    replayed: AcquisitionSolution | None, solution: AcquisitionSolution
 ) -> None:
-    """Warns with `ReplayWarning` unless the replay's scenario states x (S, M) and y
-    (S, P) and its acquisition value at the trial point (None if it wasn't solved) are
-    the stored solution's, to `_REPLAY_RTOL` relative and `_REPLAY_ATOL` absolute."""
+    """Warns with `ReplayWarning` unless the replay at the trial point (None if it
+    wasn't solved), its acquisition value and scenario states, is the stored
+    solution, to `_REPLAY_RTOL` relative and `_REPLAY_ATOL` absolute. The stack
+    level points the warning at the caller of `iteration`."""
     if replayed is None:
         msg = (
             "The replay found no root at the trial point, so the acquisition panel "
@@ -999,16 +1005,20 @@ def _check_trial_point(
         )
         warnings.warn(msg, ReplayWarning, stacklevel=5)
         return
-    # The states and the value as one vector each, compared entry by entry
-    assert solution.x is not None and solution.y is not None
-    stored = (solution.x, solution.y, solution.value)
-    replayed_entries = np.concatenate([np.ravel(part) for part in replayed])
-    stored_entries = np.concatenate([np.ravel(part) for part in stored])
+
+    # The value and the states as one vector each, compared entry by entry
+    def entries(acquisition: AcquisitionSolution) -> np.ndarray:
+        """The value, x and y of a solution in one vector."""
+        assert acquisition.x is not None and acquisition.y is not None
+        parts = (acquisition.value, acquisition.x, acquisition.y)
+        return np.concatenate([np.ravel(part) for part in parts])
+
+    replayed_entries, stored_entries = entries(replayed), entries(solution)
     if not np.allclose(
         replayed_entries, stored_entries, rtol=_REPLAY_RTOL, atol=_REPLAY_ATOL
     ):
         msg = (
-            f"The replay's acquisition value at the trial point is {replayed[2]:.6g}, "
+            f"The replay's acquisition value at the trial point is {replayed.value:.6g}, "
             f"stored {solution.value:.6g}, or its states differ: the root-finder left "
             "the branch the optimizer chose, so the acquisition panel may not show "
             "the function the run optimized"
