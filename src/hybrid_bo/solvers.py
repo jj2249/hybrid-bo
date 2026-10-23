@@ -17,6 +17,9 @@ from hybrid_bo.errors import NoSolutionError
 
 _logger = logging.getLogger(__name__)
 
+# Objectives closer than this (relative, or absolute below 1) tie in `multistart`
+_TIE_TOLERANCE = 1e-13
+
 
 @dataclass(frozen=True)
 class NLP:
@@ -50,7 +53,8 @@ class Solution:
 
 def multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
     """Solves `nlp` from each row of `starts` (n_starts, n) and returns the solution
-    with the lowest objective.
+    with the lowest objective. Objectives that differ only by rounding tie, and the
+    earlier start wins, so the result doesn't depend on the platform's arithmetic.
 
     A start that fails is expected, so it is logged (at debug level, without a
     traceback) and skipped; so are the number that failed and the time taken, under
@@ -69,7 +73,7 @@ def multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
     opti.subject_to(w >= nlp.lower[:, np.newaxis])
     opti.subject_to(w <= nlp.upper[:, np.newaxis])
 
-    # Solve from each start; a NaN objective never wins
+    # Solve from each start; a NaN objective never wins, nor does a tie with the best
     started = time.perf_counter()
     best, f_best, n_failed, n_at_limit = None, np.inf, 0, 0
     for i, start in enumerate(starts):
@@ -85,7 +89,10 @@ def multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
                 n_at_limit += 1
             continue
         f = float(solution.value(opti.f))
-        if f < f_best:
+        ties_best = best is not None and f >= f_best - _TIE_TOLERANCE * max(
+            1.0, abs(f_best)
+        )
+        if f < f_best and not ties_best:
             best, f_best = np.atleast_1d(solution.value(w)).astype(float), f
     _logger.debug(
         "%s: %d of %d starts failed, %.2fs",
