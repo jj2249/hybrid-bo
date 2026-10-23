@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Parallel studies (#145): `hb.study(..., n_workers=4)` runs the runs in 4 worker
+  processes, one per (configuration, run), with single-threaded BLAS, giving the
+  same study as `n_workers=1` (the default). The problem, the measurement and the
+  methods must pickle (module-level functions or data), else `TypeError` names the
+  one that doesn't. Workers' log records are handled by the caller's loggers and
+  their warnings raised again in the caller; `hb.studies.run_of(record)` gives the
+  run that logged a record. The experiment CLI gains `--n-workers`, starts each study
+  log line logged by a run with its tag (`hybrid_bo/run-003`), and saves one log per
+  run as `logs/<label>/run-003.log`. Results are unchanged.
 - **Breaking:** Configurations (#144): `hb.Configuration(method=..., n_evaluations=...,
   n_initial=...)` is a method with its own evaluation budget, initial points
   included, so one study can compare splits of a budget. `StudySettings` keeps only

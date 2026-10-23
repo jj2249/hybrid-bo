@@ -35,8 +35,9 @@ The original code was hard to change for three reasons:
 5. **Explicit randomness.** Anything random takes an `rng: np.random.Generator`.
 6. **Errors raise** specific exceptions. Expected failures (one multistart start not
    converging) are logged without tracebacks. Progress (each run and iteration, with
-   times) is logged too; the library never configures logging, and the experiment CLI
-   saves the records as the study log.
+   times) is logged too; the library never configures logging (worker processes'
+   records are handled by the caller's loggers), and the experiment CLI saves the
+   records as the study log and one log per run.
 7. **Rows are points.** A point is `(n,)`, a set is `(n_points, n)`, `f` is `(n_points,)`.
 8. **Experiments are short to write.** Defaults may be derived from other arguments when
    the derivation is obvious and recorded in the run. A default may set how hard or how
@@ -834,6 +835,27 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   it, and a wrong optimum silently corrupts every regret. `hb.oracle_optimum(problem,
   oracle, rng, n_starts)` helps find it once. The artifact records it, and the study warns with
   `OracleOptimumWarning` if an evaluated point's oracle objective is below it.
+- **Parallel studies** (#145). `hb.study(..., n_workers=1)`: with more workers, each
+  (configuration, run) is one task on a process pool, and the runs come back in the
+  serial order (by label, then index), bit for bit the serial study's, since each run
+  depends only on its spawned seed. `n_workers` is plumbing, so it may have a default
+  (ADR 0009). The pool uses `spawn` on every platform: forking a process that holds
+  CasADi's and BLAS's threads isn't safe, and one start method keeps results the same
+  across platforms. Workers start with single-threaded BLAS and OpenMP (environment
+  variables set while the pool starts its workers, since BLAS reads them as it
+  loads), so n workers use n cores. The problem, the measurement and the methods are
+  pickled to each task, so they must be module-level functions or data; `study`
+  checks this first and raises `TypeError` naming the culprit, instead of the pool's
+  error after the first task. A `HybridBOError` is handled inside the worker as
+  serially. A worker's records go to the parent through a queue and are handled by
+  the parent's loggers if they are enabled for the level (workers start with the
+  parent's logger levels, so they don't send what the parent would drop); its
+  warnings are recorded and raised again in the parent after its run, so the parent's
+  filters decide what is shown. Every record logged during a study's run, serially
+  or in a worker, is tagged with its run: `hb.studies.run_of(record)` gives `(label,
+  index)`, from the record for a worker's, from a context variable for this
+  process's. The experiment CLI uses it to start each study log line with
+  `label/run-NNN` and to write each run's records to `logs/<label>/run-NNN.log`.
 - **Saving** (#53; `saving.py`). `hb.save(study, path)` writes `artifact.json`
   (settings, name, artifact, the run files in order; a study saved before #144, with
   `n_initial` and `n_iterations` in its settings, loads with that budget as each

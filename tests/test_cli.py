@@ -327,6 +327,43 @@ def test_the_study_log_records_each_run_and_iteration(tmp_path, capsys):
     assert "Fitted the GP" not in console
 
 
+@pytest.mark.parametrize("n_workers", ["1", "2"])
+def test_each_run_logs_to_its_own_log_and_tags_the_study_log(tmp_path, n_workers):
+    """Every line a run logs starts with its label and index in the study log
+    (`standard_bo/run-001`), so the lines of runs in parallel can be told apart, and
+    also goes to the run's own log, `logs/<label>/run-<index>.log`, in the study's
+    folder. Lines from outside the runs are in the study log only, untagged."""
+    # One method, two runs of two iterations, serially or by two workers
+    run_cli(
+        ["--method", "standard_bo", "--n-runs", "2", "--n-workers", n_workers]
+        + ["--name", "tagged", "--results-root", str(tmp_path)],
+        configurations=small(n_iterations=2),
+    )
+
+    # The study log: each run's lines tagged, the study's start not
+    study_dir = tmp_path / "illustrative_example" / "tagged"
+    lines = (study_dir / "study.log").read_text().splitlines()
+    for index in (0, 1):
+        tagged = [line for line in lines if f" standard_bo/run-00{index} " in line]
+        assert any(f"Run {index + 1} of 2 finished in" in line for line in tagged)
+        assert sum("standard_bo iteration 2 of 2:" in line for line in tagged) == 1
+        assert any("DEBUG hybrid_bo.gp: Fitted the GP in" in line for line in tagged)
+    start = [line for line in lines if "Configuration standard_bo:" in line]
+    assert len(start) == 1
+    assert "run-00" not in start[0]
+
+    # Each run's own log holds its lines and no other run's
+    for index in (0, 1):
+        run_log = (
+            study_dir / "logs" / "standard_bo" / f"run-00{index}.log"
+        ).read_text()
+        assert f"Run {index + 1} of 2 finished in" in run_log
+        assert f"Run {2 - index} of 2" not in run_log
+        assert run_log.count("standard_bo iteration 2 of 2:") == 1
+        assert "Configuration standard_bo" not in run_log
+    assert not (tmp_path / "illustrative_example" / "tagged.logs").exists()
+
+
 def test_a_taken_name_is_refused_before_running(tmp_path, capsys):
     """`--name` names the study's folder. A name taken by a saved study, or by the
     log of a study that didn't finish, is a usage error before anything runs, and
@@ -441,16 +478,18 @@ def test_hybrid_bo_with_two_unknown_states_gets_iteration_figures_without_gps(
     assert "no iteration figures" not in capsys.readouterr().out
 
 
-def test_warnings_reach_the_study_log(tmp_path):
-    """A warning raised during the study (`warnings.warn`) is in its study log."""
+def warning_sampling(*args, **kwargs):
+    """`hb.uniform_sampling`, after a warning. A module-level function, so worker
+    processes can unpickle it."""
+    warnings.warn("a warning from the method", UserWarning, stacklevel=2)
+    return uniform_sampling(*args, **kwargs)
 
-    # Uniform sampling that warns first
-    def warning_sampling(*args, **kwargs):
-        """`hb.uniform_sampling`, after a warning."""
-        warnings.warn("a warning from the method", UserWarning, stacklevel=2)
-        return uniform_sampling(*args, **kwargs)
 
-    # A study of that method alone
+@pytest.mark.parametrize("n_workers", ["1", "2"])
+def test_warnings_reach_the_study_log(tmp_path, n_workers):
+    """A warning raised during a run (`warnings.warn`), in this process or a
+    worker's, is in the study log, tagged with the run, and in the run's log."""
+    # A study of a method that warns
     cli.main(
         "illustrative_example",
         ex.problem,
@@ -461,13 +500,17 @@ def test_warnings_reach_the_study_log(tmp_path):
             )
         },
         ex.study_settings,
-        argv=["--n-runs", "1", "--name", "warned"] + ["--results-root", str(tmp_path)],
+        argv=["--n-runs", "1", "--n-workers", n_workers, "--name", "warned"]
+        + ["--results-root", str(tmp_path)],
     )
 
     # The warning, logged through `py.warnings`
-    log = (tmp_path / "illustrative_example" / "warned" / "study.log").read_text()
-    assert "WARNING py.warnings:" in log
+    study_dir = tmp_path / "illustrative_example" / "warned"
+    log = (study_dir / "study.log").read_text()
+    assert "warning_sampling/run-000 WARNING py.warnings:" in log
     assert "a warning from the method" in log
+    run_log = (study_dir / "logs" / "warning_sampling" / "run-000.log").read_text()
+    assert "a warning from the method" in run_log
 
 
 def test_a_study_that_does_not_finish_leaves_its_log(tmp_path, capsys):

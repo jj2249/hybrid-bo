@@ -8,6 +8,7 @@ that fixture's value.
 import dataclasses
 import functools
 import json
+import os
 import warnings
 
 import illustrative_example as ex
@@ -404,6 +405,146 @@ def test_the_same_seed_gives_the_same_study(illustrative_problem):
     assert_same(
         [run.history for run in again.runs], [run.history for run in first.runs]
     )
+
+
+# Parallel studies
+
+
+def test_a_parallel_study_is_the_serial_study(illustrative_study):
+    """With worker processes, a study gives the same runs as without, bit for bit and
+    in the same order (by label, then run index), whatever order they finish in."""
+    parallel = hb.study(
+        configurations_of(ex.methods, n_evaluations=N_INITIAL + 1, n_initial=N_INITIAL),
+        ex.problem,
+        ex.measure,
+        SETTINGS,
+        name="illustrative_example",
+        optimum=ex.optimum,
+        n_workers=2,
+    )
+
+    assert_same(parallel, illustrative_study)
+
+
+def test_a_parallel_study_refuses_a_measurement_that_cannot_be_pickled(
+    illustrative_problem,
+):
+    """Worker processes need the measurement pickled, and a nested function can't
+    be: the study raises `TypeError` naming the measurement before running."""
+
+    def measure(u, rng):
+        """y = sin(u), defined inside the test, so it doesn't pickle."""
+        return np.sin(u)
+
+    with pytest.raises(TypeError, match="measurement .*module-level function"):
+        hb.study(
+            configurations_of(
+                {"uniform": hb.uniform_sampling}, n_evaluations=2, n_initial=1
+            ),
+            illustrative_problem,
+            measure,
+            SETTINGS,
+            n_workers=2,
+        )
+
+
+def test_a_study_needs_at_least_one_worker(illustrative_problem):
+    """`n_workers` counts processes, 1 meaning this one: below 1 is a `ValueError`."""
+    configurations = configurations_of(
+        {"uniform": hb.uniform_sampling}, n_evaluations=2, n_initial=1
+    )
+
+    with pytest.raises(ValueError, match="n_workers"):
+        hb.study(
+            configurations, illustrative_problem, ex.measure, SETTINGS, n_workers=0
+        )
+
+
+def nan_above_zero(u, rng):
+    """y = sin(u), but NaN for u > 0, so the root-finding problem fails there. A
+    module-level function, so worker processes can unpickle it."""
+    return np.array([np.nan]) if u[0] > 0 else np.sin(u)
+
+
+def test_a_failed_run_in_a_worker_is_kept_and_logged(illustrative_problem, caplog):
+    """A run that raises a `HybridBOError` in a worker process is kept as far as it
+    got and logged as a warning in the parent, as in a serial study."""
+    # Two initial points, one on each side of 0 (a Latin hypercube), so every run
+    # fails at the one above 0
+    configurations = configurations_of(
+        {"uniform": hb.uniform_sampling}, n_evaluations=3, n_initial=2
+    )
+    settings = hb.StudySettings(n_runs=3, seed=0)
+
+    # Act: the same study, serially and in parallel
+    serial = hb.study(configurations, illustrative_problem, nan_above_zero, settings)
+    caplog.clear()
+    parallel = hb.study(
+        configurations, illustrative_problem, nan_above_zero, settings, n_workers=2
+    )
+
+    # The same partial runs, and each failure logged by the parent's loggers
+    assert_same(parallel.runs, serial.runs)
+    failures = [
+        record
+        for record in caplog.records
+        if record.levelname == "WARNING" and "RootFindingError" in record.getMessage()
+    ]
+    assert len(failures) == 3
+    assert {record.name for record in failures} == {"hybrid_bo.studies"}
+
+
+def warning_sampling(*args, **kwargs):
+    """`hb.uniform_sampling`, after a warning. A module-level function, so worker
+    processes can unpickle it."""
+    warnings.warn("a warning from the method", UserWarning, stacklevel=2)
+    return hb.uniform_sampling(*args, **kwargs)
+
+
+def test_a_warning_in_a_worker_is_raised_again_in_the_parent(illustrative_problem):
+    """A warning a run raises in a worker process is raised in the parent too, once
+    per run, so the parent's warning filters and handlers see it as in a serial
+    study."""
+    configurations = configurations_of(
+        {"warning": warning_sampling}, n_evaluations=2, n_initial=1
+    )
+
+    # `pytest.warns` passes only if the block warns with this category and message
+    with pytest.warns(UserWarning, match="a warning from the method") as caught:
+        hb.study(
+            configurations, illustrative_problem, ex.measure, SETTINGS, n_workers=2
+        )
+
+    assert sum("from the method" in str(w.message) for w in caught) == SETTINGS.n_runs
+
+
+def thread_reporting_sampling(*args, **kwargs):
+    """`hb.uniform_sampling`, after a warning that gives the BLAS and OpenMP thread
+    settings of the process it runs in."""
+    threads = {name: os.environ.get(name) for name in THREAD_VARIABLES}
+    warnings.warn(f"threads: {threads}", UserWarning, stacklevel=2)
+    return hb.uniform_sampling(*args, **kwargs)
+
+
+THREAD_VARIABLES = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
+
+
+def test_workers_run_single_threaded_blas(illustrative_problem):
+    """Worker processes run BLAS and OpenMP on one thread each, so n workers use n
+    cores, while this process's environment stays as it was."""
+    before = dict(os.environ)
+    configurations = configurations_of(
+        {"threads": thread_reporting_sampling}, n_evaluations=2, n_initial=1
+    )
+
+    with pytest.warns(UserWarning, match="threads") as caught:
+        hb.study(
+            configurations, illustrative_problem, ex.measure, SETTINGS, n_workers=2
+        )
+
+    single_threaded = str({name: "1" for name in THREAD_VARIABLES})
+    assert [str(w.message) for w in caught] == [f"threads: {single_threaded}"] * 2
+    assert dict(os.environ) == before
 
 
 # The oracle optimum
