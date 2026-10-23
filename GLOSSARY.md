@@ -146,8 +146,9 @@ _Avoid_: re-solve, fixed-x evaluation
 ### Bayesian optimization
 
 **Experiment**:
-A problem, how it is measured, and the methods to compare, stated together so they can
-be run as studies: "the flash unit experiment". Each time it is run it gives a new study.
+A problem, how it is measured, and the configurations to compare, stated together so
+they can be run as studies: "the flash unit experiment". Each time it is run it gives a
+new study.
 _Avoid_: example, case, test case, application
 
 **Benchmark experiment**:
@@ -156,13 +157,29 @@ methods, so its studies can be scored: oracle incumbents, and regret if the orac
 optimum is stated.
 _Avoid_: test case, toy problem
 
+**Configuration**:
+A method with its own evaluation budget, labeled in a study. One method can have
+several configurations, with different settings or budgets.
+_Avoid_: variant, arm
+
+**Evaluation budget** (`n_evaluations`):
+How many evaluations a run of a configuration makes in all, its initial points
+(`n_initial`) included; the rest are iterations.
+_Avoid_: horizon, total iterations
+
+**Initial fraction** (ε):
+The share of the evaluation budget spent on initial points, `n_initial /
+n_evaluations`.
+
 **Run**:
 One complete optimization from the initial points to the end of the optimization loop.
 Runs are repeated with different seeds for statistics.
 
 **Study**:
-A collection of runs of an experiment's methods, where run i of every
-method starts from the same initial points. The unit that is saved, loaded and analyzed.
+A collection of runs of an experiment's configurations, where run i of every
+configuration with the same number of initial points starts from the same initial
+points. The number of runs and the seed are the same for every configuration. The unit
+that is saved, loaded and analyzed.
 _Avoid_: benchmark, experiment, results, batch
 
 **Artifact**:

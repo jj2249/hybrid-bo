@@ -152,7 +152,7 @@ measured:
 - don't pass ``optimum`` or ``true_curves`` to the command line (below).
 
 The measurement is called once per evaluation, so its cost sets the cost of the
-study: ``n_runs * (n_initial + n_iterations)`` calls per method.
+study: ``n_runs * n_evaluations`` calls per configuration (below).
 
 Methods and settings
 --------------------
@@ -164,7 +164,7 @@ with ``functools.partial``:
 .. literalinclude:: ../experiments/illustrative_example.py
    :language: python
    :start-at: # The prior GP
-   :end-before: # The study
+   :end-before: # Configurations
 
 - :py:func:`~hybrid_bo.bo.hybrid_bo` with
   :py:class:`~hybrid_bo.settings.HybridBOSettings`: the prior GP (``gp``; see
@@ -216,6 +216,43 @@ different settings:
            ),
        ),
    }
+
+Configurations
+--------------
+
+A *configuration* is a method with its own evaluation budget:
+:py:class:`~hybrid_bo.studies.Configuration` takes the method, ``n_evaluations``,
+the evaluations of a run in all, and ``n_initial``, how many of them are initial
+points. The rest, ``n_evaluations - n_initial``, are iterations (design points for
+the baselines). Neither has a default, and ``n_initial`` must be at least 1 and at
+most ``n_evaluations``. A study runs ``configurations``, which maps a label to a
+configuration; the shipped experiments give every method the same budget:
+
+.. literalinclude:: ../experiments/illustrative_example.py
+   :language: python
+   :start-at: # Configurations
+   :end-before: # The study
+
+To compare splits of one budget between initial points and iterations, give one
+method several configurations, e.g. *initial fractions* ε = ``n_initial /
+n_evaluations`` of 0.2 and 0.5:
+
+.. code-block:: python
+
+   configurations = {
+       f"hybrid_bo_{n_initial}": hb.Configuration(
+           method=methods["hybrid_bo"], n_evaluations=20, n_initial=n_initial
+       )
+       for n_initial in (4, 10)
+   }
+
+Run ``i`` of every configuration with the same ``n_initial`` starts from the same
+initial points. A BO method doesn't depend on how many evaluations it has left, so
+with the same seed and ``n_initial`` a run with a larger budget passes through the
+same first evaluations as one with a smaller budget: the longest run gives the regret
+of every smaller budget. The baselines draw their whole design at the start, so Latin
+hypercube sampling doesn't have this property, and uniform sampling has it only
+without measurement noise.
 
 The GP
 ------
@@ -269,8 +306,9 @@ The study and the command line
 ------------------------------
 
 ``study_settings`` (:py:class:`~hybrid_bo.studies.StudySettings`) are the study's
-defaults, which the command-line flags override: the number of runs of each method,
-initial points per run and iterations per run, and the seed. Every random draw comes
+defaults, which the command-line flags override: the number of runs of each
+configuration and the seed. Both are the same for every configuration, so the runs
+are paired. Every random draw comes
 from the seed, so the same seed gives the same study; ``None`` draws a fresh one, which
 the saved study keeps.
 
@@ -291,7 +329,7 @@ For your own system, leave out ``optimum`` and ``true_curves``:
 .. code-block:: python
 
    if __name__ == "__main__":
-       cli.main("my_experiment", problem, measure, methods, study_settings)
+       cli.main("my_experiment", problem, measure, configurations, study_settings)
 
 ``true_curves=True`` draws the true curves in the iteration figures by running the
 measurement on a grid, so use it only with an oracle.
@@ -301,7 +339,7 @@ Running
 
 .. code-block:: bash
 
-   pixi run experiment my_experiment --n-runs 1 --n-iterations 2   # a quick check first
+   pixi run experiment my_experiment --n-runs 1   # a quick check first
    pixi run experiment my_experiment --plot
    pixi run plot my_experiment
 
@@ -313,7 +351,7 @@ yourself (the library never writes files unless asked):
 
 .. code-block:: python
 
-   study = hb.study(methods, problem, measure, study_settings, optimum=optimum)
+   study = hb.study(configurations, problem, measure, study_settings, optimum=optimum)
    hb.save(study, "results/my_experiment/first-try")
 
 or run one method once, from initial points drawn with

@@ -156,10 +156,14 @@ def legend_labels(figure: Figure) -> list[str]:
 
 
 def fake_run(
-    method: str, index: int, f: list[float], f_oracle: list[float] | None
+    method: str,
+    index: int,
+    f: list[float],
+    f_oracle: list[float] | None,
+    n_initial: int = 2,
 ) -> Run:
-    """A run of one decision variable, after 2 initial points, with these measured
-    and oracle objective values."""
+    """A run of one decision variable, after `n_initial` initial points, with these
+    measured and oracle objective values."""
     n = len(f)
     history = History(
         u=np.zeros((n, 1)),
@@ -169,14 +173,14 @@ def fake_run(
         x_oracle=None if f_oracle is None else np.zeros((n, 1)),
         y_oracle=None if f_oracle is None else np.zeros((n, 1)),
         f_oracle=None if f_oracle is None else np.array(f_oracle),
-        n_initial=2,
+        n_initial=n_initial,
     )
     return Run(history, artifact={"method": method}, method=method, index=index)
 
 
 def fake_study(runs: list[Run], artifact: dict[str, str] | None = None) -> Study:
-    """A study of these runs, 2 initial points and 2 iterations each."""
-    settings = StudySettings(n_runs=2, n_initial=2, n_iterations=2, seed=0)
+    """A study of these runs, two of each method."""
+    settings = StudySettings(n_runs=2, seed=0)
     return Study(tuple(runs), settings, "fake", artifact or {})
 
 
@@ -212,6 +216,22 @@ def test_convergence_draws_the_median_oracle_incumbent_with_its_iqr():
     assert [text.get_text() for text in legend.get_texts()] == ["a"]
     assert ax.get_ylabel() == "oracle incumbent"
     assert has_grid(ax)
+    plt.close("all")
+
+
+def test_convergence_marks_the_end_of_each_number_of_initial_points():
+    """Configurations with different numbers of initial points each get a dotted line
+    after their initial points; configurations that share one share the line."""
+    f = [3.0, 1.0, 2.0, 1.5]
+    runs = [
+        fake_run(label, 0, f, None, n_initial)
+        for label, n_initial in (("a", 2), ("b", 3), ("c", 2))
+    ]
+
+    ax = plots.convergence(fake_study(runs))
+
+    dotted = [line for line in ax.get_lines() if line.get_linestyle() == ":"]
+    assert sorted(np.asarray(line.get_xdata())[0] for line in dotted) == [2.5, 3.5]
     plt.close("all")
 
 

@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- **Breaking:** Configurations (#144): `hb.Configuration(method=..., n_evaluations=...,
+  n_initial=...)` is a method with its own evaluation budget, initial points
+  included, so one study can compare splits of a budget. `StudySettings` keeps only
+  `n_runs` and `seed`; `hb.study` and `cli.main` take a mapping of labels to
+  configurations instead of methods, and `hb.repeat` a configuration.
+  `StudySettings(n_runs=10, n_initial=2, n_iterations=5)` with `methods` becomes
+  `StudySettings(n_runs=10)` with `{label: hb.Configuration(method=method,
+  n_evaluations=7, n_initial=2) for label, method in methods.items()}`. Each run of a
+  study records its configuration's budget (`Run.n_evaluations`, saved; studies saved
+  before load with their one budget in every run), `summary` counts failed runs
+  against each run's budget, and `convergence` and `regret` mark the end of each
+  number of initial points. The experiment CLI drops `--n-iterations`, and the study log
+  names each configuration with its budget. Results are unchanged.
 - **Breaking:** Defaults never choose the method (#140, ADR 0009): `acquisition` of
   `HybridBOSettings` and `StandardBOSettings`, `approximation` of `HybridBOSettings`
   and of `hybrid_acquisition`, `n_scenarios` of `SAA` and `SoftSAA`, `std_factor` of

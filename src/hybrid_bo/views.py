@@ -123,25 +123,40 @@ def evaluations(study: Study, optimum: float | None = None) -> "pl.DataFrame":
 
 
 def summary(study: Study) -> "pl.DataFrame":
-    """One row per method, in the study's order, with columns:
+    """One row per configuration, in the study's order, with columns:
 
-    - `method`, `runs` (the runs in the study) and `failed` (the runs of the
-      settings that didn't finish: those that stopped short, which are among
-      `runs`, and those that left nothing to keep, which are not);
+    - `method` (the configuration's label), `runs` (the runs in the study) and
+      `failed` (the runs of the settings that didn't make every evaluation of their
+      budget, `run.n_evaluations`: those that stopped short, which are among `runs`,
+      and those that left nothing to keep, which are not);
     - `<value>_median` and `<value>_iqr` (interquartile range, with numpy's default
       linear quantiles) over the study's runs, short ones included, of the final
       `incumbent`, `oracle_incumbent` and `regret`, as in `evaluations` (null
       where those are null).
 
-    A method none of whose runs left anything has no row. Raises `ImportError` without Polars.
+    A configuration none of whose runs left anything has no row. Raises `ImportError`
+    without Polars.
     """
     pl = _polars()
     settings = study.settings
 
-    # The last evaluation of each run; a run that finished has every evaluation
-    finals = evaluations(study).group_by("method", "run", maintain_order=True).last()
-    n_evaluations = settings.n_initial + settings.n_iterations
-    finished = (pl.col("evaluation") == n_evaluations).sum().cast(pl.Int64)
+    # The last evaluation of each run, with its budget; a run that finished has every
+    # evaluation of its budget
+    budgets = pl.DataFrame(
+        {
+            "method": [run.method for run in study.runs],
+            "run": [run.index for run in study.runs],
+            "n_evaluations": [run.n_evaluations for run in study.runs],
+        },
+        schema_overrides={"n_evaluations": pl.Int64},
+    )
+    finals = (
+        evaluations(study)
+        .group_by("method", "run", maintain_order=True)
+        .last()
+        .join(budgets, on=["method", "run"], how="left", maintain_order="left")
+    )
+    finished = (pl.col("evaluation") == pl.col("n_evaluations")).sum().cast(pl.Int64)
 
     def spread(name: str) -> list["pl.Expr"]:
         """The median and interquartile range of a column."""
@@ -149,7 +164,8 @@ def summary(study: Study) -> "pl.DataFrame":
         iqr = column.quantile(0.75, "linear") - column.quantile(0.25, "linear")
         return [column.median().alias(f"{name}_median"), iqr.alias(f"{name}_iqr")]
 
-    # Per method: failed counts against the settings, so runs that left nothing count
+    # Per configuration: failed counts against the settings, so runs that left
+    # nothing count
     return finals.group_by("method", maintain_order=True).agg(
         pl.len().cast(pl.Int64).alias("runs"),
         (settings.n_runs - finished).alias("failed"),

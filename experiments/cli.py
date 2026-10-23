@@ -3,19 +3,19 @@
 An experiment ends with a call that passes everything it defines:
 
     if __name__ == "__main__":
-        cli.main("illustrative_example", problem, measure, methods, study_settings,
-                 optimum=optimum, true_curves=True)
+        cli.main("illustrative_example", problem, measure, configurations,
+                 study_settings, optimum=optimum, true_curves=True)
 
 and the pixi tasks run the script as a module from this folder:
 
     pixi run experiment illustrative_example [--method hybrid_bo ...] [--n-runs 3]
-        [--seed 0] [--n-iterations 5] [--name lcb-vs-ei] [--plot] [--plot-runs 0 3]
-        [--require-clean]
+        [--seed 0] [--name lcb-vs-ei] [--plot] [--plot-runs 0 3] [--require-clean]
     pixi run plot illustrative_example [STUDY]
     pixi run experiment illustrative_example plot [STUDY] [--plot-runs all]
 
 Running saves the study with `hb.save` to `<results root>/<experiment>/<study id>/` (the
-results root defaults to `results/` at the repo root), where the study id is `--name`
+results root defaults to `results/` at the repo root), running each configuration
+with its own budget (there is no flag for it), where the study id is `--name`
 or the UTC time at the start, and prints `hb.summary` of it and saves it as
 `summary.csv` there. Before anything runs, the study id is reserved by creating the
 study log, `<study id>.log`, beside the study folders; an id is taken if that log or
@@ -48,7 +48,6 @@ import polars as pl
 import hybrid_bo as hb
 from hybrid_bo.run import code_version, is_clean
 from hybrid_bo.saving import ARTIFACT_FILE, OLD_ARTIFACT_FILE
-from hybrid_bo.studies import Method
 
 RESULTS_ROOT = Path(__file__).parent.parent / "results"
 ARTIFACTS = (ARTIFACT_FILE, OLD_ARTIFACT_FILE)
@@ -63,17 +62,18 @@ def main(
     name: str,
     problem: hb.Problem,
     measure: hb.Measure,
-    methods: Mapping[str, Method],
+    configurations: Mapping[str, hb.Configuration],
     study_settings: hb.StudySettings,
     *,
     optimum: float | None = None,
     true_curves: bool = False,
     argv: Sequence[str] | None = None,
 ) -> None:
-    """Runs the experiment's methods as a study and saves it, or plots a saved study,
-    as the command line (`argv`, default `sys.argv`) says.
+    """Runs the experiment's configurations as a study and saves it, or plots a saved
+    study, as the command line (`argv`, default `sys.argv`) says.
 
-    `name` names the study and its folder. `study_settings` are the defaults the
+    `name` names the study and its folder. `--method` chooses configurations by their
+    labels, each run with its own budget. `study_settings` are the defaults the
     flags override. `optimum` is the stated oracle optimum of a benchmark experiment,
     which regret is measured from. `true_curves` draws the measurement's values over the
     grid in the iteration figures, which only a cheap measurement (an oracle) can
@@ -82,7 +82,7 @@ def main(
     # The command: `plot [STUDY]`, else a run with every argument
     args = list(sys.argv[1:] if argv is None else argv)
     command, rest = ("plot", args[1:]) if args[:1] == ["plot"] else ("run", args)
-    parsers = _parsers(name, methods)
+    parsers = _parsers(name, configurations)
     parsed = parsers[command].parse_args(rest)
     experiment_dir = _from_init_cwd(parsed.results_root) / name
 
@@ -94,16 +94,14 @@ def main(
             parsers["run"].error(f"the code version {version} isn't clean")
 
         # The experiment's settings, overridden by the flags given
-        given = {
-            "n_runs": parsed.n_runs,
-            "seed": parsed.seed,
-            "n_iterations": parsed.n_iterations,
-        }
+        given = {"n_runs": parsed.n_runs, "seed": parsed.seed}
         settings = replace(
             study_settings,
             **{key: value for key, value in given.items() if value is not None},
         )
-        chosen = {label: methods[label] for label in parsed.methods or methods}
+        chosen = {
+            label: configurations[label] for label in parsed.methods or configurations
+        }
 
         # Reserve the study id: a taken name is refused, a taken UTC time suffixed
         default_id = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
@@ -167,28 +165,28 @@ def main(
 
 
 def _parsers(
-    name: str, methods: Mapping[str, Method]
+    name: str, configurations: Mapping[str, hb.Configuration]
 ) -> dict[str, argparse.ArgumentParser]:
     """The parsers of the two commands, by name: `run` (the default) and `plot`."""
     # Running, `pixi run experiment <name>`
     run_parser = argparse.ArgumentParser(
         prog=f"pixi run experiment {name}",
-        description=f"Run the methods of {name} as a study and save it.",
+        description=f"Run the configurations of {name} as a study and save it.",
         epilog=f"To plot a saved study instead: pixi run plot {name} [STUDY]",
     )
     run_parser.add_argument(
         "--method",
         action="append",
         dest="methods",
-        choices=list(methods),
+        choices=list(configurations),
         metavar="METHOD",
-        help=f"a method to run (repeatable): {', '.join(methods)}; default every one",
+        help=(
+            f"a configuration to run, by its label (repeatable): "
+            f"{', '.join(configurations)}; default every one"
+        ),
     )
     run_parser.add_argument("--n-runs", type=int, help="default: the experiment's")
     run_parser.add_argument("--seed", type=int, help="default: the experiment's")
-    run_parser.add_argument(
-        "--n-iterations", type=int, help="default: the experiment's"
-    )
     run_parser.add_argument("--name", help="the study id; default: the UTC time")
     run_parser.add_argument("--plot", action="store_true", help="plot after running")
     _add_plot_runs(run_parser, " (implies --plot)")

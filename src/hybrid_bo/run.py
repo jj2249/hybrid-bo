@@ -26,10 +26,13 @@ class Run:
     Holds only data (arrays, numbers, strings and frozen dataclasses of them), never
     the problem or any user callable, so it saves as JSON (`hb.save`) and loads
     without the code that produced it (ADR 0003, ADR 0004).
-    `method` is the label the run was run under: the key in the study's methods, or
-    the method's name when run on its own. `index` is its position among that
-    method's runs in a study, so run i of every method starts from the same initial
-    points. `surrogates` has one fitted surrogate model per iteration, the one behind
+    `method` is the label the run was run under: the key of its configuration in the
+    study, or the method's name when run on its own. `index` is its position among
+    that configuration's runs in a study, so run i of every configuration with the
+    same number of initial points starts from the same initial points.
+    `n_evaluations` is its configuration's evaluation budget, initial points
+    included, which a run that stopped short didn't reach; None for a run made
+    outside a study. `surrogates` has one fitted surrogate model per iteration, the one behind
     that iteration's trial point: a tuple of one fitted GP per unknown state, in the
     order of the system's y, for hybrid BO, and a 1-tuple of the GP of f for standard
     BO. `acquisitions` has the solution of that iteration's acquisition problem;
@@ -48,6 +51,7 @@ class Run:
     acquisitions: list[AcquisitionSolution] = field(default_factory=list)
     scenarios: Scenarios | None = None
     settings: MethodSettings | None = None
+    n_evaluations: int | None = None
 
 
 def _git(path: Path, *args: str) -> str:

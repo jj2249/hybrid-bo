@@ -25,6 +25,7 @@ USER_FACING = {
     "latin_hypercube_sampling",
     "uniform_sampling",
     # Run a study, and save and load it
+    "Configuration",
     "StudySettings",
     "Study",
     "repeat",

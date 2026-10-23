@@ -41,5 +41,5 @@ from hybrid_bo.run import Run
 from hybrid_bo.sampling import initial_points
 from hybrid_bo.saving import load, save
 from hybrid_bo.settings import HybridBOSettings, StandardBOSettings
-from hybrid_bo.studies import Study, StudySettings, repeat, study
+from hybrid_bo.studies import Configuration, Study, StudySettings, repeat, study
 from hybrid_bo.views import evaluations, hyperparameters, summary

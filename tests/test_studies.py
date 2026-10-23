@@ -16,7 +16,18 @@ import pytest
 
 import hybrid_bo as hb
 
-SETTINGS = hb.StudySettings(n_runs=2, n_initial=2, n_iterations=1, seed=0)
+SETTINGS = hb.StudySettings(n_runs=2, seed=0)
+N_INITIAL = 2  # the illustrative study's initial points, then one iteration
+
+
+def configurations_of(methods, *, n_evaluations, n_initial):
+    """Each method by its label, as a configuration with the same budget."""
+    return {
+        label: hb.Configuration(
+            method=method, n_evaluations=n_evaluations, n_initial=n_initial
+        )
+        for label, method in methods.items()
+    }
 
 
 def assert_same(actual, expected, where="study"):
@@ -67,13 +78,45 @@ def history_of(n: int) -> hb.History:
 def illustrative_study() -> hb.Study:
     """Every method of the illustrative example, 2 runs of 1 iteration from seed 0."""
     return hb.study(
-        ex.methods,
+        configurations_of(ex.methods, n_evaluations=N_INITIAL + 1, n_initial=N_INITIAL),
         ex.problem,
         ex.measure,
         SETTINGS,
         name="illustrative_example",
         optimum=ex.optimum,
     )
+
+
+# Configurations
+
+
+# `parametrize` runs the test once per pair of values, each as its own test case
+@pytest.mark.parametrize(("n_evaluations", "n_initial"), [(5, 2), (2, 2), (1, 1)])
+def test_a_configuration_takes_a_budget_with_initial_points_inside_it(
+    n_evaluations, n_initial
+):
+    """A configuration's budget may be spent on initial points alone, but needs at
+    least one."""
+    configuration = hb.Configuration(
+        method=hb.uniform_sampling, n_evaluations=n_evaluations, n_initial=n_initial
+    )
+
+    assert configuration.n_evaluations == n_evaluations
+
+
+@pytest.mark.parametrize(("n_evaluations", "n_initial"), [(5, 0), (2, 3), (0, 0)])
+def test_a_configuration_rejects_initial_points_outside_its_budget(
+    n_evaluations, n_initial
+):
+    """No initial points, or more than the budget, raises `ValueError`."""
+    # `pytest.raises` passes only if the block raises this exception, with a message
+    # matching `match`
+    with pytest.raises(ValueError, match="n_initial"):
+        hb.Configuration(
+            method=hb.uniform_sampling,
+            n_evaluations=n_evaluations,
+            n_initial=n_initial,
+        )
 
 
 # Running a study
@@ -89,7 +132,7 @@ def test_study_gives_the_runs_of_each_method_from_spawned_generators(
         runs = [run for run in illustrative_study.runs if run.method == name]
         assert [run.index for run in runs] == [0, 1]
         for run, rng in zip(runs, np.random.default_rng(0).spawn(2), strict=True):
-            u = hb.initial_points(ex.system.u, SETTINGS.n_initial, rng)
+            u = hb.initial_points(ex.system.u, N_INITIAL, rng)
             expected = method(ex.problem, ex.measure, u, 1, rng=rng)
             assert_same(run.history, expected.history, f"{name} run {run.index}")
 
@@ -100,7 +143,7 @@ def test_run_i_of_every_method_starts_from_the_same_initial_points(
     """The methods share generators, so run i of each has the same initial points."""
     for index in range(SETTINGS.n_runs):
         initial = [
-            run.history.u[: SETTINGS.n_initial]
+            run.history.u[:N_INITIAL]
             for run in illustrative_study.runs
             if run.index == index
         ]
@@ -109,6 +152,89 @@ def test_run_i_of_every_method_starts_from_the_same_initial_points(
             np.testing.assert_array_equal(u, initial[0])
     run_0, run_1 = illustrative_study.runs[:2]
     assert not np.array_equal(run_0.history.u, run_1.history.u)
+
+
+def test_configurations_with_their_own_budgets_run_save_and_load(
+    illustrative_problem, tmp_path
+):
+    """Each configuration runs its own budget, which each of its runs records and
+    saving round-trips; run i of the configurations with the same `n_initial` starts
+    from the same initial points."""
+    # Setup: one method under three budgets, two of them with 2 initial points
+    budgets = {"short": (3, 2), "long": (5, 2), "more_initial": (5, 3)}
+    configurations = {
+        label: hb.Configuration(
+            method=hb.uniform_sampling, n_evaluations=n_evaluations, n_initial=n_initial
+        )
+        for label, (n_evaluations, n_initial) in budgets.items()
+    }
+
+    # Act: run the study, then save and load it
+    study = hb.study(configurations, illustrative_problem, ex.measure, SETTINGS)
+    loaded = hb.load(hb.save(study, tmp_path / "study"))
+
+    # Check: every loaded run has its configuration's evaluations and initial points,
+    # and records its budget
+    runs = {(run.method, run.index): run for run in loaded.runs}
+    for (label, _), run in runs.items():
+        n_evaluations, n_initial = budgets[label]
+        assert len(run.history.u) == n_evaluations
+        assert run.history.n_initial == n_initial
+        assert run.n_evaluations == n_evaluations
+    assert_same(loaded, study)
+
+    # Check: run i shares its initial points with the same n_initial only
+    for index in range(SETTINGS.n_runs):
+        short, long = runs["short", index].history, runs["long", index].history
+        np.testing.assert_array_equal(short.u[:2], long.u[:2])
+        more_initial = runs["more_initial", index].history
+        assert not np.array_equal(more_initial.u[:2], short.u[:2])
+
+
+# The illustrative example's prior GP with a known noise of 0.01
+NOISY_GP = dataclasses.replace(ex.gp, noise_std=0.01)
+
+
+@pytest.mark.parametrize(
+    "method",
+    [
+        functools.partial(
+            hb.hybrid_bo,
+            settings=hb.HybridBOSettings(
+                gp=NOISY_GP,
+                acquisition=hb.EI(),
+                approximation=hb.SAA(n_scenarios=5, unknown_states_as_variables=False),
+            ),
+        ),
+        functools.partial(
+            hb.standard_bo,
+            settings=hb.StandardBOSettings(gp=NOISY_GP, acquisition=hb.EI()),
+        ),
+    ],
+    ids=["hybrid_bo", "standard_bo"],
+)
+def test_a_larger_budget_passes_through_the_evaluations_of_a_smaller_one(method):
+    """The prefix property: a BO method doesn't depend on how many evaluations it has
+    left, so with the same seed and n_initial a run of 3 iterations is the start of a
+    run of 5, its points, states, objectives, fitted GPs and acquisition solutions
+    alike. The budget sweep reads every budget's regret from the longest run. The
+    measurement is noisy, so every evaluation draws from the run's generator too."""
+    # Setup and act: one run of each budget, from the same seed
+    configurations = {
+        label: hb.Configuration(method=method, n_evaluations=n, n_initial=2)
+        for label, n in (("short", 5), ("long", 7))
+    }
+    settings = hb.StudySettings(n_runs=1, seed=0)
+    noisy = hb.oracle_measure(ex.system, ex.oracle, noise_std=0.01)
+    short, long = hb.study(configurations, ex.problem, noisy, settings).runs
+
+    # Check: the first 5 evaluations and 3 iterations of the long run are the short run
+    for field in ("u", "x", "y", "f", "x_oracle", "y_oracle", "f_oracle"):
+        expected = getattr(short.history, field)
+        assert_same(getattr(long.history, field)[:5], expected, field)
+    assert_same(long.surrogates[:3], short.surrogates, "surrogates")
+    assert_same(long.acquisitions[:3], short.acquisitions, "acquisitions")
+    assert_same(long.scenarios, short.scenarios, "scenarios")
 
 
 def test_artifact_holds_the_problem_methods_and_stated_oracle_optimum(
@@ -145,9 +271,14 @@ def test_artifact_tells_apart_methods_that_differ_only_in_their_prior_gp(
             settings=hb.StandardBOSettings(gp=noisy_gp, acquisition=hb.EI()),
         ),
     }
-    settings = hb.StudySettings(n_runs=1, n_initial=2, n_iterations=1, seed=0)
+    settings = hb.StudySettings(n_runs=1, seed=0)
 
-    study = hb.study(methods, illustrative_problem, ex.measure, settings)
+    study = hb.study(
+        configurations_of(methods, n_evaluations=3, n_initial=2),
+        illustrative_problem,
+        ex.measure,
+        settings,
+    )
 
     # Each method's entry is its settings line, then its prior GP
     noise_free, noisy = study.artifact["methods"].split("\nnoisy: ")
@@ -160,9 +291,14 @@ def test_without_a_stated_optimum_the_study_has_none(illustrative_problem):
     """The study never computes the oracle optimum, even when the measurement has an
     oracle."""
     methods = {"uniform": hb.uniform_sampling}
-    settings = hb.StudySettings(n_runs=1, n_initial=1, n_iterations=1)
+    settings = hb.StudySettings(n_runs=1)
 
-    study = hb.study(methods, illustrative_problem, ex.measure, settings)
+    study = hb.study(
+        configurations_of(methods, n_evaluations=2, n_initial=1),
+        illustrative_problem,
+        ex.measure,
+        settings,
+    )
 
     assert "oracle_optimum" not in study.artifact
 
@@ -171,18 +307,26 @@ def test_an_optimum_beaten_by_an_evaluated_point_warns(illustrative_problem):
     """A stated optimum above an evaluated point's oracle objective can't be the
     optimum, so `study` warns; the true optimum gives no warning."""
     # Two uniform points; the true optimum is about -50.46, and f is at most about 75
-    methods = {"uniform": hb.uniform_sampling}
-    settings = hb.StudySettings(n_runs=1, n_initial=1, n_iterations=1, seed=0)
+    configurations = configurations_of(
+        {"uniform": hb.uniform_sampling}, n_evaluations=2, n_initial=1
+    )
+    settings = hb.StudySettings(n_runs=1, seed=0)
 
     # `pytest.warns` fails unless the block warns with the category, matching `match`
     with pytest.warns(hb.OracleOptimumWarning, match="below the stated"):
-        hb.study(methods, illustrative_problem, ex.measure, settings, optimum=100.0)
+        hb.study(
+            configurations, illustrative_problem, ex.measure, settings, optimum=100.0
+        )
 
     # The warning turned into an error, so the test fails if it is raised
     with warnings.catch_warnings():
         warnings.simplefilter("error", hb.OracleOptimumWarning)
         hb.study(
-            methods, illustrative_problem, ex.measure, settings, optimum=ex.optimum
+            configurations,
+            illustrative_problem,
+            ex.measure,
+            settings,
+            optimum=ex.optimum,
         )
 
 
@@ -200,10 +344,10 @@ def test_two_configurations_of_one_method_keep_their_labels(illustrative_problem
             ),
         ),
     }
-    settings = hb.StudySettings(n_runs=1, n_initial=2, n_iterations=1)
+    settings = hb.StudySettings(n_runs=1)
 
     study = hb.study(
-        methods,
+        configurations_of(methods, n_evaluations=3, n_initial=2),
         illustrative_problem,
         ex.measure,
         settings,
@@ -228,10 +372,10 @@ def test_repeat_keeps_a_failed_run_as_far_as_it_got(illustrative_problem, caplog
         calls.append(u)
         return np.array([np.nan]) if len(calls) % 2 == 0 else np.sin(u)
 
-    settings = hb.StudySettings(n_runs=3, n_initial=2, n_iterations=1)
+    settings = hb.StudySettings(n_runs=3)
 
     runs = hb.repeat(
-        hb.uniform_sampling,
+        hb.Configuration(method=hb.uniform_sampling, n_evaluations=3, n_initial=2),
         illustrative_problem,
         measure,
         settings,
@@ -247,11 +391,13 @@ def test_repeat_keeps_a_failed_run_as_far_as_it_got(illustrative_problem, caplog
 def test_the_same_seed_gives_the_same_study(illustrative_problem):
     """A study is reproducible from its settings: seed None draws a seed, which the
     study's settings keep, and running again with them gives the same runs."""
-    methods = {"uniform": hb.uniform_sampling}
-    settings = hb.StudySettings(n_runs=2, n_initial=1, n_iterations=1)
+    configurations = configurations_of(
+        {"uniform": hb.uniform_sampling}, n_evaluations=2, n_initial=1
+    )
+    settings = hb.StudySettings(n_runs=2)
 
-    first = hb.study(methods, illustrative_problem, ex.measure, settings)
-    again = hb.study(methods, illustrative_problem, ex.measure, first.settings)
+    first = hb.study(configurations, illustrative_problem, ex.measure, settings)
+    again = hb.study(configurations, illustrative_problem, ex.measure, first.settings)
 
     assert first.settings.seed is not None
     assert again.settings == first.settings
@@ -325,6 +471,25 @@ def test_load_reads_a_study_saved_before_artifacts(illustrative_study, tmp_path)
     assert_same(loaded, illustrative_study)
 
 
+def test_load_reads_a_study_saved_before_configurations(illustrative_study, tmp_path):
+    """A study saved when every method had the study's budget (`n_initial` and
+    `n_iterations` in its settings, none in its runs) loads with that budget in each
+    of its runs."""
+    # Save, then rewrite the settings and the runs in the old format
+    path = hb.save(illustrative_study, tmp_path / "study")
+    data = json.loads((path / "artifact.json").read_text())
+    data["settings"] |= {"n_initial": N_INITIAL, "n_iterations": 1}
+    (path / "artifact.json").write_text(json.dumps(data))
+    for run_path in data["runs"]:
+        run_data = json.loads((path / run_path).read_text())
+        del run_data["n_evaluations"]
+        (path / run_path).write_text(json.dumps(run_data))
+
+    loaded = hb.load(path)
+
+    assert_same(loaded, illustrative_study)
+
+
 def test_a_saved_run_holds_its_artifact(illustrative_study, tmp_path):
     """A saved run's JSON has the run's artifact under `artifact`, and no `record`,
     and loading gives the artifact back."""
@@ -376,8 +541,13 @@ def test_a_loaded_run_draws_its_iterations_with_its_own_gp(tmp_path):
         gp=gp, acquisition=hb.EI(), approximation=approximation
     )
     methods = {"noisy": functools.partial(hb.hybrid_bo, settings=settings)}
-    study_settings = hb.StudySettings(n_runs=1, n_initial=2, n_iterations=2, seed=0)
-    study = hb.study(methods, ex.problem, ex.measure, study_settings)
+    study_settings = hb.StudySettings(n_runs=1, seed=0)
+    study = hb.study(
+        configurations_of(methods, n_evaluations=4, n_initial=2),
+        ex.problem,
+        ex.measure,
+        study_settings,
+    )
     (run,) = hb.load(hb.save(study, tmp_path / "study")).runs
 
     # Act: every iteration's figure, from the loaded run alone
@@ -433,8 +603,13 @@ def test_a_loaded_study_draws_every_bo_method_from_its_stored_settings(tmp_path)
         label: functools.partial(hb.hybrid_bo, settings=settings)
         for label, settings in hybrid.items()
     } | {"standard": functools.partial(hb.standard_bo, settings=standard)}
-    study_settings = hb.StudySettings(n_runs=1, n_initial=2, n_iterations=1, seed=0)
-    study = hb.study(methods, ex.problem, ex.measure, study_settings)
+    study_settings = hb.StudySettings(n_runs=1, seed=0)
+    study = hb.study(
+        configurations_of(methods, n_evaluations=3, n_initial=2),
+        ex.problem,
+        ex.measure,
+        study_settings,
+    )
     loaded = hb.load(hb.save(study, tmp_path / "study"))
 
     # Act: iteration 0 of every run, with the acquisition panel alone

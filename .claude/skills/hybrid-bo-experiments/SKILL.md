@@ -19,13 +19,16 @@ on top.
 An experiment is one module under `experiments/`, importable as a top-level module
 (pytest and ty put `experiments/` on the path). At module level, in this order:
 Problem, measurement (with a module-level `def oracle(v)` and the stated `optimum` for
-a benchmark), the BO methods' prior GP (`gp`), `methods`, `study_settings`, then a
-`__main__` block calling `cli.main`.
+a benchmark), the BO methods' prior GP (`gp`), `methods`, `configurations` (each
+method as an `hb.Configuration(method=..., n_evaluations=..., n_initial=...)`, the
+shipped experiments giving every method the same budget), `study_settings`
+(`hb.StudySettings(n_runs=..., seed=...)`), then a `__main__` block calling
+`cli.main` with `configurations`.
 
 - Everything the command line uses is passed in the `cli.main` call (directly, or
   inside `problem` and `measure`); nothing is read from the module by name.
 - Importing the module runs nothing, so `tests/test_regression.py` reuses the
-  illustrative example's `problem`, `measure`, `methods` and `study_settings`, and
+  illustrative example's `problem`, `measure`, `methods` and `configurations`, and
   `tests/conftest.py`'s `illustrative_problem` fixture is its `problem`. Changing the
   illustrative experiment's problem, measurement or settings moves the regression
   baselines: that is a *logic* change.
@@ -43,7 +46,8 @@ a benchmark), the BO methods' prior GP (`gp`), `methods`, `study_settings`, then
   `hb.SoftSAA` (with `temperature`), and `noise_std` on `hb.oracle_measure` and
   `hb.gp.GP`. Search effort and numerics keep defaults (`n_starts`, `n_starts_gp`,
   the solver, `jitter`, kernel priors, `ard`, `unknown_states_as_variables=True`). The
-  settings and choice dataclasses, `GP` and `StudySettings` are keyword-only:
+  settings and choice dataclasses, `GP`, `Configuration` and `StudySettings` are
+  keyword-only:
   `hb.SoftSAA(temperature=1e-6, n_scenarios=25, unknown_states_as_variables=False)`.
   Leaving one out, or passing one by position, raises `TypeError`.
 - Define the GP once as a module-level `gp`, each fitted
@@ -56,10 +60,15 @@ a benchmark), the BO methods' prior GP (`gp`), `methods`, `study_settings`, then
 
 ## Randomness
 
-Every draw of a study comes from `settings.seed`. Run `i` of every method gets the
-`i`th child of the seed, so run `i` of each method starts from the same initial points.
-Within `hb.repeat`, run `i` draws `hb.initial_points(system.u, n_initial, rng)` and
-runs the method, both from that generator. Outside a study, do the same by hand:
+Every draw of a study comes from `settings.seed`. Run `i` of every configuration gets
+the `i`th child of the seed, so run `i` of each configuration with the same `n_initial`
+starts from the same initial points. Within `hb.repeat`, run `i` draws
+`hb.initial_points(system.u, n_initial, rng)` and runs the method for `n_evaluations -
+n_initial` iterations, both from that generator. A BO run with a larger budget passes
+through the same first evaluations as one with a smaller budget (the prefix property),
+so a budget sweep needs one configuration per `n_initial`, at the largest budget; the
+baselines draw their whole design first: Latin hypercube sampling lacks it, and
+uniform sampling has it only with a measurement that draws nothing. Outside a study, do the same by hand:
 `np.random.default_rng(seed).spawn(n_runs)`, and draw nothing else from a run's
 generator.
 
@@ -96,10 +105,13 @@ oracle objective is below it.
 
 ## Running
 
-    pixi run experiment <name> [--method M ...] [--n-runs 10] [--seed 0] [--n-iterations 5] [--name ID] [--plot] [--plot-runs 0 3] [--require-clean]
+    pixi run experiment <name> [--method M ...] [--n-runs 10] [--seed 0] [--name ID] [--plot] [--plot-runs 0 3] [--require-clean]
     pixi run plot <name> [STUDY]
     pixi run experiment <name> plot [STUDY] [--plot-runs all] [--results-root DIR]
 
+`--method` takes configuration labels. There is no `--n-iterations`: budgets belong
+to configurations, so change them in the experiment (tests define small test
+experiments, as `tests/test_cli.py`'s `small` does).
 The tasks run `python -m <name>` from `experiments/` in the `experiments` environment.
 No command lists every experiment, and a typo in the name fails with "No module named
 ...". A relative `--results-root` is relative to where pixi was started (`INIT_CWD`),

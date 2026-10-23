@@ -25,7 +25,7 @@ ARTIFACT = {
     "y": "Var(name='rate', lower=-inf, upper=inf, start=(0.0, 1.0))",
     "oracle_optimum": repr(OPTIMUM),
 }
-SETTINGS = hb.StudySettings(n_runs=2, n_initial=2, n_iterations=2, seed=0)
+SETTINGS = hb.StudySettings(n_runs=2, seed=0)
 
 
 def history(f: list[float], f_oracle: list[float] | None) -> hb.History:
@@ -64,14 +64,15 @@ def surrogate(lengthscale: list[float]) -> FittedGP:
 
 
 def bo_run(index: int, f: list[float], f_oracle: list[float]) -> hb.Run:
-    """A standard BO run with one surrogate (one GP, of f) and acquisition solution
-    per iteration."""
+    """A standard BO run of a budget of 4 evaluations, with one surrogate (one GP, of
+    f) and acquisition solution per iteration."""
     n_iterations = len(f) - 2
     return hb.Run(
         history(f, f_oracle),
         artifact={},
         method="bo",
         index=index,
+        n_evaluations=4,
         surrogates=[(surrogate([0.1 * i, 0.2 * i]),) for i in range(n_iterations)],
         acquisitions=[AcquisitionSolution(-float(i)) for i in range(n_iterations)],
         settings=hb.StandardBOSettings(
@@ -80,9 +81,18 @@ def bo_run(index: int, f: list[float], f_oracle: list[float]) -> hb.Run:
     )
 
 
-def baseline_run(index: int, f: list[float], f_oracle: list[float]) -> hb.Run:
-    """A baseline run: no surrogates and no acquisition solutions."""
-    return hb.Run(history(f, f_oracle), artifact={}, method="lhs", index=index)
+def baseline_run(
+    index: int, f: list[float], f_oracle: list[float], n_evaluations: int = 4
+) -> hb.Run:
+    """A baseline run of a budget of `n_evaluations`: no surrogates and no
+    acquisition solutions."""
+    return hb.Run(
+        history(f, f_oracle),
+        artifact={},
+        method="lhs",
+        index=index,
+        n_evaluations=n_evaluations,
+    )
 
 
 # Noise: the second BO run's best measured point is not its best oracle point. The
@@ -249,6 +259,22 @@ def test_summary_counts_runs_that_left_nothing_as_failed():
     assert summary["failed"].to_list() == [1]
 
 
+def test_summary_counts_failed_runs_against_each_configurations_budget():
+    """A run is finished when it has every evaluation of its own budget: with a
+    budget of only its initial points, a baseline run of 2 evaluations finished, as
+    did the BO runs, whose budget is 4."""
+    runs = (
+        *RUNS[:2],
+        baseline_run(0, [2.0, 3.0], [2.0, 3.0], n_evaluations=2),
+        baseline_run(1, [2.0, 1.0], [2.0, 1.0], n_evaluations=2),
+    )
+    study = hb.Study(runs, SETTINGS, name=None, artifact=ARTIFACT)
+
+    summary = hb.summary(study)
+
+    assert summary["failed"].to_list() == [0, 0]
+
+
 # hyperparameters
 
 
@@ -332,8 +358,11 @@ system = hb.System(
 )
 problem = hb.Problem(system, f=lambda v: v.x**2)
 measure = hb.oracle_measure(system, lambda v: [v.u], noise_std=0.0)
-settings = hb.StudySettings(n_runs=1, n_initial=2, n_iterations=1, seed=0)
-study = hb.study({"lhs": hb.latin_hypercube_sampling}, problem, measure, settings)
+settings = hb.StudySettings(n_runs=1, seed=0)
+configuration = hb.Configuration(
+    method=hb.latin_hypercube_sampling, n_evaluations=3, n_initial=2
+)
+study = hb.study({"lhs": configuration}, problem, measure, settings)
 assert "polars" not in [name for name, module in sys.modules.items() if module]
 try:
     hb.evaluations(study)

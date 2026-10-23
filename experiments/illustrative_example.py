@@ -96,9 +96,16 @@ methods = {
     "uniform_sampling": hb.uniform_sampling,
 }
 
+# Configurations: every method with the same budget, 7 evaluations, the first 2 of
+# them initial points (so 5 iterations)
+configurations = {
+    label: hb.Configuration(method=method, n_evaluations=7, n_initial=2)
+    for label, method in methods.items()
+}
+
 # The study, which the command line's flags override. Seed None draws a fresh seed,
 # which the saved study keeps, so it can be run again exactly
-study_settings = hb.StudySettings(n_runs=10, n_initial=2, n_iterations=5, seed=None)
+study_settings = hb.StudySettings(n_runs=10, seed=None)
 
 # Run or plot from the command line. The oracle measurement is cheap, so the iteration
 # figures draw its true curves
@@ -107,7 +114,7 @@ if __name__ == "__main__":
         "illustrative_example",
         problem,
         measure,
-        methods,
+        configurations,
         study_settings,
         optimum=optimum,
         true_curves=True,

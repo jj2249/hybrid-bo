@@ -56,17 +56,21 @@ def two_state_study(n_u: int, approximations: dict[str, Any]) -> hb.Study:
     """One hybrid BO run per approximation on the test system: 2 initial points, 2
     iterations."""
     problem, measure = benchmark_problem(n_u)
-    methods = {
-        label: functools.partial(
-            hb.hybrid_bo,
-            settings=hb.HybridBOSettings(
-                gp=ex.gp, acquisition=hb.EI(), approximation=approximation
+    configurations = {
+        label: hb.Configuration(
+            method=functools.partial(
+                hb.hybrid_bo,
+                settings=hb.HybridBOSettings(
+                    gp=ex.gp, acquisition=hb.EI(), approximation=approximation
+                ),
             ),
+            n_evaluations=4,
+            n_initial=2,
         )
         for label, approximation in approximations.items()
     }
-    settings = hb.StudySettings(n_runs=1, n_initial=2, n_iterations=2, seed=0)
-    return hb.study(methods, problem, measure, settings)
+    settings = hb.StudySettings(n_runs=1, seed=0)
+    return hb.study(configurations, problem, measure, settings)
 
 
 # A fixture is a value pytest builds once and passes to every test that names it as an

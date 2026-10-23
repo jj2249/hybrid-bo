@@ -33,12 +33,14 @@ learn. Run every method on it three times and plot the results:
    pixi run experiment illustrative_example --n-runs 3 --plot
 
 It takes about a minute. It runs a *study*: every method (hybrid BO, standard BO, Latin hypercube sampling and
-uniform sampling) ``n_runs`` times, run ``i`` of every method from the same initial
-points. ``pixi run experiment illustrative_example --help`` lists the flags:
+uniform sampling) ``n_runs`` times, each run 7 evaluations of which the first 2 are
+initial points, run ``i`` of every method from the same initial points. ``pixi run experiment illustrative_example --help`` lists the flags:
 
-- ``--method NAME`` runs only that method (repeat it for several; default all);
-- ``--n-runs``, ``--n-iterations`` and ``--seed`` override the experiment's study
-  settings;
+- ``--method NAME`` runs only the configuration with that label (repeat it for
+  several; default all);
+- ``--n-runs`` and ``--seed`` override the experiment's study settings. Each
+  configuration has its own budget, set in the experiment, so no flag changes the
+  number of iterations;
 - ``--name`` names the study (default the current UTC time); a name already taken
   is refused before anything runs;
 - ``--plot`` draws the figures straight after, and ``--plot-runs 0 3`` (or ``all``)

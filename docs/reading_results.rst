@@ -77,14 +77,16 @@ produced it:
    study = hb.load("results/illustrative_example/<study id>")
 
 A :py:class:`~hybrid_bo.studies.Study` holds ``runs``, ``settings``
-(:py:class:`~hybrid_bo.studies.StudySettings`), ``name`` and ``artifact``. Three
+(:py:class:`~hybrid_bo.studies.StudySettings`), ``name`` and ``artifact``; each run
+records its configuration's budget as ``n_evaluations``. Three
 functions turn it into `Polars <https://pola.rs>`_ data frames:
 
 - :py:func:`~hybrid_bo.views.evaluations`: one row per evaluation of every run, with
   the method, run, evaluation and iteration, every variable (``u_<name>``,
   ``x_<name>``, ``y_<name>``) and ``f``, their oracle values, the incumbents, the
   regret and the acquisition value.
-- :py:func:`~hybrid_bo.views.summary`: one row per method, as in ``summary.csv``.
+- :py:func:`~hybrid_bo.views.summary`: one row per configuration, as in
+  ``summary.csv``; a run failed if it stopped short of its ``n_evaluations``.
 - :py:func:`~hybrid_bo.views.hyperparameters`: the fitted GP hyperparameters of every
   iteration, for checking the GP (a lengthscale stuck at a bound, say); ``output``
   names the variable each GP models (an unknown state, or ``f`` for standard BO).

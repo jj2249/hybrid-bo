@@ -85,7 +85,7 @@ The original code was hard to change for three reasons:
   ([ADR 0005](docs/adr/0005-iteration-plots-replay-the-acquisition-problem.md)).
 - **A slim top level** (#52). `hb.*` holds what a typical script uses: `Var`, `System`,
   `Problem`, `Measure`, `oracle_measure`, `initial_points`, the methods and their
-  settings, `EI`, `LCB`, `StudySettings`, `Study`, `repeat`, `study`,
+  settings, `EI`, `LCB`, `Configuration`, `StudySettings`, `Study`, `repeat`, `study`,
   `oracle_optimum`, `save`, `load`, `Run`, `History`, `incumbents`,
   `oracle_incumbents`, `evaluations`, `summary`, `hyperparameters`, the errors and
   `plots`. Everything else is reached through its module (`hb.gp.fit_gp`,
@@ -132,12 +132,17 @@ gp = hb.gp.GP(mean=hb.gp.Zero(), kernel=hb.gp.Matern52(), noise_std=0.0)
 settings = hb.HybridBOSettings(
     gp=gp, acquisition=hb.EI(), approximation=hb.SAA(n_scenarios=25)
 )
-methods = {"hybrid_bo": functools.partial(hb.hybrid_bo, settings=settings)}
+method = functools.partial(hb.hybrid_bo, settings=settings)
 
-# Study: 10 runs, run i of every method from the same initial points; the same seed
-# gives the same study
-study_settings = hb.StudySettings(n_runs=10, n_initial=2, n_iterations=5, seed=0)
-study = hb.study(methods, problem, measure, study_settings, optimum=-50.4608)
+# Configuration: the method with its budget, 7 evaluations, the first 2 initial points
+configurations = {
+    "hybrid_bo": hb.Configuration(method=method, n_evaluations=7, n_initial=2)
+}
+
+# Study: 10 runs, run i of every configuration with the same n_initial from the same
+# initial points; the same seed gives the same study
+study_settings = hb.StudySettings(n_runs=10, seed=0)
+study = hb.study(configurations, problem, measure, study_settings, optimum=-50.4608)
 hb.save(study, "results/illustrative")
 ```
 
@@ -792,27 +797,47 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   `index` and `acquisitions`, one `AcquisitionSolution` per iteration (the
   acquisition value at the trial point and, for hybrid BO, the scenario states
   there), and keeps its full artifact.
-  `StudySettings(n_runs, n_initial, n_iterations, seed=None)`, keyword-only; every draw of a study
-  comes from the seed, so the same settings give the same study.
+  `Configuration(method, n_evaluations, n_initial)` (#144), keyword-only and with no
+  defaults, is a method with its own evaluation budget, so one study can compare
+  splits of a budget between initial points and iterations; it raises `ValueError`
+  unless 1 <= n_initial <= n_evaluations. `StudySettings(n_runs, seed=None)`,
+  keyword-only, keeps only what stays the same for every configuration, so the runs
+  stay paired; every draw of a study comes from the seed, so the same settings give
+  the same study.
   `Study(runs: tuple[Run, ...], settings, name, artifact)` is a flat collection; its
   settings hold the seed actually used (a fresh one for seed None) and its artifact
   holds the problem, measurement, methods, oracle optimum (`oracle_optimum`, when
-  stated) and versions once.
-- **Running** (#53). `hb.repeat(method, problem, measure, settings)` runs
-  one method `n_runs` times, run i from `SeedSequence(seed).spawn(n_runs)[i]`, logging
-  failed runs and keeping them as far as they got. A `Method` is called as
-  `method(problem, measure, initial_points, n, rng=rng)`.
-  `hb.study(methods, problem, measure, settings, name=None, optimum=None)`
-  resolves the seed once and gives run i of every method the same
-  generator, so the same initial points; each method's later draws come from its own
-  copy. Studies take a seed, not an `rng`, so that the settings alone reproduce a
+  stated) and versions once. A configuration's method is code, so the study can't
+  save configurations: each run records its budget instead (`run.n_evaluations`,
+  set by `repeat`; `n_initial` is in its history), and there is no separate budget
+  type, since the budget's fields belong to the configuration.
+- **Running** (#53). `hb.repeat(configuration, problem, measure, settings)` runs
+  one configuration `n_runs` times, run i from `SeedSequence(seed).spawn(n_runs)[i]`,
+  logging failed runs and keeping them as far as they got. A `Method` is called as
+  `method(problem, measure, initial_points, n, rng=rng)`, n the configuration's
+  `n_evaluations - n_initial`.
+  `hb.study(configurations, problem, measure, settings, name=None, optimum=None)`
+  resolves the seed once and gives run i of every configuration the same
+  generator, so the same initial points for the same `n_initial`; each
+  configuration's later draws come from its own copy. **The prefix property** (#144):
+  a BO method uses only the history so far and draws from its generator in a fixed
+  order, never depending on how many evaluations it has left, so a run with a larger
+  budget passes through exactly the first evaluations of one with a smaller budget,
+  given the same seed and `n_initial`. A budget sweep reads every budget's regret from
+  one run per `n_initial`; `tests/test_studies.py` locks the property in for hybrid
+  and standard BO. The baselines draw their whole design first: Latin hypercube
+  sampling lacks it, since its design depends on its size, and uniform sampling has
+  it only with a measurement that draws nothing, since the noise is drawn after the
+  design. Studies take a seed, not an `rng`, so that the settings alone reproduce a
   study and the caller's generator is never advanced as a side effect. The oracle
   optimum is stated (`optimum`), never computed (#62): a multistart search can miss
   it, and a wrong optimum silently corrupts every regret. `hb.oracle_optimum(problem,
   oracle, rng, n_starts)` helps find it once. The artifact records it, and the study warns with
   `OracleOptimumWarning` if an evaluated point's oracle objective is below it.
 - **Saving** (#53; `saving.py`). `hb.save(study, path)` writes `artifact.json`
-  (settings, name, artifact, the run files in order) and `runs/<method>/run-000.json`;
+  (settings, name, artifact, the run files in order; a study saved before #144, with
+  `n_initial` and `n_iterations` in its settings, loads with that budget as each
+  run's `n_evaluations`) and `runs/<method>/run-000.json`;
   `hb.load(path)` reads them back exactly. `save` refuses an existing folder. A
   dataclass from a closed set (a GP's parts, #119; the methods' settings and their
   parts, #120) is saved with its type's name, so a field holding one of several types
@@ -855,8 +880,9 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   another design.
 - **Entry point** (#51; revised in #65; moved to `experiments/` in #69). An
   experiment ends with an explicit call that passes everything it defines:
-  `cli.main(name, problem, measure, methods, study_settings, optimum=...,
-  true_curves=...)`.
+  `cli.main(name, problem, measure, configurations, study_settings, optimum=...,
+  true_curves=...)`. Its flags override the study settings (`--n-runs`, `--seed`);
+  budgets belong to configurations, so there is no `--n-iterations` (#144).
   `experiments/cli.py` parses the flags (run by default, or `plot [STUDY]`), overrides
   the settings and calls `hb.study` and `hb.save`, or `hb.load` and `hb.plots`.
   `pixi run experiment <name> [flags]` is `python -m <name> [flags]` run from

@@ -6,7 +6,9 @@ artifact, and the list of run files) and one file per run,
 a study saved before the artifact was named: `study.json` with a `record` key, but not
 one saved before GPs were data (ADR 0008), before runs held their settings or before
 runs had an artifact (a run's JSON with `record`, not `artifact`); a run saved with one
-fitted GP per iteration, before surrogates were tuples, loads with each as a 1-tuple.
+fitted GP per iteration, before surrogates were tuples, loads with each as a 1-tuple,
+and a study saved before configurations, with one budget in its settings, loads with it
+as each run's budget.
 Arrays are nested lists; float64 values round-trip exactly. A GP's means, kernels and
 hyperparameters, and the methods' settings and their parts, are saved with their type's
 name (`"type"`), so a field that holds one of several types (kernels, approximations)
@@ -228,9 +230,19 @@ def load(path: str | Path) -> Study:
         run_data = _with_surrogate_tuples(json.loads((path / run_path).read_text()))
         _check_format(run_data, path / run_path)
         runs.append(_decode(run_data, Run))
+
+    # A study saved before configurations: its settings' one budget is every run's
+    settings = dict(study_data["settings"])
+    if "n_iterations" in settings:
+        n_initial, n_iterations = (
+            settings.pop("n_initial"),
+            settings.pop("n_iterations"),
+        )
+        n_evaluations = n_initial + n_iterations
+        runs = [dataclasses.replace(run, n_evaluations=n_evaluations) for run in runs]
     return Study(
         tuple(runs),
-        _decode(study_data["settings"], StudySettings),
+        _decode(settings, StudySettings),
         study_data["name"],
         study_data["artifact"],
     )
