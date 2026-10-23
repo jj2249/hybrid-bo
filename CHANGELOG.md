@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Figures of an initial-fraction sweep (#146): `hb.plots.budget_heatmap` (median
+  log10 regret by budget and number of initial points, with lines of constant
+  initial fraction and the best one at each budget), `hb.plots.regret_at_budget`
+  (median regret and IQR against the initial fraction at one budget) and
+  `hb.plots.regret_by_initial_fraction` (median regret over evaluations, one line
+  per number of initial points). Each takes a study of one method and raises
+  `ValueError` otherwise. `cli.main` takes `figures`, the study figures `plot`
+  draws (default: convergence and regret, as before).
 - **Breaking:** Configurations (#144): `hb.Configuration(method=..., n_evaluations=...,
   n_initial=...)` is a method with its own evaluation budget, initial points
   included, so one study can compare splits of a budget. `StudySettings` keeps only

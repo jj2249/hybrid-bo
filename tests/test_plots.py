@@ -5,6 +5,7 @@ The plots are drawn without a window (the Agg backend, set in `conftest.py`), an
 tests read the drawn data back from the matplotlib axes by their labels.
 """
 
+import functools
 import pickle
 from collections.abc import Callable
 from dataclasses import replace
@@ -282,6 +283,224 @@ def test_regret_needs_an_oracle_and_an_optimum(f_oracle, artifact):
     study = fake_study([fake_run("a", 0, [3.0, 1.0], f_oracle)], artifact)
     with pytest.raises(ValueError, match="no regret"):
         plots.regret(study)
+
+
+# An initial-fraction sweep: one method, several numbers of initial points
+
+SWEEP_N_INITIALS = (1, 2, 4)
+SWEEP_N_EVALUATIONS = 6
+SWEEP_N_RUNS = 3
+
+
+def sweep_f(n_initial: int, index: int) -> np.ndarray:
+    """The oracle objective values of run `index` of the configuration with
+    `n_initial` initial points in `sweep_study`: positive, different for every run."""
+    rng = np.random.default_rng(10 * n_initial + index)
+    return rng.uniform(0.01, 10.0, SWEEP_N_EVALUATIONS)
+
+
+def sweep_study() -> Study:
+    """A sweep of one method over `SWEEP_N_INITIALS`, each configuration (labeled
+    `eps-<n_initial>`) with `SWEEP_N_RUNS` runs of `SWEEP_N_EVALUATIONS` evaluations,
+    measured without noise, and an oracle optimum of 0, so the regret is the running
+    minimum of `sweep_f`."""
+    runs = []
+    for n_initial in SWEEP_N_INITIALS:
+        for index in range(SWEEP_N_RUNS):
+            f = list(sweep_f(n_initial, index))
+            run = fake_run("hybrid_bo", index, f, f, n_initial)
+            runs.append(replace(run, method=f"eps-{n_initial}"))
+    return fake_study(runs, {"oracle_optimum": "0.0"})
+
+
+def sweep_regret(n_initial: int) -> np.ndarray:
+    """The regret of `sweep_study`'s runs with `n_initial` initial points, one row
+    per run, computed with numpy."""
+    rows = [sweep_f(n_initial, index) for index in range(SWEEP_N_RUNS)]
+    return np.minimum.accumulate(np.array(rows), axis=1)
+
+
+def cells(ax: Axes) -> dict[tuple[int, int], float]:
+    """The heatmap's drawn cells, by (budget, n_initial) at their centers; cells
+    without a value are left out."""
+    (mesh,) = [c for c in ax.collections if isinstance(c, QuadMesh)]
+    corners = np.asarray(mesh.get_coordinates())
+    centers = (corners[:-1, :-1] + corners[1:, 1:]) / 2
+    values = np.ma.masked_invalid(np.ma.asarray(mesh.get_array())).reshape(
+        centers.shape[:2]
+    )
+    return {
+        (round(x), round(y)): float(value)
+        for (x, y), value in zip(centers.reshape(-1, 2), values.ravel())
+        if value is not np.ma.masked
+    }
+
+
+def test_budget_heatmap_cells_are_the_median_log10_regret():
+    """A cell at budget B and n_initial initial points is the median over the runs of
+    log10 of the regret after B evaluations, and there is a cell wherever n_initial <
+    B."""
+    ax = plots.budget_heatmap(sweep_study())
+
+    # Expected: every (B, n_initial) with n_initial < B, from numpy
+    expected = {
+        (budget, n_initial): float(
+            np.median(np.log10(sweep_regret(n_initial)[:, budget - 1]))
+        )
+        for n_initial in SWEEP_N_INITIALS
+        for budget in range(n_initial + 1, SWEEP_N_EVALUATIONS + 1)
+    }
+    drawn = cells(ax)
+    assert drawn.keys() == expected.keys()
+    for key, value in expected.items():
+        assert np.isclose(drawn[key], value), key
+    assert ax.get_xlim() == (1.5, SWEEP_N_EVALUATIONS + 0.5)
+    assert ax.get_xlabel() == "evaluations (budget)"
+    assert ax.get_ylabel() == "initial points"
+    plt.close("all")
+
+
+def test_budget_heatmap_marks_the_best_initial_fraction_at_each_budget():
+    """The line of the best initial fraction passes, at each budget, through the
+    n_initial with the lowest median log10 regret; dashed lines mark constant
+    initial fractions, n_initial = ε B."""
+    ax = plots.budget_heatmap(sweep_study())
+
+    # Expected: per budget, the n_initial of the lowest median log10 regret (numpy)
+    expected = []
+    for budget in range(2, SWEEP_N_EVALUATIONS + 1):
+        medians = {
+            n_initial: np.median(np.log10(sweep_regret(n_initial)[:, budget - 1]))
+            for n_initial in SWEEP_N_INITIALS
+            if n_initial < budget
+        }
+        expected.append(min(medians, key=medians.__getitem__))
+    best = drawn_line(ax, "best initial fraction")
+    budgets = range(2, SWEEP_N_EVALUATIONS + 1)
+    np.testing.assert_array_equal(np.asarray(best.get_xdata()), budgets)
+    np.testing.assert_array_equal(np.asarray(best.get_ydata()), expected)
+
+    # The lines of constant initial fraction
+    for epsilon in (0.25, 0.5):
+        drawn = drawn_line(ax, f"ε = {epsilon:g}")
+        x = np.asarray(drawn.get_xdata())
+        np.testing.assert_allclose(np.asarray(drawn.get_ydata()), epsilon * x)
+    plt.close("all")
+
+
+def test_a_configuration_sharing_n_initial_with_a_longer_one_counts_once():
+    """Two configurations with the same n_initial (here one with a smaller budget)
+    pass through the same first evaluations, so their runs count once: the figures
+    are those of the longer configuration alone. (Counted twice, the medians would
+    stay but the quartiles would move.)"""
+    # Setup: a copy of the n_initial = 2 configuration, cut to 4 evaluations
+    study = sweep_study()
+    blocks = ("u", "x", "y", "f", "x_oracle", "y_oracle", "f_oracle")
+    shorter = [
+        replace(
+            run,
+            method="eps-2-short",
+            history=replace(
+                run.history,
+                **{name: getattr(run.history, name)[:4] for name in blocks},
+            ),
+        )
+        for run in study.runs
+        if run.method == "eps-2"
+    ]
+    with_shorter = replace(study, runs=study.runs + tuple(shorter))
+
+    # Check: the same cells and quartiles with and without the copy
+    assert cells(plots.budget_heatmap(with_shorter)) == cells(
+        plots.budget_heatmap(study)
+    )
+    np.testing.assert_array_equal(
+        band(plots.regret_at_budget(with_shorter, 4)),
+        band(plots.regret_at_budget(study, 4)),
+    )
+    plt.close("all")
+
+
+def test_regret_at_budget_draws_the_median_and_iqr_against_the_initial_fraction():
+    """At a budget B, the median regret over the runs is drawn against ε =
+    n_initial / B for every n_initial < B, the interquartile range is shaded, and
+    the y-axis is logarithmic."""
+    budget = 4
+    ax = plots.regret_at_budget(sweep_study(), budget)
+
+    # Expected: n_initial 1 and 2 (4 has no iterations at this budget), from numpy
+    n_initials = [1, 2]
+    regret = [sweep_regret(n_initial)[:, budget - 1] for n_initial in n_initials]
+    drawn = drawn_line(ax, "median")
+    np.testing.assert_allclose(np.asarray(drawn.get_xdata()), [0.25, 0.5])
+    np.testing.assert_allclose(
+        np.asarray(drawn.get_ydata()), [np.median(r) for r in regret]
+    )
+    vertices = band(ax)
+    for epsilon, values in zip([0.25, 0.5], regret):
+        lower, upper = np.quantile(values, [0.25, 0.75])
+        assert np.isclose(vertices, [epsilon, lower]).all(axis=1).any()
+        assert np.isclose(vertices, [epsilon, upper]).all(axis=1).any()
+    assert ax.get_yscale() == "log"
+    assert ax.get_xlabel() == "initial fraction ε"
+    assert ax.get_title() == "after 4 evaluations"
+    plt.close("all")
+
+
+def test_regret_at_budget_needs_runs_with_iterations_at_that_budget():
+    """A budget that no run reaches, or that every configuration spends on initial
+    points, has no regret to draw."""
+    for budget in (1, SWEEP_N_EVALUATIONS + 1):
+        with pytest.raises(ValueError, match="no regret"):
+            plots.regret_at_budget(sweep_study(), budget)
+
+
+def test_regret_by_initial_fraction_draws_one_median_line_per_n_initial():
+    """One line per n_initial, labeled with it, of the median regret over the runs
+    after each evaluation, on a log y-axis."""
+    ax = plots.regret_by_initial_fraction(sweep_study())
+
+    for n_initial in SWEEP_N_INITIALS:
+        expected = np.median(sweep_regret(n_initial), axis=0)
+        np.testing.assert_allclose(line(ax, f"n_initial = {n_initial}"), expected)
+    assert ax.get_yscale() == "log"
+    plt.close("all")
+
+
+def test_regret_by_initial_fraction_thins_the_lines():
+    """With more n_initial values than `max_lines`, an evenly spread subset is drawn,
+    the smallest and largest included."""
+    ax = plots.regret_by_initial_fraction(sweep_study(), max_lines=2)
+
+    labels = [line.get_label() for line in ax.get_lines()]
+    assert labels == ["n_initial = 1", "n_initial = 4"]
+    plt.close("all")
+
+
+@pytest.mark.parametrize(
+    "figure",
+    [
+        plots.budget_heatmap,
+        functools.partial(plots.regret_at_budget, budget=4),
+        plots.regret_by_initial_fraction,
+    ],
+)
+@pytest.mark.parametrize(
+    "other",
+    [
+        # Another method
+        {"artifact": {"method": "standard_bo"}},
+        # The same method with other settings
+        {"settings": StandardBOSettings(gp=ex.gp, acquisition=LCB(std_factor=2.0))},
+    ],
+)
+def test_sweep_figures_need_a_study_of_one_method(figure, other):
+    """A sweep's figures compare initial fractions of one method, so a study with
+    runs of another method, or of the same method with other settings, is refused."""
+    study = sweep_study()
+    stranger = replace(study.runs[0], method="other", **other)
+    with pytest.raises(ValueError, match="one method"):
+        figure(replace(study, runs=(*study.runs, stranger)))
 
 
 # The figure of one iteration
