@@ -141,7 +141,8 @@ a call to another program):
        return np.array([result.outlet_concentration])
 
 The docstring (else the function's name) is how the measurement is recorded with every
-run, so say what it measures. Without an oracle the library knows only what was
+run, so say what it measures. A measurement written as a dataclass is recorded by its
+repr instead, as the oracle simulation is. Without an oracle the library knows only what was
 measured:
 
 - there is no oracle optimum, so no regret and no ``regret.png``;

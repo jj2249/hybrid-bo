@@ -7,6 +7,8 @@ that fixture's value; `monkeypatch` is a fixture built into pytest.
 
 import importlib
 import pickle
+from pathlib import Path
+from typing import Any
 
 import casadi as cas
 import numpy as np
@@ -275,7 +277,7 @@ def test_oracle_must_give_one_value_per_unknown_state():
         oracle_measure(two_branch_problem().system, oracle=lambda v: [v.u, 2 * v.u])
 
 
-def sine_oracle(v):
+def sine_oracle(v: Any) -> list[Any]:
     """The illustrative example's oracle, y = sin(u), as a module-level function."""
     return [cas.sin(v.u)]
 
@@ -285,29 +287,34 @@ def test_oracle_simulation_pickles(illustrative_problem):
     parallel studies can send it to worker processes."""
     measure = oracle_measure(illustrative_problem.system, sine_oracle, noise_std=0.1)
 
-    copy = pickle.loads(pickle.dumps(measure))
+    unpickled = pickle.loads(pickle.dumps(measure))
 
     # The same generator state gives identical measured and oracle values
     for u in (np.array([-1.0]), np.array([0.5])):
         expected = measure(u, np.random.default_rng(3))
-        actual = copy(u, np.random.default_rng(3))
+        actual = unpickled(u, np.random.default_rng(3))
         np.testing.assert_array_equal(actual.measured, expected.measured)
         np.testing.assert_array_equal(actual.x, expected.x)
         np.testing.assert_array_equal(actual.y, expected.y)
 
 
-# `parametrize` runs the test once per experiment, with its module name as `name`
-@pytest.mark.parametrize(
-    "name",
-    ["illustrative_example", "illustrative_example_2d", "langermann", "rosenbrock"],
+# Every experiment module under experiments/ (all but the CLI)
+EXPERIMENTS = sorted(
+    path.stem
+    for path in (Path(__file__).parent.parent / "experiments").glob("*.py")
+    if path.stem not in {"__init__", "cli"}
 )
+
+
+# `parametrize` runs the test once per experiment, with its module name as `name`
+@pytest.mark.parametrize("name", EXPERIMENTS)
 def test_every_experiment_measurement_pickles(name):
     """Each experiment's measurement pickles and loads back with the same repr."""
     measure = importlib.import_module(name).measure
 
-    copy = pickle.loads(pickle.dumps(measure))
+    unpickled = pickle.loads(pickle.dumps(measure))
 
-    assert repr(copy) == repr(measure)
+    assert repr(unpickled) == repr(measure)
 
 
 def history_of(f: list[float], f_oracle: list[float] | None = None) -> History:
