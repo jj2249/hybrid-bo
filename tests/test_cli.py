@@ -28,6 +28,7 @@ from hybrid_bo import (
     initial_points,
     load,
     oracle_measure,
+    plots,
     summary,
     uniform_sampling,
 )
@@ -444,6 +445,48 @@ def test_plot_flag_plots_straight_after_the_run(tmp_path):
 
     study_dir = tmp_path / "illustrative_example" / "demo"
     assert (study_dir / "figures" / "convergence.png").exists()
+
+
+def test_an_experiment_chooses_the_study_figures(tmp_path, capsys):
+    """An experiment that passes `figures` gets those study figures, saved under
+    their names, instead of convergence and regret; one that can't be drawn is
+    skipped with a message."""
+    # Setup: a sweep of uniform sampling over 1 and 2 initial points, 4 evaluations
+    configurations = {
+        f"uniform_sampling_{n_initial}": Configuration(
+            method=uniform_sampling, n_evaluations=4, n_initial=n_initial
+        )
+        for n_initial in (1, 2)
+    }
+    figures = {
+        "budget": plots.budget_heatmap,
+        "at_budget_3": functools.partial(plots.regret_at_budget, budget=3),
+        "at_budget_9": functools.partial(plots.regret_at_budget, budget=9),
+    }
+
+    # Act: run two runs and plot, with the experiment's figures
+    cli.main(
+        "illustrative_example",
+        ex.problem,
+        ex.measure,
+        configurations,
+        ex.study_settings,
+        optimum=ex.optimum,
+        figures=figures,
+        argv=["--n-runs", "2", "--name", "sweep", "--plot"]
+        + ["--results-root", str(tmp_path)],
+    )
+
+    # Check: the figures given, no convergence or regret, and no figure at a budget
+    # the runs don't reach
+    study_figures = {
+        path.name
+        for path in (tmp_path / "illustrative_example" / "sweep" / "figures").glob(
+            "*.png"
+        )
+    }
+    assert study_figures == {"budget.png", "at_budget_3.png"}
+    assert "no at_budget_9 figure" in capsys.readouterr().out
 
 
 def test_hybrid_bo_with_two_unknown_states_gets_iteration_figures_without_gps(

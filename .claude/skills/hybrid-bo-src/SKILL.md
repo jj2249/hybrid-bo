@@ -276,7 +276,13 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   artifacts: the settings without the GP, and `gp`, the prior GP's repr.
 - `plots.py`: static figures, no widgets and no `rng`. `convergence(study, ax)` and
   `regret(study, optimum, ax)` draw `evaluations` (median and IQR per method over
-  evaluations, `_over_evaluations`). `iteration(run, problem, i, *, measure, gp,
+  evaluations, `_over_evaluations`). A sweep over initial fractions of one method
+  has `budget_heatmap`, `regret_at_budget(study, budget)` and
+  `regret_by_initial_fraction`, all from `_sweep_regret` (regret per evaluation with
+  each run's `history.n_initial`; `ValueError` unless every run has the same
+  `artifact["method"]` and `repr(run.settings)`; of runs with the same n_initial
+  and index only the longest is kept, by the prefix property, so they count once).
+  `iteration(run, problem, i, *, measure, gp,
   scenarios, acquisition) -> Figure` draws the state before trial point i over the
   `u` start bounds, with one figure legend (`_figure_legend`); it dispatches on
   `n_u` (`ValueError` above 2, and for hybrid BO's GP panels with P > 1: they draw

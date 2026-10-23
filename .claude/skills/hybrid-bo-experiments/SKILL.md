@@ -133,7 +133,10 @@ finish leaves `<id>.log` (and `<id>.logs/`) in place, which keeps the id taken u
 it is deleted. `plot` loads the study given, else the one whose
 artifact was written last (`artifact.json`, or `study.json` in older studies), and
 saves `summary.csv` if the study has none (studies saved before summaries). Plotting
-draws convergence and regret, and the iteration figures of the runs `--plot-runs`
+draws the study figures `cli.main`'s `figures` names (default convergence and
+regret; a sweep over initial fractions passes `hb.plots.budget_heatmap` and its
+siblings, file name to function of the study; one that raises `ValueError` is
+skipped with a message), and the iteration figures of the runs `--plot-runs`
 names (indices or `all`, default `0`, of each method); on the run command
 `--plot-runs` implies `--plot`. Running
 with uncommitted or untracked files warns that the study won't be reproducible;

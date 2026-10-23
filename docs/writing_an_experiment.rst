@@ -254,6 +254,25 @@ of every smaller budget. The baselines draw their whole design at the start, so 
 hypercube sampling doesn't have this property, and uniform sampling has it only
 without measurement noise.
 
+A sweep of one method over many ``n_initial`` makes the convergence figure
+unreadable, so pass the sweep's figures to the command line instead (see
+:doc:`reading_results`):
+
+.. code-block:: python
+
+   cli.main(
+       "my_sweep", problem, measure, configurations, study_settings,
+       optimum=optimum,
+       figures={
+           "budget": hb.plots.budget_heatmap,
+           "at_budget_20": functools.partial(hb.plots.regret_at_budget, budget=20),
+           "regret_by_initial_fraction": hb.plots.regret_by_initial_fraction,
+       },
+   )
+
+``figures`` maps each figure's file name to a function of the study that draws it;
+the default is ``convergence`` and ``regret``.
+
 The GP
 ------
 
