@@ -340,6 +340,7 @@ def test_budget_heatmap_cells_are_the_median_log10_regret():
     """A cell at budget B and n_initial initial points is the median over the runs of
     log10 of the regret after B evaluations, and there is a cell wherever n_initial <
     B."""
+    # Act
     ax = plots.budget_heatmap(sweep_study())
 
     # Expected: every (B, n_initial) with n_initial < B, from numpy
@@ -350,6 +351,8 @@ def test_budget_heatmap_cells_are_the_median_log10_regret():
         for n_initial in SWEEP_N_INITIALS
         for budget in range(n_initial + 1, SWEEP_N_EVALUATIONS + 1)
     }
+
+    # Check: the cells, the limits and the labels
     drawn = cells(ax)
     assert drawn.keys() == expected.keys()
     for key, value in expected.items():
@@ -364,6 +367,7 @@ def test_budget_heatmap_marks_the_best_initial_fraction_at_each_budget():
     """The line of the best initial fraction passes, at each budget, through the
     n_initial with the lowest median log10 regret; dashed lines mark constant
     initial fractions, n_initial = ε B."""
+    # Act
     ax = plots.budget_heatmap(sweep_study())
 
     # Expected: per budget, the n_initial of the lowest median log10 regret (numpy)
@@ -375,6 +379,8 @@ def test_budget_heatmap_marks_the_best_initial_fraction_at_each_budget():
             if n_initial < budget
         }
         expected.append(min(medians, key=medians.__getitem__))
+
+    # Check: the best line
     best = drawn_line(ax, "best initial fraction")
     budgets = range(2, SWEEP_N_EVALUATIONS + 1)
     np.testing.assert_array_equal(np.asarray(best.get_xdata()), budgets)
@@ -385,6 +391,28 @@ def test_budget_heatmap_marks_the_best_initial_fraction_at_each_budget():
         drawn = drawn_line(ax, f"ε = {epsilon:g}")
         x = np.asarray(drawn.get_xdata())
         np.testing.assert_allclose(np.asarray(drawn.get_ydata()), epsilon * x)
+    plt.close("all")
+
+
+def test_budget_heatmap_leaves_out_budgets_without_cells():
+    """A budget no run reaches with an iteration (here 4 and 5: the n_initial = 1
+    runs end at 3 evaluations, and the n_initial = 5 runs have no iterations before
+    6) has no cells and no best initial fraction."""
+    # Setup: n_initial = 1 to 3 evaluations, n_initial = 5 to 7
+    runs = [
+        fake_run("hybrid_bo", 0, [3.0, 2.0, 1.0], [3.0, 2.0, 1.0], n_initial=1),
+        fake_run("hybrid_bo", 0, [5.0] * 7, [5.0] * 7, n_initial=5),
+    ]
+    study = fake_study(runs, {"oracle_optimum": "0.0"})
+
+    # Act
+    ax = plots.budget_heatmap(study)
+
+    # Check: cells at budgets 2, 3, 6 and 7 only, and the best line through them
+    assert sorted(cells(ax)) == [(2, 1), (3, 1), (6, 5), (7, 5)]
+    best = drawn_line(ax, "best initial fraction")
+    np.testing.assert_array_equal(np.asarray(best.get_xdata()), [2, 3, 6, 7])
+    np.testing.assert_array_equal(np.asarray(best.get_ydata()), [1, 1, 5, 5])
     plt.close("all")
 
 
@@ -410,7 +438,7 @@ def test_a_configuration_sharing_n_initial_with_a_longer_one_counts_once():
     ]
     with_shorter = replace(study, runs=study.runs + tuple(shorter))
 
-    # Check: the same cells and quartiles with and without the copy
+    # Act and check: the same cells and quartiles with and without the copy
     assert cells(plots.budget_heatmap(with_shorter)) == cells(
         plots.budget_heatmap(study)
     )

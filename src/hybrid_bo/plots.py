@@ -35,7 +35,7 @@ from hybrid_bo.run import Run
 from hybrid_bo.sampling import _start_bounds
 from hybrid_bo.settings import HybridBOSettings, MethodSettings, StandardBOSettings
 from hybrid_bo.studies import Study
-from hybrid_bo.views import _polars, evaluations
+from hybrid_bo.views import evaluations
 
 if TYPE_CHECKING:
     import polars as pl
@@ -145,7 +145,8 @@ def budget_heatmap(
     colorbar. There is a cell wherever n_initial < B, read from the runs with that
     n_initial after B evaluations (the prefix property), so one run per n_initial
     gives every budget it reaches. Dashed lines mark constant initial fractions ε =
-    n_initial / B, and a line the best n_initial at each budget, the lowest median.
+    n_initial / B, and a line the best n_initial at each budget with a cell, the
+    lowest median.
 
     The oracle optimum is `optimum` if given, else the study's recorded one. Raises
     `ValueError` if the runs are of more than one method or the study has no
@@ -201,10 +202,11 @@ def budget_heatmap(
             verticalalignment="bottom",
         )
 
-    # The best n_initial at each budget
-    best = np.asarray(n_initials)[np.nanargmin(values, axis=0)]
+    # The best n_initial at each budget that has a cell
+    has_cell = ~np.isnan(values).all(axis=0)
+    best = np.asarray(n_initials)[np.nanargmin(values[:, has_cell], axis=0)]
     (best_line,) = ax.plot(
-        budgets,
+        budgets[has_cell],
         best,
         color="black",
         marker="o",
@@ -347,24 +349,20 @@ def _sweep_regret(study: Study, optimum: float | None) -> "pl.DataFrame":
         if key not in longest or len(run.history.f) > len(longest[key].history.f):
             longest[key] = run
 
-    # Their regret, with each run's n_initial
-    rows = evaluations(replace(study, runs=tuple(longest.values())), optimum)
+    # Their regret, each run labeled with its n_initial, which with its index names
+    # it uniquely
+    import polars as pl  # `evaluations` checks it is installed
+
+    kept = [
+        replace(run, method=str(n_initial)) for (n_initial, _), run in longest.items()
+    ]
+    rows = evaluations(replace(study, runs=tuple(kept)), optimum)
     rows = rows.drop_nulls("regret") if "regret" in rows.columns else rows.clear()
     if rows.is_empty():
         msg = "The study has no regret to draw"
         raise ValueError(msg)
-    pl = _polars()
-    n_initials = pl.DataFrame(
-        {
-            "method": [run.method for run in longest.values()],
-            "run": [run.index for run in longest.values()],
-            "n_initial": [run.history.n_initial for run in longest.values()],
-        },
-        schema={"method": pl.String, "run": pl.Int64, "n_initial": pl.Int64},
-    )
-    return rows.join(n_initials, on=["method", "run"]).select(
-        "n_initial", "run", "evaluation", "regret"
-    )
+    n_initial = pl.col("method").cast(pl.Int64).alias("n_initial")
+    return rows.select(n_initial, "run", "evaluation", "regret")
 
 
 def iteration(
