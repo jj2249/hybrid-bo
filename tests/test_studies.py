@@ -157,9 +157,9 @@ def test_run_i_of_every_method_starts_from_the_same_initial_points(
 def test_configurations_with_their_own_budgets_run_save_and_load(
     illustrative_problem, tmp_path
 ):
-    """Each configuration runs its own budget, which the study keeps and saving
-    round-trips; run i of the configurations with the same `n_initial` starts from
-    the same initial points."""
+    """Each configuration runs its own budget, which each of its runs records and
+    saving round-trips; run i of the configurations with the same `n_initial` starts
+    from the same initial points."""
     # Setup: one method under three budgets, two of them with 2 initial points
     budgets = {"short": (3, 2), "long": (5, 2), "more_initial": (5, 3)}
     configurations = {
@@ -173,17 +173,14 @@ def test_configurations_with_their_own_budgets_run_save_and_load(
     study = hb.study(configurations, illustrative_problem, ex.measure, SETTINGS)
     loaded = hb.load(hb.save(study, tmp_path / "study"))
 
-    # Check: every run has its configuration's evaluations and initial points, and
-    # the budgets come back
+    # Check: every loaded run has its configuration's evaluations and initial points,
+    # and records its budget
     runs = {(run.method, run.index): run for run in loaded.runs}
     for (label, _), run in runs.items():
         n_evaluations, n_initial = budgets[label]
         assert len(run.history.u) == n_evaluations
         assert run.history.n_initial == n_initial
-    assert loaded.budgets == {
-        label: hb.studies.Budget(n_evaluations=n_evaluations, n_initial=n_initial)
-        for label, (n_evaluations, n_initial) in budgets.items()
-    }
+        assert run.n_evaluations == n_evaluations
     assert_same(loaded, study)
 
     # Check: run i shares its initial points with the same n_initial only
@@ -476,13 +473,17 @@ def test_load_reads_a_study_saved_before_artifacts(illustrative_study, tmp_path)
 
 def test_load_reads_a_study_saved_before_configurations(illustrative_study, tmp_path):
     """A study saved when every method had the study's budget (`n_initial` and
-    `n_iterations` in its settings) loads with that budget for each of its methods."""
-    # Save, then rewrite the settings in the old format, without budgets
+    `n_iterations` in its settings, none in its runs) loads with that budget in each
+    of its runs."""
+    # Save, then rewrite the settings and the runs in the old format
     path = hb.save(illustrative_study, tmp_path / "study")
     data = json.loads((path / "artifact.json").read_text())
-    del data["budgets"]
     data["settings"] |= {"n_initial": N_INITIAL, "n_iterations": 1}
     (path / "artifact.json").write_text(json.dumps(data))
+    for run_path in data["runs"]:
+        run_data = json.loads((path / run_path).read_text())
+        del run_data["n_evaluations"]
+        (path / run_path).write_text(json.dumps(run_data))
 
     loaded = hb.load(path)
 
@@ -518,7 +519,7 @@ def test_save_and_load_keep_partial_runs_and_empty_arrays(tmp_path):
     """A run that failed at its first point (no evaluated points) round-trips too,
     with its arrays' shapes."""
     run = hb.Run(history_of(0), artifact={"method": "m"}, method="m")
-    study = hb.Study((run,), SETTINGS, {}, None, {})
+    study = hb.Study((run,), SETTINGS, None, {})
 
     loaded = hb.load(hb.save(study, tmp_path / "study"))
 
@@ -654,7 +655,7 @@ def test_save_and_load_keep_every_kind_of_gp_parameter(tmp_path):
     ]
     run = hb.Run(history_of(2), artifact={"type": "an artifact entry"}, method="m")
     study = hb.Study(
-        (dataclasses.replace(run, surrogates=surrogates),), SETTINGS, {}, None, {}
+        (dataclasses.replace(run, surrogates=surrogates),), SETTINGS, None, {}
     )
 
     loaded = hb.load(hb.save(study, tmp_path / "study"))
@@ -670,7 +671,7 @@ def test_an_empty_array_in_an_optional_field_loads_with_its_shape(tmp_path):
         history_of(3), x=np.zeros((3, 0)), x_oracle=np.zeros((3, 0))
     )
     run = hb.Run(history, artifact={}, method="m")
-    study = hb.Study((run,), SETTINGS, {}, None, {})
+    study = hb.Study((run,), SETTINGS, None, {})
 
     loaded = hb.load(hb.save(study, tmp_path / "study"))
 
@@ -720,7 +721,7 @@ def test_save_and_load_keep_every_kind_of_method_settings(tmp_path):
         hb.Run(history_of(0), {"method": "m"}, "m", index, settings=settings)
         for index, settings in enumerate(all_settings)
     )
-    study = hb.Study(runs, SETTINGS, {}, None, {})
+    study = hb.Study(runs, SETTINGS, None, {})
 
     # Act: save and load
     loaded = hb.load(hb.save(study, tmp_path / "study"))
@@ -819,7 +820,7 @@ def test_save_refuses_an_existing_folder(illustrative_study, tmp_path):
 def test_save_refuses_a_label_that_is_not_a_folder_name(tmp_path):
     """A method label is a folder name, so it can't contain a path separator."""
     run = hb.Run(history_of(1), artifact={}, method="a/b")
-    study = hb.Study((run,), SETTINGS, {}, None, {})
+    study = hb.Study((run,), SETTINGS, None, {})
 
     with pytest.raises(ValueError, match="a/b"):
         hb.save(study, tmp_path / "study")

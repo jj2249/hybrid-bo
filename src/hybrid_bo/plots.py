@@ -58,7 +58,7 @@ def convergence(study: Study, ax: "Axes | None" = None) -> "Axes":
     """Per configuration, the median over its runs of the oracle incumbent (or, in a
     study without an oracle, the incumbent) at each evaluation, with the
     interquartile range shaded, a dotted line after the initial points (one for each
-    number of initial points the configurations have), and a legend.
+    number of initial points the runs have), and a legend.
 
     Raises `ValueError` if the study has no evaluations, and `ImportError` without
     Polars.
@@ -85,9 +85,9 @@ def regret(
 
 
 def _n_initials(study: Study) -> list[int]:
-    """The numbers of initial points of the study's configurations, each once, in
-    increasing order."""
-    return sorted({budget.n_initial for budget in study.budgets.values()})
+    """The numbers of initial points of the study's runs, each once, in increasing
+    order."""
+    return sorted({run.history.n_initial for run in study.runs})
 
 
 def _over_evaluations(

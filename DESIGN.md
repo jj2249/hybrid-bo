@@ -804,12 +804,13 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   keyword-only, keeps only what stays the same for every configuration, so the runs
   stay paired; every draw of a study comes from the seed, so the same settings give
   the same study.
-  `Study(runs: tuple[Run, ...], settings, budgets, name, artifact)` is a flat
-  collection; its settings hold the seed actually used (a fresh one for seed None),
-  `budgets` each configuration's `Budget(n_evaluations, n_initial)` by its label (the
-  saveable part of a configuration: its method is code), and its artifact holds the
-  problem, measurement, methods, oracle optimum (`oracle_optimum`, when stated) and
-  versions once.
+  `Study(runs: tuple[Run, ...], settings, name, artifact)` is a flat collection; its
+  settings hold the seed actually used (a fresh one for seed None) and its artifact
+  holds the problem, measurement, methods, oracle optimum (`oracle_optimum`, when
+  stated) and versions once. A configuration's method is code, so the study can't
+  save configurations: each run records its budget instead (`run.n_evaluations`,
+  set by `repeat`; `n_initial` is in its history), and there is no separate budget
+  type, since the budget's fields belong to the configuration.
 - **Running** (#53). `hb.repeat(configuration, problem, measure, settings)` runs
   one configuration `n_runs` times, run i from `SeedSequence(seed).spawn(n_runs)[i]`,
   logging failed runs and keeping them as far as they got. A `Method` is called as
@@ -834,9 +835,9 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   oracle, rng, n_starts)` helps find it once. The artifact records it, and the study warns with
   `OracleOptimumWarning` if an evaluated point's oracle objective is below it.
 - **Saving** (#53; `saving.py`). `hb.save(study, path)` writes `artifact.json`
-  (settings, budgets, name, artifact, the run files in order; a study saved before
-  #144, with `n_initial` and `n_iterations` in its settings, loads with that budget
-  for each of its methods) and `runs/<method>/run-000.json`;
+  (settings, name, artifact, the run files in order; a study saved before #144, with
+  `n_initial` and `n_iterations` in its settings, loads with that budget as each
+  run's `n_evaluations`) and `runs/<method>/run-000.json`;
   `hb.load(path)` reads them back exactly. `save` refuses an existing folder. A
   dataclass from a closed set (a GP's parts, #119; the methods' settings and their
   parts, #120) is saved with its type's name, so a field holding one of several types

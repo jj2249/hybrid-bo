@@ -1,14 +1,14 @@
 """Saving and loading a study as a folder of JSON files (ADR 0004).
 
-`save(study, path)` writes `path/artifact.json` (the study's name, settings, budgets
-and artifact, and the list of run files) and one file per run,
+`save(study, path)` writes `path/artifact.json` (the study's name, settings and
+artifact, and the list of run files) and one file per run,
 `path/runs/<method>/run-000.json`, holding every field of the run. `load` also reads
 a study saved before the artifact was named: `study.json` with a `record` key, but not
 one saved before GPs were data (ADR 0008), before runs held their settings or before
 runs had an artifact (a run's JSON with `record`, not `artifact`); a run saved with one
 fitted GP per iteration, before surrogates were tuples, loads with each as a 1-tuple,
 and a study saved before configurations, with one budget in its settings, loads with it
-as each method's budget.
+as each run's budget.
 Arrays are nested lists; float64 values round-trip exactly. A GP's means, kernels and
 hyperparameters, and the methods' settings and their parts, are saved with their type's
 name (`"type"`), so a field that holds one of several types (kernels, approximations)
@@ -27,7 +27,7 @@ import numpy as np
 from hybrid_bo import gp, settings
 from hybrid_bo.errors import StudyFormatError
 from hybrid_bo.run import Run
-from hybrid_bo.studies import Budget, Study, StudySettings
+from hybrid_bo.studies import Study, StudySettings
 
 # The artifact's file, and its name in studies saved before the artifact was named
 ARTIFACT_FILE = "artifact.json"
@@ -203,7 +203,6 @@ def save(study: Study, path: str | Path) -> Path:
     study_data = {
         "name": study.name,
         "settings": _encode(study.settings),
-        "budgets": _encode(study.budgets),
         "artifact": study.artifact,
         "runs": [run_path.as_posix() for run_path in run_paths],
     }
@@ -231,23 +230,19 @@ def load(path: str | Path) -> Study:
         run_data = _with_surrogate_tuples(json.loads((path / run_path).read_text()))
         _check_format(run_data, path / run_path)
         runs.append(_decode(run_data, Run))
-    if "budgets" not in study_data:
-        study_data = _with_budgets(study_data, runs)
+
+    # A study saved before configurations: its settings' one budget is every run's
+    settings = dict(study_data["settings"])
+    if "n_iterations" in settings:
+        n_initial, n_iterations = (
+            settings.pop("n_initial"),
+            settings.pop("n_iterations"),
+        )
+        n_evaluations = n_initial + n_iterations
+        runs = [dataclasses.replace(run, n_evaluations=n_evaluations) for run in runs]
     return Study(
         tuple(runs),
-        _decode(study_data["settings"], StudySettings),
-        _decode(study_data["budgets"], dict[str, Budget]),
+        _decode(settings, StudySettings),
         study_data["name"],
         study_data["artifact"],
     )
-
-
-def _with_budgets(study_data: dict[str, Any], runs: list[Run]) -> dict[str, Any]:
-    """The saved study `study_data`, saved before configurations, with the budget its
-    settings gave every method (`n_initial`, `n_iterations`) as the budget of each
-    method label among `runs`, and its settings without it."""
-    settings = dict(study_data["settings"])
-    n_initial, n_iterations = settings.pop("n_initial"), settings.pop("n_iterations")
-    budget = {"n_evaluations": n_initial + n_iterations, "n_initial": n_initial}
-    budgets = {run.method: budget for run in runs}
-    return study_data | {"settings": settings, "budgets": budgets}

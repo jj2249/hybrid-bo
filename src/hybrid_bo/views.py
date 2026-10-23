@@ -126,9 +126,9 @@ def summary(study: Study) -> "pl.DataFrame":
     """One row per configuration, in the study's order, with columns:
 
     - `method` (the configuration's label), `runs` (the runs in the study) and
-      `failed` (the runs of the settings that didn't finish their configuration's
-      budget: those that stopped short, which are among `runs`, and those that left
-      nothing to keep, which are not);
+      `failed` (the runs of the settings that didn't make every evaluation of their
+      budget, `run.n_evaluations`: those that stopped short, which are among `runs`,
+      and those that left nothing to keep, which are not);
     - `<value>_median` and `<value>_iqr` (interquartile range, with numpy's default
       linear quantiles) over the study's runs, short ones included, of the final
       `incumbent`, `oracle_incumbent` and `regret`, as in `evaluations` (null
@@ -140,16 +140,23 @@ def summary(study: Study) -> "pl.DataFrame":
     pl = _polars()
     settings = study.settings
 
-    # The last evaluation of each run; a run that finished has every evaluation of
-    # its configuration's budget
-    finals = evaluations(study).group_by("method", "run", maintain_order=True).last()
-    n_evaluations_by_label = {
-        label: budget.n_evaluations for label, budget in study.budgets.items()
-    }
-    is_finished = pl.col("evaluation") == pl.col("method").replace_strict(
-        n_evaluations_by_label
+    # The last evaluation of each run, with its budget; a run that finished has every
+    # evaluation of its budget
+    budgets = pl.DataFrame(
+        {
+            "method": [run.method for run in study.runs],
+            "run": [run.index for run in study.runs],
+            "n_evaluations": [run.n_evaluations for run in study.runs],
+        },
+        schema_overrides={"n_evaluations": pl.Int64},
     )
-    finished = is_finished.sum().cast(pl.Int64)
+    finals = (
+        evaluations(study)
+        .group_by("method", "run", maintain_order=True)
+        .last()
+        .join(budgets, on=["method", "run"], how="left", maintain_order="left")
+    )
+    finished = (pl.col("evaluation") == pl.col("n_evaluations")).sum().cast(pl.Int64)
 
     def spread(name: str) -> list["pl.Expr"]:
         """The median and interquartile range of a column."""

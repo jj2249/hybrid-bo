@@ -108,7 +108,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `acquisitions`: one
   `AcquisitionSolution` per iteration, both empty for the baselines; `scenarios`,
   hybrid BO only, else None; `settings`, the BO method's settings in full, else
-  None), pure data that loads without user code (ADR 0003).
+  None; `n_evaluations`, its configuration's budget, set
+  by `repeat`, else None), pure data that loads without user code (ADR 0003).
   `run_artifact(problem, measure, rng, method, settings)` builds the run's artifact,
   text, from `_problem_artifact`, `_generator_artifact` and `_versions_artifact` (a
   study's artifact reuses them); call it before the method draws. `code_version(path)` is
@@ -119,12 +120,13 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   repr.
 - `studies.py`: `Configuration(method, n_evaluations, n_initial)` (a method with
   its own budget, `ValueError` unless 1 <= n_initial <= n_evaluations; it runs
-  `n_evaluations - n_initial` iterations), `Budget(n_evaluations, n_initial)` (its
-  saveable part), `StudySettings(n_runs, seed)`, `Study(runs, settings, budgets,
-  name, artifact)` (`budgets` by label), `Method` (called as `method(problem,
+  `n_evaluations - n_initial` iterations), `StudySettings(n_runs, seed)`,
+  `Study(runs, settings, name, artifact)`, `Method` (called as `method(problem,
   measure, initial_points, n, rng=rng)`), `repeat(configuration, ...)` (run i from
   `default_rng(SeedSequence(seed).spawn(n_runs)[i])`, initial points then the method;
-  catches `HybridBOError`, logs it and keeps `error.run`) and `study(configurations,
+  catches `HybridBOError`, logs it and keeps `error.run`; sets each run's `index`
+  and `n_evaluations`, the configuration's budget, since the method is code and
+  can't be saved) and `study(configurations,
   ...)` (resolves a None seed to fresh entropy kept in its settings, then each
   configuration's `repeat` from that seed, so run i of configurations with the same
   `n_initial` shares initial points; relabels runs with their key; its artifact records a stated `optimum` as
@@ -139,10 +141,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   sampling has it only with a measurement that draws nothing). Keep it: a budget sweep
   reads every budget from the longest run.
 - `saving.py`: `save(study, path)` / `load(path)` (ADR 0004): `artifact.json` lists the
-  run files `runs/<method>/run-<index:03d>.json` and holds the budgets; `load` also
-  reads the older `study.json` (with `record` for `artifact`), a study saved before
-  #144 (`n_initial`, `n_iterations` in its settings) with that budget for each method
-  label (`_with_budgets`), and a run saved before #114, whose
+  run files `runs/<method>/run-<index:03d>.json`; `load` also reads the older
+  `study.json` (with `record` for `artifact`), a study saved before #144 (`n_initial`,
+  `n_iterations` in its settings) with that budget as each run's `n_evaluations`, and a run saved before #114, whose
   surrogates are single fitted GPs, as 1-tuples (`_with_surrogate_tuples`, before
   `_check_format`); but a run saved before #119 (fitted
   GPs without `gp`, or a `record` with a `kernel` entry), a BO run saved before #120

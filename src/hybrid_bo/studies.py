@@ -53,15 +53,6 @@ class Configuration:
 
 
 @dataclass(frozen=True, kw_only=True)
-class Budget:
-    """A configuration's evaluation budget, as its study keeps it: `n_evaluations`
-    evaluations in all, the first `n_initial` of them initial points."""
-
-    n_evaluations: int
-    n_initial: int
-
-
-@dataclass(frozen=True, kw_only=True)
 class StudySettings:
     """How many runs of each configuration, and the seed they come from. Both are
     the same for every configuration, so run i of one is paired with run i of the
@@ -84,8 +75,8 @@ class Study:
     configuration with the same number of initial points starts from the same
     initial points.
 
-    `budgets` holds each configuration's budget by its label. `artifact` says, as
-    text, what the study ran and how: the problem, the measurement, each method with
+    Each run records its configuration's budget (`run.n_evaluations`). `artifact`
+    says, as text, what the study ran and how: the problem, the measurement, each method with
     its settings (a BO method's prior GP included, never the fitted GPs, which are in
     the runs), the oracle optimum (if stated) and the versions. The seed is in
     `settings`.
@@ -93,7 +84,6 @@ class Study:
 
     runs: tuple[Run, ...]
     settings: StudySettings
-    budgets: dict[str, Budget]
     name: str | None
     artifact: dict[str, str]
 
@@ -111,8 +101,9 @@ def repeat(
     from `settings.seed` (`SeedSequence(seed).spawn(n_runs)[i]`), so the same seed
     gives the same runs, and run i of any configuration with the same `n_initial`
     starts from the same initial points. Seed None draws a fresh seed, which every
-    run records. A run that raises a `HybridBOError` is logged as a warning and kept
-    as far as it got (`error.run`); the next run goes on. Each finished run is logged
+    run records, as it records the configuration's `n_evaluations`. A run that
+    raises a `HybridBOError` is logged as a warning and kept as far as it got
+    (`error.run`); the next run goes on. Each finished run is logged
     at info level with its time.
     """
     runs = []
@@ -142,7 +133,9 @@ def repeat(
                 settings.n_runs,
                 time.perf_counter() - start,
             )
-        runs.append(replace(run, index=index))
+        runs.append(
+            replace(run, index=index, n_evaluations=configuration.n_evaluations)
+        )
     return tuple(runs)
 
 
@@ -203,16 +196,7 @@ def study(
     if optimum is not None:
         artifact["oracle_optimum"] = repr(float(optimum))
         _check_optimum(runs, float(optimum))
-
-    # Each configuration's budget, which the study keeps since its method is code
-    budgets = {
-        label: Budget(
-            n_evaluations=configuration.n_evaluations,
-            n_initial=configuration.n_initial,
-        )
-        for label, configuration in configurations.items()
-    }
-    return Study(tuple(runs), settings, budgets, name, artifact | _versions_artifact())
+    return Study(tuple(runs), settings, name, artifact | _versions_artifact())
 
 
 def _check_optimum(runs: list[Run], optimum: float) -> None:
