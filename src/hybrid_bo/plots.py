@@ -7,7 +7,7 @@ Plots read finished runs, so a saved study is plotted without running it again (
 style, `STYLE`; use it elsewhere with `plt.style.use(hb.plots.STYLE)`.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -52,6 +52,7 @@ _DECADES = 2  # a panel of f spanning more decades than this has a log color sca
 _ZERO_EI_COLOR = "lightgray"
 _EI_DECADES = 10  # the EI color scale stops this many decades below the largest EI
 _CONFIDENCE = 0.9  # probability inside the confidence bands
+_EPSILONS = (0.1, 0.25, 0.5, 0.75)  # initial fractions marked on the budget heatmap
 
 
 def convergence(study: Study, ax: "Axes | None" = None) -> "Axes":
@@ -134,6 +135,234 @@ def _over_evaluations(
     ax.set_ylabel(column.replace("_", " "))
     ax.legend()
     return ax
+
+
+def budget_heatmap(
+    study: Study, optimum: float | None = None, ax: "Axes | None" = None
+) -> "Axes":
+    """The median log10 regret of a sweep over initial fractions of one method, by
+    budget B (x, evaluations so far) and number of initial points (y), with a
+    colorbar. There is a cell wherever n_initial < B, read from the runs with that
+    n_initial after B evaluations (the prefix property), so one run per n_initial
+    gives every budget it reaches. Dashed lines mark constant initial fractions ε =
+    n_initial / B, and a line the best n_initial at each budget with a cell, the
+    lowest median.
+
+    The oracle optimum is `optimum` if given, else the study's recorded one. Raises
+    `ValueError` if the runs are of more than one method or the study has no
+    regret, and `ImportError` without Polars.
+    """
+    import matplotlib.pyplot as plt
+    import polars as pl  # `_sweep_regret` checks it is installed
+
+    # The cells: one row per n_initial, one column per budget, NaN without runs
+    rows = _sweep_regret(study, optimum).filter(
+        pl.col("n_initial") < pl.col("evaluation")
+    )
+    cells = rows.group_by("n_initial", "evaluation").agg(
+        value=pl.col("regret").log10().median()
+    )
+    n_initials = sorted(cells["n_initial"].unique().to_list())
+    last = cells["evaluation"].to_numpy().max()
+    budgets = np.arange(n_initials[0] + 1, last + 1)
+    values = np.full((len(n_initials), len(budgets)), np.nan)
+    for n_initial, budget, value in cells.iter_rows():
+        values[n_initials.index(n_initial), budget - budgets[0]] = value
+
+    # The heatmap, with cells centered on the budgets and the numbers of initial
+    # points; the lines below don't move its limits
+    if ax is None:
+        with plt.style.context(STYLE):
+            _, ax = plt.subplots()
+    mesh = ax.pcolormesh(
+        budgets, n_initials, np.ma.masked_invalid(values), shading="nearest"
+    )
+    ax.figure.colorbar(mesh, ax=ax, label="median log$_{10}$ regret")
+    ax.autoscale_view()
+    ax.autoscale(enable=False)
+
+    # Constant initial fractions, each labeled where it leaves the heatmap
+    (x_low, x_high), (_, y_high) = ax.get_xlim(), ax.get_ylim()
+    for epsilon in _EPSILONS:
+        ax.plot(
+            [x_low, x_high],
+            [epsilon * x_low, epsilon * x_high],
+            color="white",
+            linestyle="--",
+            linewidth=1,
+            label=f"ε = {epsilon:g}",
+        )
+        x_end = min(x_high, y_high / epsilon)
+        ax.annotate(
+            f"ε = {epsilon:g}",
+            (x_end, epsilon * x_end),
+            color="white",
+            fontsize="small",
+            horizontalalignment="right",
+            verticalalignment="bottom",
+        )
+
+    # The best n_initial at each budget that has a cell
+    has_cell = ~np.isnan(values).all(axis=0)
+    best = np.asarray(n_initials)[np.nanargmin(values[:, has_cell], axis=0)]
+    (best_line,) = ax.plot(
+        budgets[has_cell],
+        best,
+        color="black",
+        marker="o",
+        markersize=3,
+        label="best initial fraction",
+    )
+    ax.set_xlabel("evaluations (budget)")
+    ax.set_ylabel("initial points")
+    ax.grid(visible=False)
+    ax.legend(handles=[best_line], loc="upper left")
+    return ax
+
+
+def regret_at_budget(
+    study: Study,
+    budget: int,
+    optimum: float | None = None,
+    ax: "Axes | None" = None,
+) -> "Axes":
+    """The median regret after `budget` evaluations of a sweep over initial
+    fractions of one method, against the initial fraction ε = n_initial / budget,
+    for every n_initial < budget, with the interquartile range shaded, on a log
+    y-axis.
+
+    The oracle optimum is `optimum` if given, else the study's recorded one. Raises
+    `ValueError` if the runs are of more than one method or have no regret after
+    `budget` evaluations with an iteration among them, and `ImportError` without
+    Polars.
+    """
+    import matplotlib.pyplot as plt
+    import polars as pl  # `_sweep_regret` checks it is installed
+
+    # Per n_initial: the median and the quartiles after `budget` evaluations
+    regret = pl.col("regret")
+    rows = _sweep_regret(study, optimum).filter(
+        (pl.col("evaluation") == budget) & (pl.col("n_initial") < budget)
+    )
+    if rows.is_empty():
+        msg = f"The study has no regret after {budget} evaluations with iterations"
+        raise ValueError(msg)
+    points = (
+        rows.group_by("n_initial")
+        .agg(
+            median=regret.median(),
+            lower=regret.quantile(0.25, "linear"),
+            upper=regret.quantile(0.75, "linear"),
+        )
+        .sort("n_initial")
+    )
+
+    # The median against ε, with the quartiles shaded
+    if ax is None:
+        with plt.style.context(STYLE):
+            _, ax = plt.subplots()
+    epsilon = points["n_initial"].to_numpy() / budget
+    (drawn,) = ax.plot(epsilon, points["median"].to_numpy(), marker="o", label="median")
+    lower, upper = points["lower"].to_numpy(), points["upper"].to_numpy()
+    ax.fill_between(epsilon, lower, upper, color=drawn.get_color(), alpha=0.2)
+    ax.set_yscale("log")
+    ax.set_xlabel("initial fraction ε")
+    ax.set_ylabel("regret")
+    ax.set_title(f"after {budget} evaluations")
+    return ax
+
+
+def regret_by_initial_fraction(
+    study: Study,
+    optimum: float | None = None,
+    ax: "Axes | None" = None,
+    max_lines: int = 8,
+) -> "Axes":
+    """The median regret over evaluations of a sweep over initial fractions of one
+    method, one line per number of initial points, on a log y-axis. With more than
+    `max_lines` of them, an evenly spread subset is drawn, the smallest and the
+    largest included.
+
+    The oracle optimum is `optimum` if given, else the study's recorded one. Raises
+    `ValueError` if the runs are of more than one method or the study has no
+    regret, and `ImportError` without Polars.
+    """
+    import matplotlib.pyplot as plt
+    import polars as pl  # `_sweep_regret` checks it is installed
+
+    # The numbers of initial points to draw, evenly spread
+    rows = _sweep_regret(study, optimum)
+    n_initials = sorted(rows["n_initial"].unique().to_list())
+    n_lines = min(max_lines, len(n_initials))
+    chosen = np.unique(np.linspace(0, len(n_initials) - 1, n_lines).round())
+    n_initials = [n_initials[int(i)] for i in chosen]
+
+    # Per n_initial: the median at each evaluation, colored in order
+    if ax is None:
+        with plt.style.context(STYLE):
+            _, ax = plt.subplots()
+    colors = plt.get_cmap("viridis")(np.linspace(0, 0.9, len(n_initials)))
+    for n_initial, color in zip(n_initials, colors):
+        curve = (
+            rows.filter(pl.col("n_initial") == n_initial)
+            .group_by("evaluation")
+            .agg(median=pl.col("regret").median())
+            .sort("evaluation")
+        )
+        ax.plot(
+            curve["evaluation"].to_numpy(),
+            curve["median"].to_numpy(),
+            color=color,
+            label=f"n_initial = {n_initial}",
+        )
+    ax.set_yscale("log")
+    ax.set_xlabel("evaluations")
+    ax.set_ylabel("regret")
+    ax.legend()
+    return ax
+
+
+def _sweep_regret(study: Study, optimum: float | None) -> "pl.DataFrame":
+    """The regret of a sweep over initial fractions of one method, one row per
+    evaluation of each run, with columns `n_initial` (the run's), `run` (its index),
+    `evaluation` and `regret` (as in `evaluations`). Runs with the same n_initial and
+    index pass through the same first evaluations (the prefix property), so only the
+    longest of them is kept.
+
+    Raises `ValueError` if the runs are of more than one method (another method, or
+    the same with other settings) or the study has no regret, and `ImportError`
+    without Polars.
+    """
+    # One method: its name and settings are the same in every run
+    methods = {(run.artifact.get("method"), repr(run.settings)) for run in study.runs}
+    if len(methods) > 1:
+        msg = (
+            "A sweep's figures need a study of one method, not "
+            f"{len(methods)} (different methods or settings)"
+        )
+        raise ValueError(msg)
+
+    # The longest run of each n_initial and index
+    longest: dict[tuple[int, int], Run] = {}
+    for run in study.runs:
+        key = (run.history.n_initial, run.index)
+        if key not in longest or len(run.history.f) > len(longest[key].history.f):
+            longest[key] = run
+
+    # Their regret, each run labeled with its n_initial, which with its index names
+    # it uniquely
+    import polars as pl  # `evaluations` checks it is installed
+
+    kept = [
+        replace(run, method=str(n_initial)) for (n_initial, _), run in longest.items()
+    ]
+    rows = evaluations(replace(study, runs=tuple(kept)), optimum)
+    rows = rows.drop_nulls("regret") if "regret" in rows.columns else rows.clear()
+    if rows.is_empty():
+        msg = "The study has no regret to draw"
+        raise ValueError(msg)
+    n_initial = pl.col("method").cast(pl.Int64).alias("n_initial")
+    return rows.select(n_initial, "run", "evaluation", "regret")
 
 
 def iteration(

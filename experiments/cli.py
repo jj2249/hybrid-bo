@@ -26,8 +26,9 @@ as `study.log` once the study is saved. A study that doesn't finish leaves its l
 where it was, which keeps its id taken. Running from a tree that isn't clean
 (uncommitted or untracked files) warns that the study won't be reproducible;
 `--require-clean` refuses to run instead. `plot` loads a study (default: the newest
-saved) with `hb.load` and saves its figures to its `figures/` folder: convergence and
-regret, and the iteration figures of the runs `--plot-runs` names (indices, or `all`;
+saved) with `hb.load` and saves its figures to its `figures/` folder: the study
+figures the experiment passes as `figures` (default: convergence and regret), and the
+iteration figures of the runs `--plot-runs` names (indices, or `all`;
 default run 0 of each method). On the run command, `--plot-runs` implies `--plot`.
 """
 
@@ -36,7 +37,7 @@ import logging
 import os
 import sys
 import warnings
-from collections.abc import Generator, Mapping, Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -55,6 +56,12 @@ STUDY_LOG = "study.log"
 LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 CONSOLE_FORMAT = "%(levelname)s %(name)s: %(message)s"
 
+# The study figures `plot` draws unless the experiment passes its own, by file name
+FIGURES: Mapping[str, Callable[[hb.Study], object]] = {
+    "convergence": hb.plots.convergence,
+    "regret": hb.plots.regret,
+}
+
 _logger = logging.getLogger(__name__)
 
 
@@ -67,6 +74,7 @@ def main(
     *,
     optimum: float | None = None,
     true_curves: bool = False,
+    figures: Mapping[str, Callable[[hb.Study], object]] = FIGURES,
     argv: Sequence[str] | None = None,
 ) -> None:
     """Runs the experiment's configurations as a study and saves it, or plots a saved
@@ -77,7 +85,9 @@ def main(
     flags override. `optimum` is the stated oracle optimum of a benchmark experiment,
     which regret is measured from. `true_curves` draws the measurement's values over the
     grid in the iteration figures, which only a cheap measurement (an oracle) can
-    afford.
+    afford. `figures` are the study figures `plot` draws, by file name: functions
+    of the study that draw on a new figure (default `FIGURES`, convergence and
+    regret), e.g. a sweep's `hb.plots.budget_heatmap`.
     """
     # The command: `plot [STUDY]`, else a run with every argument
     args = list(sys.argv[1:] if argv is None else argv)
@@ -161,7 +171,14 @@ def main(
     if command == "plot" or parsed.plot or parsed.plot_runs is not None:
         runs = _plot_runs(parsers[command], parsed.plot_runs)
         with plt.style.context(hb.plots.STYLE):
-            plot(name, problem, measure if true_curves else None, study_dir, runs=runs)
+            plot(
+                name,
+                problem,
+                measure if true_curves else None,
+                study_dir,
+                runs=runs,
+                figures=figures,
+            )
 
 
 def _parsers(
@@ -330,9 +347,11 @@ def plot(
     study_dir: Path,
     *,
     runs: Sequence[int] | None,
+    figures: Mapping[str, Callable[[hb.Study], object]] = FIGURES,
 ) -> None:
     """Saves the figures of the study in `study_dir` to its `figures/` folder:
-    `convergence.png`, `regret.png` (when the study has an oracle optimum) and
+    `<name>.png` for each of `figures` (by default `convergence.png` and
+    `regret.png`, when the study has an oracle optimum) and
     `<method>/run-000/iteration-00.png` for every iteration of each method's runs
     with these indices (None: every run), with the oracle values from `measure` if
     given; hybrid BO's are drawn without the GP panels when it has more than one
@@ -351,16 +370,15 @@ def plot(
     figures_dir = study_dir / "figures"
     figures_dir.mkdir(exist_ok=True)
 
-    # Convergence, and regret when the study has an oracle optimum
-    hb.plots.convergence(study)
-    plt.savefig(figures_dir / "convergence.png")
-    plt.close("all")
-    try:
-        hb.plots.regret(study)
-    except ValueError as error:
-        print(f"no regret figure: {error}")
-    else:
-        plt.savefig(figures_dir / "regret.png")
+    # The study figures, each skipped if the study can't give it (regret without
+    # an oracle optimum)
+    for figure_name, figure in figures.items():
+        try:
+            figure(study)
+        except ValueError as error:
+            print(f"no {figure_name} figure: {error}")
+        else:
+            plt.savefig(figures_dir / f"{figure_name}.png")
         plt.close("all")
 
     # Every iteration of the runs chosen
