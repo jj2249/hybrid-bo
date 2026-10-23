@@ -218,7 +218,7 @@ def oracle_measure(
     noise_std: float = 0.0,
     n_starts: int = 100,
     tol: float = 1e-10,
-) -> Measure: ...
+) -> OracleSimulation: ...  # a frozen, callable dataclass: it pickles
 
 
 def evaluate(
@@ -311,9 +311,15 @@ anything), not the example: the variables with their bounds, `h_inputs`, `measur
 `g` and `f` as expression text, the measurement, the method and its settings, the
 prior GP's repr (#119), the seed, spawn key and generator state, and the
 versions of `hybrid_bo` (with `git describe`), Python, CasADi, NumPy and SciPy. The
-measurement is recorded by its docstring, else its name; the oracle simulation's
-docstring is the oracle as text with its noise and solver settings, so a custom
-measurement adds a description by writing a docstring.
+measurement is recorded by its docstring, else its name, so a custom measurement adds
+a description by writing a docstring. A measurement that is a dataclass is recorded
+by its repr instead: the oracle simulation (`OracleSimulation`) gives the oracle as
+text with its noise and solver settings.
+
+The oracle simulation is a frozen, callable dataclass, not a closure, so it pickles
+(#141): parallel studies send each run's problem, method and measurement to worker
+processes. It holds the oracle traced like `g`, a `cas.Function`, which pickles
+whatever the user's oracle was, a lambda included.
 
 A run's artifact has the study's name for the same thing, what was run and how (#123;
 it was `record` before). In a study it mostly repeats the study's artifact, but a run

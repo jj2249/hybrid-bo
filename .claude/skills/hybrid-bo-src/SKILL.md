@@ -82,7 +82,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - `evaluation.py`: a `Measure` is `(u (N,), rng) -> measured (P,)`, or an
   `OracleMeasurement` (measured plus oracle `x`, `y`) in benchmark experiments.
   `oracle_measure(system, oracle, noise_std, ...)` traces the oracle like `g`
-  (`_trace_oracle`).
+  (`_trace_oracle`) and returns an `OracleSimulation`, a frozen, callable dataclass
+  holding the system, the traced oracle and the settings, so it pickles (parallel
+  studies, #141) even when the oracle is a lambda; its repr is the artifact's text.
   `oracle_optimum(problem, oracle, rng)` solves min f s.t. g = 0, y = oracle by
   `multistart` from `lhs` starts over the start bounds of (u, x, y).
   `evaluate(problem, measure, u, rng)` runs the measurement per row, then always
@@ -112,7 +114,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `git describe --always --dirty` plus `-untracked` for untracked files that aren't
   ignored, or `unknown`; `is_clean(version)` says whether it pins the code (the CLI
   checks it before running). A measurement is recorded by
-  its docstring, else its name (`oracle_measure` sets the docstring).
+  its docstring, else its name; a dataclass measurement (`OracleSimulation`) by its
+  repr.
 - `studies.py`: `StudySettings(n_runs, n_initial, n_iterations, seed)`, `Study(runs,
   settings, name, artifact)`, `Method` (called as `method(problem, measure,
   initial_points, n, rng=rng)`), `repeat` (run i from
