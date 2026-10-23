@@ -115,13 +115,61 @@ def _find_root(
     raise RootFindingError(msg)
 
 
+@dataclass(frozen=True, repr=False)
+class OracleSimulation:
+    """The oracle simulation as a measurement, built by `oracle_measure`.
+
+    Called as `measure(u, rng)`. It is data, so it pickles (parallel studies send it
+    to worker processes), and its repr describes it in the run's artifact.
+    """
+
+    system: System
+    oracle: cas.Function  # traced like g, over the columns (x, y, u)
+    noise_std: float
+    n_starts: int
+    tol: float
+
+    def __call__(self, u: np.ndarray, rng: np.random.Generator) -> OracleMeasurement:
+        """The measured variables at u (N,), with noise, and the oracle values.
+
+        Raises `RootFindingError` if no start gives a root.
+        """
+        system = self.system
+        states = _states(system)
+
+        # Oracle values: g and the oracle together, for every state
+        w = Symbolic.sym("w", len(states))
+        x, y = w[: system.n_x], w[system.n_x :]
+        residuals = cas.vertcat(system.g(x, y, u), self.oracle(x, y, u) - y)
+        starts = lhs(*_start_bounds(states), self.n_starts, rng)
+        root = _find_root(w, residuals, states, starts, self.tol)
+
+        # The sensors read the measured variables, with noise
+        measured_columns = [states.index(var) for var in system.measured]
+        noise = rng.normal(0.0, self.noise_std, size=system.n_y)
+        return OracleMeasurement(
+            measured=root[measured_columns] + noise,
+            x=root[: system.n_x],
+            y=root[system.n_x :],
+        )
+
+    def __repr__(self) -> str:
+        """The oracle as text in the variable names, and the settings."""
+        system = self.system
+        oracle_text = _as_text(self.oracle, system.x, system.y, system.u)
+        return (
+            f"OracleSimulation(y = {oracle_text}, noise_std={self.noise_std}, "
+            f"n_starts={self.n_starts}, tol={self.tol})"
+        )
+
+
 def oracle_measure(
     system: System,
     oracle: Callable[[Any], Any],
     noise_std: float,
     n_starts: int = 100,
     tol: float = 1e-10,
-) -> Measure:
+) -> OracleSimulation:
     """The oracle simulation as a measurement, for benchmark experiments.
 
     `oracle` is the unknown equations in closed form, a callable over the variables
@@ -131,40 +179,14 @@ def oracle_measure(
     The measurement solves `g` and the oracle together for every state, from
     `n_starts` Latin hypercube starts over the start bounds, reads the measured
     variables and adds normal noise with std `noise_std`. The noise is drawn even when
-    `noise_std` is 0, so the draws don't depend on it.
+    `noise_std` is 0, so the draws don't depend on it. The oracle is traced here, so
+    the measurement pickles whatever the oracle is, a lambda included.
 
     Raises `ValueError` if the oracle doesn't give one value per unknown state. The
     measurement raises `RootFindingError` if no start gives a root.
     """
     oracle_function = _trace_oracle(system, oracle)
-
-    # Where each measured variable sits in an array of states
-    states = _states(system)
-    measured_columns = [states.index(var) for var in system.measured]
-
-    def measure(u: np.ndarray, rng: np.random.Generator) -> OracleMeasurement:
-        # Oracle values: g and the oracle together, for every state
-        w = Symbolic.sym("w", len(states))
-        x, y = w[: system.n_x], w[system.n_x :]
-        residuals = cas.vertcat(system.g(x, y, u), oracle_function(x, y, u) - y)
-        starts = lhs(*_start_bounds(states), n_starts, rng)
-        root = _find_root(w, residuals, states, starts, tol)
-
-        # The sensors read the measured variables, with noise
-        noise = rng.normal(0.0, noise_std, size=system.n_y)
-        return OracleMeasurement(
-            measured=root[measured_columns] + noise,
-            x=root[: system.n_x],
-            y=root[system.n_x :],
-        )
-
-    # The run's artifact describes a measurement by its docstring
-    oracle_text = _as_text(oracle_function, system.x, system.y, system.u)
-    measure.__doc__ = (
-        f"oracle simulation: y = {oracle_text}, noise_std={noise_std}, "
-        f"n_starts={n_starts}, tol={tol}"
-    )
-    return measure
+    return OracleSimulation(system, oracle_function, noise_std, n_starts, tol)
 
 
 def _trace_oracle(system: System, oracle: Callable[[Any], Any]) -> cas.Function:

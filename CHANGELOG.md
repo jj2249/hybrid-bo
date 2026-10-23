@@ -12,6 +12,12 @@
   `HybridBOSettings(gp=gp, acquisition=hb.EI(), approximation=hb.SAA(n_scenarios=25))`,
   and `SoftSAA(1e-6)` becomes `SoftSAA(temperature=1e-6, n_scenarios=25)`. Results
   and saved studies are unchanged.
+- `oracle_measure` returns an `OracleSimulation`, a frozen, callable dataclass, so
+  the measurement pickles and parallel studies can send it to worker processes
+  (#141). A run's artifact records a dataclass measurement by its repr, so the oracle
+  simulation's `measure` entry reads `OracleSimulation(y = ..., noise_std=...,
+  n_starts=..., tol=...)` instead of `oracle simulation: y = ..., ...`. Results don't
+  change.
 - **Changes results:** `multistart` breaks ties toward the earlier start (#136): a
   later start replaces the best only when its objective is lower by more than 1e-13
   (relative, or absolute below 1), so objectives that differ only by rounding give

@@ -5,7 +5,7 @@ import importlib.metadata
 import inspect
 import platform
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, is_dataclass
 from pathlib import Path
 
 import numpy as np
@@ -98,12 +98,13 @@ def _version(distribution: str) -> str:
 def _problem_artifact(problem: Problem, measure: object) -> dict[str, str]:
     """The problem's variables, structure and equations, and the measurement, as text.
 
-    The measurement is described by its docstring when it has one (the oracle
-    simulation does), else by its name.
+    A measurement that is a dataclass (the oracle simulation is) is described by its
+    repr, any other by its docstring when it has one, else by its name.
     """
     system = problem.system
     blocks = (system.x, system.y, system.u)
     name = getattr(measure, "__qualname__", type(measure).__qualname__)
+    description = repr(measure) if is_dataclass(measure) else inspect.getdoc(measure)
     return {
         "u": "; ".join(repr(var) for var in system.u),
         "x": "; ".join(repr(var) for var in system.x),
@@ -112,7 +113,7 @@ def _problem_artifact(problem: Problem, measure: object) -> dict[str, str]:
         "measured": ", ".join(var.name for var in system.measured),
         "g": _as_text(system.g, *blocks),
         "f": _as_text(problem.f, *blocks),
-        "measure": inspect.getdoc(measure) or name,
+        "measure": description or name,
     }
 
 
@@ -155,8 +156,7 @@ def run_artifact(
     package and code versions.
 
     Call it before the method draws anything, so the generator's state is the one
-    the run starts from. The measurement is described by its docstring when it has
-    one (the oracle simulation does), else by its name.
+    the run starts from. The measurement is described as `_problem_artifact` says.
     """
     return (
         _problem_artifact(problem, measure)

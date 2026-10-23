@@ -95,7 +95,9 @@ def test_artifact_describes_the_problem_method_and_versions(illustrative_problem
     assert all(isinstance(value, str) for value in artifact.values())
     assert "exp(x)" in artifact["g"]
     assert "sin(((12*x)-4))" in artifact["f"]
-    assert "sin(u)" in artifact["measure"]
+    assert artifact["measure"] == (
+        "OracleSimulation(y = sin(u), noise_std=0.0, n_starts=100, tol=1e-10)"
+    )
     assert "lower=-2.0" in artifact["u"]
     assert artifact["h_inputs"] == "u"
     assert artifact["measured"] == "y"
