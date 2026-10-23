@@ -137,7 +137,10 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   process pool, same runs in the same order; it checks that the problem, measurement
   and methods pickle (`TypeError` otherwise), starts workers with single-threaded
   BLAS, re-emits workers' records through the parent's loggers and raises their
-  warnings again after each run. `run_of(record)` gives the `(label, index)` of the
+  warnings again after each run. Workers ignore SIGINT; on an error or Ctrl-C the
+  parent terminates them (`_stop_workers`, which survives a second Ctrl-C: pixi
+  delivers each one twice). A serial study doesn't stop on Ctrl-C while IPOPT runs,
+  since CasADi catches the interrupt there. `run_of(record)` gives the `(label, index)` of the
   study run that logged a record (a context variable, or the attribute a worker's
   record carries); `repeat` alone tags nothing. Each configuration spawns its own
   `SeedSequence` children: `lhs` spawns from them, so sharing them across

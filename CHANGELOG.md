@@ -10,7 +10,8 @@
   their warnings raised again in the caller; `hb.studies.run_of(record)` gives the
   run that logged a record. The experiment CLI gains `--n-workers`, starts each study
   log line logged by a run with its tag (`hybrid_bo/run-003`), and saves one log per
-  run as `logs/<label>/run-003.log`. Results are unchanged.
+  run as `logs/<label>/run-003.log`. Ctrl-C stops a parallel study at once, its
+  workers included. Results are unchanged.
 - Figures of an initial-fraction sweep (#146): `hb.plots.budget_heatmap` (median
   log10 regret by budget and number of initial points, with lines of constant
   initial fraction and the best one at each budget), `hb.plots.regret_at_budget`

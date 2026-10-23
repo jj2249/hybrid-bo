@@ -847,7 +847,12 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   pickled to each task, so they must be module-level functions or data; `study`
   checks this first and raises `TypeError` naming the culprit, instead of the pool's
   error after the first task. A `HybridBOError` is handled inside the worker as
-  serially. A worker's records go to the parent through a queue and are handled by
+  serially. Ctrl-C is the parent's alone: workers ignore SIGINT, and on any error or
+  interrupt the parent terminates them rather than wait, since CasADi catches an
+  interrupt inside IPOPT and the run carries on. Stopping them survives another
+  Ctrl-C, because pixi passes a Ctrl-C on to its task, which so gets two. It reads
+  the pool's private `_processes`: there is no public way before Python 3.14, and
+  3.14's `terminate_workers` can't be retried once interrupted. A worker's records go to the parent through a queue and are handled by
   the parent's loggers if they are enabled for the level (workers start with the
   parent's logger levels, so they don't send what the parent would drop); its
   warnings are recorded and raised again in the parent after its run, so the parent's

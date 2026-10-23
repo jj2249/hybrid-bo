@@ -13,6 +13,7 @@ import logging.handlers
 import multiprocessing
 import os
 import pickle
+import signal
 import threading
 import time
 import warnings
@@ -335,48 +336,53 @@ def _parallel_results(
     # A thread that handles the workers' records here, until the pool is done
     context = multiprocessing.get_context("spawn")
     records = context.Queue()
-    listener = threading.Thread(target=_reemit, args=(records,))
+    listener = threading.Thread(target=_reemit, args=(records,), daemon=True)
     listener.start()
+    executor = ProcessPoolExecutor(
+        n_workers,
+        mp_context=context,
+        initializer=_start_worker,
+        initargs=(records, _levels()),
+    )
+    finished = False
     try:
-        with ProcessPoolExecutor(
-            n_workers,
-            mp_context=context,
-            initializer=_start_worker,
-            initargs=(records, _levels()),
-        ) as executor:
-            # The pool starts its workers as tasks are submitted, so they inherit
-            # single-threaded BLAS and OpenMP
-            with _single_threaded_children():
-                futures = [
-                    executor.submit(_worker_run, task, problem, measure, settings)
-                    for task in tasks
-                ]
+        # The pool starts its workers as tasks are submitted, so they inherit
+        # single-threaded BLAS and OpenMP
+        with _single_threaded_children():
+            futures = [
+                executor.submit(_worker_run, task, problem, measure, settings)
+                for task in tasks
+            ]
 
-            # Each run's warnings raised again here, tagged with the run; a
-            # registry per file shows a warning once per place, as serially. An
-            # error cancels the runs not started yet
-            results = []
-            registries = {}
-            try:
-                for task, future in zip(tasks, futures, strict=True):
-                    run, caught = future.result()
-                    with _tagged(task.label, task.index):
-                        for message, category, filename, lineno in caught:
-                            warnings.warn_explicit(
-                                message,
-                                category,
-                                filename,
-                                lineno,
-                                registry=registries.setdefault(filename, {}),
-                            )
-                    results.append(run)
-            except BaseException:
-                executor.shutdown(cancel_futures=True)
-                raise
+        # Each run's warnings raised again here, tagged with the run; a registry per
+        # file shows a warning once per place, as serially
+        results = []
+        registries = {}
+        for task, future in zip(tasks, futures, strict=True):
+            run, caught = future.result()
+            with _tagged(task.label, task.index):
+                for message, category, filename, lineno in caught:
+                    warnings.warn_explicit(
+                        message,
+                        category,
+                        filename,
+                        lineno,
+                        registry=registries.setdefault(filename, {}),
+                    )
+            results.append(run)
+        finished = True
+
+    # Finished workers exit and have queued all their records before the end
+    # marker. An error or Ctrl-C stops them at once instead, as their runs may never
+    # see the interrupt (CasADi catches it inside IPOPT), and one stopped mid-record
+    # may leave the queue unreadable, so then the wait for the listener is brief
     finally:
-        # The workers have exited, so their records are all queued before this
+        if finished:
+            executor.shutdown()
+        else:
+            _stop_workers(executor)
         records.put(None)
-        listener.join()
+        listener.join(timeout=None if finished else 5)
     return results
 
 
@@ -409,10 +415,31 @@ def _start_worker(
     records: "multiprocessing.Queue[logging.LogRecord | None]", levels: dict[str, int]
 ) -> None:
     """Sets up a worker process: its loggers at the parent's levels, with every
-    record sent to the parent through `records` instead of handled here."""
+    record sent to the parent through `records` instead of handled here, and Ctrl-C
+    left to the parent, which stops the workers."""
     for name, level in levels.items():
         logging.getLogger(name or None).setLevel(level)
     logging.root.handlers = [_Forward(records)]
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+
+def _stop_workers(executor: ProcessPoolExecutor) -> None:
+    """Terminates the executor's workers at once and cancels the runs not started.
+    Ctrl-C meanwhile doesn't stop it: pixi passes a Ctrl-C on to the process it
+    runs, which so gets it twice."""
+    # The pool's workers, from a private attribute: before Python 3.14 there is no
+    # public way to stop them, and 3.14's `terminate_workers` can't be called again
+    # once interrupted, since it clears this first
+    processes = []
+    while True:
+        try:
+            processes = processes or list((executor._processes or {}).values())
+            executor.shutdown(wait=False, cancel_futures=True)
+            for process in processes:
+                process.terminate()
+        except KeyboardInterrupt:
+            continue
+        return
 
 
 def _reemit(records: "multiprocessing.Queue[logging.LogRecord | None]") -> None:

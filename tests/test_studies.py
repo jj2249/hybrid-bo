@@ -9,7 +9,12 @@ import dataclasses
 import functools
 import json
 import os
+import signal
+import subprocess
+import sys
+import time
 import warnings
+from pathlib import Path
 
 import illustrative_example as ex
 import numpy as np
@@ -552,6 +557,77 @@ def test_workers_run_single_threaded_blas(illustrative_problem):
     single_threaded = str({name: "1" for name in THREAD_VARIABLES})
     assert [str(w.message) for w in caught] == [f"threads: {single_threaded}"] * 2
     assert dict(os.environ) == before
+
+
+# A study whose method ignores Ctrl-C, as a run inside IPOPT does (CasADi catches the
+# KeyboardInterrupt and counts it as a failed start); it writes a file once running
+STUBBORN_STUDY = """
+import os, pathlib, time
+import illustrative_example as ex
+import hybrid_bo as hb
+
+def stubborn(problem, measure, initial_points, n, rng):
+    pathlib.Path(os.environ["STARTED"], str(os.getpid())).touch()
+    while True:
+        try:
+            time.sleep(0.1)
+        except KeyboardInterrupt:
+            pass
+
+if __name__ == "__main__":
+    configuration = hb.Configuration(method=stubborn, n_evaluations=2, n_initial=1)
+    hb.study(
+        {"stubborn": configuration},
+        ex.problem,
+        ex.measure,
+        hb.StudySettings(n_runs=4, seed=0),
+        n_workers=2,
+    )
+"""
+
+
+@pytest.mark.parametrize("n_interrupts", [1, 2])
+def test_ctrl_c_stops_a_parallel_study_at_once(tmp_path, n_interrupts):
+    """Ctrl-C (SIGINT to the terminal's process group) stops a parallel study within
+    seconds with `KeyboardInterrupt`, even while its runs ignore the interrupt, and
+    leaves no worker processes behind. Under pixi, which passes a Ctrl-C on to the
+    process it runs, the study gets it twice."""
+    # Setup: the study in its own process group, as a terminal runs a command
+    script = tmp_path / "stubborn_study.py"
+    script.write_text(STUBBORN_STUDY)
+    started = tmp_path / "started"
+    started.mkdir()
+    experiments = Path(__file__).parent.parent / "experiments"
+    env = os.environ | {"STARTED": str(started), "PYTHONPATH": str(experiments)}
+    study = subprocess.Popen(
+        [sys.executable, str(script)],
+        env=env,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+
+    # Act: Ctrl-C once both workers are in their runs
+    deadline = time.monotonic() + 60
+    while len(list(started.iterdir())) < 2 and time.monotonic() < deadline:
+        time.sleep(0.2)
+    assert len(list(started.iterdir())) == 2, "the workers never started their runs"
+    for _ in range(n_interrupts):
+        os.killpg(study.pid, signal.SIGINT)
+        time.sleep(0.01)
+    try:
+        _, stderr = study.communicate(timeout=20)
+    except subprocess.TimeoutExpired:
+        os.killpg(study.pid, signal.SIGKILL)
+        study.communicate()
+        pytest.fail("the study didn't stop within 20s of Ctrl-C")
+
+    # Check: stopped by the interrupt, with no process of the group left
+    assert study.returncode != 0
+    assert "KeyboardInterrupt" in stderr
+    time.sleep(1)
+    with pytest.raises(ProcessLookupError):
+        os.killpg(study.pid, 0)
 
 
 # The oracle optimum
