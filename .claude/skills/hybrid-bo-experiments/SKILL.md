@@ -9,7 +9,9 @@ Read `docs/writing_an_experiment.rst` first: it is the user guide (layout, CasAD
 rules, `Var`/`System`/`Problem`, oracle vs custom measurement, methods and settings,
 `cli.main`, running, common errors). `docs/reading_results.rst` covers the saved study,
 the figures and the Polars views. `experiments/illustrative_example.py` is the
-reference experiment. Use GLOSSARY.md's terms. This file adds only what an agent needs
+reference experiment, and `illustrative_example_2d.py` its version with two decision
+variables; `rosenbrock.py` (P = 2) and `langermann.py` (P = 5) have no
+known equations (M = 0). Use GLOSSARY.md's terms. This file adds only what an agent needs
 on top.
 
 ## Layout contract
@@ -64,8 +66,8 @@ oracle objective is below it.
 - `System` takes keyword arguments only. Without known equations, leave out both
   `x` and `g` (M = 0); giving one without the other raises `ValueError`.
 - Exactly one measured variable per unknown state. With `P > 1` unknown states,
-  `plots.iteration` draws only with `gp=False` (else `ValueError`), so the CLI's
-  `--plot` skips their iteration figures with a message.
+  `plots.iteration` draws hybrid BO only with `gp=False` (else `ValueError`), so the
+  CLI draws those runs' iteration figures without the GP panels.
 - With measurement noise, state it in the GP too, as the same number:
   `GP(..., noise_std=0.01)` for `oracle_measure(..., noise_std=0.01)`. `noise_std`
   is in measured units; kernel hyperparameters (`Param` bounds, fixed lengthscales) are in

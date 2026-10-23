@@ -61,6 +61,8 @@ the unknown state (oracle, GP mean, GP std) and a row for ``f`` (oracle, the mea
 std over the scenarios, and EI); standard BO the row for ``f`` with its GP. The oracle
 panels, with ``true_curves=True``, share the color scale of the mean beside them. EI
 is drawn as log10 EI, with the points where it is 0, SAA-EI's flat regions, in gray.
+Its color scale covers at most 10 decades below the largest EI; smaller EI, which
+SoftSAA-EI at a low temperature has over most of the map, takes the lowest color.
 
 The study in Python
 -------------------
