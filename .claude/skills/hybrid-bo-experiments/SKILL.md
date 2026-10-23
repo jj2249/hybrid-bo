@@ -127,8 +127,8 @@ gets `-2`, `-3`, ... appended. The study log gets the library's records (DEBUG a
 above: every run, iteration, GP fit and multistart with its time) and every warning;
 the console shows INFO and above. A line a run logs starts with its tag,
 `<label>/run-003`, so the lines of parallel runs can be told apart, and also goes to
-the run's own log. Once saved, the log moves into the study folder as `study.log`, and
-the run logs from `<id>.logs/` to `logs/<label>/run-003.log`; a study that doesn't
+the run's per-run log. Once saved, the log moves into the study folder as `study.log`, and
+the per-run logs from `<id>.logs/` to `logs/<label>/run-003.log`; a study that doesn't
 finish leaves `<id>.log` (and `<id>.logs/`) in place, which keeps the id taken until
 it is deleted. `plot` loads the study given, else the one whose
 artifact was written last (`artifact.json`, or `study.json` in older studies), and

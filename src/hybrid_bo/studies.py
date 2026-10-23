@@ -131,26 +131,44 @@ def repeat(
     (`error.run`); the next run goes on. Each finished run is logged
     at info level with its time.
     """
-    children = np.random.SeedSequence(settings.seed).spawn(settings.n_runs)
-    runs = [
-        _run(configuration, problem, measure, settings, index, child)
-        for index, child in enumerate(children)
-    ]
+    tasks = _tasks({"": configuration}, settings)
+    runs = [_run(task, problem, measure, settings) for task in tasks]
     return tuple(run for run in runs if run is not None)
 
 
+@dataclass(frozen=True)
+class _Task:
+    """One run of a study: run `index` of the configuration labeled `label`, drawn
+    from `child`, its spawned seed."""
+
+    label: str
+    configuration: Configuration
+    index: int
+    child: np.random.SeedSequence
+
+
+def _tasks(
+    configurations: Mapping[str, Configuration], settings: StudySettings
+) -> list[_Task]:
+    """The runs of every configuration, by label, then index. Each configuration
+    spawns its own seeds from `settings.seed`, since `lhs` spawns from them."""
+    return [
+        _Task(label, configuration, index, child)
+        for label, configuration in configurations.items()
+        for index, child in enumerate(
+            np.random.SeedSequence(settings.seed).spawn(settings.n_runs)
+        )
+    ]
+
+
 def _run(
-    configuration: Configuration,
-    problem: Problem,
-    measure: Measure,
-    settings: StudySettings,
-    index: int,
-    child: np.random.SeedSequence,
+    task: _Task, problem: Problem, measure: Measure, settings: StudySettings
 ) -> Run | None:
-    """Run `index` of the configuration, from its spawned seed `child`, as `repeat`
-    describes; None if it failed before evaluating anything."""
+    """The task's run, as `repeat` describes; None if it failed before evaluating
+    anything."""
+    configuration, index = task.configuration, task.index
     start = time.perf_counter()
-    rng = np.random.default_rng(child)
+    rng = np.random.default_rng(task.child)
     n_iterations = configuration.n_evaluations - configuration.n_initial
     u = initial_points(problem.system.u, configuration.n_initial, rng)
     try:
@@ -186,11 +204,12 @@ def study(
     *,
     n_workers: int = 1,
 ) -> Study:
-    """Runs every configuration with `repeat` from the same seed, so run i of every
-    configuration with the same `n_initial` starts from the same initial points, and
-    the same seed gives the same study. Each run is labeled with its configuration's
-    key, so one method can appear under several labels, with different settings or
-    budgets. Logs each label at info level as its runs start.
+    """Runs every configuration `settings.n_runs` times, as `repeat` does, from the
+    same seed, so run i of every configuration with the same `n_initial` starts from
+    the same initial points, and the same seed gives the same study. Each run is
+    labeled with its configuration's key, so one method can appear under several
+    labels, with different settings or budgets. Logs each label at info level before
+    the runs start.
 
     Seed None draws a fresh seed first, and the study's settings hold it, so the
     saved study can be run again exactly. `optimum` is the oracle optimum of a test
@@ -216,22 +235,23 @@ def study(
     seed = np.random.SeedSequence(settings.seed).entropy
     settings = replace(settings, seed=seed)
 
-    # Every configuration's runs, labeled with their key, each run's records tagged
-    # with it. Each configuration spawns its own generators: `lhs` spawns from them
-    runs: list[Run] = []
+    # One task per run of each configuration, here or in workers, each run's records
+    # tagged with it; the runs keep the tasks' order and are labeled with their key
+    for label, configuration in configurations.items():
+        _log_configuration(label, configuration, settings)
+    tasks = _tasks(configurations, settings)
     if n_workers == 1:
-        for label, configuration in configurations.items():
-            _log_configuration(label, configuration, settings)
-            children = np.random.SeedSequence(settings.seed).spawn(settings.n_runs)
-            for index, child in enumerate(children):
-                with _tagged(label, index):
-                    run = _run(configuration, problem, measure, settings, index, child)
-                if run is not None:
-                    runs.append(replace(run, method=label))
+        results = []
+        for task in tasks:
+            with _tagged(task.label, task.index):
+                results.append(_run(task, problem, measure, settings))
     else:
-        for label, configuration in configurations.items():
-            _log_configuration(label, configuration, settings)
-        runs = _parallel_runs(configurations, problem, measure, settings, n_workers)
+        results = _parallel_results(tasks, problem, measure, settings, n_workers)
+    runs = [
+        replace(run, method=task.label)
+        for task, run in zip(tasks, results, strict=True)
+        if run is not None
+    ]
 
     # Each method with its settings, from the artifact of one of its runs; a BO
     # method's prior GP follows on its own line
@@ -293,15 +313,15 @@ def _log_configuration(
     )
 
 
-def _parallel_runs(
-    configurations: Mapping[str, Configuration],
+def _parallel_results(
+    tasks: list[_Task],
     problem: Problem,
     measure: Measure,
     settings: StudySettings,
     n_workers: int,
-) -> list[Run]:
-    """Every configuration's runs, labeled with their key, from `n_workers` worker
-    processes, one task per run, in the order of the serial study.
+) -> list[Run | None]:
+    """The tasks' runs (`_run`), from `n_workers` worker processes, in the tasks'
+    order.
 
     Raises `TypeError` if the problem, the measurement or a method can't be pickled,
     which sending it to a worker needs.
@@ -309,18 +329,10 @@ def _parallel_runs(
     # Everything a worker gets must pickle; say which object doesn't, before running
     _check_picklable(problem, "problem")
     _check_picklable(measure, "measurement")
-    for label, configuration in configurations.items():
-        _check_picklable(configuration.method, f"method of {label}")
+    for task in tasks:
+        _check_picklable(task.configuration.method, f"method of {task.label}")
 
-    # One task per run, collected in submission order; each configuration spawns its
-    # own generators, as serially
-    tasks = [
-        (label, configuration, index, child)
-        for label, configuration in configurations.items()
-        for index, child in enumerate(
-            np.random.SeedSequence(settings.seed).spawn(settings.n_runs)
-        )
-    ]
+    # A thread that handles the workers' records here, until the pool is done
     context = multiprocessing.get_context("spawn")
     records = context.Queue()
     listener = threading.Thread(target=_reemit, args=(records,))
@@ -336,27 +348,19 @@ def _parallel_runs(
             # single-threaded BLAS and OpenMP
             with _single_threaded_children():
                 futures = [
-                    executor.submit(
-                        _tagged_run,
-                        label,
-                        configuration,
-                        problem,
-                        measure,
-                        settings,
-                        index,
-                        child,
-                    )
-                    for label, configuration, index, child in tasks
+                    executor.submit(_worker_run, task, problem, measure, settings)
+                    for task in tasks
                 ]
+
             # Each run's warnings raised again here, tagged with the run; a
             # registry per file shows a warning once per place, as serially. An
             # error cancels the runs not started yet
             results = []
             registries = {}
             try:
-                for (label, _, index, _), future in zip(tasks, futures, strict=True):
+                for task, future in zip(tasks, futures, strict=True):
                     run, caught = future.result()
-                    with _tagged(label, index):
+                    with _tagged(task.label, task.index):
                         for message, category, filename, lineno in caught:
                             warnings.warn_explicit(
                                 message,
@@ -373,11 +377,7 @@ def _parallel_runs(
         # The workers have exited, so their records are all queued before this
         records.put(None)
         listener.join()
-    return [
-        replace(run, method=label)
-        for (label, *_), run in zip(tasks, results, strict=True)
-        if run is not None
-    ]
+    return results
 
 
 def _check_picklable(value: object, what: str) -> None:
@@ -446,21 +446,18 @@ def _tagged(label: str, index: int) -> Generator[None]:
         _current_run.reset(token)
 
 
-def _tagged_run(
-    label: str,
-    configuration: Configuration,
-    problem: Problem,
-    measure: Measure,
-    settings: StudySettings,
-    index: int,
-    child: np.random.SeedSequence,
+def _worker_run(
+    task: _Task, problem: Problem, measure: Measure, settings: StudySettings
 ) -> tuple[Run | None, list[tuple[Warning | str, type[Warning], str, int]]]:
     """`_run` in a worker process, its records tagged with the run, and every
     warning it raised (message, category, file and line), for the parent to raise
     again."""
-    with _tagged(label, index), warnings.catch_warnings(record=True) as caught:
+    with (
+        _tagged(task.label, task.index),
+        warnings.catch_warnings(record=True) as caught,
+    ):
         warnings.simplefilter("always")
-        run = _run(configuration, problem, measure, settings, index, child)
+        run = _run(task, problem, measure, settings)
     return run, [(w.message, w.category, w.filename, w.lineno) for w in caught]
 
 

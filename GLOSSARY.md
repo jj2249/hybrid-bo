@@ -198,6 +198,12 @@ every warning raised. Saved with the study, beside its artifact. It is for readi
 analysis: the runs hold the results.
 _Avoid_: run log
 
+**Per-run log**:
+One run's part of the study log: the lines that run logged, saved in the study's
+`logs/<label>/run-003.log`. In the study log, the same lines start with the run's tag,
+`<label>/run-003`.
+_Avoid_: run log, worker log
+
 **Reproducible**:
 A study is reproducible when its artifact records a clean code version (every file
 committed, none changed or untracked) and running its experiment again at that version,

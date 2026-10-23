@@ -412,7 +412,8 @@ def test_the_same_seed_gives_the_same_study(illustrative_problem):
 
 def test_a_parallel_study_is_the_serial_study(illustrative_study):
     """With worker processes, a study gives the same runs as without, bit for bit and
-    in the same order (by label, then run index), whatever order they finish in."""
+    in the same order (by label, then run index), whatever order they finish in: 12
+    runs on 4 workers."""
     parallel = hb.study(
         configurations_of(ex.methods, n_evaluations=N_INITIAL + 1, n_initial=N_INITIAL),
         ex.problem,
@@ -420,7 +421,7 @@ def test_a_parallel_study_is_the_serial_study(illustrative_study):
         SETTINGS,
         name="illustrative_example",
         optimum=ex.optimum,
-        n_workers=2,
+        n_workers=4,
     )
 
     assert_same(parallel, illustrative_study)
@@ -450,6 +451,7 @@ def test_a_parallel_study_refuses_a_measurement_that_cannot_be_pickled(
 
 def test_a_study_needs_at_least_one_worker(illustrative_problem):
     """`n_workers` counts processes, 1 meaning this one: below 1 is a `ValueError`."""
+    # A quick study, asked for with no workers
     configurations = configurations_of(
         {"uniform": hb.uniform_sampling}, n_evaluations=2, n_initial=1
     )
@@ -505,6 +507,7 @@ def test_a_warning_in_a_worker_is_raised_again_in_the_parent(illustrative_proble
     """A warning a run raises in a worker process is raised in the parent too, once
     per run, so the parent's warning filters and handlers see it as in a serial
     study."""
+    # A method that warns once per run
     configurations = configurations_of(
         {"warning": warning_sampling}, n_evaluations=2, n_initial=1
     )
@@ -515,6 +518,7 @@ def test_a_warning_in_a_worker_is_raised_again_in_the_parent(illustrative_proble
             configurations, illustrative_problem, ex.measure, SETTINGS, n_workers=2
         )
 
+    # One warning per run
     assert sum("from the method" in str(w.message) for w in caught) == SETTINGS.n_runs
 
 
@@ -532,16 +536,19 @@ THREAD_VARIABLES = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"
 def test_workers_run_single_threaded_blas(illustrative_problem):
     """Worker processes run BLAS and OpenMP on one thread each, so n workers use n
     cores, while this process's environment stays as it was."""
+    # This process's environment, and a method that reports its process's threads
     before = dict(os.environ)
     configurations = configurations_of(
         {"threads": thread_reporting_sampling}, n_evaluations=2, n_initial=1
     )
 
+    # Act: the reports arrive as warnings, raised again here
     with pytest.warns(UserWarning, match="threads") as caught:
         hb.study(
             configurations, illustrative_problem, ex.measure, SETTINGS, n_workers=2
         )
 
+    # Both runs had one thread, and this process's environment is unchanged
     single_threaded = str({name: "1" for name in THREAD_VARIABLES})
     assert [str(w.message) for w in caught] == [f"threads: {single_threaded}"] * 2
     assert dict(os.environ) == before

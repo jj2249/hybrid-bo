@@ -331,7 +331,7 @@ def test_the_study_log_records_each_run_and_iteration(tmp_path, capsys):
 def test_each_run_logs_to_its_own_log_and_tags_the_study_log(tmp_path, n_workers):
     """Every line a run logs starts with its label and index in the study log
     (`standard_bo/run-001`), so the lines of runs in parallel can be told apart, and
-    also goes to the run's own log, `logs/<label>/run-<index>.log`, in the study's
+    also goes to the run's per-run log, `logs/<label>/run-<index>.log`, in the study's
     folder. Lines from outside the runs are in the study log only, untagged."""
     # One method, two runs of two iterations, serially or by two workers
     run_cli(
@@ -352,7 +352,7 @@ def test_each_run_logs_to_its_own_log_and_tags_the_study_log(tmp_path, n_workers
     assert len(start) == 1
     assert "run-00" not in start[0]
 
-    # Each run's own log holds its lines and no other run's
+    # Each run's per-run log holds its lines and no other run's
     for index in (0, 1):
         run_log = (
             study_dir / "logs" / "standard_bo" / f"run-00{index}.log"
@@ -362,6 +362,17 @@ def test_each_run_logs_to_its_own_log_and_tags_the_study_log(tmp_path, n_workers
         assert run_log.count("standard_bo iteration 2 of 2:") == 1
         assert "Configuration standard_bo" not in run_log
     assert not (tmp_path / "illustrative_example" / "tagged.logs").exists()
+
+
+def test_per_run_logs_left_by_an_unfinished_study_keep_its_id_taken(tmp_path):
+    """A study that didn't finish may leave its per-run logs, `<study id>.logs`,
+    after its study log was deleted; a new study doesn't reuse that id, so the old
+    per-run logs never mix with its own."""
+    (tmp_path / "old.logs").mkdir()
+
+    assert cli.reserve(tmp_path, "old", suffix_if_taken=True).name == "old-2.log"
+    with pytest.raises(FileExistsError, match="per-run logs"):
+        cli.reserve(tmp_path, "old", suffix_if_taken=False)
 
 
 def test_a_taken_name_is_refused_before_running(tmp_path, capsys):

@@ -23,9 +23,9 @@ study log, `<study id>.log`, beside the study folders; an id is taken if that lo
 its folder exists. A taken `--name` is refused, and a taken UTC time gets `-2`, `-3`,
 ... appended. The study log records the library's progress (DEBUG and above; the
 console shows INFO and above) and every warning, a line logged by a run starting
-with the run's tag (`hybrid_bo/run-003`); each run's lines also go to its own log in
+with the run's tag (`hybrid_bo/run-003`); each run's lines also go to its per-run log in
 `<study id>.logs/`. Once the study is saved, the log moves into its folder as
-`study.log`, and the run logs to `logs/<label>/run-003.log`. A study that doesn't
+`study.log`, and the per-run logs to `logs/<label>/run-003.log`. A study that doesn't
 finish leaves them where they were, which keeps its id taken. Running from a tree that isn't clean
 (uncommitted or untracked files) warns that the study won't be reproducible;
 `--require-clean` refuses to run instead. `plot` loads a study (default: the newest
@@ -56,7 +56,7 @@ from hybrid_bo.studies import run_of
 RESULTS_ROOT = Path(__file__).parent.parent / "results"
 ARTIFACTS = (ARTIFACT_FILE, OLD_ARTIFACT_FILE)
 STUDY_LOG = "study.log"
-RUN_LOGS = "logs"
+PER_RUN_LOGS = "logs"
 LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 TAGGED_FORMAT = "%(asctime)s %(run_tag)s%(levelname)s %(name)s: %(message)s"
 CONSOLE_FORMAT = "%(run_tag)s%(levelname)s %(name)s: %(message)s"
@@ -122,9 +122,9 @@ def main(
 
         # Run and save the study, logging to its study log and run logs; a study
         # that doesn't finish leaves them where they are
-        run_logs = log_path.with_suffix(".logs")
+        per_run_logs = log_path.with_suffix(".logs")
         try:
-            with study_log(log_path, run_logs):
+            with study_log(log_path, per_run_logs):
                 if not clean:
                     _logger.warning(
                         "The code version %s isn't clean (uncommitted or untracked "
@@ -152,12 +152,12 @@ def main(
                     )
         except BaseException:
             print(f"The study didn't finish; its log is {log_path}", file=sys.stderr)
-            if run_logs.exists():
-                print(f"and its run logs are in {run_logs}", file=sys.stderr)
+            if per_run_logs.exists():
+                print(f"and its per-run logs are in {per_run_logs}", file=sys.stderr)
             raise
         log_path.replace(study_dir / STUDY_LOG)
-        if run_logs.exists():
-            run_logs.replace(study_dir / RUN_LOGS)
+        if per_run_logs.exists():
+            per_run_logs.replace(study_dir / PER_RUN_LOGS)
         save_summary(study, study_dir)
 
     # Plot: the study given, else the one saved last
@@ -279,8 +279,9 @@ def _from_init_cwd(path: Path) -> Path:
 def reserve(experiment_dir: Path, study_id: str, *, suffix_if_taken: bool) -> Path:
     """Reserves a study id in `experiment_dir` by creating its study log,
     `<study id>.log`, and returns the log's path (the study folder is the path
-    without `.log`). An id is taken if its log or its folder exists; creating the
-    log fails if it exists, so studies started at once never share an id.
+    without `.log`). An id is taken if its log, its per-run logs (`<study id>.logs`)
+    or its folder exists; creating the log fails if it exists, so studies started at
+    once never share an id.
 
     A taken id gets `-2`, `-3`, ... appended if `suffix_if_taken`; otherwise raises
     `FileExistsError` saying what holds it.
@@ -289,8 +290,11 @@ def reserve(experiment_dir: Path, study_id: str, *, suffix_if_taken: bool) -> Pa
     candidate, n = study_id, 2
     while True:
         folder, log = experiment_dir / candidate, experiment_dir / f"{candidate}.log"
+        per_run_logs = experiment_dir / f"{candidate}.logs"
         if folder.exists():
             holder = f"the saved study {folder}"
+        elif per_run_logs.exists():
+            holder = f"the per-run logs of a study that didn't finish, {per_run_logs}"
         else:
             try:
                 log.open("x").close()
@@ -305,14 +309,14 @@ def reserve(experiment_dir: Path, study_id: str, *, suffix_if_taken: bool) -> Pa
 
 
 @contextmanager
-def study_log(path: Path, run_logs: Path) -> Generator[None]:
+def study_log(path: Path, per_run_logs: Path) -> Generator[None]:
     """Logs to the study log at `path` (DEBUG and above from the library, INFO and
     above from the rest) and to the console (INFO and above), with warnings logged
     too, until the block ends; then puts logging back as it was.
 
     A line logged by a run of the study starts with the run's tag,
-    `<label>/run-<index>`, and also goes to the run's own log,
-    `<run_logs>/<label>/run-<index>.log`, created when the run first logs.
+    `<label>/run-<index>`, and also goes to the run's per-run log,
+    `<per_run_logs>/<label>/run-<index>.log`, created when the run first logs.
     """
     # The handlers, on the root logger so the experiment's own records are kept
     file_handler = logging.FileHandler(path)
@@ -320,7 +324,7 @@ def study_log(path: Path, run_logs: Path) -> Generator[None]:
     console = logging.StreamHandler()
     console.setLevel(logging.INFO)
     console.setFormatter(logging.Formatter(CONSOLE_FORMAT))
-    run_handler = RunLogs(run_logs)
+    run_handler = PerRunLogs(per_run_logs)
     run_handler.setFormatter(logging.Formatter(LOG_FORMAT))
     for handler in (file_handler, console):
         handler.addFilter(tag_run)
@@ -363,17 +367,17 @@ def tag_run(record: logging.LogRecord) -> bool:
     return True
 
 
-class RunLogs(logging.Handler):
-    """Writes each record a run of the study logs to the run's own log,
+class PerRunLogs(logging.Handler):
+    """Writes each record a run of the study logs to the run's per-run log,
     `<folder>/<label>/run-<index>.log`, and ignores the others."""
 
     def __init__(self, folder: Path) -> None:
-        """Writes the run logs under `folder`, created with the first of them."""
+        """Writes the per-run logs under `folder`, created with the first of them."""
         super().__init__()
         self.folder = folder
 
     def emit(self, record: logging.LogRecord) -> None:
-        """Appends the record to its run's log, if a run logged it."""
+        """Appends the record to its run's per-run log, if a run logged it."""
         run = run_of(record)
         if run is None:
             return
