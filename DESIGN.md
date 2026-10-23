@@ -460,7 +460,8 @@ only operator; `kernel * kernel` raises `TypeError` (the kernels share `_Scalabl
   cond(K) at the kept hyperparameters exceeds 1e10 (`CONDITION_THRESHOLD`, #108),
   below the 1e11 that stalled the fit.
 - **Output scale** multiplies the kernel unsquared, as legacy `OutputScaleKernel` did,
-  so `GP(Zero(), Scale(Matern52()))` fits the same hyperparameters as the legacy GP.
+  so `GP(mean=Zero(), kernel=Scale(Matern52()), noise_std=0.0)` fits the same
+  hyperparameters as the legacy GP.
 - `fit_gp` fits the scalers (`minmax` onto [0, 1] for X, `standard` for Y), puts
   CasADi symbols in place of each `Param`, builds the negative log marginal
   likelihood, draws starts with `lhs` over the (log-transformed) bounds and calls

@@ -173,7 +173,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `outputscale * kernel`, a number or a `Param` on either side, builds it through
   `_Scalable`, the kernels' only operator: `kernel * kernel` raises `TypeError`),
   `Kernel` their union; the `Zero` mean (`Mean`); `TYPES` the closed set, which
-  saving tags by name. `GP(mean, kernel, noise_std, jitter=1e-6)` is the prior
+  saving tags by name. `GP(mean, kernel, noise_std, jitter=1e-6)` (keyword-only) is the prior
   GP; `FittedGP(gp, X, Y, x_scaler, y_scaler)` the fitted GP, its `gp` with no
   `Param` left (checked), scaled data and scalers. `covariance(kernel, X1, X2)` and
   `prior_mean(mean, X)` match on the type; the formulas are the cases' bodies. A

@@ -52,7 +52,7 @@ POSITIONAL = {
 def test_method_choice_has_no_default(build):
     """Leaving out an argument that chooses the method raises `TypeError`."""
     # `raises` passes only if the block raises that exception
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="argument"):
         build()
 
 
@@ -60,5 +60,5 @@ def test_method_choice_has_no_default(build):
 def test_settings_are_keyword_only(build):
     """Passing the fields of a settings or choice dataclass by position raises
     `TypeError`."""
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="argument"):
         build()

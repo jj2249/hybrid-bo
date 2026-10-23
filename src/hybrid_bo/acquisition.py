@@ -128,13 +128,13 @@ def _check_approximation(acquisition: EI | LCB, approximation: object) -> None:
     if isinstance(acquisition, LCB) and isinstance(approximation, SoftSAA):
         msg = (
             "SoftSAA softens EI's improvement, so it gives EI only: use EI() with "
-            "SoftSAA, or EI() or LCB(std_factor) with SAA"
+            "SoftSAA, or EI() or LCB(std_factor=...) with SAA"
         )
         raise ValueError(msg)  # noqa: TRY004  (both types are valid, not together)
     if isinstance(acquisition, LCB) and isinstance(approximation, Linearization):
         msg = (
             "LCB isn't implemented with Linearization: use EI() with Linearization, "
-            "or EI() or LCB(std_factor) with SAA"
+            "or EI() or LCB(std_factor=...) with SAA"
         )
         raise NotImplementedError(msg)
 
