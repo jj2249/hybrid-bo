@@ -27,19 +27,19 @@ _EI_STD_EPSILON = 1e-10
 _LOG_SOFTPLUS_LINEAR_BELOW = -30.0
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class EI:
     """Expected improvement over the incumbent."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class LCB:
     """The lower confidence bound, mean - std_factor * std.
 
     Raises `ValueError` if `std_factor` is negative or not finite.
     """
 
-    std_factor: float = 1.0
+    std_factor: float
 
     def __post_init__(self) -> None:
         if not (np.isfinite(self.std_factor) and self.std_factor >= 0):
@@ -60,7 +60,7 @@ def _check_acquisition(acquisition: object) -> None:
         raise TypeError(msg)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class SAA:
     """The sample-average approximation of hybrid BO's acquisition function: the
     number of scenarios, and whether each scenario's unknown states are variables of
@@ -71,11 +71,11 @@ class SAA:
     the GP's prediction is substituted for them, so the problem is smaller.
     """
 
-    n_scenarios: int = 25
+    n_scenarios: int
     unknown_states_as_variables: bool = True
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class SoftSAA:
     """The soft sample-average approximation of hybrid BO's acquisition function
     (SoftSAA-EI): SAA-EI with each scenario's improvement max(a, 0) replaced by the
@@ -89,7 +89,7 @@ class SoftSAA:
     """
 
     temperature: float
-    n_scenarios: int = 25
+    n_scenarios: int
     unknown_states_as_variables: bool = True
 
     def __post_init__(self) -> None:
@@ -98,7 +98,7 @@ class SoftSAA:
             raise ValueError(msg)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Linearization:
     """The linearization of hybrid BO's acquisition function (Lin-EI): the objective
     expanded to first order in the scenario draws around the nominal states, which
@@ -128,13 +128,13 @@ def _check_approximation(acquisition: EI | LCB, approximation: object) -> None:
     if isinstance(acquisition, LCB) and isinstance(approximation, SoftSAA):
         msg = (
             "SoftSAA softens EI's improvement, so it gives EI only: use EI() with "
-            "SoftSAA, or EI() or LCB() with SAA"
+            "SoftSAA, or EI() or LCB(std_factor=...) with SAA"
         )
         raise ValueError(msg)  # noqa: TRY004  (both types are valid, not together)
     if isinstance(acquisition, LCB) and isinstance(approximation, Linearization):
         msg = (
             "LCB isn't implemented with Linearization: use EI() with Linearization, "
-            "or EI() or LCB() with SAA"
+            "or EI() or LCB(std_factor=...) with SAA"
         )
         raise NotImplementedError(msg)
 
@@ -360,7 +360,7 @@ def hybrid_acquisition(
     scenarios: Scenarios,
     incumbent: float,
     acquisition: EI | LCB,
-    approximation: SAA | SoftSAA | Linearization = SAA(),
+    approximation: SAA | SoftSAA | Linearization,
 ) -> AcquisitionProblem:
     """The acquisition problem of hybrid BO (paper, Problems 8 and 9).
 

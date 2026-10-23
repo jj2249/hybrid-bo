@@ -49,7 +49,9 @@ from hybrid_bo.gp import predict
 # The illustrative example's hybrid BO settings: the GP's prediction substituted for
 # the unknown states
 HYBRID_SETTINGS = HybridBOSettings(
-    gp=ex.gp, approximation=SAA(unknown_states_as_variables=False)
+    gp=ex.gp,
+    acquisition=EI(),
+    approximation=SAA(n_scenarios=25, unknown_states_as_variables=False),
 )
 
 
@@ -84,7 +86,12 @@ def hybrid_run() -> Run:
 @pytest.fixture(scope="module")
 def hybrid_lcb_run() -> Run:
     """A pickled hybrid BO run with LCB and the unknown states as variables."""
-    return illustrative_run(hybrid_bo, HybridBOSettings(gp=ex.gp, acquisition=LCB(2.0)))
+    return illustrative_run(
+        hybrid_bo,
+        HybridBOSettings(
+            gp=ex.gp, acquisition=LCB(std_factor=2.0), approximation=SAA(n_scenarios=25)
+        ),
+    )
 
 
 @pytest.fixture(scope="module")
@@ -93,7 +100,8 @@ def hybrid_lin_run() -> Run:
     unknown states."""
     approximation = Linearization(unknown_states_as_variables=False)
     return illustrative_run(
-        hybrid_bo, HybridBOSettings(gp=ex.gp, approximation=approximation)
+        hybrid_bo,
+        HybridBOSettings(gp=ex.gp, acquisition=EI(), approximation=approximation),
     )
 
 
@@ -101,16 +109,19 @@ def hybrid_lin_run() -> Run:
 def hybrid_soft_run() -> Run:
     """A pickled hybrid BO run with SoftSAA-EI at a temperature of 0.5, the GP's
     prediction substituted for the unknown states."""
-    approximation = SoftSAA(0.5, n_scenarios=10, unknown_states_as_variables=False)
+    approximation = SoftSAA(
+        temperature=0.5, n_scenarios=10, unknown_states_as_variables=False
+    )
     return illustrative_run(
-        hybrid_bo, HybridBOSettings(gp=ex.gp, approximation=approximation)
+        hybrid_bo,
+        HybridBOSettings(gp=ex.gp, acquisition=EI(), approximation=approximation),
     )
 
 
 @pytest.fixture(scope="module")
 def standard_run() -> Run:
     """A pickled standard BO run with the illustrative example's settings."""
-    return illustrative_run(standard_bo, StandardBOSettings(gp=ex.gp))
+    return illustrative_run(standard_bo, StandardBOSettings(gp=ex.gp, acquisition=EI()))
 
 
 @pytest.fixture(scope="module")
@@ -360,7 +371,7 @@ def test_hybrid_bo_figure_from_a_pickled_run(hybrid_run):
         hybrid_run.scenarios,
         incumbent,
         EI(),
-        SAA(unknown_states_as_variables=False),
+        SAA(n_scenarios=25, unknown_states_as_variables=False),
     ).nlp
     expected = [
         nlp.f(_pack(np.array([u_k]), x_row[:, np.newaxis])).full().item()
@@ -516,7 +527,9 @@ ROSENBROCK_SYSTEM = System(
     measured=[ROSENBROCK_Y],
 )
 ROSENBROCK = Problem(ROSENBROCK_SYSTEM, f=lambda v: 100 * v.y**2 + v.x**2)
-ROSENBROCK_MEASURE = oracle_measure(ROSENBROCK_SYSTEM, lambda v: [v.u2 - v.u1**2])
+ROSENBROCK_MEASURE = oracle_measure(
+    ROSENBROCK_SYSTEM, lambda v: [v.u2 - v.u1**2], noise_std=0.0
+)
 
 
 def rosenbrock_run(
@@ -538,16 +551,20 @@ def hybrid_2d_run() -> Run:
     scenarios, the GP's prediction substituted for the unknown state."""
     approximation = SAA(n_scenarios=10, unknown_states_as_variables=False)
     return rosenbrock_run(
-        hybrid_bo, HybridBOSettings(gp=ex.gp, approximation=approximation)
+        hybrid_bo,
+        HybridBOSettings(gp=ex.gp, acquisition=EI(), approximation=approximation),
     )
 
 
 @pytest.fixture(scope="module")
 def hybrid_soft_2d_run() -> Run:
     """As `hybrid_2d_run`, with SoftSAA-EI at a temperature of 10."""
-    approximation = SoftSAA(10.0, n_scenarios=10, unknown_states_as_variables=False)
+    approximation = SoftSAA(
+        temperature=10.0, n_scenarios=10, unknown_states_as_variables=False
+    )
     return rosenbrock_run(
-        hybrid_bo, HybridBOSettings(gp=ex.gp, approximation=approximation)
+        hybrid_bo,
+        HybridBOSettings(gp=ex.gp, acquisition=EI(), approximation=approximation),
     )
 
 
@@ -555,16 +572,19 @@ def hybrid_soft_2d_run() -> Run:
 def hybrid_cold_soft_2d_run() -> Run:
     """As `hybrid_soft_2d_run`, at a temperature of 0.01, where SoftSAA-EI underflows
     to 0 in float64 over most of the grid."""
-    approximation = SoftSAA(0.01, n_scenarios=10, unknown_states_as_variables=False)
+    approximation = SoftSAA(
+        temperature=0.01, n_scenarios=10, unknown_states_as_variables=False
+    )
     return rosenbrock_run(
-        hybrid_bo, HybridBOSettings(gp=ex.gp, approximation=approximation)
+        hybrid_bo,
+        HybridBOSettings(gp=ex.gp, acquisition=EI(), approximation=approximation),
     )
 
 
 @pytest.fixture(scope="module")
 def standard_2d_run() -> Run:
     """A pickled standard BO run on the Rosenbrock problem."""
-    return rosenbrock_run(standard_bo, StandardBOSettings(gp=ex.gp))
+    return rosenbrock_run(standard_bo, StandardBOSettings(gp=ex.gp, acquisition=EI()))
 
 
 @pytest.fixture(scope="module")

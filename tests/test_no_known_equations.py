@@ -27,13 +27,17 @@ from hybrid_bo.saving import _encode
 # Hybrid BO with each approximation, both ways where it applies, and the other methods
 HYBRID = {
     f"{label}-{as_variables}": hb.HybridBOSettings(
-        gp=ex.gp, approximation=approximation(as_variables)
+        gp=ex.gp,
+        acquisition=hb.EI(),
+        approximation=approximation(as_variables),
     )
     for as_variables in (True, False)
     for label, approximation in {
-        "saa": lambda flag: hb.SAA(5, flag),
-        "soft": lambda flag: hb.SoftSAA(0.5, 5, flag),
-        "lin": hb.Linearization,
+        "saa": lambda flag: hb.SAA(n_scenarios=5, unknown_states_as_variables=flag),
+        "soft": lambda flag: hb.SoftSAA(
+            temperature=0.5, n_scenarios=5, unknown_states_as_variables=flag
+        ),
+        "lin": lambda flag: hb.Linearization(unknown_states_as_variables=flag),
     }.items()
 }
 METHODS = {
@@ -41,7 +45,7 @@ METHODS = {
     for label, settings in HYBRID.items()
 } | {
     "standard": functools.partial(
-        hb.standard_bo, settings=hb.StandardBOSettings(gp=ex.gp)
+        hb.standard_bo, settings=hb.StandardBOSettings(gp=ex.gp, acquisition=hb.EI())
     ),
     "lhs": hb.latin_hypercube_sampling,
     "uniform": hb.uniform_sampling,
@@ -59,7 +63,9 @@ def composite_problem(n_u: int) -> tuple[hb.Problem, hb.Measure]:
     problem = hb.Problem(system, f=lambda v: (v.y - 0.3) ** 2 + v.u1**2 / 10)
     last = f"u{n_u}"
     measure = hb.oracle_measure(
-        system, oracle=lambda v: [cas.sin(v.u1) + getattr(v, last) / 2]
+        system,
+        oracle=lambda v: [cas.sin(v.u1) + getattr(v, last) / 2],
+        noise_std=0.0,
     )
     return problem, measure
 
@@ -172,7 +178,9 @@ def test_with_f_y_hybrid_bo_is_standard_bo():
     y = hb.Var("y", start=(-2.0, 2.0))
     system = hb.System(u=[u], y=[y], h_inputs=[u], measured=[y])
     problem = hb.Problem(system, f=lambda v: v.y)
-    measure = hb.oracle_measure(system, oracle=lambda v: [cas.sin(3 * v.u)])
+    measure = hb.oracle_measure(
+        system, oracle=lambda v: [cas.sin(3 * v.u)], noise_std=0.0
+    )
     initial = np.array([[-1.5], [-0.2], [0.4], [1.3]])
     runs = {
         name: method(problem, measure, initial, 1, np.random.default_rng(0))
@@ -195,7 +203,12 @@ def test_with_f_y_hybrid_bo_is_standard_bo():
     incumbent, point = float(runs["standard"].history.f[:4].min()), np.array([0.9])
     scenarios = saa_scenarios(500, 1, np.random.default_rng(1))
     saa = hybrid_acquisition(
-        problem, (hybrid_gp,), scenarios, incumbent, hb.EI(), hb.SAA(500, False)
+        problem,
+        (hybrid_gp,),
+        scenarios,
+        incumbent,
+        hb.EI(),
+        hb.SAA(n_scenarios=500, unknown_states_as_variables=False),
     )
     saa_ei = -float(saa.nlp.f(_pack(point, np.zeros((500, 0)))))
     analytic = standard_acquisition(problem, standard_gp, incumbent, hb.EI())

@@ -137,10 +137,12 @@ def test_artifact_tells_apart_methods_that_differ_only_in_their_prior_gp(
     noisy_gp = dataclasses.replace(ex.gp, noise_std=0.1)
     methods = {
         "noise_free": functools.partial(
-            hb.standard_bo, settings=hb.StandardBOSettings(gp=ex.gp)
+            hb.standard_bo,
+            settings=hb.StandardBOSettings(gp=ex.gp, acquisition=hb.EI()),
         ),
         "noisy": functools.partial(
-            hb.standard_bo, settings=hb.StandardBOSettings(gp=noisy_gp)
+            hb.standard_bo,
+            settings=hb.StandardBOSettings(gp=noisy_gp, acquisition=hb.EI()),
         ),
     }
     settings = hb.StudySettings(n_runs=1, n_initial=2, n_iterations=1, seed=0)
@@ -188,11 +190,14 @@ def test_two_configurations_of_one_method_keep_their_labels(illustrative_problem
     """Each run carries the label it was run under, so one method can appear twice."""
     methods = {
         "ei": functools.partial(
-            hb.standard_bo, settings=hb.StandardBOSettings(gp=ex.gp)
+            hb.standard_bo,
+            settings=hb.StandardBOSettings(gp=ex.gp, acquisition=hb.EI()),
         ),
         "lcb": functools.partial(
             hb.standard_bo,
-            settings=hb.StandardBOSettings(gp=ex.gp, acquisition=hb.LCB()),
+            settings=hb.StandardBOSettings(
+                gp=ex.gp, acquisition=hb.LCB(std_factor=1.0)
+            ),
         ),
     }
     settings = hb.StudySettings(n_runs=1, n_initial=2, n_iterations=1)
@@ -362,10 +367,14 @@ def test_a_loaded_run_draws_its_iterations_with_its_own_gp(tmp_path):
     with no settings passed, and its GP panel is that GP's prediction."""
     # Setup: one hybrid BO run with its own GP, saved and loaded
     gp = hb.gp.GP(
-        hb.gp.Zero(), hb.gp.Scale(hb.gp.Matern52(), outputscale=2.0), noise_std=0.05
+        mean=hb.gp.Zero(),
+        kernel=hb.gp.Scale(hb.gp.Matern52(), outputscale=2.0),
+        noise_std=0.05,
     )
-    approximation = hb.SAA(unknown_states_as_variables=False)
-    settings = hb.HybridBOSettings(gp=gp, approximation=approximation)
+    approximation = hb.SAA(n_scenarios=25, unknown_states_as_variables=False)
+    settings = hb.HybridBOSettings(
+        gp=gp, acquisition=hb.EI(), approximation=approximation
+    )
     methods = {"noisy": functools.partial(hb.hybrid_bo, settings=settings)}
     study_settings = hb.StudySettings(n_runs=1, n_initial=2, n_iterations=2, seed=0)
     study = hb.study(methods, ex.problem, ex.measure, study_settings)
@@ -394,12 +403,31 @@ def test_a_loaded_study_draws_every_bo_method_from_its_stored_settings(tmp_path)
     # Setup: each approximation and acquisition function, and a custom solver
     solver = hb.solvers.Ipopt(solver_options={"print_level": 0, "max_iter": 500})
     hybrid = {
-        "saa": hb.HybridBOSettings(gp=ex.gp, approximation=hb.SAA(5, False)),
-        "soft": hb.HybridBOSettings(gp=ex.gp, approximation=hb.SoftSAA(0.5, 5, False)),
-        "lin": hb.HybridBOSettings(gp=ex.gp, approximation=hb.Linearization(False)),
-        "lcb": hb.HybridBOSettings(gp=ex.gp, acquisition=hb.LCB(2.0), solver=solver),
+        "saa": hb.HybridBOSettings(
+            gp=ex.gp,
+            acquisition=hb.EI(),
+            approximation=hb.SAA(n_scenarios=5, unknown_states_as_variables=False),
+        ),
+        "soft": hb.HybridBOSettings(
+            gp=ex.gp,
+            acquisition=hb.EI(),
+            approximation=hb.SoftSAA(
+                temperature=0.5, n_scenarios=5, unknown_states_as_variables=False
+            ),
+        ),
+        "lin": hb.HybridBOSettings(
+            gp=ex.gp,
+            acquisition=hb.EI(),
+            approximation=hb.Linearization(unknown_states_as_variables=False),
+        ),
+        "lcb": hb.HybridBOSettings(
+            gp=ex.gp,
+            acquisition=hb.LCB(std_factor=2.0),
+            approximation=hb.SAA(n_scenarios=25),
+            solver=solver,
+        ),
     }
-    standard = hb.StandardBOSettings(gp=ex.gp, acquisition=hb.LCB(1.0))
+    standard = hb.StandardBOSettings(gp=ex.gp, acquisition=hb.LCB(std_factor=1.0))
     all_settings = hybrid | {"standard": standard}
     methods = {
         label: functools.partial(hb.hybrid_bo, settings=settings)
@@ -434,11 +462,15 @@ def test_save_and_load_keep_every_kind_of_gp_parameter(tmp_path):
     """A fitted GP's parameters round-trip as they were given: a number, a tuple
     (one per input) and, inside a kernel held by another, the right kernel type."""
     gp = hb.gp.GP(
-        hb.gp.Zero(),
-        hb.gp.Scale(hb.gp.Matern32(lengthscale=0.3), outputscale=1.5),
+        mean=hb.gp.Zero(),
+        kernel=hb.gp.Scale(hb.gp.Matern32(lengthscale=0.3), outputscale=1.5),
         noise_std=0.2,
     )
-    ard = hb.gp.GP(hb.gp.Zero(), hb.gp.SquaredExponential(lengthscale=(0.1, 0.2)))
+    ard = hb.gp.GP(
+        mean=hb.gp.Zero(),
+        kernel=hb.gp.SquaredExponential(lengthscale=(0.1, 0.2)),
+        noise_std=0.0,
+    )
     scaler = hb.gp.Scaler(np.ones(1), np.zeros(1))
     surrogates = [
         tuple(
@@ -481,12 +513,34 @@ def test_save_and_load_keep_every_kind_of_method_settings(tmp_path):
         solver_options={"print_level": 0, "max_iter": 50, "tol": 1e-6},
     )
     all_settings = [
-        hb.HybridBOSettings(gp=ex.gp, approximation=hb.SAA(5, False), solver=solver),
-        hb.HybridBOSettings(gp=ex.gp, approximation=hb.SoftSAA(0.5, 7, False)),
-        hb.HybridBOSettings(gp=ex.gp, approximation=hb.Linearization(False)),
-        hb.HybridBOSettings(gp=ex.gp, acquisition=hb.LCB(2.5), n_starts=3),
-        hb.StandardBOSettings(gp=ex.gp, acquisition=hb.LCB(1.5), n_starts_gp=4),
-        hb.StandardBOSettings(gp=ex.gp, solver=solver),
+        hb.HybridBOSettings(
+            gp=ex.gp,
+            acquisition=hb.EI(),
+            approximation=hb.SAA(n_scenarios=5, unknown_states_as_variables=False),
+            solver=solver,
+        ),
+        hb.HybridBOSettings(
+            gp=ex.gp,
+            acquisition=hb.EI(),
+            approximation=hb.SoftSAA(
+                temperature=0.5, n_scenarios=7, unknown_states_as_variables=False
+            ),
+        ),
+        hb.HybridBOSettings(
+            gp=ex.gp,
+            acquisition=hb.EI(),
+            approximation=hb.Linearization(unknown_states_as_variables=False),
+        ),
+        hb.HybridBOSettings(
+            gp=ex.gp,
+            acquisition=hb.LCB(std_factor=2.5),
+            approximation=hb.SAA(n_scenarios=25),
+            n_starts=3,
+        ),
+        hb.StandardBOSettings(
+            gp=ex.gp, acquisition=hb.LCB(std_factor=1.5), n_starts_gp=4
+        ),
+        hb.StandardBOSettings(gp=ex.gp, acquisition=hb.EI(), solver=solver),
     ]
     runs = tuple(
         hb.Run(history_of(0), {"method": "m"}, "m", index, settings=settings)

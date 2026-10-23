@@ -166,7 +166,7 @@ class OracleSimulation:
 def oracle_measure(
     system: System,
     oracle: Callable[[Any], Any],
-    noise_std: float = 0.0,
+    noise_std: float,
     n_starts: int = 100,
     tol: float = 1e-10,
 ) -> OracleSimulation:

@@ -35,13 +35,17 @@ from hybrid_bo.run import run_artifact
 
 def illustrative_measure(problem):
     """The oracle simulation of the illustrative example, without noise."""
-    return oracle_measure(problem.system, oracle=lambda v: [cas.sin(v.u)])
+    return oracle_measure(
+        problem.system, oracle=lambda v: [cas.sin(v.u)], noise_std=0.0
+    )
 
 
 def illustrative_run(problem, settings=None) -> Run:
     """A standard BO run on the illustrative example: 2 initial points, 2 iterations,
     with the default settings unless `settings` is given."""
-    settings = StandardBOSettings(gp=ex.gp) if settings is None else settings
+    settings = (
+        StandardBOSettings(gp=ex.gp, acquisition=EI()) if settings is None else settings
+    )
     rng = np.random.default_rng(0)
     u = initial_points(problem.system.u, 2, rng)
     measure = illustrative_measure(problem)
@@ -94,7 +98,9 @@ def test_lcb_is_mean_minus_std_factor_times_std(illustrative_problem):
     fitted = fitted_illustrative_gp()
     u = np.linspace(-2.0, 2.0, 7)[:, np.newaxis]
 
-    nlp = standard_acquisition(illustrative_problem, fitted, 0.0, LCB(2.0)).nlp
+    nlp = standard_acquisition(
+        illustrative_problem, fitted, 0.0, LCB(std_factor=2.0)
+    ).nlp
 
     mean, std = predict(fitted, u)
     np.testing.assert_allclose(acquisition_values(nlp, u), mean - 2.0 * std, rtol=1e-12)
@@ -122,7 +128,7 @@ def test_lcb_needs_a_finite_nonnegative_std_factor(std_factor):
     # `pytest.raises` passes only if the block raises this exception, with a message
     # matching the regular expression `match`
     with pytest.raises(ValueError, match="std_factor"):
-        LCB(std_factor)
+        LCB(std_factor=std_factor)
 
 
 @pytest.mark.parametrize("acquisition", ["ei", LCB, None])
@@ -178,7 +184,7 @@ def test_run_pickles_without_the_code_that_produced_it(
 def test_artifact_holds_the_settings_and_the_gp(illustrative_problem):
     """The artifact holds the settings, and the prior GP as its repr in an entry of
     its own."""
-    settings = StandardBOSettings(gp=ex.gp, acquisition=LCB(2.0))
+    settings = StandardBOSettings(gp=ex.gp, acquisition=LCB(std_factor=2.0))
 
     artifact = illustrative_run(illustrative_problem, settings).artifact
 
@@ -212,7 +218,7 @@ def test_settings_are_required_and_keyword_only(illustrative_problem):
             u,
             0,
             np.random.default_rng(0),
-            StandardBOSettings(gp=ex.gp),  # ty: ignore[too-many-positional-arguments]
+            StandardBOSettings(gp=ex.gp, acquisition=EI()),  # ty: ignore[too-many-positional-arguments]
         )
 
 
@@ -234,7 +240,7 @@ def test_failed_evaluation_carries_the_partial_run(illustrative_problem):
             np.array([[-0.5], [0.5]]),
             2,
             np.random.default_rng(0),
-            settings=StandardBOSettings(gp=ex.gp),
+            settings=StandardBOSettings(gp=ex.gp, acquisition=EI()),
         )
 
     # The partial run: the initial points, and no surrogate (the surrogate behind the

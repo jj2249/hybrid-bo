@@ -22,7 +22,7 @@ from hybrid_bo.saving import _encode
 # Each approximation, with few scenarios so the runs are quick
 APPROXIMATIONS = {
     "saa": hb.SAA(n_scenarios=5),
-    "soft": hb.SoftSAA(0.5, n_scenarios=5),
+    "soft": hb.SoftSAA(temperature=0.5, n_scenarios=5),
     "lin": hb.Linearization(),
 }
 
@@ -45,7 +45,9 @@ def benchmark_problem(n_u: int) -> tuple[hb.Problem, hb.Measure]:
     problem = hb.Problem(system, f=lambda v: v.x1**2 + (v.y1 - v.y2) ** 2)
     last = f"u{n_u}"
     measure = hb.oracle_measure(
-        system, oracle=lambda v: [cas.sin(v.u1), cas.cos(getattr(v, last))]
+        system,
+        oracle=lambda v: [cas.sin(v.u1), cas.cos(getattr(v, last))],
+        noise_std=0.0,
     )
     return problem, measure
 
@@ -57,7 +59,9 @@ def two_state_study(n_u: int, approximations: dict[str, Any]) -> hb.Study:
     methods = {
         label: functools.partial(
             hb.hybrid_bo,
-            settings=hb.HybridBOSettings(gp=ex.gp, approximation=approximation),
+            settings=hb.HybridBOSettings(
+                gp=ex.gp, acquisition=hb.EI(), approximation=approximation
+            ),
         )
         for label, approximation in approximations.items()
     }

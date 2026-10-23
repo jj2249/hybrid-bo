@@ -91,7 +91,9 @@ def illustrative_run(problem, settings, seed=0) -> Run:
     """A hybrid BO run without noise: 2 initial points, 2 iterations."""
     rng = np.random.default_rng(seed)
     u = initial_points(problem.system.u, 2, rng)
-    measure = oracle_measure(problem.system, oracle=lambda v: [cas.sin(v.u)])
+    measure = oracle_measure(
+        problem.system, oracle=lambda v: [cas.sin(v.u)], noise_std=0.0
+    )
     return hybrid_bo(problem, measure, u, 2, rng, settings=settings)
 
 
@@ -148,7 +150,7 @@ def test_saa_ei_is_the_weighted_average_over_scenarios(
         SCENARIOS,
         incumbent,
         EI(),
-        SAA(unknown_states_as_variables=unknown_states_as_variables),
+        SAA(n_scenarios=25, unknown_states_as_variables=unknown_states_as_variables),
     ).nlp
 
     y, f = scenario_values(fitted, u, x, h_inputs)
@@ -172,8 +174,8 @@ def test_saa_lcb_is_the_weighted_mean_minus_std_factor_times_weighted_std(
         (fitted,),
         SCENARIOS,
         0.0,
-        LCB(2.0),
-        SAA(unknown_states_as_variables=unknown_states_as_variables),
+        LCB(std_factor=2.0),
+        SAA(n_scenarios=25, unknown_states_as_variables=unknown_states_as_variables),
     ).nlp
 
     y, f = scenario_values(fitted, u, x, ["u"])
@@ -191,7 +193,9 @@ def test_known_equations_hold_per_scenario_and_tie_the_unknown_states_to_the_gp(
     u, x = 0.3, np.array([-1.0, 0.0, 0.5])
     y = np.array([0.1, -0.2, 0.4])
 
-    nlp = hybrid_acquisition(problem, (fitted,), SCENARIOS, 0.0, EI()).nlp
+    nlp = hybrid_acquisition(
+        problem, (fitted,), SCENARIOS, 0.0, EI(), SAA(n_scenarios=25)
+    ).nlp
     assert nlp.g is not None
     constraints = nlp.g(variables_at(u, x, y, True)).full().ravel()
 
@@ -214,7 +218,7 @@ def test_substituted_unknown_states_leave_only_the_known_equations():
         SCENARIOS,
         0.0,
         EI(),
-        SAA(unknown_states_as_variables=False),
+        SAA(n_scenarios=25, unknown_states_as_variables=False),
     ).nlp
     assert nlp.g is not None
     constraints = nlp.g(variables_at(u, x, None, False)).full().ravel()
@@ -241,7 +245,7 @@ def test_bounds_and_start_bounds_come_from_each_variable(unknown_states_as_varia
         SCENARIOS,
         0.0,
         EI(),
-        SAA(unknown_states_as_variables=unknown_states_as_variables),
+        SAA(n_scenarios=25, unknown_states_as_variables=unknown_states_as_variables),
     )
     nlp, (lower, upper) = acquisition_problem.nlp, acquisition_problem.start_bounds
 
@@ -279,7 +283,7 @@ def test_unpack_undoes_pack(unknown_states_as_variables):
         SCENARIOS,
         0.0,
         EI(),
-        SAA(unknown_states_as_variables=unknown_states_as_variables),
+        SAA(n_scenarios=25, unknown_states_as_variables=unknown_states_as_variables),
     )
 
     # Distinct values for every entry, packed then unpacked
@@ -311,7 +315,7 @@ def test_unpack_rejects_a_decision_vector_of_the_wrong_length(
         SCENARIOS,
         0.0,
         EI(),
-        SAA(unknown_states_as_variables=unknown_states_as_variables),
+        SAA(n_scenarios=25, unknown_states_as_variables=unknown_states_as_variables),
     )
     w = np.zeros(len(acquisition_problem.nlp.lower))
 
@@ -326,7 +330,14 @@ def test_acquisition_builder_rejects_anything_but_ei_or_lcb():
     fitted = fitted_gp(1)
 
     with pytest.raises(TypeError, match=r"EI\(\) or LCB"):
-        hybrid_acquisition(problem_with(["u"]), (fitted,), SCENARIOS, 0.0, "ei")  # ty: ignore[invalid-argument-type]
+        hybrid_acquisition(
+            problem_with(["u"]),
+            (fitted,),
+            SCENARIOS,
+            0.0,
+            "ei",  # ty: ignore[invalid-argument-type]
+            SAA(n_scenarios=25),
+        )
 
 
 def test_scenarios_need_one_column_per_unknown_state():
@@ -336,20 +347,24 @@ def test_scenarios_need_one_column_per_unknown_state():
     scenarios = Scenarios(np.zeros((3, 2)), np.full(3, 1 / 3))
 
     with pytest.raises(ValueError, match="one column of z per unknown state"):
-        hybrid_acquisition(problem_with(["u"]), (fitted,), scenarios, 0.0, EI())
+        hybrid_acquisition(
+            problem_with(["u"]), (fitted,), scenarios, 0.0, EI(), SAA(n_scenarios=25)
+        )
 
 
 @pytest.mark.parametrize("acquisition", ["ei", LCB, None])
 def test_settings_reject_anything_but_ei_or_lcb(acquisition):
     """The settings accept only an EI or LCB instance, not a name or the class."""
     with pytest.raises(TypeError, match=r"EI\(\) or LCB"):
-        HybridBOSettings(gp=ex.gp, acquisition=acquisition)
+        HybridBOSettings(
+            gp=ex.gp, acquisition=acquisition, approximation=SAA(n_scenarios=25)
+        )
 
 
 def test_settings_reject_an_unknown_approximation():
     """The settings accept only an approximation the library knows, such as SAA()."""
     with pytest.raises(TypeError, match=r"SAA\("):
-        HybridBOSettings(gp=ex.gp, approximation=object())  # ty: ignore[invalid-argument-type]
+        HybridBOSettings(gp=ex.gp, acquisition=EI(), approximation=object())  # ty: ignore[invalid-argument-type]
 
 
 def test_acquisition_builder_rejects_an_unknown_approximation():
@@ -373,14 +388,16 @@ def test_lcb_with_linearization_is_not_implemented():
     fitted = fitted_gp(1)
 
     with pytest.raises(NotImplementedError, match=r"EI\(\) with Linearization"):
-        HybridBOSettings(gp=ex.gp, acquisition=LCB(), approximation=Linearization())
+        HybridBOSettings(
+            gp=ex.gp, acquisition=LCB(std_factor=1.0), approximation=Linearization()
+        )
     with pytest.raises(NotImplementedError, match=r"EI\(\) with Linearization"):
         hybrid_acquisition(
             problem_with(["u"]),
             (fitted,),
             nominal_scenario(1),
             0.0,
-            LCB(),
+            LCB(std_factor=1.0),
             Linearization(),
         )
 
@@ -437,7 +454,9 @@ def test_lin_ei_is_exact_for_a_linear_problem(unknown_states_as_variables):
     incumbent = f_mean - 0.5 * f_std
 
     # Lin-EI's objective at the nominal states, x = 2y - u
-    approximation = Linearization(unknown_states_as_variables)
+    approximation = Linearization(
+        unknown_states_as_variables=unknown_states_as_variables
+    )
     nlp = hybrid_acquisition(
         problem, (fitted,), nominal_scenario(1), incumbent, EI(), approximation
     ).nlp
@@ -460,7 +479,12 @@ def test_saa_ei_agrees_with_lin_ei_for_a_linear_problem():
 
     # SAA-EI at those scenario states
     nlp = hybrid_acquisition(
-        problem, (fitted,), scenarios, incumbent, EI(), SAA(500, False)
+        problem,
+        (fitted,),
+        scenarios,
+        incumbent,
+        EI(),
+        SAA(n_scenarios=500, unknown_states_as_variables=False),
     ).nlp
     saa_ei = -nlp.f(variables_at(u, 2 * y_s - u, None, False)).full().item()
 
@@ -559,7 +583,9 @@ def test_acquisition_builder_needs_one_fitted_gp_per_unknown_state():
     (fitted, _) = two_fitted_gps()
 
     with pytest.raises(ValueError, match="one fitted GP per unknown state"):
-        hybrid_acquisition(two_state_problem(), (fitted,), SCENARIOS_2, 0.0, EI())
+        hybrid_acquisition(
+            two_state_problem(), (fitted,), SCENARIOS_2, 0.0, EI(), SAA(n_scenarios=25)
+        )
 
 
 def test_sensitivity_has_one_entry_per_unknown_state():
@@ -601,7 +627,7 @@ def test_soft_saa_needs_a_positive_finite_temperature(temperature):
     """The temperature is in units of the objective, so it must be positive and
     finite."""
     with pytest.raises(ValueError, match="temperature"):
-        SoftSAA(temperature)
+        SoftSAA(temperature=temperature, n_scenarios=25)
 
 
 def test_lcb_with_soft_saa_is_rejected():
@@ -611,10 +637,19 @@ def test_lcb_with_soft_saa_is_rejected():
 
     # The settings, then the acquisition builder
     with pytest.raises(ValueError, match=r"EI\(\) with SoftSAA"):
-        HybridBOSettings(gp=ex.gp, acquisition=LCB(), approximation=SoftSAA(1.0))
+        HybridBOSettings(
+            gp=ex.gp,
+            acquisition=LCB(std_factor=1.0),
+            approximation=SoftSAA(temperature=1.0, n_scenarios=25),
+        )
     with pytest.raises(ValueError, match=r"EI\(\) with SoftSAA"):
         hybrid_acquisition(
-            problem_with(["u"]), (fitted,), SCENARIOS, 0.0, LCB(), SoftSAA(1.0)
+            problem_with(["u"]),
+            (fitted,),
+            SCENARIOS,
+            0.0,
+            LCB(std_factor=1.0),
+            SoftSAA(temperature=1.0, n_scenarios=25),
         )
 
 
@@ -633,8 +668,16 @@ def ei_problems(incumbent, temperature, unknown_states_as_variables):
         )
 
     y, f = scenario_values(fitted, u, x, ["u"])
-    soft = build(SoftSAA(temperature, 3, unknown_states_as_variables))
-    saa = build(SAA(3, unknown_states_as_variables))
+    soft = build(
+        SoftSAA(
+            temperature=temperature,
+            n_scenarios=3,
+            unknown_states_as_variables=unknown_states_as_variables,
+        )
+    )
+    saa = build(
+        SAA(n_scenarios=3, unknown_states_as_variables=unknown_states_as_variables)
+    )
     return soft, saa, variables_at(u, x, y, unknown_states_as_variables), f
 
 
@@ -722,8 +765,10 @@ def test_both_settings_solve_the_illustrative_example(
 ):
     """Hybrid BO runs on the illustrative example either way: one trial point per
     iteration within the bounds, one GP per iteration, and the scenarios it drew."""
-    approximation = SAA(unknown_states_as_variables=unknown_states_as_variables)
-    settings = HybridBOSettings(gp=ex.gp, approximation=approximation)
+    approximation = SAA(
+        n_scenarios=25, unknown_states_as_variables=unknown_states_as_variables
+    )
+    settings = HybridBOSettings(gp=ex.gp, acquisition=EI(), approximation=approximation)
 
     run = illustrative_run(illustrative_problem, settings)
 
@@ -753,9 +798,11 @@ def test_soft_saa_solves_the_illustrative_example(
     scenarios drawn as SAA draws them; the stored acquisition value is the minimized
     -log SoftSAA-EI, finite."""
     approximation = SoftSAA(
-        1.0, unknown_states_as_variables=unknown_states_as_variables
+        temperature=1.0,
+        n_scenarios=25,
+        unknown_states_as_variables=unknown_states_as_variables,
     )
-    settings = HybridBOSettings(gp=ex.gp, approximation=approximation)
+    settings = HybridBOSettings(gp=ex.gp, acquisition=EI(), approximation=approximation)
 
     run = illustrative_run(illustrative_problem, settings)
 
@@ -780,9 +827,10 @@ def test_stored_acquisition_solution_solves_the_acquisition_problem(
     the scenario states there: they satisfy the known equations, and the unknown
     states are the GP's scenarios at the trial point."""
     approximation = SAA(
-        n_scenarios=5, unknown_states_as_variables=unknown_states_as_variables
+        n_scenarios=5,
+        unknown_states_as_variables=unknown_states_as_variables,
     )
-    settings = HybridBOSettings(gp=ex.gp, approximation=approximation)
+    settings = HybridBOSettings(gp=ex.gp, acquisition=EI(), approximation=approximation)
 
     run = illustrative_run(illustrative_problem, settings)
 
@@ -806,7 +854,9 @@ def test_stored_acquisition_solution_solves_the_acquisition_problem(
             run.scenarios,
             incumbent,
             EI(),
-            SAA(unknown_states_as_variables=unknown_states_as_variables),
+            SAA(
+                n_scenarios=25, unknown_states_as_variables=unknown_states_as_variables
+            ),
         ).nlp
         w = variables_at(
             u, solution.x[:, 0], solution.y[:, 0], unknown_states_as_variables
@@ -827,8 +877,10 @@ def test_linearization_runs_over_the_nominal_scenario(
     """Hybrid BO with linearization holds the nominal scenario, and each iteration
     stores the nominal states at its trial point, where x solves the known equation
     with y the GP's mean, and the acquisition problem's objective there."""
-    approximation = Linearization(unknown_states_as_variables)
-    settings = HybridBOSettings(gp=ex.gp, approximation=approximation)
+    approximation = Linearization(
+        unknown_states_as_variables=unknown_states_as_variables
+    )
+    settings = HybridBOSettings(gp=ex.gp, acquisition=EI(), approximation=approximation)
 
     run = illustrative_run(illustrative_problem, settings)
 
@@ -874,13 +926,17 @@ def test_linearization_draws_nothing_from_the_generator(illustrative_problem):
     scenarios."""
     # Initial points only (0 iterations), with each approximation
     measure = oracle_measure(
-        illustrative_problem.system, oracle=lambda v: [cas.sin(v.u)]
+        illustrative_problem.system,
+        oracle=lambda v: [cas.sin(v.u)],
+        noise_std=0.0,
     )
     u = np.array([[-0.5], [0.5]])
     states = {}
-    for approximation in (Linearization(), SAA()):
+    for approximation in (Linearization(), SAA(n_scenarios=25)):
         rng = np.random.default_rng(0)
-        settings = HybridBOSettings(gp=ex.gp, approximation=approximation)
+        settings = HybridBOSettings(
+            gp=ex.gp, acquisition=EI(), approximation=approximation
+        )
         hybrid_bo(illustrative_problem, measure, u, 0, rng, settings=settings)
         states[type(approximation)] = rng.bit_generator.state
 
@@ -898,7 +954,8 @@ def test_gp_inputs_are_the_arguments_of_h():
     problem = problem_with(["u", "x"])
 
     run = illustrative_run(
-        problem, HybridBOSettings(gp=ex.gp, approximation=SAA(n_scenarios=5))
+        problem,
+        HybridBOSettings(gp=ex.gp, acquisition=EI(), approximation=SAA(n_scenarios=5)),
     )
 
     # The fitted GP's inputs, unscaled, are the (u, x) of the points before it
@@ -917,7 +974,7 @@ def test_artifact_holds_the_settings_and_the_gp_over_the_arguments_of_h(
 ):
     """The artifact names the method and its settings, and the prior GP as its repr."""
     approximation = SAA(n_scenarios=5, unknown_states_as_variables=False)
-    settings = HybridBOSettings(gp=ex.gp, approximation=approximation)
+    settings = HybridBOSettings(gp=ex.gp, acquisition=EI(), approximation=approximation)
 
     artifact = illustrative_run(illustrative_problem, settings).artifact
 
@@ -934,7 +991,9 @@ def test_settings_are_required_and_keyword_only(illustrative_problem):
     """Hybrid BO has no default settings, since its GP is stated by the experiment,
     and the settings are keyword-only, so they can't be passed in `rng`'s place."""
     measure = oracle_measure(
-        illustrative_problem.system, oracle=lambda v: [cas.sin(v.u)]
+        illustrative_problem.system,
+        oracle=lambda v: [cas.sin(v.u)],
+        noise_std=0.0,
     )
     u = np.array([[-0.5], [0.5]])
 
@@ -949,7 +1008,9 @@ def test_settings_are_required_and_keyword_only(illustrative_problem):
             u,
             0,
             np.random.default_rng(0),
-            HybridBOSettings(gp=ex.gp),  # ty: ignore[too-many-positional-arguments]
+            HybridBOSettings(  # ty: ignore[too-many-positional-arguments]
+                gp=ex.gp, acquisition=EI(), approximation=SAA(n_scenarios=25)
+            ),
         )
 
 
@@ -960,7 +1021,7 @@ def test_run_pickles_without_the_code_that_produced_it(
     pickle without user code."""
     run = illustrative_run(
         illustrative_problem,
-        HybridBOSettings(gp=ex.gp, approximation=SAA(n_scenarios=5)),
+        HybridBOSettings(gp=ex.gp, acquisition=EI(), approximation=SAA(n_scenarios=5)),
     )
 
     loaded = data_only_pickle(run)
@@ -993,7 +1054,9 @@ def test_failed_evaluation_carries_the_partial_run_with_its_scenarios(
             np.array([[-0.5], [0.5]]),
             2,
             np.random.default_rng(0),
-            settings=HybridBOSettings(gp=ex.gp, approximation=SAA(n_scenarios=5)),
+            settings=HybridBOSettings(
+                gp=ex.gp, acquisition=EI(), approximation=SAA(n_scenarios=5)
+            ),
         )
 
     run = info.value.run

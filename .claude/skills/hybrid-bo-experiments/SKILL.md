@@ -35,12 +35,23 @@ a benchmark), the BO methods' prior GP (`gp`), `methods`, `study_settings`, then
 - A BO method's settings are required, since they name its GP: bind them with
   `functools.partial(hb.hybrid_bo, settings=hb.HybridBOSettings(gp=gp, ...))`, never
   put `hb.hybrid_bo` or `hb.standard_bo` in `methods` bare. `settings` is
-  keyword-only, after `rng`. Define the GP once as a module-level `gp`, each fitted
+  keyword-only, after `rng`.
+- Defaults never choose the method (ADR 0009): a default may set how hard or how
+  precisely we search, never what we search for. So these are required and spelled
+  out in every experiment: `acquisition` (`hb.EI()` or `hb.LCB(std_factor=...)`) on
+  both settings, `approximation` on `HybridBOSettings`, `n_scenarios` on `hb.SAA` and
+  `hb.SoftSAA` (with `temperature`), and `noise_std` on `hb.oracle_measure` and
+  `hb.gp.GP`. Search effort and numerics keep defaults (`n_starts`, `n_starts_gp`,
+  the solver, `jitter`, kernel priors, `ard`, `unknown_states_as_variables=True`). The
+  settings and choice dataclasses, `GP` and `StudySettings` are keyword-only:
+  `hb.SoftSAA(temperature=1e-6, n_scenarios=25, unknown_states_as_variables=False)`.
+  Leaving one out, or passing one by position, raises `TypeError`.
+- Define the GP once as a module-level `gp`, each fitted
   hyperparameter its own variable so the experiment shows them all (see
   `illustrative_example.py`): `outputscale = hb.gp.Param(1.0, bounds=(0.1, 10.0))`,
   `lengthscale = hb.gp.Param(1.0, bounds=(1e-3, 1e2))`, then
   `hb.gp.GP(mean=hb.gp.Zero(), kernel=outputscale *
-  hb.gp.Matern52(lengthscale=lengthscale))`. The shipped experiments
+  hb.gp.Matern52(lengthscale=lengthscale), noise_std=0.0)`. The shipped experiments
   share it between methods; each method fits its own GP to its own data.
 
 ## Randomness

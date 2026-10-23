@@ -30,7 +30,7 @@ _logger = logging.getLogger(__name__)
 Method = Callable[..., Run]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class StudySettings:
     """How many runs of each method, with how many initial points and iterations.
 

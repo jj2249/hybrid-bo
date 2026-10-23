@@ -76,23 +76,31 @@ methods = {
     "hybrid_bo": functools.partial(
         hb.hybrid_bo,
         settings=hb.HybridBOSettings(
-            gp=gp, approximation=hb.SAA(unknown_states_as_variables=False)
+            gp=gp,
+            acquisition=hb.EI(),
+            approximation=hb.SAA(n_scenarios=25, unknown_states_as_variables=False),
         ),
     ),
     "hybrid_bo_lin": functools.partial(
         hb.hybrid_bo,
         settings=hb.HybridBOSettings(
-            gp=gp, approximation=hb.Linearization(unknown_states_as_variables=False)
+            gp=gp,
+            acquisition=hb.EI(),
+            approximation=hb.Linearization(unknown_states_as_variables=False),
         ),
     ),
     "hybrid_bo_soft": functools.partial(
         hb.hybrid_bo,
         settings=hb.HybridBOSettings(
-            gp=gp, approximation=hb.SoftSAA(1e-6, unknown_states_as_variables=False)
+            gp=gp,
+            acquisition=hb.EI(),
+            approximation=hb.SoftSAA(
+                temperature=1e-6, n_scenarios=25, unknown_states_as_variables=False
+            ),
         ),
     ),
     "standard_bo": functools.partial(
-        hb.standard_bo, settings=hb.StandardBOSettings(gp=gp)
+        hb.standard_bo, settings=hb.StandardBOSettings(gp=gp, acquisition=hb.EI())
     ),
     "latin_hypercube_sampling": hb.latin_hypercube_sampling,
 }

@@ -81,10 +81,11 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   them for any Latin hypercube or uniform draw.
 - `evaluation.py`: a `Measure` is `(u (N,), rng) -> measured (P,)`, or an
   `OracleMeasurement` (measured plus oracle `x`, `y`) in benchmark experiments.
-  `oracle_measure(system, oracle, noise_std, ...)` traces the oracle like `g`
-  (`_trace_oracle`) and returns an `OracleSimulation`, a frozen, callable dataclass
-  holding the system, the traced oracle and the settings, so it pickles (parallel
-  studies, #141) even when the oracle is a lambda; its repr is the artifact's text.
+  `oracle_measure(system, oracle, noise_std, ...)` (`noise_std` required) traces
+  the oracle like `g` (`_trace_oracle`) and returns an `OracleSimulation`, a frozen,
+  callable dataclass holding the system, the traced oracle and the settings, so it
+  pickles (parallel studies, #141) even when the oracle is a lambda; its repr is the
+  artifact's text.
   `oracle_optimum(problem, oracle, rng)` solves min f s.t. g = 0, y = oracle by
   `multistart` from `lhs` starts over the start bounds of (u, x, y).
   `evaluate(problem, measure, u, rng)` runs the measurement per row, then always
@@ -176,7 +177,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `outputscale * kernel`, a number or a `Param` on either side, builds it through
   `_Scalable`, the kernels' only operator: `kernel * kernel` raises `TypeError`),
   `Kernel` their union; the `Zero` mean (`Mean`); `TYPES` the closed set, which
-  saving tags by name. `GP(mean, kernel, noise_std=0.0, jitter=1e-6)` is the prior
+  saving tags by name. `GP(mean, kernel, noise_std, jitter=1e-6)` (keyword-only) is the prior
   GP; `FittedGP(gp, X, Y, x_scaler, y_scaler)` the fitted GP, its `gp` with no
   `Param` left (checked), scaled data and scalers. `covariance(kernel, X1, X2)` and
   `prior_mean(mean, X)` match on the type; the formulas are the cases' bodies. A
@@ -287,6 +288,18 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 
 ## Conventions and contracts
 
+- **Defaults never choose the method** (ADR 0009): a default may set how hard or how
+  precisely we search, never what we search for. Required, with no default:
+  `acquisition` on both settings, `approximation` on `HybridBOSettings` and
+  `hybrid_acquisition`, `n_scenarios` on `SAA` and `SoftSAA`, `temperature` on
+  `SoftSAA`, `std_factor` on `LCB`, `noise_std` on `oracle_measure` and `GP`. Defaults
+  stay for search effort, numerics and plumbing (`n_starts`, `n_starts_gp`, `tol`,
+  `solver`, `jitter`, kernel priors and `ard`, `Var` bounds, `seed`, plot flags, and
+  `unknown_states_as_variables=True`, a formulation with the same optimum). The
+  settings and choice dataclasses (`EI`, `LCB`, `SAA`, `SoftSAA`, `Linearization`,
+  both settings, `GP`, `StudySettings`) are `kw_only=True`;
+  `tests/test_required_arguments.py` pins both. A new setting that chooses the method
+  gets no default.
 - **Shapes.** Rows are points: a point is `(n,)`, a set `(n_points, n)`, `f`
   `(n_points,)`. Column vectors appear only where a traced `cas.Function` is called
   (`g(x, y, u)` takes columns) and in `predict` with symbolic X.

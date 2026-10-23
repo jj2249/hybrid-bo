@@ -51,7 +51,11 @@ def surrogate(lengthscale: list[float]) -> FittedGP:
     lengthscales."""
     scaler = Scaler(np.zeros(1), np.ones(1))
     return FittedGP(
-        GP(Zero(), Scale(Matern52(tuple(lengthscale)), outputscale=1.0)),
+        GP(
+            mean=Zero(),
+            kernel=Scale(Matern52(tuple(lengthscale)), outputscale=1.0),
+            noise_std=0.0,
+        ),
         X=np.zeros((2, 2)),
         Y=np.zeros(2),
         x_scaler=scaler,
@@ -70,7 +74,9 @@ def bo_run(index: int, f: list[float], f_oracle: list[float]) -> hb.Run:
         index=index,
         surrogates=[(surrogate([0.1 * i, 0.2 * i]),) for i in range(n_iterations)],
         acquisitions=[AcquisitionSolution(-float(i)) for i in range(n_iterations)],
-        settings=hb.StandardBOSettings(gp=GP(Zero(), Matern52())),
+        settings=hb.StandardBOSettings(
+            gp=GP(mean=Zero(), kernel=Matern52(), noise_std=0.0), acquisition=hb.EI()
+        ),
     )
 
 
@@ -288,7 +294,11 @@ def test_hyperparameters_name_the_unknown_state_each_gp_models():
         method="hybrid",
         surrogates=[(surrogate([0.1, 0.2]), surrogate([0.3, 0.4]))],
         acquisitions=[AcquisitionSolution(0.0)],
-        settings=hb.HybridBOSettings(gp=GP(Zero(), Matern52())),
+        settings=hb.HybridBOSettings(
+            gp=GP(mean=Zero(), kernel=Matern52(), noise_std=0.0),
+            acquisition=hb.EI(),
+            approximation=hb.SAA(n_scenarios=25),
+        ),
     )
     study = hb.Study((run,), SETTINGS, name="two states", artifact=artifact)
 

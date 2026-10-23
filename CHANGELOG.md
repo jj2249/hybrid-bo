@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **Breaking:** Defaults never choose the method (#140, ADR 0009): `acquisition` of
+  `HybridBOSettings` and `StandardBOSettings`, `approximation` of `HybridBOSettings`
+  and of `hybrid_acquisition`, `n_scenarios` of `SAA` and `SoftSAA`, `std_factor` of
+  `LCB`, and `noise_std` of `oracle_measure` and `GP` have no default. `EI`, `LCB`,
+  `SAA`, `SoftSAA`, `Linearization`, both settings, `GP` and `StudySettings` are
+  keyword-only. The old defaults were `EI()`, `SAA(n_scenarios=25)`,
+  `std_factor=1.0` and `noise_std=0.0`: `HybridBOSettings(gp=gp)` becomes
+  `HybridBOSettings(gp=gp, acquisition=hb.EI(), approximation=hb.SAA(n_scenarios=25))`,
+  and `SoftSAA(1e-6)` becomes `SoftSAA(temperature=1e-6, n_scenarios=25)`. Results
+  and saved studies are unchanged.
 - `oracle_measure` returns an `OracleSimulation`, a frozen, callable dataclass, so
   the measurement pickles and parallel studies can send it to worker processes
   (#141). A run's artifact records a dataclass measurement by its repr, so the oracle

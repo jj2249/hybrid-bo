@@ -35,7 +35,9 @@ def illustrative_measure(problem: Problem, noise_std: float):
     """The oracle simulation of the illustrative example, with Gaussian noise of
     `noise_std` on the measurement."""
     return oracle_measure(
-        problem.system, oracle=lambda v: [cas.sin(v.u)], noise_std=noise_std
+        problem.system,
+        oracle=lambda v: [cas.sin(v.u)],
+        noise_std=noise_std,
     )
 
 
@@ -251,7 +253,9 @@ def test_failed_oracle_simulation_raises():
     history."""
     # y = -1 - x**2 and y = x**2 have no common real root
     problem = two_branch_problem()
-    measure = oracle_measure(problem.system, oracle=lambda v: -1 - v.x**2, n_starts=5)
+    measure = oracle_measure(
+        problem.system, oracle=lambda v: -1 - v.x**2, n_starts=5, noise_std=0.0
+    )
 
     with pytest.raises(RootFindingError) as info:
         evaluate(problem, measure, np.array([[0.0]]), np.random.default_rng(0))
@@ -274,7 +278,9 @@ def test_measure_returning_the_wrong_shape_raises():
 def test_oracle_must_give_one_value_per_unknown_state():
     """An oracle with more expressions than unknown states is rejected."""
     with pytest.raises(ValueError, match="oracle"):
-        oracle_measure(two_branch_problem().system, oracle=lambda v: [v.u, 2 * v.u])
+        oracle_measure(
+            two_branch_problem().system, oracle=lambda v: [v.u, 2 * v.u], noise_std=0.0
+        )
 
 
 def sine_oracle(v: Any) -> list[Any]:

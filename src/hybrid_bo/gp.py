@@ -1,7 +1,7 @@
 """Gaussian processes: the prior GP, fitting it to data, and predicting.
 
-A prior GP is data (ADR 0008): `GP(mean, kernel, noise_std)`, with the mean and the
-kernel from a closed set of frozen dataclasses (`Zero`; `Scale`, `Matern12`,
+A prior GP is data (ADR 0008): `GP(mean=..., kernel=..., noise_std=...)`, with the
+mean and the kernel from a closed set of frozen dataclasses (`Zero`; `Scale`, `Matern12`,
 `Matern32`, `Matern52`, `SquaredExponential`). Each kernel declares its hyperparameters as
 fields: a number fixes the value, a `Param` is fitted within its bounds. Kernel
 hyperparameters are in scaled units (inputs scaled onto [0, 1], outputs standardized);
@@ -170,7 +170,7 @@ Mean = Zero
 TYPES = (Param, Matern12, Matern32, Matern52, SquaredExponential, Scale, Zero)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class GP:
     """A prior GP, before it sees any data: its mean, its kernel with each
     hyperparameter fixed or to be fitted, and its observation noise.
@@ -184,7 +184,7 @@ class GP:
 
     mean: Mean
     kernel: Kernel
-    noise_std: float = 0.0
+    noise_std: float
     jitter: float = 1e-6
 
     def __post_init__(self) -> None:
