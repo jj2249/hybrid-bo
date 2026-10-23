@@ -99,3 +99,7 @@ with a GitHub issue labeled `bug`: remove the marker when fixing the bug.
 - Defaults may be derived from other arguments when the derivation is obvious and
   recorded in the run (start bounds from finite bounds, GP size from its inputs);
   otherwise arguments are explicit. Experiments should be short to write.
+- A default may set how hard or how precisely we search, never what we search for
+  (ADR 0009): the acquisition function, the approximation, `n_scenarios`,
+  `std_factor`, `temperature` and `noise_std` are required. Settings and choice
+  dataclasses are keyword-only (`@dataclass(frozen=True, kw_only=True)`).

@@ -39,7 +39,11 @@ The original code was hard to change for three reasons:
    saves the records as the study log.
 7. **Rows are points.** A point is `(n,)`, a set is `(n_points, n)`, `f` is `(n_points,)`.
 8. **Experiments are short to write.** Defaults may be derived from other arguments when
-   the derivation is obvious and recorded in the run.
+   the derivation is obvious and recorded in the run. A default may set how hard or how
+   precisely we search, never what we search for ([ADR 0009](docs/adr/0009-defaults-never-choose-the-method.md)):
+   the acquisition function, the approximation, the number of scenarios, LCB's
+   `std_factor`, SoftSAA's temperature and the noise are required, and the settings
+   are keyword-only.
 
 ## Decisions
 
@@ -91,6 +95,8 @@ The original code was hard to change for three reasons:
 ## Example
 
 ```python
+import functools
+
 import casadi as cas
 import numpy as np
 
@@ -120,9 +126,13 @@ def oracle(v):
 
 measure = hb.oracle_measure(system, oracle, noise_std=0.0)
 
-# Method: how we search, with the default settings; bind others with
-# functools.partial(hb.hybrid_bo, settings=hb.HybridBOSettings(...))
-methods = {"hybrid_bo": hb.hybrid_bo}
+# Method: how we search, its settings bound with functools.partial. The GP, the
+# acquisition function and its approximation have no defaults (ADR 0009)
+gp = hb.gp.GP(mean=hb.gp.Zero(), kernel=hb.gp.Matern52(), noise_std=0.0)
+settings = hb.HybridBOSettings(
+    gp=gp, acquisition=hb.EI(), approximation=hb.SAA(n_scenarios=25)
+)
+methods = {"hybrid_bo": functools.partial(hb.hybrid_bo, settings=settings)}
 
 # Study: 10 runs, run i of every method from the same initial points; the same seed
 # gives the same study
@@ -382,11 +392,11 @@ class Scale:
     outputscale: float | Param = Param(1.0, (0.1, 10.0))  # unsquared
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class GP:  # the prior GP, before it sees any data
     mean: Mean  # Zero()
     kernel: Kernel
-    noise_std: float = 0.0  # known, in measured units
+    noise_std: float  # known, in measured units, no default (ADR 0009)
     jitter: float = 1e-6
 
 
@@ -473,13 +483,15 @@ only operator; `kernel * kernel` raises `TypeError` (the kernels share `_Scalabl
 ### Acquisition (`acquisition.py`)
 
 ```python
-@dataclass(frozen=True)
+# The settings and choice dataclasses are keyword-only; what chooses the method has
+# no default (ADR 0009)
+@dataclass(frozen=True, kw_only=True)
 class EI: ...
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class LCB:
-    std_factor: float = 1.0  # finite and >= 0, else ValueError
+    std_factor: float  # finite and >= 0, else ValueError
 
 
 @dataclass(frozen=True)
@@ -505,20 +517,20 @@ def _pack(u, x=None, y=None): ...  # numpy or CasADi
 def _unpack(problem: AcquisitionProblem, w) -> tuple[u, x, y | None]: ...
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class SAA:
-    n_scenarios: int = 25
-    unknown_states_as_variables: bool = True
+    n_scenarios: int
+    unknown_states_as_variables: bool = True  # a formulation, same optimum
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class SoftSAA:  # SoftSAA-EI, SAA-EI with a smooth maximum
-    temperature: float  # in units of the objective, no default
-    n_scenarios: int = 25
+    temperature: float  # in units of the objective
+    n_scenarios: int
     unknown_states_as_variables: bool = True
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Linearization:  # Lin-EI, over the nominal scenario
     unknown_states_as_variables: bool = True
 
@@ -530,7 +542,7 @@ def hybrid_acquisition(
     scenarios,
     incumbent,
     acquisition,
-    approximation=SAA(),  # SAA | SoftSAA | Linearization
+    approximation,  # SAA | SoftSAA | Linearization
 ) -> AcquisitionProblem: ...
 def standard_acquisition(
     problem, gp, fitted, incumbent, acquisition
@@ -610,7 +622,8 @@ SAA-EI stays the paper's and the two can be compared as settings of one study.
   are finite for any `a/τ`. Far below the incumbent the gradient is that of a
   softmax-weighted `−a_s/τ`, which points toward improvement.
 - **The temperature is explicit.** It is in units of the objective, so a default
-  would be wrong for most problems; it has none and is recorded in the run. The
+  would be wrong for most problems; it has none and is recorded in the run (the
+  worked example of [ADR 0009](docs/adr/0009-defaults-never-choose-the-method.md)). The
   log already gives a gradient at any temperature, so it only needs to be small: a
   measured point has no scenario spread and scores `τ log 2`, so a temperature
   near the improvements makes the noise-free loop re-measure the incumbent.
@@ -660,20 +673,20 @@ states as one-row `x (1, M)` and `y (1, P)`.
 ### Methods and the optimization loop (`bo.py`, `settings.py`)
 
 ```python
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class HybridBOSettings:
     gp: GP  # required: the experiment states it
-    acquisition: EI | LCB = EI()  # what is computed
-    approximation: SAA | SoftSAA | Linearization = SAA()  # how it is computed
+    acquisition: EI | LCB  # what is computed, required (ADR 0009)
+    approximation: SAA | SoftSAA | Linearization  # how it is computed, required
     n_starts: int = 10  # acquisition multistart
     n_starts_gp: int = 10
     solver: Ipopt = Ipopt()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class StandardBOSettings:
     gp: GP  # required
-    acquisition: EI | LCB = EI()
+    acquisition: EI | LCB  # required
     n_starts: int = 10
     n_starts_gp: int = 10
     solver: Ipopt = Ipopt()
@@ -705,7 +718,7 @@ def hybrid_bo(
     n_iterations,
     rng,
     *,
-    settings=HybridBOSettings(),
+    settings: HybridBOSettings,  # required
 ) -> Run: ...
 def standard_bo(
     problem,
@@ -714,7 +727,7 @@ def standard_bo(
     n_iterations,
     rng,
     *,
-    settings=StandardBOSettings(),
+    settings: StandardBOSettings,  # required
 ) -> Run: ...
 def latin_hypercube_sampling(
     problem, measure, initial_points, n_points, rng
@@ -729,8 +742,8 @@ The baselines are named `*_sampling` because `hb.sampling.uniform` and
   scenario and draws nothing), then runs `optimization_loop` with a
   trial-point function that fits the GP on `(u, x)[h_inputs] -> y`, builds
   `hybrid_acquisition`, and solves it with `multistart`. The user never draws `z`.
-  With `SAA(unknown_states_as_variables=False)` (the legacy illustrative setting) it
-  reproduces the legacy illustrative baseline.
+  With `SAA(n_scenarios=25, unknown_states_as_variables=False)` (the legacy
+  illustrative setting) it reproduces the legacy illustrative baseline.
 - `standard_bo` fits on `u -> f` (measured), with the incumbent the best measured `f`,
   and solves `standard_acquisition` by `multistart` from `lhs` starts over the `u` start
   bounds. With the defaults it reproduces the legacy illustrative baseline.
@@ -772,7 +785,7 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   `index` and `acquisitions`, one `AcquisitionSolution` per iteration (the
   acquisition value at the trial point and, for hybrid BO, the scenario states
   there), and keeps its full artifact.
-  `StudySettings(n_runs, n_initial, n_iterations, seed=None)`; every draw of a study
+  `StudySettings(n_runs, n_initial, n_iterations, seed=None)`, keyword-only; every draw of a study
   comes from the seed, so the same settings give the same study.
   `Study(runs: tuple[Run, ...], settings, name, artifact)` is a flat collection; its
   settings hold the seed actually used (a fresh one for seed None) and its artifact

@@ -16,6 +16,7 @@ import polars as pl
 import pytest
 
 from hybrid_bo import (
+    EI,
     SAA,
     HybridBOSettings,
     Problem,
@@ -384,9 +385,11 @@ def test_hybrid_bo_with_two_unknown_states_gets_iteration_figures_without_gps(
     y1, y2 = Var("y1", start=(-1.0, 1.0)), Var("y2", start=(-1.0, 1.0))
     system = System(u=[u1, u2], y=[y1, y2], h_inputs=[u1, u2], measured=[y1, y2])
     problem = Problem(system, f=lambda v: v.y1**2 + v.y2**2)
-    measure = oracle_measure(system, lambda v: [v.u1, v.u2])
+    measure = oracle_measure(system, lambda v: [v.u1, v.u2], noise_std=0.0)
     settings = HybridBOSettings(
-        gp=ex.gp, approximation=SAA(n_scenarios=5, unknown_states_as_variables=False)
+        gp=ex.gp,
+        acquisition=EI(),
+        approximation=SAA(n_scenarios=5, unknown_states_as_variables=False),
     )
     methods = {"hybrid_bo": functools.partial(hybrid_bo, settings=settings)}
 

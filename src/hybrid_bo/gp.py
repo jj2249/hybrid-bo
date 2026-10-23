@@ -170,7 +170,7 @@ Mean = Zero
 TYPES = (Param, Matern12, Matern32, Matern52, SquaredExponential, Scale, Zero)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class GP:
     """A prior GP, before it sees any data: its mean, its kernel with each
     hyperparameter fixed or to be fitted, and its observation noise.
@@ -184,7 +184,7 @@ class GP:
 
     mean: Mean
     kernel: Kernel
-    noise_std: float = 0.0
+    noise_std: float
     jitter: float = 1e-6
 
     def __post_init__(self) -> None:

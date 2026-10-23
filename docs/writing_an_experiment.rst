@@ -106,9 +106,9 @@ A benchmark experiment: an oracle
 
 To test a method you write the unknown equations in closed form, the *oracle*, and
 :py:func:`~hybrid_bo.evaluation.oracle_measure` simulates the system from ``g`` and
-the oracle together. The methods only see the measured variables, optionally with
-normal noise (``noise_std``); the study also keeps the true (*oracle*) values, so it can
-score the methods.
+the oracle together. The methods only see the measured variables, with normal noise
+of the standard deviation you state (``noise_std``, 0 for none); the study also keeps
+the true (*oracle*) values, so it can score the methods.
 
 .. literalinclude:: ../experiments/illustrative_example.py
    :language: python
@@ -166,13 +166,14 @@ with ``functools.partial``:
    :end-before: # The study
 
 - :py:func:`~hybrid_bo.bo.hybrid_bo` with
-  :py:class:`~hybrid_bo.settings.HybridBOSettings`: the acquisition function
-  (:py:class:`~hybrid_bo.acquisition.EI`, the default, or
+  :py:class:`~hybrid_bo.settings.HybridBOSettings`: the prior GP (``gp``; see
+  below), the acquisition function (:py:class:`~hybrid_bo.acquisition.EI`, or
   :py:class:`~hybrid_bo.acquisition.LCB` with a ``std_factor``), how it is
-  approximated (``approximation``, default
-  :py:class:`~hybrid_bo.acquisition.SAA`), the solver starts (``n_starts``) and the
-  prior GP (``gp``, required; see below). ``SAA`` takes the number
-  of scenarios (``n_scenarios``) and ``unknown_states_as_variables``: ``False`` (as
+  approximated (``approximation``, e.g. :py:class:`~hybrid_bo.acquisition.SAA`), and
+  the solver starts (``n_starts``). The first three are required: a default may set
+  how hard or how precisely we search, never what we search for, so an experiment
+  shows which method it runs. ``SAA`` takes the number of scenarios
+  (``n_scenarios``, required) and ``unknown_states_as_variables``: ``False`` (as
   above) makes the acquisition problem smaller; the default, ``True``, often helps
   the solver.
   :py:class:`~hybrid_bo.acquisition.Linearization` (Lin-EI, as
@@ -188,7 +189,7 @@ with ``functools.partial``:
   is -log EI; the iteration plot draws it as -EI.
 - :py:func:`~hybrid_bo.bo.standard_bo` with
   :py:class:`~hybrid_bo.settings.StandardBOSettings`: BO with a GP of the objective, as the
-  usual comparison. Its GP is required too.
+  usual comparison. Its GP and acquisition function are required too.
 - :py:func:`~hybrid_bo.baselines.latin_hypercube_sampling` and
   :py:func:`~hybrid_bo.baselines.uniform_sampling`, which sample without a model and
   take no settings.
@@ -200,10 +201,18 @@ different settings:
 
    methods = {
        "hybrid_bo_ei": functools.partial(
-           hb.hybrid_bo, settings=hb.HybridBOSettings(gp=gp)
+           hb.hybrid_bo,
+           settings=hb.HybridBOSettings(
+               gp=gp, acquisition=hb.EI(), approximation=hb.SAA(n_scenarios=25)
+           ),
        ),
        "hybrid_bo_lcb": functools.partial(
-           hb.hybrid_bo, settings=hb.HybridBOSettings(gp=gp, acquisition=hb.LCB(2.0))
+           hb.hybrid_bo,
+           settings=hb.HybridBOSettings(
+               gp=gp,
+               acquisition=hb.LCB(std_factor=2.0),
+               approximation=hb.SAA(n_scenarios=25),
+           ),
        ),
    }
 
@@ -225,6 +234,7 @@ which multiply by an output scale written in front of them:
    gp = hb.gp.GP(
        mean=hb.gp.Zero(),
        kernel=outputscale * hb.gp.Matern52(lengthscale=lengthscale),
+       noise_std=0.0,
    )
 
 A kernel's hyperparameters are its fields, and the output scale is the factor in
@@ -238,8 +248,9 @@ inputs scaled onto [0, 1] and its outputs scaled to zero mean and unit standard
 deviation, so a lengthscale of 0.5 is half the range of the data.
 
 ``noise_std`` is the known standard deviation of the measurement noise, in the units
-of the measured variable, the same number as the measurement's noise. It defaults to
-0, noise-free. With noise of 0.01 on the measured state:
+of the measured variable, the same number as the measurement's noise. It has no
+default, here or in ``oracle_measure``: 0 is noise-free. With noise of 0.01 on the
+measured state:
 
 .. code-block:: python
 

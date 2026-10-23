@@ -33,7 +33,7 @@ Y_train = np.sin(3 * X_train[:, 0]) + X_train[:, 1] ** 2
 X_test = rng.uniform(-1, 1, size=(4, 2))
 
 # The default kernel: an output scale times Matern-5/2, both fitted
-DEFAULT = GP(Zero(), Scale(Matern52()))
+DEFAULT = GP(mean=Zero(), kernel=Scale(Matern52()), noise_std=0.0)
 
 
 def matern52(X1, X2):
@@ -48,7 +48,11 @@ def matern52(X1, X2):
 def fitted():
     """A fitted GP with known parameters, noise and identity scalers, so predictions
     are in the units of the reference."""
-    gp = GP(Zero(), Scale(Matern52(lengthscale=(0.6, 0.9)), 1.7), noise_std=NOISE_STD)
+    gp = GP(
+        mean=Zero(),
+        kernel=Scale(Matern52(lengthscale=(0.6, 0.9)), 1.7),
+        noise_std=NOISE_STD,
+    )
     identity = Scaler(np.ones(2), np.zeros(2))
     return FittedGP(gp, X_train, Y_train, identity, Scaler(np.ones(1), np.zeros(1)))
 
@@ -117,12 +121,23 @@ def test_gp_checks():
     # `pytest.raises` fails the test unless the block raises that exception, with a
     # message matching `match`
     with pytest.raises(ValueError, match="noise_std"):
-        GP(Zero(), Matern52(), noise_std=-0.1)
+        GP(mean=Zero(), kernel=Matern52(), noise_std=-0.1)
     scaler = Scaler(np.ones(1), np.zeros(1))
     with pytest.raises(ValueError, match=r"kernel\.lengthscale"):
-        FittedGP(GP(Zero(), Matern52()), X_train, Y_train, scaler, scaler)
+        FittedGP(
+            GP(mean=Zero(), kernel=Matern52(), noise_std=0.0),
+            X_train,
+            Y_train,
+            scaler,
+            scaler,
+        )
     with pytest.raises(ValueError, match="3 entries for 2 inputs"):
-        fit_gp(GP(Zero(), Matern52((0.1, 0.2, 0.3))), X_train, Y_train, rng)
+        fit_gp(
+            GP(mean=Zero(), kernel=Matern52((0.1, 0.2, 0.3)), noise_std=0.0),
+            X_train,
+            Y_train,
+            rng,
+        )
 
 
 # Fitting: the regression baselines pin the fitted parameters of the illustrative
@@ -146,7 +161,11 @@ def test_fit_maximizes_the_log_marginal_likelihood():
         log_marginal_likelihood(
             replace(
                 fitted,
-                gp=GP(Zero(), Scale(Matern52((lengthscale,)), outputscale)),
+                gp=GP(
+                    mean=Zero(),
+                    kernel=Scale(Matern52((lengthscale,)), outputscale),
+                    noise_std=0.0,
+                ),
             )
         )
         for outputscale in np.geomspace(0.1, 10.0, 15)
@@ -159,7 +178,12 @@ def test_fit_fills_in_params_and_keeps_fixed_values():
     """A fit replaces each `Param` with its fitted value, one per input for an ARD
     lengthscale, and leaves fixed parameters, the noise and the jitter as they were."""
     # A fixed output scale, a fitted lengthscale per input
-    gp = GP(Zero(), Scale(Matern52(), outputscale=2.0), noise_std=0.05, jitter=1e-7)
+    gp = GP(
+        mean=Zero(),
+        kernel=Scale(Matern52(), outputscale=2.0),
+        noise_std=0.05,
+        jitter=1e-7,
+    )
 
     fitted = fit_gp(gp, *FIT_DATA["2d"], np.random.default_rng(0))
 
@@ -173,7 +197,9 @@ def test_fit_fills_in_params_and_keeps_fixed_values():
 
     # Without ARD, one lengthscale shared by both inputs
     shared = fit_gp(
-        GP(Zero(), Matern52(ard=False)), *FIT_DATA["2d"], np.random.default_rng(0)
+        GP(mean=Zero(), kernel=Matern52(ard=False), noise_std=0.0),
+        *FIT_DATA["2d"],
+        np.random.default_rng(0),
     )
     assert isinstance(shared.gp.kernel, Matern52)
     assert isinstance(shared.gp.kernel.lengthscale, float)
@@ -187,7 +213,7 @@ def test_noise_is_in_measured_units():
     noise_std = 0.3
 
     fitted = fit_gp(
-        GP(Zero(), Scale(Matern52()), noise_std=noise_std),
+        GP(mean=Zero(), kernel=Scale(Matern52()), noise_std=noise_std),
         X,
         Y,
         np.random.default_rng(0),
@@ -226,7 +252,7 @@ def test_fit_without_params_draws_nothing():
     """A GP with every parameter fixed is only conditioned on the data: it comes back
     as it was, and the generator spawns no child."""
     X, Y = FIT_DATA["1d"]
-    gp = GP(Zero(), Scale(Matern52(0.5), 1.5))
+    gp = GP(mean=Zero(), kernel=Scale(Matern52(0.5), 1.5), noise_std=0.0)
     rng = np.random.default_rng(1)
 
     fitted = fit_gp(gp, X, Y, rng)
@@ -244,7 +270,9 @@ def test_failed_fit_keeps_initial_values(caplog):
     no_iterations = Ipopt(solver_options={"print_level": 0, "max_iter": 0})
     fitted = fit_gp(DEFAULT, X, Y, np.random.default_rng(0), solver=no_iterations)
 
-    assert fitted.gp == GP(Zero(), Scale(Matern52((1.0,)), 1.0))
+    assert fitted.gp == GP(
+        mean=Zero(), kernel=Scale(Matern52((1.0,)), 1.0), noise_std=0.0
+    )
     assert "initial values" in caplog.text
 
 
@@ -311,7 +339,7 @@ def test_well_conditioned_fit_is_not_warned_about(caplog):
 
 def test_param_is_fitted_within_its_bounds():
     """A `Param` with narrow bounds is fitted inside them."""
-    gp = GP(Zero(), Matern52(Param(0.5, (0.4, 0.6))))
+    gp = GP(mean=Zero(), kernel=Matern52(Param(0.5, (0.4, 0.6))), noise_std=0.0)
 
     fitted = fit_gp(gp, *FIT_DATA["2d"], np.random.default_rng(0))
 

@@ -29,7 +29,9 @@ METHODS = [latin_hypercube_sampling, uniform_sampling]
 def illustrative_run(problem, method, rng=None) -> Run:
     """A run of `method` on the illustrative example: 2 initial points, then 3."""
     rng = np.random.default_rng(0) if rng is None else rng
-    measure = oracle_measure(problem.system, oracle=lambda v: [cas.sin(v.u)])
+    measure = oracle_measure(
+        problem.system, oracle=lambda v: [cas.sin(v.u)], noise_std=0.0
+    )
     u = initial_points(problem.system.u, 2, rng)
     return method(problem, measure, u, 3, rng)
 
@@ -55,7 +57,9 @@ def test_initial_points_come_first(illustrative_problem, method):
     rng = np.random.default_rng(0)
     u = initial_points(illustrative_problem.system.u, 2, rng)
     measure = oracle_measure(
-        illustrative_problem.system, oracle=lambda v: [cas.sin(v.u)]
+        illustrative_problem.system,
+        oracle=lambda v: [cas.sin(v.u)],
+        noise_std=0.0,
     )
 
     run = method(illustrative_problem, measure, u, 3, rng)

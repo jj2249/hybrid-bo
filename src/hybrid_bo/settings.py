@@ -19,7 +19,7 @@ from hybrid_bo.gp import GP
 from hybrid_bo.solvers import Ipopt
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class StandardBOSettings:
     """Settings of standard BO: the prior GP of u -> f, the acquisition function,
     the number of multistart starts for the acquisition problem and for fitting the
@@ -29,7 +29,7 @@ class StandardBOSettings:
     """
 
     gp: GP
-    acquisition: EI | LCB = field(default_factory=EI)
+    acquisition: EI | LCB
     n_starts: int = 10
     n_starts_gp: int = 10
     solver: Ipopt = field(default_factory=Ipopt)
@@ -38,7 +38,7 @@ class StandardBOSettings:
         _check_acquisition(self.acquisition)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class HybridBOSettings:
     """Settings of hybrid BO: the prior GP of the unknown states over the arguments
     of h (`h_inputs`), the acquisition function (what is computed), its
@@ -52,8 +52,8 @@ class HybridBOSettings:
     """
 
     gp: GP
-    acquisition: EI | LCB = field(default_factory=EI)
-    approximation: SAA | SoftSAA | Linearization = field(default_factory=SAA)
+    acquisition: EI | LCB
+    approximation: SAA | SoftSAA | Linearization
     n_starts: int = 10
     n_starts_gp: int = 10
     solver: Ipopt = field(default_factory=Ipopt)
