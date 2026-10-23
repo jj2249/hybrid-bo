@@ -33,6 +33,13 @@ USER_FACING = {
     "oracle_optimum",
     "save",
     "load",
+    # Run a study's tasks elsewhere, and save and load its runs one by one
+    "Task",
+    "study_tasks",
+    "run_task",
+    "assemble",
+    "save_run",
+    "load_run",
     # Look at the results
     "Run",
     "History",

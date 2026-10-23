@@ -39,7 +39,17 @@ from hybrid_bo.history import History, incumbents, oracle_incumbents
 from hybrid_bo.problem import Problem, System, Var
 from hybrid_bo.run import Run
 from hybrid_bo.sampling import initial_points
-from hybrid_bo.saving import load, save
+from hybrid_bo.saving import load, load_run, save, save_run
 from hybrid_bo.settings import HybridBOSettings, StandardBOSettings
-from hybrid_bo.studies import Configuration, Study, StudySettings, repeat, study
+from hybrid_bo.studies import (
+    Configuration,
+    Study,
+    StudySettings,
+    Task,
+    assemble,
+    repeat,
+    run_task,
+    study,
+    study_tasks,
+)
 from hybrid_bo.views import evaluations, hyperparameters, summary

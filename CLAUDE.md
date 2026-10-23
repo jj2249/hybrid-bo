@@ -19,7 +19,7 @@ matplotlib, Polars and the docs, and `dev` includes everything.
 ```bash
 pixi install -e dev
 pixi run -e dev check        # lint (with --fix) + format + typecheck
-pixi run -e dev test         # pytest (~45s)
+pixi run -e dev test         # pytest (~2 min)
 pixi run -e dev test --update-baselines   # regenerate regression results
 pixi run -e dev coverage     # tests + per-file line coverage of src/hybrid_bo
 pixi run -e dev lint | format | typecheck
@@ -28,12 +28,16 @@ pixi run -e dev setup        # install pre-commit hooks (ruff and ty on commit)
 pixi run experiment illustrative_example [--n-runs 3 --plot ...]   # every method; --help lists the flags
 pixi run plot illustrative_example [STUDY]   # figures of the newest (or named) study, iterations of run 0
 pixi run experiment illustrative_example plot [STUDY] --plot-runs all   # iteration figures of every run
+pixi run experiment illustrative_example resume STUDY [--n-workers 4]   # finish a study that stopped
 ```
 
 The pixi tasks run an experiment as a module from `experiments/` (`python -m
 illustrative_example ...`). The experiment ends with an explicit `cli.main(...)`
 call that passes everything it defines; `experiments/cli.py` parses the flags and
-runs or plots. The `experiment`, `plot` and `docs` tasks set a
+runs or plots. A study's runs are tasks, each run in its own process (`python -m
+<experiment> run-task`), which rebuilds the experiment from its module and saves its
+run file as it finishes; `prepare`, `run-task` and `resume` split a study up (e.g.
+for a SLURM array). The `experiment`, `plot` and `docs` tasks set a
 `default-environment`, so they need no `-e`. `experiment` passes every flag through;
 `plot` takes only the study id, so plot with other flags as
 `pixi run experiment illustrative_example plot [STUDY] [--plot-runs ...]
@@ -75,8 +79,9 @@ with a GitHub issue labeled `bug`: remove the marker when fixing the bug.
   operator may only build data (`Param(...) * Matern52()` is a `Scale`). Add a
   protocol only once a second implementation exists.
   The exception is a value the user passes where a function is expected, which may
-  be a frozen dataclass with `__call__` when it must pickle (the oracle simulation,
-  `OracleSimulation`; #141): users call and write it as a function.
+  be a frozen dataclass with `__call__` when it is data that the run's artifact
+  describes by its repr (the oracle simulation, `OracleSimulation`; #141): users
+  call and write it as a function.
 - American spelling everywhere, in code and prose (`optimization_loop`,
   "optimization loop").
 - Library code lives at the top level of `hybrid_bo`.

@@ -4,23 +4,17 @@ points.
 
 A configuration is a method with its own evaluation budget. `repeat` runs one
 configuration `n_runs` times from generators spawned from one seed; `study` runs every
-configuration from the same seed, in this process or in worker processes, and its
-artifact records the problem, the methods and the stated oracle optimum once. Save and load a study with `hb.save` and `hb.load`.
+configuration from the same seed, and its artifact records the problem, the methods
+and the stated oracle optimum once. A study is its tasks (`study_tasks`), one per run,
+each run by `run_task`, then assembled (`assemble`), so a launcher can run the tasks
+elsewhere, e.g. in other processes. Save and load a study with `hb.save` and
+`hb.load`.
 """
 
 import logging
-import logging.handlers
-import multiprocessing
-import os
-import pickle
-import signal
-import threading
 import time
 import warnings
-from collections.abc import Callable, Generator, Mapping
-from concurrent.futures import ProcessPoolExecutor
-from contextlib import contextmanager
-from contextvars import ContextVar
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 
 import numpy as np
@@ -28,7 +22,7 @@ import numpy as np
 from hybrid_bo.errors import HybridBOError, OracleOptimumWarning
 from hybrid_bo.evaluation import Measure
 from hybrid_bo.problem import Problem
-from hybrid_bo.run import Run, _problem_artifact, _versions_artifact
+from hybrid_bo.run import Run, _versions_artifact, problem_artifact
 from hybrid_bo.sampling import initial_points
 
 _logger = logging.getLogger(__name__)
@@ -37,23 +31,6 @@ _logger = logging.getLogger(__name__)
 # n is the number of iterations (of design points for the baselines). Bind a BO
 # method's settings with `functools.partial(hb.hybrid_bo, settings=...)`
 Method = Callable[..., Run]
-
-# The study run this context is running, as (label, index), for `run_of`
-_current_run: ContextVar[tuple[str, int] | None] = ContextVar(
-    "_current_run", default=None
-)
-
-# The attribute that carries a worker's record's run to the parent
-_RUN_ATTRIBUTE = "hybrid_bo_run"
-
-# The environment variables that set the threads of BLAS and OpenMP, read when they
-# load, so workers get them from the environment they start in
-_THREAD_VARIABLES = (
-    "OMP_NUM_THREADS",
-    "OPENBLAS_NUM_THREADS",
-    "MKL_NUM_THREADS",
-    "VECLIB_MAXIMUM_THREADS",
-)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -132,15 +109,17 @@ def repeat(
     (`error.run`); the next run goes on. Each finished run is logged
     at info level with its time.
     """
-    tasks = _tasks({"": configuration}, settings)
-    runs = [_run(task, problem, measure, settings) for task in tasks]
+    seed = np.random.SeedSequence(settings.seed).entropy
+    settings = replace(settings, seed=seed)
+    tasks = study_tasks({"": configuration}, settings)
+    runs = [run_task(task, problem, measure, settings) for task in tasks]
     return tuple(run for run in runs if run is not None)
 
 
 @dataclass(frozen=True)
-class _Task:
-    """One run of a study: run `index` of the configuration labeled `label`, drawn
-    from `child`, its spawned seed."""
+class Task:
+    """One run of a configuration in a study: run `index` of the configuration
+    labeled `label`, drawn from `child`, its seed spawned from the study's seed."""
 
     label: str
     configuration: Configuration
@@ -148,25 +127,36 @@ class _Task:
     child: np.random.SeedSequence
 
 
-def _tasks(
+def study_tasks(
     configurations: Mapping[str, Configuration], settings: StudySettings
-) -> list[_Task]:
-    """The runs of every configuration, by label, then index. Each configuration
-    spawns its own seeds from `settings.seed`, since `lhs` spawns from them."""
-    return [
-        _Task(label, configuration, index, child)
+) -> tuple[Task, ...]:
+    """The tasks of a study: every configuration's runs, by label, then index. Each
+    configuration spawns its own seeds from `settings.seed`, since `lhs` spawns
+    from them.
+
+    Raises `ValueError` if `settings.seed` is None: resolve it first and keep it, so
+    every task of the study comes from the same seed.
+    """
+    if settings.seed is None:
+        msg = "The study's tasks need its seed: resolve a seed of None first"
+        raise ValueError(msg)
+    return tuple(
+        Task(label, configuration, index, child)
         for label, configuration in configurations.items()
         for index, child in enumerate(
             np.random.SeedSequence(settings.seed).spawn(settings.n_runs)
         )
-    ]
+    )
 
 
-def _run(
-    task: _Task, problem: Problem, measure: Measure, settings: StudySettings
+def run_task(
+    task: Task, problem: Problem, measure: Measure, settings: StudySettings
 ) -> Run | None:
-    """The task's run, as `repeat` describes; None if it failed before evaluating
-    anything."""
+    """The task's run, as `repeat` describes, with its index and its
+    configuration's budget, or None if it failed before evaluating anything. A
+    `HybridBOError` is logged as a warning and the partial run kept; a finished run
+    is logged at info level with its time. The run keeps its method's name;
+    `assemble` labels it with the task's label."""
     configuration, index = task.configuration, task.index
     start = time.perf_counter()
     rng = np.random.default_rng(task.child)
@@ -202,8 +192,6 @@ def study(
     settings: StudySettings,
     name: str | None = None,
     optimum: float | None = None,
-    *,
-    n_workers: int = 1,
 ) -> Study:
     """Runs every configuration `settings.n_runs` times, as `repeat` does, from the
     same seed, so run i of every configuration with the same `n_initial` starts from
@@ -218,48 +206,50 @@ def study(
     can miss it (`oracle_optimum` helps find it once); the artifact records it. Warns
     with `OracleOptimumWarning` if an evaluated point's oracle objective is below it.
 
-    `n_workers` > 1 runs the runs in that many worker processes, one task per run,
-    each with single-threaded BLAS and OpenMP; the study is the same as with 1 (this
-    process), runs in the same order. The problem, the measurement and the methods
-    are pickled to the workers, so they must be module-level functions or data. The
-    workers' records are handled by this process's loggers at their levels, and their
-    warnings raised again here after each run. While a run of the study runs, `run_of`
-    gives the label and index of the run that logged a record, in this process or a
-    worker. Raises `ValueError` if `n_workers` < 1, and `TypeError` naming what can't
-    be pickled.
+    The runs run here, one after another: `study_tasks`, `run_task` on each, then
+    `assemble`. To run them elsewhere, call those instead.
     """
-    if n_workers < 1:
-        msg = f"A study needs n_workers >= 1, not {n_workers}"
-        raise ValueError(msg)
-
-    # One seed for every configuration; a fresh one is kept in the settings
     seed = np.random.SeedSequence(settings.seed).entropy
     settings = replace(settings, seed=seed)
-
-    # One task per run of each configuration, here or in workers, each run's records
-    # tagged with it; the runs keep the tasks' order and are labeled with their key
     for label, configuration in configurations.items():
         _log_configuration(label, configuration, settings)
-    tasks = _tasks(configurations, settings)
-    if n_workers == 1:
-        results = []
-        for task in tasks:
-            with _tagged(task.label, task.index):
-                results.append(_run(task, problem, measure, settings))
-    else:
-        results = _parallel_results(tasks, problem, measure, settings, n_workers)
-    runs = [
+    tasks = study_tasks(configurations, settings)
+    runs = [run_task(task, problem, measure, settings) for task in tasks]
+    return assemble(tasks, runs, problem, measure, settings, name, optimum)
+
+
+def assemble(
+    tasks: Sequence[Task],
+    runs: Sequence[Run | None],
+    problem: Problem,
+    measure: Measure,
+    settings: StudySettings,
+    name: str | None = None,
+    optimum: float | None = None,
+) -> Study:
+    """The study of the tasks' runs (`run_task`), `runs[i]` the run of `tasks[i]`,
+    None for a run that failed before evaluating anything, which the study drops.
+    Each run is labeled with its task's label; the artifact, the oracle optimum and
+    its check are as `study` describes. `settings` must hold the seed the tasks came
+    from.
+
+    Raises `ValueError` unless there is one run (or None) per task.
+    """
+    if len(runs) != len(tasks):
+        msg = f"A study needs one run per task, not {len(runs)} for {len(tasks)}"
+        raise ValueError(msg)
+    labeled = [
         replace(run, method=task.label)
-        for task, run in zip(tasks, results, strict=True)
+        for task, run in zip(tasks, runs, strict=True)
         if run is not None
     ]
 
     # Each method with its settings, from the artifact of one of its runs; a BO
     # method's prior GP follows on its own line
-    artifact = _problem_artifact(problem, measure)
-    run_artifacts = {run.method: run.artifact for run in runs}
+    artifact = problem_artifact(problem, measure)
+    run_artifacts = {run.method: run.artifact for run in labeled}
     method_lines = []
-    for label in configurations:
+    for label in dict.fromkeys(task.label for task in tasks):
         if label in run_artifacts:
             run_artifact = run_artifacts[label]
             text = f"{run_artifact['method']}({run_artifact['settings']})"
@@ -273,8 +263,8 @@ def study(
     # The stated oracle optimum, checked against the points the runs evaluated
     if optimum is not None:
         artifact["oracle_optimum"] = repr(float(optimum))
-        _check_optimum(runs, float(optimum))
-    return Study(tuple(runs), settings, name, artifact | _versions_artifact())
+        _check_optimum(labeled, float(optimum))
+    return Study(tuple(labeled), settings, name, artifact | _versions_artifact())
 
 
 def _check_optimum(runs: list[Run], optimum: float) -> None:
@@ -312,204 +302,3 @@ def _log_configuration(
         configuration.n_evaluations,
         configuration.n_initial,
     )
-
-
-def _parallel_results(
-    tasks: list[_Task],
-    problem: Problem,
-    measure: Measure,
-    settings: StudySettings,
-    n_workers: int,
-) -> list[Run | None]:
-    """The tasks' runs (`_run`), from `n_workers` worker processes, in the tasks'
-    order.
-
-    Raises `TypeError` if the problem, the measurement or a method can't be pickled,
-    which sending it to a worker needs.
-    """
-    # Everything a worker gets must pickle; say which object doesn't, before running
-    _check_picklable(problem, "problem")
-    _check_picklable(measure, "measurement")
-    for task in tasks:
-        _check_picklable(task.configuration.method, f"method of {task.label}")
-
-    # A thread that handles the workers' records here, until the pool is done
-    context = multiprocessing.get_context("spawn")
-    records = context.Queue()
-    listener = threading.Thread(target=_reemit, args=(records,), daemon=True)
-    listener.start()
-    executor = ProcessPoolExecutor(
-        n_workers,
-        mp_context=context,
-        initializer=_start_worker,
-        initargs=(records, _levels()),
-    )
-    finished = False
-    try:
-        # The pool starts its workers as tasks are submitted, so they inherit
-        # single-threaded BLAS and OpenMP
-        with _single_threaded_children():
-            futures = [
-                executor.submit(_worker_run, task, problem, measure, settings)
-                for task in tasks
-            ]
-
-        # Each run's warnings raised again here, tagged with the run; a registry per
-        # file shows a warning once per place, as serially
-        results = []
-        registries = {}
-        for task, future in zip(tasks, futures, strict=True):
-            run, caught = future.result()
-            with _tagged(task.label, task.index):
-                for message, category, filename, lineno in caught:
-                    warnings.warn_explicit(
-                        message,
-                        category,
-                        filename,
-                        lineno,
-                        registry=registries.setdefault(filename, {}),
-                    )
-            results.append(run)
-        finished = True
-
-    # Finished workers exit and have queued all their records before the end
-    # marker. An error or Ctrl-C stops them at once instead, as their runs may never
-    # see the interrupt (CasADi catches it inside IPOPT), and one stopped mid-record
-    # may leave the queue unreadable, so then the wait for the listener is brief
-    finally:
-        if finished:
-            executor.shutdown()
-        else:
-            _stop_workers(executor)
-        records.put(None)
-        listener.join(timeout=None if finished else 5)
-    return results
-
-
-def _check_picklable(value: object, what: str) -> None:
-    """Raises `TypeError`, naming `what`, if `value` can't be pickled."""
-    try:
-        pickle.dumps(value)
-    except (pickle.PicklingError, AttributeError, TypeError) as error:
-        msg = (
-            f"With n_workers > 1, the {what} is sent to worker processes, so it must "
-            f"pickle, and {value!r} doesn't ({error}). Define it as a module-level "
-            "function, not a lambda or a nested function"
-        )
-        raise TypeError(msg) from error
-
-
-def _levels() -> dict[str, int]:
-    """The levels set on this process's loggers, by name ("" for the root), for a
-    worker to log at the same levels."""
-    loggers = logging.root.manager.loggerDict.items()
-    levels = {
-        name: logger.level
-        for name, logger in loggers
-        if isinstance(logger, logging.Logger) and logger.level != logging.NOTSET
-    }
-    return levels | {"": logging.root.level}
-
-
-def _start_worker(
-    records: "multiprocessing.Queue[logging.LogRecord | None]", levels: dict[str, int]
-) -> None:
-    """Sets up a worker process: its loggers at the parent's levels, with every
-    record sent to the parent through `records` instead of handled here, and Ctrl-C
-    left to the parent, which stops the workers."""
-    for name, level in levels.items():
-        logging.getLogger(name or None).setLevel(level)
-    logging.root.handlers = [_Forward(records)]
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
-
-
-def _stop_workers(executor: ProcessPoolExecutor) -> None:
-    """Terminates the executor's workers at once and cancels the runs not started.
-    Ctrl-C meanwhile doesn't stop it: pixi passes a Ctrl-C on to the process it
-    runs, which so gets it twice."""
-    # The pool's workers, from a private attribute: before Python 3.14 there is no
-    # public way to stop them, and 3.14's `terminate_workers` can't be called again
-    # once interrupted, since it clears this first
-    processes = []
-    while True:
-        try:
-            processes = processes or list((executor._processes or {}).values())
-            executor.shutdown(wait=False, cancel_futures=True)
-            for process in processes:
-                process.terminate()
-        except KeyboardInterrupt:
-            continue
-        return
-
-
-def _reemit(records: "multiprocessing.Queue[logging.LogRecord | None]") -> None:
-    """Handles the workers' records with this process's loggers, as if logged here,
-    until it takes None."""
-    while (record := records.get()) is not None:
-        logger = logging.getLogger(None if record.name == "root" else record.name)
-        if logger.isEnabledFor(record.levelno):
-            logger.handle(record)
-
-
-def run_of(record: logging.LogRecord) -> tuple[str, int] | None:
-    """The configuration label and run index of the study run that logged `record`,
-    or None for a record logged outside the runs of a study (`repeat` has no labels,
-    so its runs have none either).
-
-    Call it while handling the record, in a handler or a filter: a record from a
-    worker process carries its run, and a record logged in this process gets it from
-    the run that is logging.
-    """
-    return getattr(record, _RUN_ATTRIBUTE, None) or _current_run.get()
-
-
-@contextmanager
-def _tagged(label: str, index: int) -> Generator[None]:
-    """Tags the records logged in the block with the run `(label, index)`."""
-    token = _current_run.set((label, index))
-    try:
-        yield
-    finally:
-        _current_run.reset(token)
-
-
-def _worker_run(
-    task: _Task, problem: Problem, measure: Measure, settings: StudySettings
-) -> tuple[Run | None, list[tuple[Warning | str, type[Warning], str, int]]]:
-    """`_run` in a worker process, its records tagged with the run, and every
-    warning it raised (message, category, file and line), for the parent to raise
-    again."""
-    with (
-        _tagged(task.label, task.index),
-        warnings.catch_warnings(record=True) as caught,
-    ):
-        warnings.simplefilter("always")
-        run = _run(task, problem, measure, settings)
-    return run, [(w.message, w.category, w.filename, w.lineno) for w in caught]
-
-
-class _Forward(logging.handlers.QueueHandler):
-    """Sends a worker's records to the parent process, each tagged with its run."""
-
-    def prepare(self, record: logging.LogRecord) -> logging.LogRecord:
-        """The record as `QueueHandler` sends it (message formatted, nothing that
-        might not pickle), carrying its run."""
-        prepared = super().prepare(record)
-        setattr(prepared, _RUN_ATTRIBUTE, _current_run.get())
-        return prepared
-
-
-@contextmanager
-def _single_threaded_children() -> Generator[None]:
-    """Sets one thread for BLAS and OpenMP in the environment of the processes
-    started in the block, then puts this process's environment back as it was."""
-    before = {name: os.environ.get(name) for name in _THREAD_VARIABLES}
-    os.environ.update(dict.fromkeys(_THREAD_VARIABLES, "1"))
-    try:
-        yield
-    finally:
-        for name, value in before.items():
-            if value is None:
-                os.environ.pop(name, None)
-            else:
-                os.environ[name] = value

@@ -42,13 +42,39 @@ initial points, run ``i`` of every method from the same initial points. ``pixi r
   configuration has its own budget, set in the experiment, so no flag changes the
   number of iterations;
 - ``--n-workers 4`` runs the runs in 4 processes at once, with the same results
-  (default 1);
+  (default 1: one after another, each still in its own process);
 - ``--name`` names the study (default the current UTC time); a name already taken
   is refused before anything runs;
 - ``--plot`` draws the figures straight after, and ``--plot-runs 0 3`` (or ``all``)
   chooses the runs that get a figure per iteration (default run 0 of each method);
 - ``--require-clean`` refuses to run with uncommitted or untracked files (without it,
   they get a warning), since the study wouldn't be reproducible.
+
+Each run is saved as soon as it finishes. Ctrl-C, or a crash, stops the study but
+keeps its finished runs, and prints the command that finishes it:
+
+.. code-block:: bash
+
+   pixi run experiment illustrative_example resume STUDY [--n-workers 4]
+
+which runs only the runs that are missing. It refuses if the experiment, the seed or
+the code changed since the study started, so a resumed study equals one run in one go.
+
+On a cluster, ``prepare`` writes the study's task list without running anything and
+prints how many tasks it has; each task is one run, run by ``run-task``, and
+``resume`` assembles the study once they are done. With SLURM, for a study of 18
+tasks:
+
+.. code-block:: bash
+
+   pixi run experiment langermann prepare --name sweep
+   sbatch --array=0-17 --wrap \
+       'pixi run experiment langermann run-task sweep --task-index $SLURM_ARRAY_TASK_ID'
+   pixi run experiment langermann resume sweep   # after the array has finished
+
+A task whose run is saved already exits at once, so resubmitting the whole array
+after a failure is safe. ``run-task`` is an ordinary command, so GNU parallel or any
+other launcher can run the tasks too.
 
 Look at the study
 -----------------

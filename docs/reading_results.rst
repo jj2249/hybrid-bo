@@ -19,15 +19,19 @@ The study folder
 - ``runs/<method>/run-000.json``: one file per run.
 - ``summary.csv``: one row per method, the median and interquartile range (IQR) over
   its runs of the final values, and how many runs failed.
-- ``study.log``: the study log, the study's progress as it ran: each run and
-  iteration with its time and the incumbent, the time of each GP fit and multistart,
-  and every warning. Each line a run logged starts with the run, as
-  ``hybrid_bo/run-003``, which tells apart the lines of runs that ran in parallel
-  (``--n-workers``). While the study runs it is ``<study id>.log`` beside the study
-  folders; a study that doesn't finish leaves it there.
-- ``logs/<method>/run-000.log``: one log per run, the study log's lines of that run.
-  While the study runs they are in ``<study id>.logs/``.
+- ``study.log``: the study log, the study's progress as it ran: each task as it
+  started and finished, then every run's lines in order: each run and iteration with
+  its time and the incumbent, the time of each GP fit and multistart, and every
+  warning. Each line a run logged starts with the run, as ``hybrid_bo/run-003``.
+- ``logs/<method>/run-000.log``: one log per run, the lines that run logged.
+- ``tasks.json``: the task list, what the study runs, written before anything runs;
+  ``resume`` checks the experiment against it.
 - ``figures/``: written by ``plot`` (or ``--plot``).
+
+A study that didn't finish has no ``artifact.json`` yet, only its task list, logs and
+the runs saved so far (and ``runs/<method>/run-000.failed`` for a run that failed
+before evaluating anything). It can't be loaded or plotted until ``pixi run experiment
+<experiment> resume <study id>`` finishes it.
 
 Every *evaluation* runs the measurement at a point ``u``, recovers the unmeasured
 states and computes ``f``. A run evaluates its *initial points*, then one trial point

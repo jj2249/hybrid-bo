@@ -26,11 +26,28 @@ pixi run plot <name> [STUDY]                         # plot the newest (or named
 pixi run experiment <name> plot [STUDY] --plot-runs all   # iteration figures of every run
 ```
 
-A study shows its progress on the console and saves it as `study.log` in its folder,
-and each run's part of it in `logs/<method>/run-000.log`; a study that doesn't finish
-leaves `<study id>.log` beside the study folders. `--n-workers 4` runs the runs in 4
-processes, with the same results. A
-`--name` that is already taken is refused before anything runs.
+A study's runs are its tasks, each run in its own process, `--n-workers` at a time
+(default 1), with the same results whatever the number. A study shows its progress on
+the console and saves it as `study.log` in its folder, and each run's lines in
+`logs/<method>/run-000.log`. Each run is saved as it finishes, so a study stopped by
+Ctrl-C or a crash keeps its finished runs and prints the command that finishes it:
+
+```bash
+pixi run experiment <name> resume STUDY [--n-workers 4]
+```
+
+A `--name` that is already taken, by a saved or an unfinished study, is refused
+before anything runs.
+
+On a cluster, `prepare` writes a study's task list without running anything, each
+task runs as `run-task STUDY --task-index K`, and `resume` assembles the study:
+
+```bash
+pixi run experiment langermann prepare --name sweep      # prints the number of tasks
+sbatch --array=0-17 --wrap \
+    'pixi run experiment langermann run-task sweep --task-index $SLURM_ARRAY_TASK_ID'
+pixi run experiment langermann resume sweep              # after the array finishes
+```
 
 To write your own, see
 [Writing an experiment](../docs/writing_an_experiment.rst) (build the docs with
