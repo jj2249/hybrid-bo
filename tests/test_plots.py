@@ -30,6 +30,7 @@ from hybrid_bo import (
     HybridBOSettings,
     Linearization,
     Problem,
+    ReplayWarning,
     Run,
     SoftSAA,
     StandardBOSettings,
@@ -1035,8 +1036,10 @@ def test_2d_softsaa_note_is_finite_where_its_ei_underflows(hybrid_soft_2d_run):
     acquisitions[1] = replace(acquisitions[1], value=1e6)
     run = replace(run, acquisitions=acquisitions)
 
-    # Act: iteration 1's EI panel alone
-    figure = plots.iteration(run, ROSENBROCK, 1, gp=False, scenarios=False)
+    # Act: iteration 1's EI panel alone. The replay's value isn't the stored one, so
+    # it warns; `pytest.warns` passes only if the block warns with this category
+    with pytest.warns(ReplayWarning):
+        figure = plots.iteration(run, ROSENBROCK, 1, gp=False, scenarios=False)
 
     # Check: the stored number in the note, log10 EI = -1e6 / ln 10
     (note,) = figure.axes[0].texts

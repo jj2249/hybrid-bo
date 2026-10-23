@@ -302,16 +302,31 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `run.settings` (its type says hybrid or standard BO; None draws the points only).
   The artifact's settings text is never read back.
   `_replay`: standard BO evaluates `standard_acquisition`'s NLP; hybrid BO rebuilds
-  `hybrid_acquisition` and solves it over all of `w` with u fixed by equal bounds
-  (built with `_pack`), in order of distance from the trial point, each from the
-  nearest solution so far, the stored one first (NaN where a solve fails), then f per
+  `hybrid_acquisition` but optimizes nothing: with u fixed, each scenario's equations
+  are a square system (`_scenario_equations`: M equations in x, or M + P in (x, y)
+  with the unknown states as variables, the GP tie included; no equation links two
+  scenarios), which `_scenario_roots` solves with CasADi's Newton `rootfinder`,
+  mapped over the (point, scenario) pairs of one ring of points at a time, rings one
+  median nearest-point spacing wide outwards from the trial point, each point
+  started from the nearest point solved in an earlier ring, the trial point's ring
+  from the stored solution. A point is NaN if a pair's residual exceeds
+  `_RESIDUAL_TOLERANCE` (1e-8; mapped calls report no per-instance success, so
+  Newton runs with `error_on_fail: False`) or its root is outside a state's bounds
+  (solved without bounds, then rejected: IPOPT could have found another root inside
+  them). With M = 0 and the GP substituted nothing is solved. The value is `nlp.f`
+  at the packed (u, x, y), mapped over the solved points, so it covers every
+  approximation. `_check_trial_point` warns with `ReplayWarning` unless the trial
+  point's states and value are the stored solution's (`_REPLAY_RTOL` 1e-4,
+  `_REPLAY_ATOL` 1e-6); pytest turns that warning into an error (`pyproject.toml`),
+  so a test that expects it uses `pytest.warns`. Then f per
   scenario in one mapped call of `_scenario_objective`, and with linearization `s`
   from `_sensitivity` (the scenarios
   panel draws nominal f ± s, `_nominal_band`). Figures are drawn in `STYLE` (`hybrid_bo.mplstyle`).
   matplotlib and Polars are imported inside the functions.
 - `errors.py`: `HybridBOError` (with `.history`, the points evaluated before the
   error, and `.run`, the partial run when raised in a method), `RootFindingError`,
-  `NoSolutionError`, `ReconstructionWarning`, `OracleOptimumWarning`, and
+  `NoSolutionError`, `ReconstructionWarning`, `OracleOptimumWarning`, `ReplayWarning`
+  (an iteration figure's replay left the optimizer's branch at the trial point), and
   `StudyFormatError` (a `ValueError`: a saved study this version can't load). The library
   raises these, never bare `Exception` (ruff `TRY002`/`BLE001` apply everywhere).
   It imports `History` and `Run` only for type checking, since `run.py` imports
@@ -400,7 +415,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   to end: every method, saving, plots, and hybrid BO matching standard BO when
   f = y), `test_two_unknown_states.py` (P = 2 end to
   end: runs, saving, plots),
-  `test_studies.py`, `test_views.py`, `test_run.py`) compare against
+  `test_studies.py`, `test_views.py`, `test_run.py`, `test_replay.py` (the replay
+  against values recorded from the IPOPT replay it replaced, `tests/data/replay/`)) compare against
   numpy/scipy references or closed forms. Add one when changing math.
 - Tests follow the comment rules in CLAUDE.md Conventions (docstrings, commented
   blocks, a note on the first use of each pytest feature); `test_standard_bo.py` is

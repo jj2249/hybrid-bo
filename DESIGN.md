@@ -901,7 +901,18 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   true curve. EI is drawn as log10 EI with its zeros in gray, since SAA-EI's flat
   regions are what the figure is for. The replay solves the grid in order of distance
   from the trial point, each point from the nearest one solved, which in 1D is the
-  outward sweep it always was. GP prediction at the grid is mapped over the points
+  outward sweep it always was. Since #154 it optimizes nothing: with u fixed, the
+  acquisition problem is S independent square systems, one per scenario (no slack
+  variables, no equation linking two scenarios), so each scenario's states are a
+  Newton root (CasADi's `rootfinder`) and the value is the problem's objective `nlp.f`
+  there. The (point, scenario) pairs of a ring of points around the trial point are
+  one mapped call, each ring started from the previous ones, so the replay keeps the
+  branch the optimizer chose. One IPOPT solve per grid point took about 195 s for a 2D
+  figure of `langermann_partial` (25 scenarios, M = 2); a root-finder solves the same
+  systems without IPOPT's overhead. Roots are found without bounds and rejected
+  outside them, which matches IPOPT whenever the root is unique. The trial point
+  checks the replay: if its root isn't the stored solution, the figure warns with
+  `ReplayWarning` rather than failing, since the rest of the figure is still useful. GP prediction at the grid is mapped over the points
   (`predict` maps a numpy input over its rows): predicting 900 points at once built
   their whole covariance matrix and took 6 s. More than two decision variables need
   another design.
