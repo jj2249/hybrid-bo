@@ -143,10 +143,12 @@ def summary(study: Study) -> "pl.DataFrame":
     # The last evaluation of each run; a run that finished has every evaluation of
     # its configuration's budget
     finals = evaluations(study).group_by("method", "run", maintain_order=True).last()
-    n_evaluations = {
+    n_evaluations_by_label = {
         label: budget.n_evaluations for label, budget in study.budgets.items()
     }
-    is_finished = pl.col("evaluation") == pl.col("method").replace_strict(n_evaluations)
+    is_finished = pl.col("evaluation") == pl.col("method").replace_strict(
+        n_evaluations_by_label
+    )
     finished = is_finished.sum().cast(pl.Int64)
 
     def spread(name: str) -> list["pl.Expr"]:

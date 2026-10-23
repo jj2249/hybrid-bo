@@ -824,8 +824,10 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   budget passes through exactly the first evaluations of one with a smaller budget,
   given the same seed and `n_initial`. A budget sweep reads every budget's regret from
   one run per `n_initial`; `tests/test_studies.py` locks the property in for hybrid
-  and standard BO. The baselines lack it: they draw their whole design first, so the
-  Latin hypercube depends on its size, and later stream draws shift with it. Studies take a seed, not an `rng`, so that the settings alone reproduce a
+  and standard BO. The baselines draw their whole design first: Latin hypercube
+  sampling lacks it, since its design depends on its size, and uniform sampling has
+  it only with a measurement that draws nothing, since the noise is drawn after the
+  design. Studies take a seed, not an `rng`, so that the settings alone reproduce a
   study and the caller's generator is never advanced as a side effect. The oracle
   optimum is stated (`optimum`), never computed (#62): a multistart search can miss
   it, and a wrong optimum silently corrupts every regret. `hb.oracle_optimum(problem,

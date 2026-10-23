@@ -250,8 +250,9 @@ Run ``i`` of every configuration with the same ``n_initial`` starts from the sam
 initial points. A BO method doesn't depend on how many evaluations it has left, so
 with the same seed and ``n_initial`` a run with a larger budget passes through the
 same first evaluations as one with a smaller budget: the longest run gives the regret
-of every smaller budget. The baselines don't have this property, since they draw
-their whole design at the start.
+of every smaller budget. The baselines draw their whole design at the start, so Latin
+hypercube sampling doesn't have this property, and uniform sampling has it only
+without measurement noise.
 
 The GP
 ------

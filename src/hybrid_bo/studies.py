@@ -204,6 +204,7 @@ def study(
         artifact["oracle_optimum"] = repr(float(optimum))
         _check_optimum(runs, float(optimum))
 
+    # Each configuration's budget, which the study keeps since its method is code
     budgets = {
         label: Budget(
             n_evaluations=configuration.n_evaluations,

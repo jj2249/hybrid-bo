@@ -90,6 +90,7 @@ def illustrative_study() -> hb.Study:
 # Configurations
 
 
+# `parametrize` runs the test once per pair of values, each as its own test case
 @pytest.mark.parametrize(("n_evaluations", "n_initial"), [(5, 2), (2, 2), (1, 1)])
 def test_a_configuration_takes_a_budget_with_initial_points_inside_it(
     n_evaluations, n_initial
@@ -108,6 +109,8 @@ def test_a_configuration_rejects_initial_points_outside_its_budget(
     n_evaluations, n_initial
 ):
     """No initial points, or more than the budget, raises `ValueError`."""
+    # `pytest.raises` passes only if the block raises this exception, with a message
+    # matching `match`
     with pytest.raises(ValueError, match="n_initial"):
         hb.Configuration(
             method=hb.uniform_sampling,
@@ -191,20 +194,24 @@ def test_configurations_with_their_own_budgets_run_save_and_load(
         assert not np.array_equal(more_initial.u[:2], short.u[:2])
 
 
+# The illustrative example's prior GP with a known noise of 0.01
+NOISY_GP = dataclasses.replace(ex.gp, noise_std=0.01)
+
+
 @pytest.mark.parametrize(
     "method",
     [
         functools.partial(
             hb.hybrid_bo,
             settings=hb.HybridBOSettings(
-                gp=ex.gp,
+                gp=NOISY_GP,
                 acquisition=hb.EI(),
                 approximation=hb.SAA(n_scenarios=5, unknown_states_as_variables=False),
             ),
         ),
         functools.partial(
             hb.standard_bo,
-            settings=hb.StandardBOSettings(gp=ex.gp, acquisition=hb.EI()),
+            settings=hb.StandardBOSettings(gp=NOISY_GP, acquisition=hb.EI()),
         ),
     ],
     ids=["hybrid_bo", "standard_bo"],
@@ -213,14 +220,16 @@ def test_a_larger_budget_passes_through_the_evaluations_of_a_smaller_one(method)
     """The prefix property: a BO method doesn't depend on how many evaluations it has
     left, so with the same seed and n_initial a run of 3 iterations is the start of a
     run of 5, its points, states, objectives, fitted GPs and acquisition solutions
-    alike. The budget sweep reads every budget's regret from the longest run."""
+    alike. The budget sweep reads every budget's regret from the longest run. The
+    measurement is noisy, so every evaluation draws from the run's generator too."""
     # Setup and act: one run of each budget, from the same seed
     configurations = {
         label: hb.Configuration(method=method, n_evaluations=n, n_initial=2)
         for label, n in (("short", 5), ("long", 7))
     }
     settings = hb.StudySettings(n_runs=1, seed=0)
-    short, long = hb.study(configurations, ex.problem, ex.measure, settings).runs
+    noisy = hb.oracle_measure(ex.system, ex.oracle, noise_std=0.01)
+    short, long = hb.study(configurations, ex.problem, noisy, settings).runs
 
     # Check: the first 5 evaluations and 3 iterations of the long run are the short run
     for field in ("u", "x", "y", "f", "x_oracle", "y_oracle", "f_oracle"):

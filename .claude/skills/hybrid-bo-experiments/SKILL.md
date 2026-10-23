@@ -67,7 +67,8 @@ starts from the same initial points. Within `hb.repeat`, run `i` draws
 n_initial` iterations, both from that generator. A BO run with a larger budget passes
 through the same first evaluations as one with a smaller budget (the prefix property),
 so a budget sweep needs one configuration per `n_initial`, at the largest budget; the
-baselines draw their whole design first and lack it. Outside a study, do the same by hand:
+baselines draw their whole design first: Latin hypercube sampling lacks it, and
+uniform sampling has it only with a measurement that draws nothing. Outside a study, do the same by hand:
 `np.random.default_rng(seed).spawn(n_runs)`, and draw nothing else from a run's
 generator.
 

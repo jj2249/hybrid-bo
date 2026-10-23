@@ -135,7 +135,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   depends on its remaining budget, so with the same seed and `n_initial` a longer
   run starts with exactly the shorter run's evaluations, fitted GPs and acquisition
   solutions (`tests/test_studies.py` pins it for hybrid and standard BO; the
-  baselines lack it, as they draw their whole design first). Keep it: a budget sweep
+  baselines draw their whole design first: Latin hypercube sampling lacks it, uniform
+  sampling has it only with a measurement that draws nothing). Keep it: a budget sweep
   reads every budget from the longest run.
 - `saving.py`: `save(study, path)` / `load(path)` (ADR 0004): `artifact.json` lists the
   run files `runs/<method>/run-<index:03d>.json` and holds the budgets; `load` also
