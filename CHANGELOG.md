@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.5.0 (2026-10-24)
+
 - The experiment `langermann_sweep` (#147): a sweep of SoftSAA-EI over initial
   fractions on `langermann_partial`'s problem, with n_initial = 2, 4, ..., 38 and 40
   evaluations each, which plots `budget_heatmap`, `regret_at_budget` at a budget of
