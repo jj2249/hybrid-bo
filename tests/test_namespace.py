@@ -46,6 +46,7 @@ USER_FACING = {
     "NoSolutionError",
     "OracleOptimumWarning",
     "ReconstructionWarning",
+    "ReplayWarning",
     "RootFindingError",
 }
 

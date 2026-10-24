@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Faster iteration figures for hybrid BO with mechanistic states (#154): the replay
+  of the acquisition function root-finds each scenario's states with Newton's method
+  (CasADi's `rootfinder`), mapped over the grid in rings outwards from the trial
+  point, instead of one IPOPT solve per grid point, and evaluates the acquisition
+  problem's objective there. A grid point whose root falls outside a state's bounds
+  is still a gap. A new `hb.ReplayWarning` says when the replay at the trial point
+  isn't the run's stored solution. Results are unchanged; figures differ from before
+  only by IPOPT's tolerance.
 - Parallel studies (#145): `hb.study(..., n_workers=4)` runs the runs in 4 worker
   processes, one per (configuration, run), with single-threaded BLAS, giving the
   same study as `n_workers=1` (the default). The problem, the measurement and the

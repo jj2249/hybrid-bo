@@ -8,6 +8,14 @@ minimized, with the states the solver would choose, and the stored acquisition v
 the trial point checks the replay. A run stores the acquisition problem's solution at
 each iteration, but not the curves.
 
+Amended in #154: the replay no longer solves the problem with IPOPT. With u fixed it
+is a square system per scenario, so each scenario's states are a Newton root started
+from the stored solution and continued outwards over the grid, and the value is the
+problem's objective there. That is the root-finding rejected below, without its
+objections: no random starts, and it stays on the solver's branch, which the trial
+point checks (`ReplayWarning`). The panels still show the function the method
+minimized.
+
 ## Considered Options
 
 - **Root-finding the known equations per grid point and scenario** (the plots of #31):

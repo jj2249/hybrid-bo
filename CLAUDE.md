@@ -19,7 +19,7 @@ matplotlib, Polars and the docs, and `dev` includes everything.
 ```bash
 pixi install -e dev
 pixi run -e dev check        # lint (with --fix) + format + typecheck
-pixi run -e dev test         # pytest (~45s)
+pixi run -e dev test         # pytest (~75s)
 pixi run -e dev test --update-baselines   # regenerate regression results
 pixi run -e dev coverage     # tests + per-file line coverage of src/hybrid_bo
 pixi run -e dev lint | format | typecheck
