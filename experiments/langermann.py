@@ -84,7 +84,7 @@ gp = hb.gp.GP(
 # Methods: each takes (problem, measure, initial_points, n, rng), where n is the
 # number of iterations, or of design points for the baseline. Hybrid BO substitutes
 # the GPs' predictions for the unknown states, with SAA-EI and with SoftSAA-EI at a
-# temperature of 1e-6, as in the rosenbrock experiment
+# temperature of 5e-3, about 1e-3 times the optimum's magnitude (about 4.2)
 methods = {
     "hybrid_bo": functools.partial(
         hb.hybrid_bo,
@@ -100,7 +100,7 @@ methods = {
             gp=gp,
             acquisition=hb.EI(),
             approximation=hb.SoftSAA(
-                temperature=1e-6, n_scenarios=25, unknown_states_as_variables=False
+                temperature=5e-3, n_scenarios=25, unknown_states_as_variables=False
             ),
         ),
     ),

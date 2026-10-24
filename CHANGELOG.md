@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Changes results:** The experiments' SoftSAA-EI temperatures are about 1e-3 times
+  each optimum's magnitude, set from trial runs, instead of 1e-6, which took tiny
+  local steps: 50e-3 for `illustrative_example` and `illustrative_example_2d`, 5e-3
+  for `langermann`, and 100e-3 for `rosenbrock` (whose optimum is 0). The library is
+  unchanged; the illustrative example's `hybrid_bo_soft` regression baseline changes.
 - Faster iteration figures for hybrid BO with mechanistic states (#154): the replay
   of the acquisition function root-finds each scenario's states with Newton's method
   (CasADi's `rootfinder`), mapped over the grid in rings outwards from the trial
