@@ -21,9 +21,10 @@ initial fractions for one method (one configuration per `n_initial`, and the swe
 An experiment is one module under `experiments/`, importable as a top-level module
 (pytest and ty put `experiments/` on the path). At module level, in this order:
 Problem, measurement (with a module-level `def oracle(v)` and the stated `optimum` for
-a benchmark), the BO methods' prior GP (`gp`), `methods`, `configurations` (each
-method as an `hb.Configuration(method=..., n_evaluations=..., n_initial=...)`, the
-shipped experiments giving every method the same budget), `study_settings`
+a benchmark), the BO methods' prior GP (`gp`), `methods` (or one `method`, for a
+sweep), `configurations` (each method as an `hb.Configuration(method=...,
+n_evaluations=..., n_initial=...)`, the comparisons giving every method the same
+budget, and `langermann_sweep.py` one per `n_initial`), `study_settings`
 (`hb.StudySettings(n_runs=..., seed=...)`), then a `__main__` block calling
 `cli.main` with `configurations`.
 

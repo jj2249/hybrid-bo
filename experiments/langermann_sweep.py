@@ -27,7 +27,7 @@ n_initial / B is never 0 or 1. The full study is 19 configurations x 10 runs, ab
 `plot` draws the budget heatmap, the regret against the initial fraction at a budget
 of 20, and the regret over evaluations by number of initial points, besides the
 iteration figures of run 0 of each configuration (without GP panels, since those
-draw one unknown state). `pixi run experiment langermann_sweep --help` lists the
+draw one unknown state): 380 of them, one per iteration, which takes a while. `pixi run experiment langermann_sweep --help` lists the
 flags.
 """
 
