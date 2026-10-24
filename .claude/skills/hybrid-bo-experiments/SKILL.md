@@ -106,38 +106,67 @@ oracle objective is below it.
 ## Running
 
     pixi run experiment <name> [--method M ...] [--n-runs 10] [--seed 0] [--n-workers 4] [--name ID] [--plot] [--plot-runs 0 3] [--require-clean]
+    pixi run experiment <name> prepare [--method M ...] [--n-runs 10] [--seed 0] [--name ID]
+    pixi run experiment <name> run-task STUDY --task-index K
+    pixi run experiment <name> resume STUDY [--n-workers 4] [--plot]
     pixi run plot <name> [STUDY]
     pixi run experiment <name> plot [STUDY] [--plot-runs all] [--results-root DIR]
 
 `--method` takes configuration labels. There is no `--n-iterations`: budgets belong
-to configurations, so change them in the experiment (tests define small test
-experiments, as `tests/test_cli.py`'s `small` does). `--n-workers N` runs the runs
-in N worker processes (default 1, this process) with the same results; the
-measurement and any method of your own must then be module-level functions (or
-data), not lambdas or nested functions, else the study raises `TypeError` naming it.
-`hb.oracle_measure` pickles whatever its oracle is.
-The tasks run `python -m <name>` from `experiments/` in the `experiments` environment.
+to configurations, so change them in the experiment (tests write small experiment
+modules, as `tests/test_cli.py`'s `small` does, and run them with its `experiment`
+fixture). A study's runs are tasks (one run of one configuration, `hb.Task`). `run`
+is `prepare`, then the tasks, then assembly:
+
+- `prepare` reserves the study id by creating the study folder (an atomic `mkdir`,
+  so studies started at once never share an id) and writes its task list
+  `tasks.json`: the seed (resolved if None), `n_runs`, each chosen configuration's
+  budget, the oracle optimum, the code version, the problem's artifact text and the
+  tasks as `[label, index]`, by label, then index.
+- The launcher (`cli.run_tasks` -> `cli.run_commands`, a generic runner of named
+  commands) runs each task as `python -m <name> run-task STUDY --task-index K` from
+  `experiments/`, keeping `--n-workers` running (default 1) in task order. The
+  `name` passed to `cli.main` must be the experiment's module name (a usage error
+  otherwise); tests write their experiment modules to a folder on `PYTHONPATH`. The
+  task rebuilds the experiment from its module, so nothing is pickled: lambdas and
+  nested functions are fine. A task saves `runs/<label>/run-003.json`
+  (temporary file, then renamed), or `run-003.failed` for a run that failed before
+  evaluating anything, and `logs/<label>/run-003.log` (DEBUG and above; the console
+  gets INFO and above, tagged `<label>/run-003`). It exits 0 when the task is done,
+  also if it was already, 1 on an unexpected exception (traceback in its log), 2 if
+  the experiment or the code version differs from the task list. With more than one
+  at a time, tasks get `OMP/OPENBLAS/MKL/VECLIB_*_NUM_THREADS=1` unless set; `-W`
+  options are passed on.
+- Assembly loads the run files (`hb.load_run`), calls `hb.assemble`, writes
+  `artifact.json` (`hb.saving.save_artifact`; the study is finished exactly when it
+  exists, so it is written last, atomically), rebuilds `study.log` as the launcher's
+  lines then every per-run log, each line starting with its tag (dropping lines an
+  interrupted assembly tagged, so none appear twice), and writes `summary.csv`.
+
+Ctrl-C, a failing task, or any other error once the tasks have started stops the
+study at once (running tasks are terminated, finished runs kept), prints the `resume`
+command and exits 130 or 1. `resume STUDY [--n-workers N] [--require-clean]` takes
+everything else from the task list; it refuses a finished study and, naming the
+difference (both values for one-value fields), an experiment whose configurations,
+budgets, problem or measurement text, or code version differ from the task list;
+then it runs the tasks left and assembles. Helpers raise `cli.UsageError`, which
+`main` reports as a usage error. For a cluster, `prepare`, then a SLURM array of
+`run-task --task-index $SLURM_ARRAY_TASK_ID`, then `resume`.
+
 No command lists every experiment, and a typo in the name fails with "No module named
 ...". A relative `--results-root` is relative to where pixi was started (`INIT_CWD`),
 not `experiments/`. The study id is `--name`, else the UTC time to the second at the
-start. It is reserved before anything runs by creating the study log
-`<experiment>/<id>.log` exclusively, so parallel runs never share an id; an id is taken
-if that log or its folder exists. A taken `--name` is a usage error; a taken UTC time
-gets `-2`, `-3`, ... appended. The study log gets the library's records (DEBUG and
-above: every run, iteration, GP fit and multistart with its time) and every warning;
-the console shows INFO and above. A line a run logs starts with its tag,
-`<label>/run-003`, so the lines of parallel runs can be told apart, and also goes to
-the run's per-run log. Once saved, the log moves into the study folder as `study.log`, and
-the per-run logs from `<id>.logs/` to `logs/<label>/run-003.log`; a study that doesn't
-finish leaves `<id>.log` (and `<id>.logs/`) in place, which keeps the id taken until
-it is deleted. `plot` loads the study given, else the one whose
-artifact was written last (`artifact.json`, or `study.json` in older studies), and
-saves `summary.csv` if the study has none (studies saved before summaries). Plotting
-draws the study figures `cli.main`'s `figures` names (default convergence and
-regret; a sweep over initial fractions passes `hb.plots.budget_heatmap` and its
-siblings, file name to function of the study; one that raises `ValueError` is
-skipped with a message), and the iteration figures of the runs `--plot-runs`
-names (indices or `all`, default `0`, of each method); on the run command
-`--plot-runs` implies `--plot`. Running
-with uncommitted or untracked files warns that the study won't be reproducible;
+start. A taken `--name` (by a saved or an unfinished study) is a usage error; a taken
+UTC time gets `-2`, `-3`, ... appended. The study log holds the launcher's lines
+(each configuration, each task started and finished with a count, warnings) and then
+every run's lines, once the study is assembled. `plot` loads the study given (an unfinished one is a usage error
+saying to resume it), else the finished one whose artifact was written last
+(`artifact.json`, or `study.json` in older studies), and saves `summary.csv` if the
+study has none (studies saved before summaries). Plotting draws the study figures
+`cli.main`'s `figures` names (default convergence and regret; a sweep over initial
+fractions passes `hb.plots.budget_heatmap` and its siblings, file name to function of
+the study; one that raises `ValueError` is skipped with a message), and the iteration
+figures of the runs `--plot-runs` names (indices or `all`, default `0`, of each
+method); on `run` and `resume`, `--plot-runs` implies `--plot`. Running with
+uncommitted or untracked files warns that the study won't be reproducible;
 `--require-clean` refuses to run instead.

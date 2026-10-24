@@ -119,8 +119,8 @@ def _find_root(
 class OracleSimulation:
     """The oracle simulation as a measurement, built by `oracle_measure`.
 
-    Called as `measure(u, rng)`. It is data, so it pickles (parallel studies send it
-    to worker processes), and its repr describes it in the run's artifact.
+    Called as `measure(u, rng)`. It is data (the system, the traced oracle and the
+    settings), and its repr describes it in the run's artifact.
     """
 
     system: System
@@ -179,8 +179,8 @@ def oracle_measure(
     The measurement solves `g` and the oracle together for every state, from
     `n_starts` Latin hypercube starts over the start bounds, reads the measured
     variables and adds normal noise with std `noise_std`. The noise is drawn even when
-    `noise_std` is 0, so the draws don't depend on it. The oracle is traced here, so
-    the measurement pickles whatever the oracle is, a lambda included.
+    `noise_std` is 0, so the draws don't depend on it. The oracle is traced once,
+    here.
 
     Raises `ValueError` if the oracle doesn't give one value per unknown state. The
     measurement raises `RootFindingError` if no start gives a root.

@@ -83,9 +83,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `OracleMeasurement` (measured plus oracle `x`, `y`) in benchmark experiments.
   `oracle_measure(system, oracle, noise_std, ...)` (`noise_std` required) traces
   the oracle like `g` (`_trace_oracle`) and returns an `OracleSimulation`, a frozen,
-  callable dataclass holding the system, the traced oracle and the settings, so it
-  pickles (parallel studies, #141) even when the oracle is a lambda; its repr is the
-  artifact's text.
+  callable dataclass holding the system, the traced oracle and the settings (#141);
+  its repr is the artifact's text, which `resume` compares across processes, so it
+  must not depend on the process (no addresses).
   `oracle_optimum(problem, oracle, rng)` solves min f s.t. g = 0, y = oracle by
   `multistart` from `lhs` starts over the start bounds of (u, x, y).
   `evaluate(problem, measure, u, rng)` runs the measurement per row, then always
@@ -111,7 +111,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   None; `n_evaluations`, its configuration's budget, set
   by `repeat`, else None), pure data that loads without user code (ADR 0003).
   `run_artifact(problem, measure, rng, method, settings)` builds the run's artifact,
-  text, from `_problem_artifact`, `_generator_artifact` and `_versions_artifact` (a
+  text, from `problem_artifact` (public: the CLI's task list holds it),
+  `_generator_artifact` and `_versions_artifact` (a
   study's artifact reuses them); call it before the method draws. `code_version(path)` is
   `git describe --always --dirty` plus `-untracked` for untracked files that aren't
   ignored, or `unknown`; `is_clean(version)` says whether it pins the code (the CLI
@@ -126,23 +127,24 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `default_rng(SeedSequence(seed).spawn(n_runs)[i])`, initial points then the method;
   catches `HybridBOError`, logs it and keeps `error.run`; sets each run's `index`
   and `n_evaluations`, the configuration's budget, since the method is code and
-  can't be saved) and `study(configurations,
-  ...)` (resolves a None seed to fresh entropy kept in its settings, then each
-  configuration's `repeat` from that seed, so run i of configurations with the same
-  `n_initial` shares initial points; relabels runs with their key; its artifact records a stated `optimum` as
-  `oracle_optimum`, never computes one, gives a BO method's prior GP (the run
-  artifact's `gp`) on the line after its settings in `methods`, and warns with
-  `OracleOptimumWarning` if an evaluated point's `f_oracle` is below it). With
-  `n_workers` > 1, `study` runs one task per (configuration, run) on a `spawn`
-  process pool, same runs in the same order; it checks that the problem, measurement
-  and methods pickle (`TypeError` otherwise), starts workers with single-threaded
-  BLAS, re-emits workers' records through the parent's loggers and raises their
-  warnings again after each run. Workers ignore SIGINT; on an error or Ctrl-C the
-  parent terminates them (`_stop_workers`, which survives a second Ctrl-C: pixi
-  delivers each one twice). A serial study doesn't stop on Ctrl-C while IPOPT runs,
-  since CasADi catches the interrupt there. `run_of(record)` gives the `(label, index)` of the
-  study run that logged a record (a context variable, or the attribute a worker's
-  record carries); `repeat` alone tags nothing. Each configuration spawns its own
+  can't be saved) and `study(configurations, problem, measure, settings, name,
+  optimum)`, serial in the caller's process (no `n_workers`; #156, ADR 0010):
+  resolves a None seed to fresh entropy kept in its settings, logs each
+  configuration, then `study_tasks` -> `run_task` on each -> `assemble`. `Task(label,
+  configuration, index, child)` is one run of a configuration; `study_tasks(configurations,
+  settings)` gives them by label, then index (`ValueError` if the seed is None);
+  `run_task(task, problem, measure, settings) -> Run | None` is one run as `repeat`
+  describes (None: failed before evaluating anything; the run keeps its method's
+  name); `assemble(tasks, runs, problem, measure, settings, name, optimum)` relabels
+  runs with their task's label, drops the Nones (`ValueError` unless one per task),
+  builds the artifact (records a stated `optimum` as `oracle_optimum`, never computes
+  one, gives a BO method's prior GP, the run artifact's `gp`, on the line after its
+  settings in `methods`, `no runs` for a label without runs) and warns with
+  `OracleOptimumWarning` if an evaluated point's `f_oracle` is below the optimum.
+  Run i of configurations with the same `n_initial` shares initial points. Running
+  tasks elsewhere is the experiment CLI's job (processes over files). A study
+  doesn't stop on Ctrl-C while IPOPT runs (#155), since CasADi catches the
+  interrupt there; the CLI's does. Each configuration spawns its own
   `SeedSequence` children: `lhs` spawns from them, so sharing them across
   configurations changes the later ones' initial points. Studies take a seed, not an
   `rng`: the settings alone reproduce a study. **Prefix property**: no BO method
@@ -153,7 +155,12 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   sampling has it only with a measurement that draws nothing). Keep it: a budget sweep
   reads every budget from the longest run.
 - `saving.py`: `save(study, path)` / `load(path)` (ADR 0004): `artifact.json` lists the
-  run files `runs/<method>/run-<index:03d>.json`; `load` also reads the older
+  run files `runs/<method>/run-<index:03d>.json`; `save_run(run, path)` (new file
+  only, `FileExistsError`) and `load_run(path)` write and read one run file in that
+  format (the caller writes atomically), and `save_artifact(study, path)` writes only
+  the artifact beside run files already in place (`ValueError` if one is missing or
+  its text isn't the run's encoding, `FileExistsError` if an artifact exists); `save`
+  is `save_run` per run then the artifact; `load` also reads the older
   `study.json` (with `record` for `artifact`), a study saved before #144 (`n_initial`,
   `n_iterations` in its settings) with that budget as each run's `n_evaluations`, and a run saved before #114, whose
   surrogates are single fitted GPs, as 1-tuples (`_with_surrogate_tuples`, before
@@ -390,9 +397,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   run, `optimization_loop` the initial points and each iteration (with the incumbent)
   at INFO; `fit_gp` and `multistart` log their times at DEBUG, and warn about a
   nearly singular training covariance and starts at the iteration limit. Times come from
-  `time.perf_counter`. The library adds no handlers to the caller's process (a
-  worker's only handler sends its records to the parent); the experiment CLI saves
-  the records as the study log, tagged with `run_of`, and one log per run.
+  `time.perf_counter`. The library adds no handlers to the caller's process; the
+  experiment CLI's task processes save each run's records as its per-run log, and the
+  launcher appends them, tagged `<label>/run-003`, to the study log.
 - **Oracle incumbents.** `incumbents(history)` is the running minimum of the measured
   `f`. The benchmark metric `oracle_incumbents(history)` is `f_oracle` at the
   incumbent's point, not the running minimum of `f_oracle`; they agree only
@@ -400,7 +407,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 
 ## Testing rules
 
-- `pixi run -e dev test` runs in about 75s. Run it for every change.
+- `pixi run -e dev test` runs in about 2 minutes (each CLI study task is a new process). Run it for every change.
 - `tests/test_regression.py` runs each method of `experiments/illustrative_example.py`
   (seed 0, 2 iterations) and compares with `tests/data/regression/*.json`. The
   baselines were recorded by the pre-refactor code, so the test maps each `Run` to

@@ -192,17 +192,47 @@ generator's seed and state, and the versions, so a run made without a study stil
 how it was made.
 _Avoid_: record, metadata, manifest, provenance
 
+**Task**:
+One run of a configuration in a study: the configuration's label, the configuration,
+the run's index and the seed spawned for it (`hb.Task`). A study is its tasks, each
+run on its own (`hb.run_task`), then assembled (`hb.assemble`); the experiment CLI runs
+each task in a process of its own.
+_Avoid_: job, work item
+
+**Task list**:
+The file `tasks.json` that the experiment CLI writes when it prepares a study: what
+the study will run (the seed, the number of runs, each configuration's budget, the
+oracle optimum, the code version, the problem and the measurement) and its tasks in
+order. Resuming checks the experiment against it. Unlike the artifact, it is written
+before anything runs.
+_Avoid_: manifest, job list
+
+**Unfinished study**:
+A study folder without an artifact: its task list, its study log, and the run files
+and per-run logs of the tasks done so far. It can't be loaded or plotted; `resume`
+runs the tasks left and assembles it. Its folder keeps its study id taken. Saving
+each run as it finishes, so a study can be resumed, is *checkpointing*; the unit is a
+run, never part of one.
+_Avoid_: partial study
+
+**Launcher**:
+What starts a study's tasks and waits for them: the experiment CLI's `run` and
+`resume`, which keep `--n-workers` task processes running, or anything that runs
+`run-task` commands (a SLURM array, GNU parallel).
+_Avoid_: scheduler (SLURM's role), pool, worker
+
 **Study log**:
-What a study logged as it ran: each run and iteration with its time, and
-every warning raised. Saved with the study, beside its artifact. It is for reading, not
+What a study logged as it ran: each task as it started and finished, then every run's
+lines (each run and iteration with its time, and every warning raised), each starting
+with the run's tag. Saved with the study, beside its artifact. It is for reading, not
 analysis: the runs hold the results.
 _Avoid_: run log
 
 **Per-run log**:
-One run's part of the study log: the lines that run logged, saved in the study's
-`logs/<label>/run-003.log`. In the study log, the same lines start with the run's tag,
-`<label>/run-003`.
-_Avoid_: run log, worker log
+The lines one run logged, saved as the run's task runs, in the study's
+`logs/<label>/run-003.log`. When the study is assembled, they are added to the study
+log, each starting with the run's tag, `<label>/run-003`.
+_Avoid_: run log, worker log, task log
 
 **Reproducible**:
 A study is reproducible when its artifact records a clean code version (every file

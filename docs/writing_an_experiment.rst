@@ -343,7 +343,9 @@ argument is the experiment's name, which names its results folder:
    :language: python
    :start-at: # Run or plot
 
-For your own system, leave out ``optimum`` and ``true_curves``:
+The first argument is the experiment's name, which must be its file's name without
+``.py``: each run of a study starts the experiment again as ``python -m <name>``. For
+your own system, leave out ``optimum`` and ``true_curves``:
 
 .. code-block:: python
 
@@ -363,7 +365,8 @@ Running
    pixi run plot my_experiment
 
 The study is saved in ``results/my_experiment/<study id>/``; :doc:`reading_results`
-explains what is in it. Results are git-ignored.
+explains what is in it. Results are git-ignored. For a long study, see
+:doc:`running_large_studies`.
 
 The command line is a convenience. In a script or notebook, run the study and save it
 yourself (the library never writes files unless asked):
