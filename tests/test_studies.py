@@ -7,14 +7,9 @@ that fixture's value.
 
 import dataclasses
 import functools
+import inspect
 import json
-import os
-import signal
-import subprocess
-import sys
-import time
 import warnings
-from pathlib import Path
 
 import illustrative_example as ex
 import numpy as np
@@ -412,222 +407,64 @@ def test_the_same_seed_gives_the_same_study(illustrative_problem):
     )
 
 
-# Parallel studies
+# A study's tasks
 
 
-def test_a_parallel_study_is_the_serial_study(illustrative_study):
-    """With worker processes, a study gives the same runs as without, bit for bit and
-    in the same order (by label, then run index), whatever order they finish in: 12
-    runs on 4 workers."""
-    parallel = hb.study(
-        configurations_of(ex.methods, n_evaluations=N_INITIAL + 1, n_initial=N_INITIAL),
+def test_study_runs_here_and_has_no_workers():
+    """`hb.study` runs its runs in this process, one after another: running them
+    elsewhere is the job of a launcher (the experiment CLI), so it takes no
+    `n_workers`."""
+    assert "n_workers" not in inspect.signature(hb.study).parameters
+
+
+def test_a_study_is_its_tasks_run_one_by_one_then_assembled(illustrative_study):
+    """`study_tasks`, `run_task` on each task and `assemble` give the study `hb.study`
+    gives, bit for bit, so a launcher that runs the tasks elsewhere gets the same
+    study."""
+    # The tasks of the illustrative study, by label, then index
+    configurations = configurations_of(
+        ex.methods, n_evaluations=N_INITIAL + 1, n_initial=N_INITIAL
+    )
+    tasks = hb.study_tasks(configurations, SETTINGS)
+    assert [(task.label, task.index) for task in tasks] == [
+        (label, index) for label in ex.methods for index in range(SETTINGS.n_runs)
+    ]
+
+    # Act: each task's run, then the study
+    runs = [hb.run_task(task, ex.problem, ex.measure, SETTINGS) for task in tasks]
+    study = hb.assemble(
+        tasks,
+        runs,
         ex.problem,
         ex.measure,
         SETTINGS,
         name="illustrative_example",
         optimum=ex.optimum,
-        n_workers=4,
     )
 
-    assert_same(parallel, illustrative_study)
+    assert_same(study, illustrative_study)
 
 
-def test_a_parallel_study_refuses_a_measurement_that_cannot_be_pickled(
-    illustrative_problem,
-):
-    """Worker processes need the measurement pickled, and a nested function can't
-    be: the study raises `TypeError` naming the measurement before running."""
-
-    def measure(u, rng):
-        """y = sin(u), defined inside the test, so it doesn't pickle."""
-        return np.sin(u)
-
-    with pytest.raises(TypeError, match="measurement .*module-level function"):
-        hb.study(
-            configurations_of(
-                {"uniform": hb.uniform_sampling}, n_evaluations=2, n_initial=1
-            ),
-            illustrative_problem,
-            measure,
-            SETTINGS,
-            n_workers=2,
-        )
-
-
-def test_a_study_needs_at_least_one_worker(illustrative_problem):
-    """`n_workers` counts processes, 1 meaning this one: below 1 is a `ValueError`."""
-    # A quick study, asked for with no workers
+def test_study_tasks_need_the_seed():
+    """Every task of a study comes from one seed, so `study_tasks` refuses a seed of
+    None, which would draw a fresh seed per configuration."""
     configurations = configurations_of(
         {"uniform": hb.uniform_sampling}, n_evaluations=2, n_initial=1
     )
 
-    with pytest.raises(ValueError, match="n_workers"):
-        hb.study(
-            configurations, illustrative_problem, ex.measure, SETTINGS, n_workers=0
-        )
+    with pytest.raises(ValueError, match="seed"):
+        hb.study_tasks(configurations, hb.StudySettings(n_runs=2))
 
 
-def nan_above_zero(u, rng):
-    """y = sin(u), but NaN for u > 0, so the root-finding problem fails there. A
-    module-level function, so worker processes can unpickle it."""
-    return np.array([np.nan]) if u[0] > 0 else np.sin(u)
-
-
-def test_a_failed_run_in_a_worker_is_kept_and_logged(illustrative_problem, caplog):
-    """A run that raises a `HybridBOError` in a worker process is kept as far as it
-    got and logged as a warning in the parent, as in a serial study."""
-    # Two initial points, one on each side of 0 (a Latin hypercube), so every run
-    # fails at the one above 0
+def test_assemble_needs_one_run_per_task():
+    """`assemble` pairs each task with its run, so a missing run is a `ValueError`."""
     configurations = configurations_of(
-        {"uniform": hb.uniform_sampling}, n_evaluations=3, n_initial=2
+        {"uniform": hb.uniform_sampling}, n_evaluations=2, n_initial=1
     )
-    settings = hb.StudySettings(n_runs=3, seed=0)
+    tasks = hb.study_tasks(configurations, SETTINGS)
 
-    # Act: the same study, serially and in parallel
-    serial = hb.study(configurations, illustrative_problem, nan_above_zero, settings)
-    caplog.clear()
-    parallel = hb.study(
-        configurations, illustrative_problem, nan_above_zero, settings, n_workers=2
-    )
-
-    # The same partial runs, and each failure logged by the parent's loggers
-    assert_same(parallel.runs, serial.runs)
-    failures = [
-        record
-        for record in caplog.records
-        if record.levelname == "WARNING" and "RootFindingError" in record.getMessage()
-    ]
-    assert len(failures) == 3
-    assert {record.name for record in failures} == {"hybrid_bo.studies"}
-
-
-def warning_sampling(*args, **kwargs):
-    """`hb.uniform_sampling`, after a warning. A module-level function, so worker
-    processes can unpickle it."""
-    warnings.warn("a warning from the method", UserWarning, stacklevel=2)
-    return hb.uniform_sampling(*args, **kwargs)
-
-
-def test_a_warning_in_a_worker_is_raised_again_in_the_parent(illustrative_problem):
-    """A warning a run raises in a worker process is raised in the parent too, once
-    per run, so the parent's warning filters and handlers see it as in a serial
-    study."""
-    # A method that warns once per run
-    configurations = configurations_of(
-        {"warning": warning_sampling}, n_evaluations=2, n_initial=1
-    )
-
-    # `pytest.warns` passes only if the block warns with this category and message
-    with pytest.warns(UserWarning, match="a warning from the method") as caught:
-        hb.study(
-            configurations, illustrative_problem, ex.measure, SETTINGS, n_workers=2
-        )
-
-    # One warning per run
-    assert sum("from the method" in str(w.message) for w in caught) == SETTINGS.n_runs
-
-
-def thread_reporting_sampling(*args, **kwargs):
-    """`hb.uniform_sampling`, after a warning that gives the BLAS and OpenMP thread
-    settings of the process it runs in."""
-    threads = {name: os.environ.get(name) for name in THREAD_VARIABLES}
-    warnings.warn(f"threads: {threads}", UserWarning, stacklevel=2)
-    return hb.uniform_sampling(*args, **kwargs)
-
-
-THREAD_VARIABLES = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
-
-
-def test_workers_run_single_threaded_blas(illustrative_problem):
-    """Worker processes run BLAS and OpenMP on one thread each, so n workers use n
-    cores, while this process's environment stays as it was."""
-    # This process's environment, and a method that reports its process's threads
-    before = dict(os.environ)
-    configurations = configurations_of(
-        {"threads": thread_reporting_sampling}, n_evaluations=2, n_initial=1
-    )
-
-    # Act: the reports arrive as warnings, raised again here
-    with pytest.warns(UserWarning, match="threads") as caught:
-        hb.study(
-            configurations, illustrative_problem, ex.measure, SETTINGS, n_workers=2
-        )
-
-    # Both runs had one thread, and this process's environment is unchanged
-    single_threaded = str({name: "1" for name in THREAD_VARIABLES})
-    assert [str(w.message) for w in caught] == [f"threads: {single_threaded}"] * 2
-    assert dict(os.environ) == before
-
-
-# A study whose method ignores Ctrl-C, as a run inside IPOPT does (CasADi catches the
-# KeyboardInterrupt and counts it as a failed start); it writes a file once running
-STUBBORN_STUDY = """
-import os, pathlib, time
-import illustrative_example as ex
-import hybrid_bo as hb
-
-def stubborn(problem, measure, initial_points, n, rng):
-    pathlib.Path(os.environ["STARTED"], str(os.getpid())).touch()
-    while True:
-        try:
-            time.sleep(0.1)
-        except KeyboardInterrupt:
-            pass
-
-if __name__ == "__main__":
-    configuration = hb.Configuration(method=stubborn, n_evaluations=2, n_initial=1)
-    hb.study(
-        {"stubborn": configuration},
-        ex.problem,
-        ex.measure,
-        hb.StudySettings(n_runs=4, seed=0),
-        n_workers=2,
-    )
-"""
-
-
-@pytest.mark.parametrize("n_interrupts", [1, 2])
-def test_ctrl_c_stops_a_parallel_study_at_once(tmp_path, n_interrupts):
-    """Ctrl-C (SIGINT to the terminal's process group) stops a parallel study within
-    seconds with `KeyboardInterrupt`, even while its runs ignore the interrupt, and
-    leaves no worker processes behind. Under pixi, which passes a Ctrl-C on to the
-    process it runs, the study gets it twice."""
-    # Setup: the study in its own process group, as a terminal runs a command
-    script = tmp_path / "stubborn_study.py"
-    script.write_text(STUBBORN_STUDY)
-    started = tmp_path / "started"
-    started.mkdir()
-    experiments = Path(__file__).parent.parent / "experiments"
-    env = os.environ | {"STARTED": str(started), "PYTHONPATH": str(experiments)}
-    study = subprocess.Popen(
-        [sys.executable, str(script)],
-        env=env,
-        stderr=subprocess.PIPE,
-        text=True,
-        start_new_session=True,
-    )
-
-    # Act: Ctrl-C once both workers are in their runs
-    deadline = time.monotonic() + 60
-    while len(list(started.iterdir())) < 2 and time.monotonic() < deadline:
-        time.sleep(0.2)
-    assert len(list(started.iterdir())) == 2, "the workers never started their runs"
-    for _ in range(n_interrupts):
-        os.killpg(study.pid, signal.SIGINT)
-        time.sleep(0.01)
-    try:
-        _, stderr = study.communicate(timeout=20)
-    except subprocess.TimeoutExpired:
-        os.killpg(study.pid, signal.SIGKILL)
-        study.communicate()
-        pytest.fail("the study didn't stop within 20s of Ctrl-C")
-
-    # Check: stopped by the interrupt, with no process of the group left
-    assert study.returncode != 0
-    assert "KeyboardInterrupt" in stderr
-    time.sleep(1)
-    with pytest.raises(ProcessLookupError):
-        os.killpg(study.pid, 0)
+    with pytest.raises(ValueError, match="one run per task"):
+        hb.assemble(tasks, [None], ex.problem, ex.measure, SETTINGS)
 
 
 # The oracle optimum
@@ -1049,3 +886,64 @@ def test_save_refuses_a_label_that_is_not_a_folder_name(tmp_path):
     with pytest.raises(ValueError, match="a/b"):
         hb.save(study, tmp_path / "study")
     assert not (tmp_path / "study").exists()
+
+
+def test_a_study_saved_run_by_run_loads_as_the_study(illustrative_study, tmp_path):
+    """Saving each run with `save_run` where `save` puts it, then the artifact with
+    `save_artifact`, gives the folder `save` writes; each run file loads with
+    `load_run`."""
+    # Each run into its run file, as a launcher saves them as they finish
+    path = tmp_path / "study"
+    for run in illustrative_study.runs:
+        run_path = path / "runs" / run.method / f"run-{run.index:03d}.json"
+        run_path.parent.mkdir(parents=True, exist_ok=True)
+        hb.save_run(run, run_path)
+        assert_same(hb.load_run(run_path), run)
+
+    # Act: the artifact beside them
+    hb.saving.save_artifact(illustrative_study, path)
+
+    assert_same(hb.load(path), illustrative_study)
+    assert (path / "artifact.json").read_text() == (
+        hb.save(illustrative_study, tmp_path / "whole") / "artifact.json"
+    ).read_text()
+
+
+def test_save_run_refuses_an_existing_file(illustrative_study, tmp_path):
+    """`save_run` never overwrites a run file: an existing one raises
+    `FileExistsError`."""
+    run_path = tmp_path / "run.json"
+    run_path.write_text("{}")
+
+    with pytest.raises(FileExistsError):
+        hb.save_run(illustrative_study.runs[0], run_path)
+    assert run_path.read_text() == "{}"
+
+
+def test_save_artifact_refuses_run_files_that_do_not_hold_the_runs(
+    illustrative_study, tmp_path
+):
+    """`save_artifact` writes nothing unless every run file is in place and holds its
+    run, so the folder never lists a run it doesn't have; a folder that already holds
+    an artifact is refused."""
+    # Setup: the study saved whole, then one run file swapped for another run's
+    path = hb.save(illustrative_study, tmp_path / "study")
+    (path / "artifact.json").unlink()
+    first, second = illustrative_study.runs[:2]
+    run_path = path / "runs" / first.method / "run-000.json"
+    run_path.unlink()
+    hb.save_run(second, run_path)
+
+    # A run file that holds another run, then one that is missing
+    with pytest.raises(ValueError, match="doesn't hold run 0"):
+        hb.saving.save_artifact(illustrative_study, path)
+    run_path.unlink()
+    with pytest.raises(ValueError, match="doesn't hold run 0"):
+        hb.saving.save_artifact(illustrative_study, path)
+    assert not (path / "artifact.json").exists()
+
+    # An artifact already there
+    hb.save_run(first, run_path)
+    hb.saving.save_artifact(illustrative_study, path)
+    with pytest.raises(FileExistsError):
+        hb.saving.save_artifact(illustrative_study, path)

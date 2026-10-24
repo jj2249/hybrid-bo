@@ -35,9 +35,8 @@ The original code was hard to change for three reasons:
 5. **Explicit randomness.** Anything random takes an `rng: np.random.Generator`.
 6. **Errors raise** specific exceptions. Expected failures (one multistart start not
    converging) are logged without tracebacks. Progress (each run and iteration, with
-   times) is logged too; the library never configures logging (worker processes'
-   records are handled by the caller's loggers), and the experiment CLI saves the
-   records as the study log and one log per run.
+   times) is logged too; the library never configures logging, and the experiment
+   CLI saves the records as one log per run and the study log.
 7. **Rows are points.** A point is `(n,)`, a set is `(n_points, n)`, `f` is `(n_points,)`.
 8. **Experiments are short to write.** Defaults may be derived from other arguments when
    the derivation is obvious and recorded in the run. A default may set how hard or how
@@ -234,7 +233,7 @@ def oracle_measure(
     noise_std: float = 0.0,
     n_starts: int = 100,
     tol: float = 1e-10,
-) -> OracleSimulation: ...  # a frozen, callable dataclass: it pickles
+) -> OracleSimulation: ...  # a frozen, callable dataclass, described by its repr
 
 
 def evaluate(
@@ -332,10 +331,12 @@ a description by writing a docstring. A measurement that is a dataclass is recor
 by its repr instead: the oracle simulation (`OracleSimulation`) gives the oracle as
 text with its noise and solver settings.
 
-The oracle simulation is a frozen, callable dataclass, not a closure, so it pickles
-(#141): parallel studies send each run's problem, method and measurement to worker
-processes. It holds the oracle traced like `g`, a `cas.Function`, which pickles
-whatever the user's oracle was, a lambda included.
+The oracle simulation is a frozen, callable dataclass, not a closure (#141): it is
+data (the system, the oracle traced like `g`, a `cas.Function`, and the settings),
+and its repr is the measurement's text in the artifact, which `resume` compares with
+the study's task list. A closure would need its `__doc__` set to describe it. (It
+was made a dataclass so a process pool could pickle it; studies no longer pickle
+anything, #156.)
 
 A run's artifact has the study's name for the same thing, what was run and how (#123;
 it was `record` before). In a study it mostly repeats the study's artifact, but a run
@@ -839,37 +840,70 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   it, and a wrong optimum silently corrupts every regret. `hb.oracle_optimum(problem,
   oracle, rng, n_starts)` helps find it once. The artifact records it, and the study warns with
   `OracleOptimumWarning` if an evaluated point's oracle objective is below it.
-- **Parallel studies** (#145). `hb.study(..., n_workers=1)`: with more workers, each
-  (configuration, run) is one task on a process pool, and the runs come back in the
-  serial order (by label, then index), bit for bit the serial study's, since each run
-  depends only on its spawned seed. `n_workers` is plumbing, so it may have a default
-  (ADR 0009). The pool uses `spawn` on every platform: forking a process that holds
-  CasADi's and BLAS's threads isn't safe, and one start method keeps results the same
-  across platforms. Workers start with single-threaded BLAS and OpenMP (environment
-  variables set while the pool starts its workers, since BLAS reads them as it
-  loads), so n workers use n cores. The problem, the measurement and the methods are
-  pickled to each task, so they must be module-level functions or data; `study`
-  checks this first and raises `TypeError` naming the culprit, instead of the pool's
-  error after the first task. A `HybridBOError` is handled inside the worker as
-  serially. Ctrl-C is the parent's alone: workers ignore SIGINT, and on any error or
-  interrupt the parent terminates them rather than wait, since CasADi catches an
-  interrupt inside IPOPT and the run carries on. Stopping them survives another
-  Ctrl-C, because pixi passes a Ctrl-C on to its task, which so gets two. It reads
-  the pool's private `_processes`: there is no public way before Python 3.14, and
-  3.14's `terminate_workers` can't be retried once interrupted. A worker's records go to the parent through a queue and are handled by
-  the parent's loggers if they are enabled for the level (workers start with the
-  parent's logger levels, so they don't send what the parent would drop); its
-  warnings are recorded and raised again in the parent after its run, so the parent's
-  filters decide what is shown. Every record logged during a study's run, serially
-  or in a worker, is tagged with its run: `hb.studies.run_of(record)` gives `(label,
-  index)`, from the record for a worker's, from a context variable for this
-  process's. The experiment CLI uses it to start each study log line with
-  `label/run-NNN` and to write each run's records to `logs/<label>/run-NNN.log`.
+- **A study is its tasks** (#143, #156; ADR 0010). A task is one run of a
+  configuration (`hb.Task`: label, configuration, index, spawned seed).
+  `hb.study` is `study_tasks` (every configuration's runs, by label, then index; it
+  needs the seed resolved, so every task comes from one seed), `run_task` on each in
+  this process, then `assemble` (labels the runs, drops the runs that failed before
+  evaluating anything, builds the artifact and checks the optimum). The library runs
+  serially, the easiest form to debug; running tasks elsewhere is the caller's job,
+  and the three functions let any launcher do it with the same results, since each
+  run depends only on its spawned seed. Parallel studies first ran on a process pool
+  inside `hb.study` (#145), which took about 200 lines of plumbing because results,
+  log records, warnings and Ctrl-C all had to come back through one parent: a pickling
+  check, a log queue with a listener thread, warnings replayed in the parent, BLAS
+  variables set while workers started, and stopping workers through the pool's
+  private `_processes`, since CasADi catches Ctrl-C inside IPOPT. It saved nothing
+  until every run finished, and couldn't spread over a cluster.
+- **The experiment CLI runs tasks as processes over files** (#156; ADR 0010). Each
+  task is `python -m <experiment> run-task STUDY --task-index K`: a new process that
+  rebuilds the experiment from its module (so nothing is pickled, and lambdas work),
+  runs `hb.run_task`, and saves its run file and per-run log. The process boundary
+  does what the pool's plumbing did: each task logs to its own file and console,
+  warnings are logged where they happen, BLAS reads its thread variables from the
+  task's environment, and stopping a task is `terminate()`, which works inside
+  IPOPT. The launcher is plain `subprocess`: up to `--n-workers` children in task
+  order, each in its own process group (`start_new_session` on POSIX,
+  `CREATE_NEW_PROCESS_GROUP` on Windows) so a terminal Ctrl-C reaches only the
+  launcher, which then terminates them, kills any left after 5 s, and ignores further
+  Ctrl-C (pixi passes each one on, so it comes twice). It forwards `-W` options and,
+  with more than one worker, sets the four BLAS/OpenMP thread variables to 1 unless
+  the user set them. GNU parallel was rejected as the local launcher (it needs Perl
+  and a POSIX shell, so not Windows), as were joblib/loky, submitit, Ray and Dask:
+  none removes the log, warning and Ctrl-C handling, and pickled results don't give
+  resumable run files. A task costs about 1–2 s of startup (CasADi, scipy.stats),
+  negligible next to a Langermann run.
+- **An unfinished study** is a folder: the task list `tasks.json` (name, resolved
+  seed, `n_runs`, each chosen configuration's budget, oracle optimum, code version,
+  the problem's artifact text and the tasks as (label, index)), `study.log`,
+  `runs/<label>/run-003.json` as each run finishes (written to a temporary file, then
+  `os.replace`d, so a killed task never leaves a corrupt run), a failure marker
+  `run-003.failed` for a run that failed before evaluating anything (its task is
+  done, as the serial study drops it), and `logs/<label>/run-003.log`. Assembly
+  writes `artifact.json` (`hb.saving.save_artifact`, which checks each run file holds
+  its run) and `summary.csv`; a study is finished exactly when `artifact.json`
+  exists. The files are the checkpoint: `resume` runs only the tasks with no run file
+  or marker, after refusing a finished study or an experiment or code version that
+  differs from the task list (it takes no flags that choose the study), so a resumed
+  study equals one run in one go. Assembly writes the artifact last and rebuilds the
+  study log rather than appending to it, so an interrupted assembly resumes cleanly.
+  The launcher is `cli.run_commands`, a runner of named commands that knows nothing of
+  studies (its tests run `python -c` commands); `cli.run_tasks` builds the tasks'
+  commands. Tasks run `python -m <name>` from `experiments/`, so an experiment's name
+  is its module's. The
+  folder is created when the id is reserved (an atomic `mkdir`), so an unfinished
+  study keeps its id. Checkpointing within a run is out of scope: a task killed
+  mid-run starts again. For SLURM: `prepare`, an array of `run-task --task-index
+  $SLURM_ARRAY_TASK_ID` (a task already done exits 0, so resubmitting is safe), then
+  `resume`.
 - **Saving** (#53; `saving.py`). `hb.save(study, path)` writes `artifact.json`
   (settings, name, artifact, the run files in order; a study saved before #144, with
   `n_initial` and `n_iterations` in its settings, loads with that budget as each
   run's `n_evaluations`) and `runs/<method>/run-000.json`;
-  `hb.load(path)` reads them back exactly. `save` refuses an existing folder. A
+  `hb.load(path)` reads them back exactly. `save` refuses an existing folder.
+  `hb.save_run`/`hb.load_run` write and read one run file in the same format, and
+  `hb.saving.save_artifact` writes the artifact beside run files already in place, so
+  a study saved run by run loads as one saved whole. A
   dataclass from a closed set (a GP's parts, #119; the methods' settings and their
   parts, #120) is saved with its type's name, so a field holding one of several types
   loads as the right one. Studies saved before #119 or #120 raise

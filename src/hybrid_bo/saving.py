@@ -2,7 +2,9 @@
 
 `save(study, path)` writes `path/artifact.json` (the study's name, settings and
 artifact, and the list of run files) and one file per run,
-`path/runs/<method>/run-000.json`, holding every field of the run. `load` also reads
+`path/runs/<method>/run-000.json`, holding every field of the run. `save_run` and
+`load_run` write and read one run file, so a study can be saved run by run as its runs
+finish, then completed with `save_artifact`. `load` also reads
 a study saved before the artifact was named: `study.json` with a `record` key, but not
 one saved before GPs were data (ADR 0008), before runs held their settings or before
 runs had an artifact (a run's JSON with `record`, not `artifact`); a run saved with one
@@ -181,6 +183,37 @@ def _run_path(run: Run) -> Path:
     return Path("runs", run.method, f"run-{run.index:03d}.json")
 
 
+def _run_text(run: Run) -> str:
+    """The run as its run file holds it."""
+    return json.dumps(_encode(run), indent=1) + "\n"
+
+
+def save_run(run: Run, path: str | Path) -> Path:
+    """Writes `run` to a new file `path`, as a study's run file, and returns the
+    path. Write to a temporary name and rename it, if a run file must appear only when
+    complete.
+
+    Raises `FileExistsError` if `path` exists.
+    """
+    path = Path(path)
+    with path.open("x") as file:
+        file.write(_run_text(run))
+    return path
+
+
+def load_run(path: str | Path) -> Run:
+    """Reads the run saved by `save_run` (or `save`, as a run file of a study) at
+    `path`.
+
+    Raises `StudyFormatError` for a run saved before GPs were data, before runs held
+    their settings or before runs had an artifact.
+    """
+    path = Path(path)
+    run_data = _with_surrogate_tuples(json.loads(path.read_text()))
+    _check_format(run_data, path)
+    return _decode(run_data, Run)
+
+
 def save(study: Study, path: str | Path) -> Path:
     """Writes `study` to a new folder `path` (see the module docs) and returns it.
 
@@ -190,24 +223,71 @@ def save(study: Study, path: str | Path) -> Path:
     """
     # Every run's file, checked before anything is written
     path = Path(path)
-    run_paths = [_run_path(run) for run in study.runs]
-    if len(set(run_paths)) < len(run_paths):
-        msg = "Two runs share a method and an index, so they would share a file"
-        raise ValueError(msg)
+    run_paths = _run_paths(study)
     path.mkdir(parents=True)
 
     # One file per run, then the artifact, which lists them in order
     for run, run_path in zip(study.runs, run_paths, strict=True):
         (path / run_path).parent.mkdir(parents=True, exist_ok=True)
-        (path / run_path).write_text(json.dumps(_encode(run), indent=1) + "\n")
+        save_run(run, path / run_path)
+    _write_artifact(study, path, run_paths)
+    return path
+
+
+def save_artifact(study: Study, path: str | Path) -> Path:
+    """Writes the artifact of `study` (see the module docs) to the folder `path`,
+    which already holds every run file `save` would write (e.g. by `save_run`), and
+    returns the folder. The folder then loads with `load`, as if `save` had written
+    it.
+
+    Raises `FileExistsError` if the folder holds an artifact, `ValueError` if a
+    method label can't be a folder name, two runs share a method and an index, or a
+    run file is missing or doesn't hold its run; nothing is written then.
+    """
+    # Every run file in place, holding its run
+    path = Path(path)
+    run_paths = _run_paths(study)
+    if (path / ARTIFACT_FILE).exists():
+        msg = f"{path} already holds a study's artifact"
+        raise FileExistsError(msg)
+    for run, run_path in zip(study.runs, run_paths, strict=True):
+        saved = path / run_path
+        holds_run = saved.exists() and saved.read_text() == _run_text(run)
+        if not holds_run:
+            msg = f"{saved} doesn't hold run {run.index} of {run.method}"
+            raise ValueError(msg)
+
+    _write_artifact(study, path, run_paths)
+    return path
+
+
+def _run_paths(study: Study) -> list[Path]:
+    """Where each run of the study is saved, relative to the study's folder.
+
+    Raises `ValueError` if a method label can't be a folder name or two runs share a
+    method and an index.
+    """
+    run_paths = [_run_path(run) for run in study.runs]
+    if len(set(run_paths)) < len(run_paths):
+        msg = "Two runs share a method and an index, so they would share a file"
+        raise ValueError(msg)
+    return run_paths
+
+
+def _write_artifact(study: Study, path: Path, run_paths: list[Path]) -> None:
+    """Writes the study's artifact file to its folder `path`, listing `run_paths`,
+    so it appears only when complete."""
     study_data = {
         "name": study.name,
         "settings": _encode(study.settings),
         "artifact": study.artifact,
         "runs": [run_path.as_posix() for run_path in run_paths],
     }
-    (path / ARTIFACT_FILE).write_text(json.dumps(study_data, indent=1) + "\n")
-    return path
+    # To a temporary file first, so a folder holds an artifact only when it is
+    # complete: an artifact says the study is finished
+    temporary = path / f"{ARTIFACT_FILE}.tmp"
+    temporary.write_text(json.dumps(study_data, indent=1) + "\n")
+    temporary.replace(path / ARTIFACT_FILE)
 
 
 def load(path: str | Path) -> Study:
@@ -225,11 +305,7 @@ def load(path: str | Path) -> Study:
         study_data["artifact"] = study_data.pop("record")
 
     # The runs, in the order the artifact lists them
-    runs = []
-    for run_path in study_data["runs"]:
-        run_data = _with_surrogate_tuples(json.loads((path / run_path).read_text()))
-        _check_format(run_data, path / run_path)
-        runs.append(_decode(run_data, Run))
+    runs = [load_run(path / run_path) for run_path in study_data["runs"]]
 
     # A study saved before configurations: its settings' one budget is every run's
     settings = dict(study_data["settings"])

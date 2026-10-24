@@ -10,6 +10,8 @@ explains the method; these pages explain how to use the library.
   produced.
 - :doc:`writing_an_experiment`: state your own problem and measurement, choose the
   methods and run them.
+- :doc:`running_large_studies`: long studies on many cores or a SLURM cluster, and
+  resuming a study that stopped.
 - :doc:`reading_results`: the saved study, the summary, the figures, and the study in
   Python.
 
@@ -23,4 +25,5 @@ experiment uses, the rest is in its module (``hb.gp.GP``). The
 
    getting_started
    writing_an_experiment
+   running_large_studies
    reading_results

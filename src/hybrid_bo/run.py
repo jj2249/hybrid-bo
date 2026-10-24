@@ -99,7 +99,7 @@ def _version(distribution: str) -> str:
         return "unknown"
 
 
-def _problem_artifact(problem: Problem, measure: object) -> dict[str, str]:
+def problem_artifact(problem: Problem, measure: object) -> dict[str, str]:
     """The problem's variables, structure and equations, and the measurement, as text.
 
     A measurement that is a dataclass (the oracle simulation is) is described by its
@@ -160,10 +160,10 @@ def run_artifact(
     package and code versions.
 
     Call it before the method draws anything, so the generator's state is the one
-    the run starts from. The measurement is described as `_problem_artifact` says.
+    the run starts from. The measurement is described as `problem_artifact` says.
     """
     return (
-        _problem_artifact(problem, measure)
+        problem_artifact(problem, measure)
         | {"method": method, "settings": settings}
         | _generator_artifact(rng)
         | _versions_artifact()

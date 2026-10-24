@@ -7,6 +7,26 @@
   local steps: 50e-3 for `illustrative_example` and `illustrative_example_2d`, 5e-3
   for `langermann`, and 100e-3 for `rosenbrock` (whose optimum is 0). The library is
   unchanged; the illustrative example's `hybrid_bo_soft` regression baseline changes.
+- **Breaking:** Parallel studies are tasks over files, which checkpoint and resume
+  (#143, #145, #156, ADR 0010). A study's runs are its tasks: `hb.study_tasks`,
+  `hb.run_task` on each and `hb.assemble`, of which `hb.study` is the composition, so
+  a launcher can run them elsewhere; `hb.study` runs them serially in the caller's
+  process and has no `n_workers`. `hb.save_run` and `hb.load_run` save and load one
+  run file, and `hb.saving.save_artifact` completes a study whose run files are
+  saved. The experiment CLI runs each task as its own process
+  (`python -m <experiment> run-task`), `--n-workers` at a time (default 1), on
+  Windows and macOS alike, with single-threaded BLAS when there are several; each
+  run is saved as it finishes, with its per-run log, and lambdas and nested
+  functions work. Ctrl-C, or a task that fails, stops the study at once, keeps the
+  finished runs and prints the command that finishes it:
+  `pixi run experiment <name> resume STUDY [--n-workers N]`, which refuses a
+  finished study or a changed experiment, seed or code version. `prepare` and
+  `run-task STUDY --task-index K` split a study up for a SLURM array or GNU
+  parallel. A study folder holds its task list (`tasks.json`) from the start, and
+  is finished when `artifact.json` exists; `plot` skips unfinished studies. The
+  study log starts each line of a run with its tag (`hybrid_bo/run-003`) and holds
+  the runs' lines after the launcher's, in task order. The `<id>.log` and
+  `<id>.logs` beside the study folders are gone. Results are unchanged.
 - Faster iteration figures for hybrid BO with mechanistic states (#154): the replay
   of the acquisition function root-finds each scenario's states with Newton's method
   (CasADi's `rootfinder`), mapped over the grid in rings outwards from the trial
@@ -15,16 +35,6 @@
   is still a gap. A new `hb.ReplayWarning` says when the replay at the trial point
   isn't the run's stored solution. Results are unchanged; figures differ from before
   only by IPOPT's tolerance.
-- Parallel studies (#145): `hb.study(..., n_workers=4)` runs the runs in 4 worker
-  processes, one per (configuration, run), with single-threaded BLAS, giving the
-  same study as `n_workers=1` (the default). The problem, the measurement and the
-  methods must pickle (module-level functions or data), else `TypeError` names the
-  one that doesn't. Workers' log records are handled by the caller's loggers and
-  their warnings raised again in the caller; `hb.studies.run_of(record)` gives the
-  run that logged a record. The experiment CLI gains `--n-workers`, starts each study
-  log line logged by a run with its tag (`hybrid_bo/run-003`), and saves one log per
-  run as `logs/<label>/run-003.log`. Ctrl-C stops a parallel study at once, its
-  workers included. Results are unchanged.
 - Figures of an initial-fraction sweep (#146): `hb.plots.budget_heatmap` (median
   log10 regret by budget and number of initial points, with lines of constant
   initial fraction and the best one at each budget), `hb.plots.regret_at_budget`
@@ -56,9 +66,8 @@
   `HybridBOSettings(gp=gp, acquisition=hb.EI(), approximation=hb.SAA(n_scenarios=25))`,
   and `SoftSAA(1e-6)` becomes `SoftSAA(temperature=1e-6, n_scenarios=25)`. Results
   and saved studies are unchanged.
-- `oracle_measure` returns an `OracleSimulation`, a frozen, callable dataclass, so
-  the measurement pickles and parallel studies can send it to worker processes
-  (#141). A run's artifact records a dataclass measurement by its repr, so the oracle
+- `oracle_measure` returns an `OracleSimulation`, a frozen, callable dataclass that
+  holds the system, the traced oracle and the settings (#141). A run's artifact records a dataclass measurement by its repr, so the oracle
   simulation's `measure` entry reads `OracleSimulation(y = ..., noise_std=...,
   n_starts=..., tol=...)` instead of `oracle simulation: y = ..., ...`. Results don't
   change.
