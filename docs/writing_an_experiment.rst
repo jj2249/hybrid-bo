@@ -363,7 +363,8 @@ Running
    pixi run plot my_experiment
 
 The study is saved in ``results/my_experiment/<study id>/``; :doc:`reading_results`
-explains what is in it. Results are git-ignored.
+explains what is in it. Results are git-ignored. For a long study, see
+:doc:`running_large_studies`.
 
 The command line is a convenience. In a script or notebook, run the study and save it
 yourself (the library never writes files unless asked):

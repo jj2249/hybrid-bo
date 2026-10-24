@@ -39,15 +39,10 @@ pixi run experiment <name> resume STUDY [--n-workers 4]
 A `--name` that is already taken, by a saved or an unfinished study, is refused
 before anything runs.
 
-On a cluster, `prepare` writes a study's task list without running anything, each
-task runs as `run-task STUDY --task-index K`, and `resume` assembles the study:
-
-```bash
-pixi run experiment langermann prepare --name sweep      # prints the number of tasks
-sbatch --array=0-17 --wrap \
-    'pixi run experiment langermann run-task sweep --task-index $SLURM_ARRAY_TASK_ID'
-pixi run experiment langermann resume sweep              # after the array finishes
-```
+On a cluster, `prepare` writes a study's task list without running anything and
+prints its number of tasks, each task runs as `run-task STUDY --task-index K` (e.g.
+one SLURM array element each, on one core with `OMP_NUM_THREADS=1`), and `resume`
+assembles the study. `docs/running_large_studies.rst` has a full `sbatch` script.
 
 To write your own, see
 [Writing an experiment](../docs/writing_an_experiment.rst) (build the docs with

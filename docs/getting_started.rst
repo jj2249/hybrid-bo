@@ -60,21 +60,8 @@ keeps its finished runs, and prints the command that finishes it:
 which runs only the runs that are missing. It refuses if the experiment, the seed or
 the code changed since the study started, so a resumed study equals one run in one go.
 
-On a cluster, ``prepare`` writes the study's task list without running anything and
-prints how many tasks it has; each task is one run, run by ``run-task``, and
-``resume`` assembles the study once they are done. With SLURM, for a study of 18
-tasks:
-
-.. code-block:: bash
-
-   pixi run experiment langermann prepare --name sweep
-   sbatch --array=0-17 --wrap \
-       'pixi run experiment langermann run-task sweep --task-index $SLURM_ARRAY_TASK_ID'
-   pixi run experiment langermann resume sweep   # after the array has finished
-
-A task whose run is saved already exits at once, so resubmitting the whole array
-after a failure is safe. ``run-task`` is an ordinary command, so GNU parallel or any
-other launcher can run the tasks too.
+:doc:`running_large_studies` covers long studies: many runs on one machine, and
+SLURM clusters.
 
 Look at the study
 -----------------
@@ -90,6 +77,7 @@ The study is saved in ``results/illustrative_example/<study id>/``:
 .. code-block:: text
 
    artifact.json       what the study ran and how: settings, problem, methods
+   tasks.json          the task list: what the study runs, written before it starts
    runs/<method>/      one JSON file per run: every evaluated point, the GPs, ...
    summary.csv         the summary table printed above
    study.log           the study's progress: each run and iteration, times, warnings
