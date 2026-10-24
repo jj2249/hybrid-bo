@@ -17,7 +17,8 @@ each run to 40 evaluations. A BO run with a larger budget passes through the sam
 first evaluations as one with a smaller budget (the prefix property), so each run
 gives the regret at every budget B from n_initial + 1 to 40, and the initial fraction
 n_initial / B is never 0 or 1. The full study is 19 configurations x 10 runs, about
-5 hours on one core. Run it in parallel, then plot the newest study:
+18 hours on one core: an iteration takes about 0.9 s per evaluation so far (8 s
+after 16, 28 s after 38). Run it in parallel, then plot the newest study:
 
     pixi run experiment langermann_sweep --n-workers 8
     pixi run plot langermann_sweep

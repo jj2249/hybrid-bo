@@ -24,7 +24,7 @@ compare. `cli.py` is the shared command line, not an experiment.
   problem for SoftSAA-EI, n_initial = 2, 4, ..., 38, each run to 40 evaluations. It
   plots the budget heatmap, the regret against the initial fraction at a budget of
   20, and the regret over evaluations by number of initial points instead of the
-  convergence and regret figures. The full study is about 5 hours on one core, so
+  convergence and regret figures. The full study is about 18 hours on one core, so
   run it with `--n-workers`.
 
 With more than one unknown state, hybrid BO's iteration figures are drawn without
