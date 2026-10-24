@@ -44,8 +44,9 @@ command that finishes it:
 
 ``resume`` runs only the tasks without a saved run, possibly with another number of
 workers or on another machine, then saves the study, which equals the study run in
-one go. It refuses if the experiment, ``--n-runs``, ``--seed`` or the code changed
-since the study started. Until it finishes, ``plot`` skips the study.
+one go. It takes the study's methods, runs and seed from its task list, and refuses
+if the experiment or the code changed since the study started. Until it finishes,
+``plot`` skips the study.
 
 On a SLURM cluster
 ------------------
@@ -56,7 +57,7 @@ Prepare the study, run its tasks as an array job, then assemble it:
 
    pixi run experiment langermann prepare --n-runs 10 --seed 0 --name sweep \
        --require-clean
-   # Prepared .../results/langermann/sweep with 40 tasks. Run task K (0 to 39) ...
+   # Prepared .../results/langermann/sweep with 40 tasks. Run task K (0 to 39):
 
 ``prepare`` reserves the study and writes its task list (``tasks.json``) without
 running anything. Take the array's range from the number of tasks it prints, and

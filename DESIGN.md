@@ -879,8 +879,14 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   writes `artifact.json` (`hb.saving.save_artifact`, which checks each run file holds
   its run) and `summary.csv`; a study is finished exactly when `artifact.json`
   exists. The files are the checkpoint: `resume` runs only the tasks with no run file
-  or marker, after refusing a finished study or an experiment, flags or code version
-  that differ from the task list, so a resumed study equals one run in one go. The
+  or marker, after refusing a finished study or an experiment or code version that
+  differs from the task list (it takes no flags that choose the study), so a resumed
+  study equals one run in one go. Assembly writes the artifact last and rebuilds the
+  study log rather than appending to it, so an interrupted assembly resumes cleanly.
+  The launcher is `cli.run_commands`, a runner of named commands that knows nothing of
+  studies (its tests run `python -c` commands); `cli.run_tasks` builds the tasks'
+  commands. Tasks run `python -m <name>` from `experiments/`, so an experiment's name
+  is its module's. The
   folder is created when the id is reserved (an atomic `mkdir`), so an unfinished
   study keeps its id. Checkpointing within a run is out of scope: a task killed
   mid-run starts again. For SLURM: `prepare`, an array of `run-task --task-index

@@ -123,30 +123,34 @@ is `prepare`, then the tasks, then assembly:
   `tasks.json`: the seed (resolved if None), `n_runs`, each chosen configuration's
   budget, the oracle optimum, the code version, the problem's artifact text and the
   tasks as `[label, index]`, by label, then index.
-- The launcher runs each task as `python -m <name> run-task STUDY --task-index K`
-  from the experiment module's folder, keeping `--n-workers` running (default 1) in
-  task order. The task rebuilds the experiment from its module, so nothing is
-  pickled: lambdas and nested functions are fine. But `cli.main` must be called from
-  the module run as `__main__` (the `if __name__ == "__main__":` call), else `run`
-  and `resume` are usage errors. A task saves `runs/<label>/run-003.json`
+- The launcher (`cli.run_tasks` -> `cli.run_commands`, a generic runner of named
+  commands) runs each task as `python -m <name> run-task STUDY --task-index K` from
+  `experiments/`, keeping `--n-workers` running (default 1) in task order. The
+  `name` passed to `cli.main` must be the experiment's module name (a usage error
+  otherwise); tests write their experiment modules to a folder on `PYTHONPATH`. The
+  task rebuilds the experiment from its module, so nothing is pickled: lambdas and
+  nested functions are fine. A task saves `runs/<label>/run-003.json`
   (temporary file, then renamed), or `run-003.failed` for a run that failed before
   evaluating anything, and `logs/<label>/run-003.log` (DEBUG and above; the console
   gets INFO and above, tagged `<label>/run-003`). It exits 0 when the task is done,
   also if it was already, 1 on an unexpected exception (traceback in its log), 2 if
   the experiment or the code version differs from the task list. With more than one
-  worker, tasks get `OMP/OPENBLAS/MKL/VECLIB_*_NUM_THREADS=1` unless set; `-W`
+  at a time, tasks get `OMP/OPENBLAS/MKL/VECLIB_*_NUM_THREADS=1` unless set; `-W`
   options are passed on.
 - Assembly loads the run files (`hb.load_run`), calls `hb.assemble`, writes
   `artifact.json` (`hb.saving.save_artifact`; the study is finished exactly when it
-  exists), appends every per-run log to `study.log`, each line starting with its
-  tag, and writes `summary.csv`.
+  exists, so it is written last, atomically), rebuilds `study.log` as the launcher's
+  lines then every per-run log, each line starting with its tag (dropping lines an
+  interrupted assembly tagged, so none appear twice), and writes `summary.csv`.
 
-Ctrl-C or a failing task stops the study at once (running tasks are terminated,
-finished runs kept), prints the `resume` command and exits 130 or 1. `resume STUDY`
-refuses a finished study and, naming the difference, an experiment whose
-configurations, budgets, problem or measurement text differ from the task list, as
-well as `--method`/`--n-runs`/`--seed` flags or a code version that differ; then it
-runs the tasks left and assembles. For a cluster, `prepare`, then a SLURM array of
+Ctrl-C, a failing task, or any other error once the tasks have started stops the
+study at once (running tasks are terminated, finished runs kept), prints the `resume`
+command and exits 130 or 1. `resume STUDY [--n-workers N] [--require-clean]` takes
+everything else from the task list; it refuses a finished study and, naming the
+difference (both values for one-value fields), an experiment whose configurations,
+budgets, problem or measurement text, or code version differ from the task list;
+then it runs the tasks left and assembles. Helpers raise `cli.UsageError`, which
+`main` reports as a usage error. For a cluster, `prepare`, then a SLURM array of
 `run-task --task-index $SLURM_ARRAY_TASK_ID`, then `resume`.
 
 No command lists every experiment, and a typo in the name fails with "No module named
@@ -155,7 +159,7 @@ not `experiments/`. The study id is `--name`, else the UTC time to the second at
 start. A taken `--name` (by a saved or an unfinished study) is a usage error; a taken
 UTC time gets `-2`, `-3`, ... appended. The study log holds the launcher's lines
 (each configuration, each task started and finished with a count, warnings) and then
-every run's lines. `plot` loads the study given (an unfinished one is a usage error
+every run's lines, once the study is assembled. `plot` loads the study given (an unfinished one is a usage error
 saying to resume it), else the finished one whose artifact was written last
 (`artifact.json`, or `study.json` in older studies), and saves `summary.csv` if the
 study has none (studies saved before summaries). Plotting draws the study figures

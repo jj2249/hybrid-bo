@@ -343,7 +343,9 @@ argument is the experiment's name, which names its results folder:
    :language: python
    :start-at: # Run or plot
 
-For your own system, leave out ``optimum`` and ``true_curves``:
+The first argument is the experiment's name, which must be its file's name without
+``.py``: each run of a study starts the experiment again as ``python -m <name>``. For
+your own system, leave out ``optimum`` and ``true_curves``:
 
 .. code-block:: python
 

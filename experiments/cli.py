@@ -1,96 +1,57 @@
-"""The command line of an experiment: run its methods as a study, run one task of a
-study, resume a study, or plot a saved study.
+"""The command line of an experiment: run its methods as a study, resume a study, run
+one task of a study, or plot a saved study (`docs/running_large_studies.rst`).
 
-An experiment ends with a call that passes everything it defines:
+An experiment ends with a call that passes everything it defines, its name being its
+module's:
 
     if __name__ == "__main__":
         cli.main("illustrative_example", problem, measure, configurations,
                  study_settings, optimum=optimum, true_curves=True)
 
-and the pixi tasks run the script as a module from this folder:
-
-    pixi run experiment illustrative_example [--method hybrid_bo ...] [--n-runs 3]
-        [--seed 0] [--n-workers 4] [--name lcb-vs-ei] [--plot] [--plot-runs 0 3]
-        [--require-clean]
-    pixi run experiment illustrative_example prepare [--method ...] [--n-runs 3] ...
-    pixi run experiment illustrative_example run-task STUDY --task-index K
-    pixi run experiment illustrative_example resume STUDY [--n-workers 4]
-    pixi run plot illustrative_example [STUDY]
-    pixi run experiment illustrative_example plot [STUDY] [--plot-runs all]
-
-A study's runs are its tasks (`hb.study_tasks`), each run by `run-task` in a process
-of its own, which saves the run's file and per-run log as soon as the run finishes.
-Running (`run`, the default command) is `prepare`, then the tasks, then assembling:
-
-- `prepare` reserves the study id by creating the study folder,
-  `<results root>/<experiment>/<study id>/` (the results root defaults to `results/`
-  at the repo root; the study id is `--name` or the UTC time at the start), and
-  writes its task list, `tasks.json`: the seed (a fresh one if None), the number of
-  runs, each chosen configuration's budget, the oracle optimum, the code version, the
-  problem and measurement, and the tasks in order. A taken `--name` is refused, and a
-  taken UTC time gets `-2`, `-3`, ... appended.
-- The launcher keeps `--n-workers` tasks running (default 1), each as
-  `python -m <experiment> run-task`, in task order; with more than one, the tasks run
-  BLAS and OpenMP on one thread each unless their variables are set. A task saves
-  `runs/<label>/run-003.json`, or the failure marker `runs/<label>/run-003.failed`
-  for a run that failed before evaluating anything, and its per-run log
-  `logs/<label>/run-003.log` (DEBUG and above from the library); the console shows
-  its INFO lines tagged `<label>/run-003`.
-- Assembling loads the run files, saves the study's `artifact.json` beside them (a
-  study is finished exactly when it exists), appends each per-run log to the study log
-  `study.log`, every line tagged with its run, and prints `hb.summary` of the study and
-  saves it as `summary.csv`.
-
-Ctrl-C, or a task that fails, stops the study at once and keeps its finished runs;
-`resume STUDY` runs the tasks left and assembles the study. It refuses a finished
-study, and an experiment, flags or code version that differ from the task list. The
-study log records the launcher's progress and the warnings (the console shows INFO and
-above). Running from a tree that isn't clean (uncommitted or untracked files) warns
-that the study won't be reproducible; `--require-clean` refuses to run instead. `plot`
-loads a study (default: the newest finished) with `hb.load` and saves its figures to
-its `figures/` folder: the study figures the experiment passes as `figures` (default:
-convergence and regret), and the iteration figures of the runs `--plot-runs` names
-(indices, or `all`; default run 0 of each method). On `run` and `resume`,
-`--plot-runs` implies `--plot`.
+and the pixi tasks run it as a module from this folder (`python -m <name> ...`).
+`run` (the default command) is `prepare` (reserve the study folder and write its task
+list), then the launcher (`run_commands`) running each task as
+`python -m <name> run-task`, then assembling the study from the run files. A study is
+finished exactly when its `artifact.json` exists; `resume` runs the tasks left of one
+that isn't, then assembles it.
 """
 
 import argparse
-import inspect
+import dataclasses
+import importlib.util
 import json
 import logging
 import os
+import secrets
 import signal
 import subprocess
 import sys
 import time
 import warnings
-from collections import deque
 from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
-
-import numpy as np
 
 import hybrid_bo as hb
 from hybrid_bo.run import code_version, is_clean, problem_artifact
 from hybrid_bo.saving import ARTIFACT_FILE, OLD_ARTIFACT_FILE, save_artifact
 
-RESULTS_ROOT = Path(__file__).parent.parent / "results"
+EXPERIMENTS_DIR = Path(__file__).parent
+RESULTS_ROOT = EXPERIMENTS_DIR.parent / "results"
 ARTIFACTS = (ARTIFACT_FILE, OLD_ARTIFACT_FILE)
 TASK_LIST = "tasks.json"
 STUDY_LOG = "study.log"
+SUMMARY = "summary.csv"
 PER_RUN_LOGS = "logs"
 RUN_FILES = "runs"
 LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 CONSOLE_FORMAT = "%(levelname)s %(name)s: %(message)s"
 COMMANDS = ("run", "prepare", "run-task", "resume", "plot")
-NOT_FINISHED = "The study didn't finish; its finished runs are kept. To finish it: %s"
 
 # The environment variables that set the threads of BLAS and OpenMP, read when they
-# load, so a task gets them from the environment it starts in
+# load, so a command gets them from the environment it starts in
 THREAD_VARIABLES = (
     "OMP_NUM_THREADS",
     "OPENBLAS_NUM_THREADS",
@@ -98,8 +59,8 @@ THREAD_VARIABLES = (
     "VECLIB_MAXIMUM_THREADS",
 )
 
-# How long stopped tasks get to exit before they are killed, and how often the
-# launcher checks on its tasks, in seconds
+# How long stopped commands get to exit before they are killed, and how often the
+# launcher checks on them, in seconds
 STOP_TIMEOUT = 5.0
 POLL_INTERVAL = 0.05
 
@@ -112,10 +73,25 @@ FIGURES: Mapping[str, Callable[[hb.Study], object]] = {
 _logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
+class UsageError(Exception):
+    """The command line asks for something that can't be done; `main` reports it as
+    a usage error (exit status 2)."""
+
+
+class CommandFailedError(Exception):
+    """A command the launcher ran exited with a status other than 0."""
+
+    def __init__(self, name: str, status: int) -> None:
+        """The command `name` exited with `status`."""
+        super().__init__(f"{name} failed with exit status {status}")
+        self.name = name
+        self.status = status
+
+
+@dataclass(frozen=True, kw_only=True)
 class Experiment:
-    """What an experiment defines that its studies depend on: its name, problem,
-    measurement, configurations and stated oracle optimum."""
+    """What an experiment defines that its studies depend on: its name (its module's
+    too), problem, measurement, configurations and stated oracle optimum."""
 
     name: str
     problem: hb.Problem
@@ -124,8 +100,21 @@ class Experiment:
     optimum: float | None
 
 
-class TaskFailedError(Exception):
-    """A task of a study exited without finishing its run, which stops the study."""
+@dataclass(frozen=True, kw_only=True)
+class TaskList:
+    """What a study runs, saved as `tasks.json` before anything runs: the seed (never
+    None), the number of runs, each chosen configuration's budget, the oracle optimum,
+    the code version, the problem's artifact text and the tasks as (label, index), in
+    order."""
+
+    name: str
+    seed: int
+    n_runs: int
+    configurations: dict[str, dict[str, int]]
+    optimum: float | None
+    code_version: str
+    problem: dict[str, str]
+    tasks: tuple[tuple[str, int], ...]
 
 
 def main(
@@ -140,29 +129,18 @@ def main(
     figures: Mapping[str, Callable[[hb.Study], object]] = FIGURES,
     argv: Sequence[str] | None = None,
 ) -> None:
-    """Runs the experiment's configurations as a study and saves it, prepares a
-    study, runs one of its tasks, resumes it, or plots a saved study, as the command
-    line (`argv`, default `sys.argv`) says.
+    """Runs, prepares or resumes a study of the experiment, runs one of its tasks, or
+    plots a saved study, as the command line (`argv`, default `sys.argv`) says.
 
-    `name` names the study and its folder. `--method` chooses configurations by their
-    labels, each run with its own budget. `study_settings` are the defaults the
-    flags override. `optimum` is the stated oracle optimum of a benchmark experiment,
-    which regret is measured from. `true_curves` draws the measurement's values over the
-    grid in the iteration figures, which only a cheap measurement (an oracle) can
-    afford. `figures` are the study figures `plot` draws, by file name: functions
-    of the study that draw on a new figure (default `FIGURES`, convergence and
-    regret), e.g. a sweep's `hb.plots.budget_heatmap`.
+    `name` names the experiment's module, its studies and their folder.
+    `study_settings` are the defaults the flags override. `optimum` is the stated
+    oracle optimum, which regret is measured from. `true_curves` draws the
+    measurement's values in the iteration figures, which only an oracle can afford.
+    `figures` are the study figures `plot` draws, by file name (default `FIGURES`).
 
-    Tasks run as `python -m <module> run-task`, the module that calls `main`, so
-    `run` and `resume` need it called from the experiment's module run as
-    `__main__`. A study that doesn't finish exits with status 1 (a task failed) or
-    130 (Ctrl-C), after saying how to resume it.
+    A study that doesn't finish exits with status 130 (Ctrl-C) or 1, after saying how
+    to resume it.
     """
-    # The module that called, which tasks are run as
-    frame = inspect.currentframe()
-    caller = frame.f_back.f_globals if frame and frame.f_back else {}
-    module = _experiment_module(caller)
-
     # The command: the first argument if it names one, else a run
     args = list(sys.argv[1:] if argv is None else argv)
     command, rest = (
@@ -170,69 +148,36 @@ def main(
     )
     parser = _parsers(name, configurations)[command]
     parsed = parser.parse_args(rest)
-    results_root = _from_init_cwd(parsed.results_root)
-    experiment_dir = results_root / name
-    experiment = Experiment(name, problem, measure, configurations, optimum)
+    experiment = Experiment(
+        name=name,
+        problem=problem,
+        measure=measure,
+        configurations=configurations,
+        optimum=optimum,
+    )
+    experiment_dir = _from_init_cwd(parsed.results_root) / name
 
-    # Plot: the study given, else the newest finished one
-    if command == "plot":
-        study_dir = _study_to_plot(parser, experiment_dir, parsed.study)
+    try:
+        # Plot: the study given, else the newest finished one
+        if command == "plot":
+            study_dir = _study_to_plot(experiment_dir, parsed.study)
 
-    # One task, in this process, as the launcher (or a scheduler) started it
-    elif command == "run-task":
-        study_dir = _existing_study(parser, experiment_dir, parsed.study)
-        sys.exit(run_one_task(parser, experiment, study_dir, parsed.task_index))
+        # One task, in this process, as a launcher started it
+        elif command == "run-task":
+            study_dir = experiment_dir / parsed.study
+            sys.exit(run_one_task(experiment, study_dir, parsed.task_index))
 
-    # Prepare, run or resume: the code version, then the study's task list
-    else:
-        version = code_version(Path(hb.__file__).parent)
-        if not is_clean(version) and parsed.require_clean:
-            parser.error(f"the code version {version} isn't clean")
-        launcher = None if command == "prepare" else _launcher(parser, name, module)
-        if command == "resume":
-            study_dir = _existing_study(parser, experiment_dir, parsed.study)
-            task_list = _resumable_task_list(
-                parser, experiment, study_dir, parsed, version
-            )
+        # Prepare, run or resume
         else:
-            study_dir, task_list = prepare(
-                parser, experiment, experiment_dir, study_settings, parsed, version
+            study_dir = _run_study(
+                command, experiment, experiment_dir, study_settings, parsed
             )
-
-        # Run the tasks left and assemble the study, logging to its study log
-        with logging_to(study_dir / STUDY_LOG, mode="a", console_format=CONSOLE_FORMAT):
-            if not is_clean(version):
-                _logger.warning(
-                    "The code version %s isn't clean (uncommitted or untracked "
-                    "files), so this study won't be reproducible",
-                    version,
-                )
-            if launcher is None:
-                _log_tasks(name, study_dir, task_list, parsed.results_root)
-                return
-            if command == "run":
-                _log_configurations(task_list)
-            resume = _command(name, "resume", study_dir.name, parsed.results_root)
-            try:
-                launch(
-                    launcher,
-                    study_dir,
-                    task_list,
-                    n_workers=parsed.n_workers,
-                    results_root=results_root,
-                )
-                assemble_study(experiment, study_dir, task_list)
-            except KeyboardInterrupt:
-                signal.signal(signal.SIGINT, signal.SIG_IGN)
-                _logger.error(NOT_FINISHED, resume)
-                sys.exit(130)
-            except TaskFailedError as error:
-                _logger.error("%s", error)
-                _logger.error(NOT_FINISHED, resume)
-                sys.exit(1)
+    except UsageError as error:
+        parser.error(str(error))
 
     # Plot, also straight after a run with --plot or --plot-runs
-    if command == "plot" or parsed.plot or parsed.plot_runs is not None:
+    plot_after_run = command == "run" and (parsed.plot or parsed.plot_runs is not None)
+    if command == "plot" or plot_after_run:
         # Imported here, as in `plot`: tasks never plot, so they start without it
         import matplotlib.pyplot as plt
 
@@ -248,169 +193,82 @@ def main(
             )
 
 
-def _launcher(
-    parser: argparse.ArgumentParser, name: str, module: tuple[Path, str] | None
-) -> tuple[Path, str]:
-    """The module that tasks are run as, `module`; None, when `main` wasn't called
-    from the experiment run as a module, is a usage error."""
-    if module is None:
-        parser.error(
-            "running tasks needs the experiment run as a module: "
-            f"python -m {name} (pixi run experiment {name})"
-        )
-    return module
-
-
-def _experiment_module(caller: Mapping[str, Any]) -> tuple[Path, str] | None:
-    """The folder and name of the module with globals `caller`, as `python -m` runs
-    it from that folder, if it runs as `__main__` from a file; else None."""
-    file = caller.get("__file__")
-    if caller.get("__name__") != "__main__" or file is None:
-        return None
-    spec = caller.get("__spec__")
-    return Path(file).parent, spec.name if spec is not None else Path(file).stem
-
-
 def _parsers(
     name: str, configurations: Mapping[str, hb.Configuration]
 ) -> dict[str, argparse.ArgumentParser]:
-    """The parsers of the commands, by name: `run` (the default), `prepare`,
-    `run-task`, `resume` and `plot`."""
-    # Running, `pixi run experiment <name>`, and preparing, which takes its flags
-    # but runs nothing
-    run_parser = argparse.ArgumentParser(
-        prog=f"pixi run experiment {name}",
-        description=f"Run the configurations of {name} as a study and save it.",
-        epilog=(
-            f"Other commands: pixi run experiment {name} prepare | run-task | "
-            f"resume | plot (each with --help). To plot a saved study: "
-            f"pixi run plot {name} [STUDY]"
+    """The parsers of the commands, by name."""
+    parsers = {
+        "run": argparse.ArgumentParser(
+            prog=f"pixi run experiment {name}",
+            description=f"Run the configurations of {name} as a study and save it.",
+            epilog=(
+                f"Other commands: pixi run experiment {name} prepare | run-task | "
+                f"resume | plot. To plot a saved study: pixi run plot {name} [STUDY]"
+            ),
         ),
-    )
-    prepare_parser = argparse.ArgumentParser(
-        prog=f"pixi run experiment {name} prepare",
-        description=(
-            f"Reserve a study of {name} and write its task list, running nothing: "
-            "run its tasks with run-task (e.g. a SLURM array), then resume it."
+        "prepare": argparse.ArgumentParser(
+            prog=f"pixi run experiment {name} prepare",
+            description="Reserve a study and write its task list, running nothing.",
         ),
-    )
-    for parser in (run_parser, prepare_parser):
-        _add_choices(parser, configurations)
-        parser.add_argument("--name", help="the study id; default: the UTC time")
-        _add_require_clean(parser)
-        parser.add_argument("--results-root", type=Path, default=RESULTS_ROOT)
-    _add_running(run_parser)
-
-    # One task of a prepared study
-    task_parser = argparse.ArgumentParser(
-        prog=f"pixi run experiment {name} run-task",
-        description=(
-            f"Run one task of a prepared study of {name} and save its run; exits 0 "
-            "once the task is done, also if it was already."
+        "run-task": argparse.ArgumentParser(
+            prog=f"pixi run experiment {name} run-task",
+            description="Run one task of a study; exit status 0 once it is done.",
         ),
-    )
-    task_parser.add_argument("study", help="the study id")
-    task_parser.add_argument(
-        "--task-index",
-        type=int,
-        required=True,
-        help="the task, by its place in the study's task list, from 0",
-    )
-    task_parser.add_argument("--results-root", type=Path, default=RESULTS_ROOT)
-
-    # Resuming a study that didn't finish; the flags given must be the study's
-    resume_parser = argparse.ArgumentParser(
-        prog=f"pixi run experiment {name} resume",
-        description=(
-            f"Run the tasks of a study of {name} that have no saved run, then "
-            "assemble the study. --method, --n-runs and --seed, if given, must be "
-            "the study's."
+        "resume": argparse.ArgumentParser(
+            prog=f"pixi run experiment {name} resume",
+            description="Run the tasks of a study without a saved run, then save it.",
         ),
-    )
-    resume_parser.add_argument("study", help="the study id")
-    _add_choices(resume_parser, configurations)
-    _add_require_clean(resume_parser)
-    resume_parser.add_argument("--results-root", type=Path, default=RESULTS_ROOT)
-    _add_running(resume_parser)
-
-    # Plotting, `pixi run plot <name>`
-    plot_parser = argparse.ArgumentParser(
-        prog=f"pixi run plot {name}",
-        description=f"Plot a saved study of {name} into its figures/ folder.",
-    )
-    plot_parser.add_argument("study", nargs="?", help="the study id; default: newest")
-    _add_plot_runs(plot_parser)
-    plot_parser.add_argument("--results-root", type=Path, default=RESULTS_ROOT)
-    return {
-        "run": run_parser,
-        "prepare": prepare_parser,
-        "run-task": task_parser,
-        "resume": resume_parser,
-        "plot": plot_parser,
+        "plot": argparse.ArgumentParser(
+            prog=f"pixi run plot {name}",
+            description=f"Plot a saved study of {name} into its figures/ folder.",
+        ),
     }
 
+    # The study's choices, when it starts
+    for command in ("run", "prepare"):
+        parser = parsers[command]
+        parser.add_argument(
+            "--method",
+            action="append",
+            dest="methods",
+            choices=list(configurations),
+            metavar="METHOD",
+            help=f"a configuration (repeatable): {', '.join(configurations)}; "
+            "default every one",
+        )
+        parser.add_argument("--n-runs", type=int, help="default: the experiment's")
+        parser.add_argument("--seed", type=int, help="default: the experiment's")
+        parser.add_argument("--name", help="the study id; default: the UTC time")
 
-def _add_choices(
-    parser: argparse.ArgumentParser, configurations: Mapping[str, hb.Configuration]
-) -> None:
-    """Adds the flags that choose a study's runs: `--method`, `--n-runs`, `--seed`."""
-    parser.add_argument(
-        "--method",
-        action="append",
-        dest="methods",
-        choices=list(configurations),
-        metavar="METHOD",
-        help=(
-            f"a configuration to run, by its label (repeatable): "
-            f"{', '.join(configurations)}; default every one"
-        ),
-    )
-    parser.add_argument("--n-runs", type=int, help="default: the experiment's")
-    parser.add_argument("--seed", type=int, help="default: the experiment's")
+    # The study, for the commands on one
+    parsers["run-task"].add_argument("study", help="the study id")
+    parsers["run-task"].add_argument("--task-index", type=int, required=True)
+    parsers["resume"].add_argument("study", help="the study id")
+    parsers["plot"].add_argument("study", nargs="?", help="default: the newest")
 
-
-def _add_require_clean(parser: argparse.ArgumentParser) -> None:
-    """Adds `--require-clean`."""
-    parser.add_argument(
-        "--require-clean",
-        action="store_true",
-        help="refuse to run with uncommitted or untracked files",
-    )
-
-
-def _add_running(parser: argparse.ArgumentParser) -> None:
-    """Adds the flags of a command that runs tasks: `--n-workers`, `--plot` and
-    `--plot-runs`."""
-    parser.add_argument(
-        "--n-workers",
-        type=_positive,
-        default=1,
-        help="the tasks to run at once, each in its own process (default 1)",
-    )
-    parser.add_argument("--plot", action="store_true", help="plot after running")
-    _add_plot_runs(parser, " (implies --plot)")
-
-
-def _positive(text: str) -> int:
-    """A positive integer.
-
-    Raises `argparse.ArgumentTypeError` otherwise.
-    """
-    if not text.isdigit() or int(text) < 1:
-        msg = f"not a positive integer: {text!r}"
-        raise argparse.ArgumentTypeError(msg)
-    return int(text)
-
-
-def _add_plot_runs(parser: argparse.ArgumentParser, note: str = "") -> None:
-    """Adds `--plot-runs` to the parser: run indices or `all`, None when not given."""
-    parser.add_argument(
-        "--plot-runs",
-        nargs="+",
-        type=_plot_run,
-        metavar="RUN",
-        help=f"the runs with iteration figures: indices or all; default 0{note}",
-    )
+    # Running tasks, plotting, and the flags of every command
+    for command in ("run", "prepare", "resume"):
+        parsers[command].add_argument(
+            "--require-clean",
+            action="store_true",
+            help="refuse to run with uncommitted or untracked files",
+        )
+    for command in ("run", "resume"):
+        parsers[command].add_argument(
+            "--n-workers", type=int, default=1, help="tasks at once (default 1)"
+        )
+    parsers["run"].add_argument("--plot", action="store_true", help="plot after")
+    for command in ("run", "plot"):
+        parsers[command].add_argument(
+            "--plot-runs",
+            nargs="+",
+            type=_plot_run,
+            metavar="RUN",
+            help="the runs with iteration figures: indices or all; default 0",
+        )
+    for parser in parsers.values():
+        parser.add_argument("--results-root", type=Path, default=RESULTS_ROOT)
+    return parsers
 
 
 def _plot_run(text: str) -> int | str:
@@ -447,187 +305,252 @@ def _from_init_cwd(path: Path) -> Path:
     return (Path(os.environ.get("INIT_CWD", ".")) / path).resolve()
 
 
-def _command(name: str, command: str, arguments: str, results_root: Path) -> str:
-    """The command line of `command` with `arguments`, with the results root if it
-    isn't the default."""
-    line = f"pixi run experiment {name} {command} {arguments}"
+def _command(name: str, arguments: str, results_root: Path) -> str:
+    """The command line of the experiment with `arguments`, and the results root as
+    the user gave it, if it isn't the default."""
+    line = f"pixi run experiment {name} {arguments}"
     if results_root != RESULTS_ROOT:
         line += f" --results-root {results_root}"
     return line
 
 
-# The task list
+# Studies
 
 
-def prepare(
-    parser: argparse.ArgumentParser,
+def _run_study(
+    command: str,
     experiment: Experiment,
     experiment_dir: Path,
     study_settings: hb.StudySettings,
     parsed: argparse.Namespace,
-    version: str,
-) -> tuple[Path, dict[str, Any]]:
-    """Reserves the study and writes its task list, as the flags choose, and returns
-    the study's folder and task list. A taken name is a usage error
-    (`parser.error`)."""
-    # The experiment's settings, overridden by the flags given, with the seed resolved
-    given = {"n_runs": parsed.n_runs, "seed": parsed.seed}
-    settings = replace(
-        study_settings,
-        **{key: value for key, value in given.items() if value is not None},
-    )
-    settings = replace(settings, seed=np.random.SeedSequence(settings.seed).entropy)
-    labels = list(dict.fromkeys(parsed.methods or experiment.configurations))
-    task_list = task_list_of(experiment, labels, settings, version)
+) -> Path:
+    """Prepares a study (`command` is `run` or `prepare`) or takes the one to resume
+    (`resume`) as the command line `parsed` says, then, unless preparing, runs its tasks left and
+    assembles it; returns its folder.
 
-    # Reserve the study id: a taken name is refused, a taken UTC time suffixed
-    default_id = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-    try:
+    Raises `UsageError` for a tree that isn't clean with `--require-clean`, an
+    experiment that isn't a module, a taken name, or a study that can't be resumed.
+    Exits with status 130 (Ctrl-C) or 1 if the study doesn't finish.
+    """
+    # The code version, and the experiment's module, which tasks run as
+    version = code_version(Path(hb.__file__).parent)
+    if not is_clean(version) and parsed.require_clean:
+        msg = f"the code version {version} isn't clean"
+        raise UsageError(msg)
+    if importlib.util.find_spec(experiment.name) is None:
+        msg = f"tasks run `python -m {experiment.name}`, so it must be a module"
+        raise UsageError(msg)
+
+    # The task list: the study's to resume, else a new one, as the flags choose
+    if command == "resume":
+        study_dir = experiment_dir / parsed.study
+        task_list = _resumable_task_list(experiment, study_dir, version)
+    else:
+        n_runs = study_settings.n_runs if parsed.n_runs is None else parsed.n_runs
+        # A fresh seed when none is given, as `hb.study` draws one (128 random bits)
+        seed = study_settings.seed if parsed.seed is None else parsed.seed
+        seed = secrets.randbits(128) if seed is None else seed
+        labels = list(dict.fromkeys(parsed.methods or experiment.configurations))
+        task_list = task_list_of(
+            experiment,
+            labels,
+            n_runs=n_runs,
+            seed=seed,
+            version=version,
+        )
+        default_id = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
         study_dir = reserve(
             experiment_dir, parsed.name or default_id, suffix_if_taken=not parsed.name
         )
-    except FileExistsError as error:
-        parser.error(str(error))
-    text = json.dumps(task_list, indent=1) + "\n"
-    _write_atomically(study_dir / TASK_LIST, lambda path: path.write_text(text))
-    return study_dir, task_list
+        write_task_list(study_dir, task_list)
+
+    # Run the tasks left and assemble the study, logging to its study log
+    with logging_to(study_dir / STUDY_LOG, mode="a", console_format=CONSOLE_FORMAT):
+        if not is_clean(version):
+            _logger.warning(
+                "The code version %s isn't clean (uncommitted or untracked files), "
+                "so this study won't be reproducible",
+                version,
+            )
+        if command == "prepare":
+            _print_tasks(experiment.name, study_dir, task_list, parsed.results_root)
+            return study_dir
+        if command == "run":
+            _log_configurations(task_list)
+        resume = _command(
+            experiment.name, f"resume {study_dir.name}", parsed.results_root
+        )
+        try:
+            run_tasks(
+                experiment,
+                study_dir,
+                task_list,
+                n_workers=parsed.n_workers,
+                results_root=_from_init_cwd(parsed.results_root),
+            )
+            assemble_study(experiment, study_dir, task_list)
+
+        # A study that doesn't finish says how to finish it. Ctrl-C ends it, so
+        # another one is ignored (pixi passes each one on, so it comes twice)
+        except KeyboardInterrupt:
+            signal.signal(signal.SIGINT, signal.SIG_IGN)
+            _logger.error("The study didn't finish. To finish it: %s", resume)
+            sys.exit(130)
+        except CommandFailedError as error:
+            per_run_log = study_dir / PER_RUN_LOGS / f"{error.name}.log"
+            _logger.error("%s; its per-run log is %s", error, per_run_log)
+            _logger.error("The study didn't finish. To finish it: %s", resume)
+            sys.exit(1)
+        except Exception:
+            _logger.exception("The study didn't finish. To finish it: %s", resume)
+            sys.exit(1)
+    return study_dir
 
 
 def task_list_of(
     experiment: Experiment,
     labels: Sequence[str],
-    settings: hb.StudySettings,
+    *,
+    n_runs: int,
+    seed: int,
     version: str,
-) -> dict[str, Any]:
-    """The task list of a study of the experiment's configurations `labels` with
-    `settings` (its seed resolved), at the code version `version`, as JSON data."""
+) -> TaskList:
+    """The task list of a study of the experiment's configurations `labels`, `n_runs`
+    runs each from `seed`, at the code version `version`."""
     chosen = {label: experiment.configurations[label] for label in labels}
-    optimum = experiment.optimum
-    return {
-        "name": experiment.name,
-        "seed": settings.seed,
-        "n_runs": settings.n_runs,
-        "configurations": {
+    settings = hb.StudySettings(n_runs=n_runs, seed=seed)
+    return TaskList(
+        name=experiment.name,
+        seed=seed,
+        n_runs=n_runs,
+        configurations={
             label: {
                 "n_evaluations": configuration.n_evaluations,
                 "n_initial": configuration.n_initial,
             }
             for label, configuration in chosen.items()
         },
-        "optimum": None if optimum is None else float(optimum),
-        "code_version": version,
-        "problem": problem_artifact(experiment.problem, experiment.measure),
-        "tasks": [
-            [task.label, task.index] for task in hb.study_tasks(chosen, settings)
-        ],
-    }
-
-
-def differences(
-    experiment: Experiment,
-    task_list: Mapping[str, Any],
-    version: str,
-    *,
-    methods: Sequence[str] | None = None,
-    n_runs: int | None = None,
-    seed: int | None = None,
-) -> list[str]:
-    """What differs between the study's task list `task_list` and the experiment at
-    the code version `version`, with the flags given (None takes the study's), by
-    the task list's keys; empty if nothing does."""
-    # The study's labels, in its order, unless the flags choose others
-    labels = list(task_list["configurations"])
-    if methods and set(methods) != set(labels):
-        labels = list(dict.fromkeys(methods))
-    if any(label not in experiment.configurations for label in labels):
-        return ["configurations"]
-    settings = hb.StudySettings(
-        n_runs=task_list["n_runs"] if n_runs is None else n_runs,
-        seed=task_list["seed"] if seed is None else seed,
+        optimum=None if experiment.optimum is None else float(experiment.optimum),
+        code_version=version,
+        problem=problem_artifact(experiment.problem, experiment.measure),
+        tasks=tuple(
+            (task.label, task.index) for task in hb.study_tasks(chosen, settings)
+        ),
     )
-    expected = task_list_of(experiment, labels, settings, version)
-    return [key for key in expected if task_list.get(key) != expected[key]]
 
 
-def _read_task_list(parser: argparse.ArgumentParser, study_dir: Path) -> dict[str, Any]:
-    """The study's task list; a study without one is a usage error."""
+def write_task_list(study_dir: Path, task_list: TaskList) -> None:
+    """Writes the task list to the study's folder, so it appears only when
+    complete."""
+    text = json.dumps(dataclasses.asdict(task_list), indent=1) + "\n"
+    _write_atomically(study_dir / TASK_LIST, lambda path: path.write_text(text))
+
+
+def read_task_list(study_dir: Path) -> TaskList:
+    """The task list in the study's folder.
+
+    Raises `UsageError` if there is none.
+    """
     path = study_dir / TASK_LIST
     if not path.exists():
-        parser.error(f"{study_dir} has no task list ({TASK_LIST}), so it can't be run")
-    return json.loads(path.read_text())
+        msg = f"{study_dir} holds no unfinished study (no {TASK_LIST})"
+        raise UsageError(msg)
+    data = json.loads(path.read_text())
+    tasks = tuple((label, index) for label, index in data.pop("tasks"))
+    return TaskList(**data, tasks=tasks)
+
+
+def task_list_differences(
+    task_list: TaskList, experiment: Experiment, version: str
+) -> list[str]:
+    """What differs between the task list and the experiment at the code version
+    `version`, as the task list's fields, each with both values if it is one value;
+    empty if nothing does."""
+    if any(
+        label not in experiment.configurations for label in task_list.configurations
+    ):
+        return ["configurations"]
+    now = task_list_of(
+        experiment,
+        list(task_list.configurations),
+        n_runs=task_list.n_runs,
+        seed=task_list.seed,
+        version=version,
+    )
+    different = []
+    for field in dataclasses.fields(TaskList):
+        then_value, now_value = getattr(task_list, field.name), getattr(now, field.name)
+        if then_value == now_value:
+            continue
+        is_one_value = isinstance(now_value, str | int | float | None)
+        different.append(
+            f"{field.name} ({then_value!r} in the study, {now_value!r} now)"
+            if is_one_value
+            else field.name
+        )
+    return different
 
 
 def _resumable_task_list(
-    parser: argparse.ArgumentParser,
-    experiment: Experiment,
-    study_dir: Path,
-    parsed: argparse.Namespace,
-    version: str,
-) -> dict[str, Any]:
-    """The task list of the study to resume. A finished study, or one whose task
-    list differs from the experiment and the flags given, is a usage error."""
+    experiment: Experiment, study_dir: Path, version: str
+) -> TaskList:
+    """The task list of the study to resume.
+
+    Raises `UsageError` if the study is finished, or its task list differs from the
+    experiment.
+    """
     if _is_finished(study_dir):
-        parser.error(
-            f"the study {study_dir} is finished, so there is nothing to resume"
-        )
-    task_list = _read_task_list(parser, study_dir)
-    different = differences(
-        experiment,
-        task_list,
-        version,
-        methods=parsed.methods,
-        n_runs=parsed.n_runs,
-        seed=parsed.seed,
-    )
-    if different:
-        parser.error(
-            f"the study {study_dir.name} can't be resumed: its task list differs from "
-            f"the experiment in {', '.join(different)}"
-        )
+        msg = f"the study {study_dir} is finished, so there is nothing to resume"
+        raise UsageError(msg)
+    task_list = read_task_list(study_dir)
+    _check_task_list(task_list, experiment, version)
     return task_list
 
 
-def _settings(task_list: Mapping[str, Any]) -> hb.StudySettings:
+def _check_task_list(task_list: TaskList, experiment: Experiment, version: str) -> None:
+    """Raises `UsageError`, naming what differs, if the task list differs from the
+    experiment at the code version `version`."""
+    different = task_list_differences(task_list, experiment, version)
+    if different:
+        msg = f"the study's task list differs from the experiment in {', '.join(different)}"
+        raise UsageError(msg)
+
+
+def _settings(task_list: TaskList) -> hb.StudySettings:
     """The study's settings, as its task list holds them."""
-    return hb.StudySettings(n_runs=task_list["n_runs"], seed=task_list["seed"])
+    return hb.StudySettings(n_runs=task_list.n_runs, seed=task_list.seed)
 
 
-def _tasks(experiment: Experiment, task_list: Mapping[str, Any]) -> tuple[hb.Task, ...]:
+def _tasks(task_list: TaskList, experiment: Experiment) -> tuple[hb.Task, ...]:
     """The study's tasks, in the order of its task list."""
     chosen = {
-        label: experiment.configurations[label] for label in task_list["configurations"]
+        label: experiment.configurations[label] for label in task_list.configurations
     }
     return hb.study_tasks(chosen, _settings(task_list))
 
 
-def _log_configurations(task_list: Mapping[str, Any]) -> None:
-    """Logs at info level each configuration's runs and budget, and the seed."""
-    for label, budget in task_list["configurations"].items():
+def _log_configurations(task_list: TaskList) -> None:
+    """Logs at info level each configuration's runs and budget."""
+    for label, budget in task_list.configurations.items():
         _logger.info(
             "Configuration %s: %d runs of %d evaluations, %d of them initial points",
             label,
-            task_list["n_runs"],
+            task_list.n_runs,
             budget["n_evaluations"],
             budget["n_initial"],
         )
-    _logger.info("Seed %d, %d tasks", task_list["seed"], len(task_list["tasks"]))
 
 
-def _log_tasks(
-    name: str, study_dir: Path, task_list: Mapping[str, Any], results_root: Path
+def _print_tasks(
+    name: str, study_dir: Path, task_list: TaskList, results_root: Path
 ) -> None:
-    """Logs the prepared study's configurations and tasks, and prints how to run
-    each task and then assemble the study."""
-    _log_configurations(task_list)
-    n_tasks = len(task_list["tasks"])
-    run_task_line = _command(
-        name, "run-task", f"{study_dir.name} --task-index K", results_root
-    )
+    """Prints the prepared study's number of tasks and how to run task K."""
+    n_tasks = len(task_list.tasks)
+    line = _command(name, f"run-task {study_dir.name} --task-index K", results_root)
     print(
-        f"Prepared {study_dir} with {n_tasks} tasks. Run task K (0 to {n_tasks - 1}) "
-        f"with\n  {run_task_line}\nthen assemble the study with\n  "
-        f"{_command(name, 'resume', study_dir.name, results_root)}"
+        f"Prepared {study_dir} with {n_tasks} tasks. Run task K (0 to {n_tasks - 1}):"
     )
+    print(f"  {line}")
 
 
 # The study folder
@@ -636,26 +559,23 @@ def _log_tasks(
 def reserve(experiment_dir: Path, study_id: str, *, suffix_if_taken: bool) -> Path:
     """Reserves a study id in `experiment_dir` by creating its folder, and returns
     the folder. Creating it fails if it exists, so studies started at once never
-    share an id, and a study that didn't finish keeps its id.
+    share an id, and an unfinished study keeps its id.
 
     A taken id gets `-2`, `-3`, ... appended if `suffix_if_taken`; otherwise raises
-    `FileExistsError` saying what holds it.
+    `UsageError`.
     """
     experiment_dir.mkdir(parents=True, exist_ok=True)
     candidate, n = study_id, 2
     while True:
-        folder = experiment_dir / candidate
         try:
-            folder.mkdir()
+            (experiment_dir / candidate).mkdir()
         except FileExistsError:
-            finished = _is_finished(folder)
-            holder = "the saved study" if finished else "the unfinished study"
+            if not suffix_if_taken:
+                msg = f"the study id {candidate} is taken: {experiment_dir / candidate}"
+                raise UsageError(msg) from None
+            candidate, n = f"{study_id}-{n}", n + 1
         else:
-            return folder
-        if not suffix_if_taken:
-            msg = f"the study id {candidate} is taken by {holder} {folder}"
-            raise FileExistsError(msg)
-        candidate, n = f"{study_id}-{n}", n + 1
+            return experiment_dir / candidate
 
 
 def _is_finished(study_dir: Path) -> bool:
@@ -663,62 +583,61 @@ def _is_finished(study_dir: Path) -> bool:
     return any((study_dir / name).exists() for name in ARTIFACTS)
 
 
-def _existing_study(
-    parser: argparse.ArgumentParser, experiment_dir: Path, study_id: str
-) -> Path:
-    """The folder of the study `study_id`; one that doesn't exist is a usage error."""
-    study_dir = experiment_dir / study_id
-    if not study_dir.is_dir():
-        parser.error(f"{experiment_dir} holds no study {study_id}")
-    return study_dir
+def _study_to_plot(experiment_dir: Path, study_id: str | None) -> Path:
+    """The finished study `study_id`, else the finished study saved last.
 
-
-def _study_to_plot(
-    parser: argparse.ArgumentParser, experiment_dir: Path, study_id: str | None
-) -> Path:
-    """The study `study_id`, else the finished study saved last. No finished study, or
-    an unfinished one named, is a usage error."""
+    Raises `UsageError` if there is none, or the study named is unfinished.
+    """
+    # The newest, by when its artifact was written
     if study_id is None:
         saved = [
             path for name in ARTIFACTS for path in experiment_dir.glob(f"*/{name}")
         ]
         if not saved:
-            parser.error(f"{experiment_dir} holds no study")
+            msg = f"{experiment_dir} holds no study"
+            raise UsageError(msg)
         return max(saved, key=lambda path: path.stat().st_mtime).parent
+
+    # The one named, if it is finished
     study_dir = experiment_dir / study_id
-    if not _is_finished(study_dir) and (study_dir / TASK_LIST).exists():
-        parser.error(f"the study {study_id} didn't finish: resume it first")
     if not _is_finished(study_dir):
-        parser.error(f"{study_dir} holds no study")
+        unfinished = (study_dir / TASK_LIST).exists()
+        msg = (
+            f"the study {study_id} didn't finish: resume it first"
+            if unfinished
+            else f"{study_dir} holds no study"
+        )
+        raise UsageError(msg)
     return study_dir
 
 
-def run_tag(label: str, index: int) -> str:
-    """The tag of run `index` of the configuration `label`, `label/run-003`, as its
-    lines in the study log start and its files are named."""
-    return f"{label}/run-{index:03d}"
+def run_tag(task: hb.Task) -> str:
+    """The task's tag, `label/run-003`, as its lines in the study log start and its
+    files are named."""
+    return f"{task.label}/run-{task.index:03d}"
 
 
-def _run_file(study_dir: Path, label: str, index: int) -> Path:
-    """The run file of run `index` of `label`, where `hb.save` puts it."""
-    return study_dir / RUN_FILES / f"{run_tag(label, index)}.json"
+def _run_file(study_dir: Path, task: hb.Task) -> Path:
+    """The task's run file, where `hb.save` puts it."""
+    return study_dir / RUN_FILES / f"{run_tag(task)}.json"
 
 
-def _failure_marker(study_dir: Path, label: str, index: int) -> Path:
-    """The file that says run `index` of `label` failed before evaluating anything."""
-    return _run_file(study_dir, label, index).with_suffix(".failed")
+def _failure_marker(study_dir: Path, task: hb.Task) -> Path:
+    """The file that says the task's run failed before evaluating anything."""
+    return _run_file(study_dir, task).with_suffix(".failed")
 
 
-def _run_log(study_dir: Path, label: str, index: int) -> Path:
-    """The per-run log of run `index` of `label`."""
-    return study_dir / PER_RUN_LOGS / f"{run_tag(label, index)}.log"
+def _per_run_log(study_dir: Path, task: hb.Task) -> Path:
+    """The per-run log of the task's run."""
+    return study_dir / PER_RUN_LOGS / f"{run_tag(task)}.log"
 
 
-def _is_done(study_dir: Path, label: str, index: int) -> bool:
-    """Whether the task of run `index` of `label` is done: its run is saved, or it
-    failed before evaluating anything."""
-    run_file = _run_file(study_dir, label, index)
-    return run_file.exists() or _failure_marker(study_dir, label, index).exists()
+def _is_done(study_dir: Path, task: hb.Task) -> bool:
+    """Whether the task is done: its run is saved, or it failed before evaluating
+    anything."""
+    return (
+        _run_file(study_dir, task).exists() or _failure_marker(study_dir, task).exists()
+    )
 
 
 def _write_atomically(path: Path, write: Callable[[Path], object]) -> None:
@@ -731,184 +650,157 @@ def _write_atomically(path: Path, write: Callable[[Path], object]) -> None:
     temporary.replace(path)
 
 
-# Running the tasks
+# Tasks
 
 
-def run_one_task(
-    parser: argparse.ArgumentParser,
-    experiment: Experiment,
-    study_dir: Path,
-    task_index: int,
-) -> int:
+def run_one_task(experiment: Experiment, study_dir: Path, task_index: int) -> int:
     """Runs the study's task `task_index` (`hb.run_task`) unless it is done, and
     saves its run file, or its failure marker, so it appears only when complete.
     Logs to the run's per-run log (DEBUG and above from the library) and to the
-    console (INFO and above), tagged with the run, warnings included.
+    console (INFO and above, tagged with the run), warnings included.
 
     Returns the exit status: 0 once the task is done, 1 if the run raised an
-    exception, logged with its traceback. An experiment that differs from the task
-    list, or an index outside it, is a usage error (`parser.error`, status 2).
+    exception (logged with its traceback), 130 on Ctrl-C. Raises `UsageError` if the
+    study has no task list, the experiment differs from it, or there is no such task.
     """
-    # The task, from the task list the experiment matches
-    task_list = _read_task_list(parser, study_dir)
-    different = differences(
-        experiment, task_list, code_version(Path(hb.__file__).parent)
-    )
-    if different:
-        parser.error(
-            f"the experiment differs from the task list of {study_dir.name} in "
-            f"{', '.join(different)}"
-        )
-    tasks = _tasks(experiment, task_list)
+    # The task, from a task list the experiment matches
+    task_list = read_task_list(study_dir)
+    _check_task_list(task_list, experiment, code_version(Path(hb.__file__).parent))
+    tasks = _tasks(task_list, experiment)
     if not 0 <= task_index < len(tasks):
-        parser.error(f"the study has tasks 0 to {len(tasks) - 1}, not {task_index}")
+        msg = f"the study has tasks 0 to {len(tasks) - 1}, not {task_index}"
+        raise UsageError(msg)
     task = tasks[task_index]
-    tag = run_tag(task.label, task.index)
-    if _is_done(study_dir, task.label, task.index):
-        print(f"Task {task_index} ({tag}) is done already", file=sys.stderr)
+    if _is_done(study_dir, task):
         return 0
 
     # The run, logged to its per-run log, saved as it finishes
-    run_file = _run_file(study_dir, task.label, task.index)
-    log_path = _run_log(study_dir, task.label, task.index)
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    run_file.parent.mkdir(parents=True, exist_ok=True)
-    with logging_to(log_path, mode="w", console_format=f"{tag} {CONSOLE_FORMAT}"):
+    per_run_log = _per_run_log(study_dir, task)
+    per_run_log.parent.mkdir(parents=True, exist_ok=True)
+    _run_file(study_dir, task).parent.mkdir(parents=True, exist_ok=True)
+    console_format = f"{run_tag(task)} {CONSOLE_FORMAT}"
+    with logging_to(per_run_log, mode="w", console_format=console_format):
         try:
             run = hb.run_task(
                 task, experiment.problem, experiment.measure, _settings(task_list)
             )
             if run is None:
-                marker = _failure_marker(study_dir, task.label, task.index)
                 _write_atomically(
-                    marker,
+                    _failure_marker(study_dir, task),
                     lambda path: path.write_text("failed before evaluating anything\n"),
                 )
             else:
                 labeled = replace(run, method=task.label)
-                _write_atomically(run_file, lambda path: hb.save_run(labeled, path))
+                _write_atomically(
+                    _run_file(study_dir, task),
+                    lambda path: hb.save_run(labeled, path),
+                )
+        except KeyboardInterrupt:
+            _logger.exception("Task %d (%s) was interrupted", task_index, run_tag(task))
+            return 130
         except Exception:
-            _logger.exception("Task %d (%s) failed", task_index, tag)
+            _logger.exception("Task %d (%s) failed", task_index, run_tag(task))
             return 1
     return 0
 
 
-def launch(
-    module: tuple[Path, str],
+def run_tasks(
+    experiment: Experiment,
     study_dir: Path,
-    task_list: Mapping[str, Any],
+    task_list: TaskList,
     *,
     n_workers: int,
     results_root: Path,
 ) -> None:
-    """Runs the study's tasks that aren't done, each as `python -m <module> run-task`
-    from its folder (`module`), keeping `n_workers` running, in task order, and logs
-    each task as it starts and finishes.
+    """Runs the study's tasks that aren't done, each as `python -m <experiment>
+    run-task`, `n_workers` at a time (`run_commands`), named by their tags, with this
+    process's warning options.
 
-    Each task runs in its own process group, so a Ctrl-C in the terminal reaches only
-    this process, and with the warning options of this one. With more than one
-    worker, the tasks run BLAS and OpenMP on one thread each, unless their variables
-    are set here.
-
-    Raises `TaskFailedError` when a task exits with a status other than 0, and
-    `KeyboardInterrupt` on Ctrl-C, after stopping the tasks running; after Ctrl-C this
-    process ignores Ctrl-C.
+    Raises `CommandFailedError`, naming the task, if one fails, and
+    `KeyboardInterrupt` on Ctrl-C, after stopping the tasks running.
     """
-    # The tasks left, in order, and their environment
-    tasks = task_list["tasks"]
-    left = deque(
-        index
-        for index, (label, run_index) in enumerate(tasks)
-        if not _is_done(study_dir, label, run_index)
-    )
-    n_done = len(tasks) - len(left)
-    if n_done:
-        _logger.info("%d of %d tasks are done already", n_done, len(tasks))
+    commands = {
+        run_tag(task): [
+            sys.executable,
+            *(f"-W{option}" for option in sys.warnoptions),
+            "-m",
+            experiment.name,
+            "run-task",
+            study_dir.name,
+            "--task-index",
+            str(index),
+            "--results-root",
+            str(results_root),
+        ]
+        for index, task in enumerate(_tasks(task_list, experiment))
+        if not _is_done(study_dir, task)
+    }
+    run_commands(commands, n_workers=n_workers, cwd=EXPERIMENTS_DIR)
+
+
+def run_commands(
+    commands: Mapping[str, Sequence[str]], *, n_workers: int, cwd: Path
+) -> None:
+    """Runs the commands, named by their keys, from the folder `cwd`, keeping
+    `n_workers` running, in order, and logs each as it starts and finishes.
+
+    Each runs in its own process group, so a Ctrl-C in the terminal reaches only this
+    process. With more than one at a time, they run BLAS and OpenMP on one thread
+    each, unless their variables are set here.
+
+    Raises `ValueError` if `n_workers` < 1, `CommandFailedError` when a command exits
+    with a status other than 0, and `KeyboardInterrupt` on Ctrl-C, after stopping the
+    commands running; after Ctrl-C this process ignores Ctrl-C.
+    """
+    # The commands' environment
+    if n_workers < 1:
+        msg = f"n_workers must be at least 1, not {n_workers}"
+        raise ValueError(msg)
     environment = dict(os.environ)
     if n_workers > 1:
         for variable in THREAD_VARIABLES:
             environment.setdefault(variable, "1")
 
-    # Ctrl-C only marks the study interrupted, checked once per poll, so it never
-    # lands between starting a task and keeping track of it
-    interrupts: list[int] = []
+    # Ctrl-C only marks the commands interrupted, checked once per poll, so it never
+    # lands between starting a command and keeping track of it
+    interrupts = []
     previous = signal.signal(signal.SIGINT, lambda signum, _: interrupts.append(signum))
 
-    # Keep n_workers running; a task that fails stops the study
-    running: dict[int, subprocess.Popen[bytes]] = {}
+    # Keep n_workers running; one that fails stops the rest
+    left = list(commands)
+    running = {}
     try:
         while left or running:
             if interrupts:
                 raise KeyboardInterrupt
             while left and len(running) < n_workers:
-                index = left.popleft()
-                running[index] = _start(
-                    module, study_dir.name, index, results_root, environment
+                name = left.pop(0)
+                running[name] = subprocess.Popen(
+                    commands[name],
+                    cwd=cwd,
+                    env=environment,
+                    start_new_session=sys.platform != "win32",
+                    creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
                 )
-                _logger.info("Started task %d (%s)", index, run_tag(*tasks[index]))
-            for index, process in list(running.items()):
+                _logger.info("Started %s", name)
+            for name, process in list(running.items()):
                 status = process.poll()
                 if status is None:
                     continue
-                del running[index]
-                tag = run_tag(*tasks[index])
+                del running[name]
                 if status != 0:
-                    msg = (
-                        f"Task {index} ({tag}) failed with exit status {status}; its "
-                        f"log is {_run_log(study_dir, *tasks[index])}"
-                    )
-                    raise TaskFailedError(msg)
-                n_done += 1
-                _logger.info(
-                    "Finished task %d (%s): %d of %d done",
-                    index,
-                    tag,
-                    n_done,
-                    len(tasks),
-                )
+                    raise CommandFailedError(name, status)
+                n_done = len(commands) - len(left) - len(running)
+                _logger.info("Finished %s: %d of %d done", name, n_done, len(commands))
             time.sleep(POLL_INTERVAL)
 
-    # On a failure or Ctrl-C, the tasks still running are stopped at once, as their
-    # runs may never see the interrupt (CasADi catches it inside IPOPT). Ctrl-C ends
-    # the study, so another one is ignored from then on: pixi passes a Ctrl-C on to
-    # the process it runs, which so gets it twice
+    # On a failure or Ctrl-C, the commands still running are stopped at once, as
+    # they may never see the interrupt (CasADi catches it inside IPOPT). Ctrl-C ends
+    # the commands, so another one is ignored from then on: pixi passes a Ctrl-C on
+    # to the process it runs, which so gets it twice
     finally:
         _stop(list(running.values()))
         signal.signal(signal.SIGINT, signal.SIG_IGN if interrupts else previous)
-
-
-def _start(
-    module: tuple[Path, str],
-    study_id: str,
-    index: int,
-    results_root: Path,
-    environment: Mapping[str, str],
-) -> "subprocess.Popen[bytes]":
-    """Starts task `index` of the study as `python -m <module> run-task`, in a new
-    process group."""
-    folder, name = module
-    command = [
-        sys.executable,
-        *(f"-W{option}" for option in sys.warnoptions),
-        "-m",
-        name,
-        "run-task",
-        study_id,
-        "--task-index",
-        str(index),
-        "--results-root",
-        str(results_root),
-    ]
-    if sys.platform == "win32":
-        return subprocess.Popen(
-            command,
-            cwd=folder,
-            env=environment,
-            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
-        )
-    return subprocess.Popen(
-        command, cwd=folder, env=environment, start_new_session=True
-    )
 
 
 def _stop(processes: Sequence["subprocess.Popen[bytes]"]) -> None:
@@ -935,18 +827,18 @@ def _stop(processes: Sequence["subprocess.Popen[bytes]"]) -> None:
 
 
 def assemble_study(
-    experiment: Experiment, study_dir: Path, task_list: Mapping[str, Any]
+    experiment: Experiment, study_dir: Path, task_list: TaskList
 ) -> hb.Study:
     """The study, from its run files in the order of its task list (`hb.assemble`).
-    Appends the per-run logs to the study log and saves the summary, then the
-    artifact, which finishes the study, so a study that is finished has both; logs
-    how many runs of each configuration were saved."""
+    Rebuilds the study log with every per-run log and saves the summary, then the
+    artifact, which finishes the study; logs how many runs of each configuration were
+    saved."""
     # Each task's run, None for a run that failed before evaluating anything
-    tasks = _tasks(experiment, task_list)
+    tasks = _tasks(task_list, experiment)
     runs = [
         None
-        if _failure_marker(study_dir, task.label, task.index).exists()
-        else hb.load_run(_run_file(study_dir, task.label, task.index))
+        if _failure_marker(study_dir, task).exists()
+        else hb.load_run(_run_file(study_dir, task))
         for task in tasks
     ]
     study = hb.assemble(
@@ -955,37 +847,38 @@ def assemble_study(
         experiment.problem,
         experiment.measure,
         _settings(task_list),
-        name=task_list["name"],
-        optimum=task_list["optimum"],
+        name=task_list.name,
+        optimum=task_list.optimum,
     )
 
     # The logs and the summary, then the artifact
-    _append_run_logs(study_dir, task_list)
+    _rebuild_study_log(study_dir, tasks)
     save_summary(study, study_dir)
     save_artifact(study, study_dir)
-    for label in task_list["configurations"]:
+    for label in task_list.configurations:
         n_saved = sum(run.method == label for run in study.runs)
         _logger.info(
-            "%s: saved %d of %d runs to %s",
-            label,
-            n_saved,
-            task_list["n_runs"],
-            study_dir,
+            "%s: saved %d of %d runs to %s", label, n_saved, task_list.n_runs, study_dir
         )
     return study
 
 
-def _append_run_logs(study_dir: Path, task_list: Mapping[str, Any]) -> None:
-    """Appends each per-run log to the study log, in the order of the task list,
-    every line starting with the run's tag."""
-    with (study_dir / STUDY_LOG).open("a") as study_log:
-        for label, index in task_list["tasks"]:
-            run_log = _run_log(study_dir, label, index)
-            if not run_log.exists():
-                continue
-            tag = run_tag(label, index)
-            for line in run_log.read_text().splitlines():
-                study_log.write(f"{tag} {line}\n")
+def _rebuild_study_log(study_dir: Path, tasks: Sequence[hb.Task]) -> None:
+    """Rewrites the study log as the launcher's lines, then each per-run log in task
+    order, every line starting with its run's tag. Lines tagged by an earlier,
+    interrupted assembly are dropped first, so they are never there twice."""
+    tags = tuple(f"{run_tag(task)} " for task in tasks)
+    study_log = study_dir / STUDY_LOG
+    lines = [
+        line for line in study_log.read_text().splitlines() if not line.startswith(tags)
+    ]
+    for task in tasks:
+        per_run_log = _per_run_log(study_dir, task)
+        if per_run_log.exists():
+            tag = run_tag(task)
+            lines += [f"{tag} {line}" for line in per_run_log.read_text().splitlines()]
+    text = "".join(f"{line}\n" for line in lines)
+    _write_atomically(study_log, lambda path: path.write_text(text))
 
 
 @contextmanager
@@ -1023,13 +916,16 @@ def logging_to(path: Path, *, mode: str, console_format: str) -> Generator[None]
         file_handler.close()
 
 
+# Plotting
+
+
 def save_summary(study: hb.Study, study_dir: Path) -> None:
     """Prints `hb.summary(study)` and saves it to `summary.csv` in `study_dir`."""
     # Imported here, so tasks, which never summarize, start without it
     import polars as pl
 
     table = hb.summary(study)
-    table.write_csv(study_dir / "summary.csv")
+    table.write_csv(study_dir / SUMMARY)
     with pl.Config(tbl_cols=-1, tbl_width_chars=200):
         print(table)
 
@@ -1062,7 +958,7 @@ def plot(
     if study.name != name:
         msg = f"{study_dir} holds a study of {study.name}, not {name}"
         raise ValueError(msg)
-    if not (study_dir / "summary.csv").exists():
+    if not (study_dir / SUMMARY).exists():
         save_summary(study, study_dir)
     figures_dir = study_dir / "figures"
     figures_dir.mkdir(exist_ok=True)

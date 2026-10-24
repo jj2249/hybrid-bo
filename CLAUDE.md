@@ -33,7 +33,7 @@ pixi run experiment illustrative_example resume STUDY [--n-workers 4]   # finish
 
 The pixi tasks run an experiment as a module from `experiments/` (`python -m
 illustrative_example ...`). The experiment ends with an explicit `cli.main(...)`
-call that passes everything it defines; `experiments/cli.py` parses the flags and
+call that passes everything it defines, its name first, which must be the module's; `experiments/cli.py` parses the flags and
 runs or plots. A study's runs are tasks, each run in its own process (`python -m
 <experiment> run-task`), which rebuilds the experiment from its module and saves its
 run file as it finishes; `prepare`, `run-task` and `resume` split a study up (e.g.

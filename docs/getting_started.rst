@@ -57,8 +57,8 @@ keeps its finished runs, and prints the command that finishes it:
 
    pixi run experiment illustrative_example resume STUDY [--n-workers 4]
 
-which runs only the runs that are missing. It refuses if the experiment, the seed or
-the code changed since the study started, so a resumed study equals one run in one go.
+which runs only the runs that are missing. It refuses if the experiment or the code
+changed since the study started, so a resumed study equals one run in one go.
 
 :doc:`running_large_studies` covers long studies: many runs on one machine, and
 SLURM clusters.

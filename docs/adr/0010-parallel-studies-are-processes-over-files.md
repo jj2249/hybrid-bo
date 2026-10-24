@@ -41,9 +41,9 @@ CLI through explicit saving calls (`hb.save_run`, `hb.saving.save_artifact`).
   task: noticeable for the illustrative example's sub-second runs, negligible for
   Langermann's (about 90 s each).
 - A task rebuilds the experiment from its module, so nothing is pickled: lambdas and
-  nested functions work. In return, `cli.main` must be called from the experiment's
-  module run as `__main__`, and a resumed or scheduled task refuses to run unless the
-  experiment, the flags and the code version match the study's task list.
+  nested functions work. In return, the name an experiment passes to `cli.main` must
+  be its module's, and a resumed or scheduled task refuses to run unless the
+  experiment and the code version match the study's task list.
 - A run killed partway starts again from scratch; checkpointing within a run is out of
   scope.
 - In-process `hb.study` is serial again and stays the easiest form to debug, but it

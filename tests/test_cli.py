@@ -52,8 +52,8 @@ def small_configurations(n_iterations=1):
 
 
 def small(n_iterations=1, true_curves=False):
-    """The module of a small test experiment: every method of the illustrative
-    example, as `small_configurations` gives them."""
+    """The module `small_example`, a small test experiment: every method of the
+    illustrative example, as `small_configurations` gives them."""
     return f"""
 import cli
 import illustrative_example as ex
@@ -66,7 +66,7 @@ configurations = {{
 
 if __name__ == "__main__":
     cli.main(
-        "illustrative_example",
+        "small_example",
         ex.problem,
         ex.measure,
         configurations,
@@ -77,8 +77,8 @@ if __name__ == "__main__":
 """
 
 
-def experiment_of(configurations, *, name="illustrative_example", optimum=None):
-    """The module of a test experiment on the illustrative example, with
+def experiment_of(configurations, *, name="custom_example", optimum=None):
+    """The module `name`, a test experiment on the illustrative example, with
     `configurations`, the source of a dict of configurations that may use `cli`,
     `ex` (the illustrative example), `hb`, `np`, `os`, `time` and `warnings`."""
     return f"""
@@ -112,26 +112,28 @@ if __name__ == "__main__":
 # variables for this test only
 @pytest.fixture
 def experiment_folder(tmp_path):
-    """The folder of the test's experiment modules, which tasks run from."""
-    folder = tmp_path / "experiment"
+    """The folder of the test's experiment modules."""
+    folder = tmp_path / "modules"
     folder.mkdir()
     return folder
 
 
 @pytest.fixture
 def experiment(experiment_folder, monkeypatch):
-    """A function `experiment(argv, module=small())` that writes the experiment
-    module `module` (source text) to `experiment_folder` and runs it with the command
-    line `argv`, in this process, as `python -m` would, with the task processes it
-    starts able to import it."""
+    """A function `experiment(argv, module=small(), name="small_example")` that
+    writes the experiment module `name` (source text `module`) to
+    `experiment_folder` and runs it with the command line `argv`, in this process, as
+    `python -m` would. Tasks run from `experiments/`, and import it from
+    `PYTHONPATH`."""
     # The module importable here and in tasks, and no bytecode, which could be older
     # than a module rewritten in the same second
     monkeypatch.syspath_prepend(str(experiment_folder))
-    monkeypatch.setenv("PYTHONPATH", str(EXPERIMENTS_DIR))
+    paths = os.pathsep.join([str(experiment_folder), str(EXPERIMENTS_DIR)])
+    monkeypatch.setenv("PYTHONPATH", paths)
     monkeypatch.setenv("PYTHONDONTWRITEBYTECODE", "1")
     monkeypatch.setattr(sys, "dont_write_bytecode", True)
 
-    def run(argv, module=None, name="experiment_module"):
+    def run(argv, module=None, name="small_example"):
         """Writes the module `name` and runs it with `argv`."""
         (experiment_folder / f"{name}.py").write_text(
             small() if module is None else module
@@ -163,9 +165,9 @@ def test_run_then_plot_the_newest_study(tmp_path, experiment):
 
     # One study, two runs per method, run i starting from the seed's ith child, with
     # the stated optimum
-    (study_dir,) = (tmp_path / "illustrative_example").iterdir()
+    (study_dir,) = (tmp_path / "small_example").iterdir()
     study = load(study_dir)
-    assert study.name == "illustrative_example"
+    assert study.name == "small_example"
     assert study.artifact["oracle_optimum"] == repr(ex.optimum)
     runs = [run for run in study.runs if run.method == "standard_bo"]
     assert len(runs) == 2
@@ -217,10 +219,10 @@ def test_a_study_run_as_tasks_is_the_serial_study(tmp_path, experiment):
         ex.problem,
         ex.measure,
         StudySettings(n_runs=2, seed=0),
-        name="illustrative_example",
+        name="small_example",
         optimum=ex.optimum,
     )
-    assert_same(load(tmp_path / "illustrative_example" / "tasks"), serial)
+    assert_same(load(tmp_path / "small_example" / "tasks"), serial)
 
 
 def iteration_figures(study_dir):
@@ -240,7 +242,7 @@ def test_plot_runs_chooses_the_runs_with_iteration_figures(tmp_path, experiment)
         results(tmp_path, "--method", "uniform_sampling", "--n-runs", "3")
         + ["--name", "demo", "--plot-runs", "1", "2", "--n-workers", "3"]
     )
-    study_dir = tmp_path / "illustrative_example" / "demo"
+    study_dir = tmp_path / "small_example" / "demo"
     assert (study_dir / "figures" / "convergence.png").exists()
     assert iteration_figures(study_dir) == {
         "uniform_sampling/run-001",
@@ -277,7 +279,7 @@ def test_plot_takes_the_finished_study_saved_last(tmp_path, experiment):
 
     experiment(["plot", *results(tmp_path)])
 
-    experiment_dir = tmp_path / "illustrative_example"
+    experiment_dir = tmp_path / "small_example"
     assert (experiment_dir / "alpha" / "figures").exists()
     assert not (experiment_dir / "zeta" / "figures").exists()
     assert not (experiment_dir / "unfinished" / "figures").exists()
@@ -313,9 +315,7 @@ def test_a_relative_results_root_is_relative_to_where_pixi_started(
     )
 
     # Saved under the temporary folder, not experiments/
-    assert (
-        tmp_path / "out" / "illustrative_example" / "here" / "artifact.json"
-    ).exists()
+    assert (tmp_path / "out" / "small_example" / "here" / "artifact.json").exists()
 
 
 def test_help_names_the_configurations_and_the_other_commands(experiment, capsys):
@@ -328,7 +328,7 @@ def test_help_names_the_configurations_and_the_other_commands(experiment, capsys
     printed = " ".join(capsys.readouterr().out.split())
     assert ", ".join(ex.configurations) in printed
     assert "prepare | run-task | resume | plot" in printed
-    assert "pixi run plot illustrative_example" in printed
+    assert "pixi run plot small_example" in printed
 
 
 def test_a_tree_that_is_not_clean_warns_but_still_prepares(
@@ -343,7 +343,7 @@ def test_a_tree_that_is_not_clean_warns_but_still_prepares(
 
     assert "abc1234-untracked" in capsys.readouterr().err
     task_list = json.loads(
-        (tmp_path / "illustrative_example" / "dirty" / "tasks.json").read_text()
+        (tmp_path / "small_example" / "dirty" / "tasks.json").read_text()
     )
     assert task_list["code_version"] == "abc1234-untracked"
 
@@ -360,19 +360,19 @@ def test_require_clean_refuses_a_tree_that_is_not_clean(
     with pytest.raises(SystemExit) as exit_info:
         experiment(command)
     assert exit_info.value.code != 0
-    assert not (tmp_path / "illustrative_example").exists()
+    assert not (tmp_path / "small_example").exists()
 
     # A clean tree: the study is prepared
     monkeypatch.setattr(cli, "code_version", lambda path: "abc1234")
     experiment(["prepare", *command])
-    assert (tmp_path / "illustrative_example").exists()
+    assert (tmp_path / "small_example").exists()
 
 
 def test_run_rejects_a_method_the_experiment_lacks(tmp_path, experiment):
     """An unknown method name is a usage error, before anything runs."""
     with pytest.raises(SystemExit):
         experiment(results(tmp_path, "--method", "nope"))
-    assert not (tmp_path / "illustrative_example").exists()
+    assert not (tmp_path / "small_example").exists()
 
 
 def test_run_has_no_n_iterations_flag(tmp_path, experiment):
@@ -381,7 +381,7 @@ def test_run_has_no_n_iterations_flag(tmp_path, experiment):
     runs."""
     with pytest.raises(SystemExit):
         experiment(results(tmp_path, "--n-iterations", "1"))
-    assert not (tmp_path / "illustrative_example").exists()
+    assert not (tmp_path / "small_example").exists()
 
 
 def test_plot_without_a_study_is_a_usage_error(tmp_path, experiment):
@@ -390,20 +390,19 @@ def test_plot_without_a_study_is_a_usage_error(tmp_path, experiment):
         experiment(["plot", *results(tmp_path)])
 
 
-def test_running_needs_the_experiment_run_as_a_module(tmp_path):
-    """Tasks are run as `python -m <experiment>`, so running from a call of `main`
-    that isn't the experiment run as `__main__` is a usage error, before anything
-    runs."""
+def test_running_needs_the_experiment_to_be_a_module(tmp_path):
+    """Tasks run as `python -m <name>`, so running an experiment whose name names no
+    module is a usage error, before anything runs."""
     with pytest.raises(SystemExit):
         cli.main(
-            "illustrative_example",
+            "no_such_experiment",
             ex.problem,
             ex.measure,
             small_configurations(),
             ex.study_settings,
             argv=results(tmp_path, "--n-runs", "1"),
         )
-    assert not (tmp_path / "illustrative_example").exists()
+    assert not (tmp_path / "no_such_experiment").exists()
 
 
 def test_the_experiment_runs_as_a_module_from_the_experiments_folder():
@@ -436,12 +435,12 @@ def test_the_study_log_records_each_run_and_iteration(tmp_path, experiment):
         ),
         small(n_iterations=2),
     )
-    log = (tmp_path / "illustrative_example" / "logged" / "study.log").read_text()
+    log = (tmp_path / "small_example" / "logged" / "study.log").read_text()
 
     # The launcher's lines: the configuration and each task
     assert "Configuration standard_bo: 2 runs of 4 evaluations" in log
-    assert "Started task 0 (standard_bo/run-000)" in log
-    assert "Finished task 1 (standard_bo/run-001): 2 of 2 done" in log
+    assert "Started standard_bo/run-000" in log
+    assert "Finished standard_bo/run-001: 2 of 2 done" in log
 
     # INFO: each run, the initial points and each iteration
     assert "Run 1 of 2 finished in" in log
@@ -475,7 +474,7 @@ def test_each_run_logs_to_its_own_log_and_tags_the_study_log(
 
     # The study log: each run's lines tagged, run 0's before run 1's; the launcher's
     # not
-    study_dir = tmp_path / "illustrative_example" / "tagged"
+    study_dir = tmp_path / "small_example" / "tagged"
     lines = (study_dir / "study.log").read_text().splitlines()
     for index in (0, 1):
         tagged = [
@@ -528,10 +527,11 @@ def test_warnings_reach_the_study_log(tmp_path, experiment, n_workers):
             tmp_path, "--n-runs", "2", "--n-workers", n_workers, "--name", "warned"
         ),
         experiment_of(WARNING_SAMPLING),
+        name="custom_example",
     )
 
     # The warning, logged through `py.warnings`
-    study_dir = tmp_path / "illustrative_example" / "warned"
+    study_dir = tmp_path / "custom_example" / "warned"
     log = (study_dir / "study.log").read_text()
     assert log.count("a warning from the method") == 2
     assert any(
@@ -555,7 +555,7 @@ def test_running_twice_in_one_process_logs_each_record_once(tmp_path, experiment
     experiment([*command, "--name", "second"])
 
     # Each record once in each log, and the handlers as they were
-    experiment_dir = tmp_path / "illustrative_example"
+    experiment_dir = tmp_path / "small_example"
     first = (experiment_dir / "first" / "study.log").read_text()
     second = (experiment_dir / "second" / "study.log").read_text()
     assert first.count("Configuration uniform_sampling") == 1
@@ -569,21 +569,20 @@ def test_running_twice_in_one_process_logs_each_record_once(tmp_path, experiment
 
 def test_an_unfinished_study_keeps_its_id_taken(tmp_path):
     """A study's folder reserves its id, so a study that didn't finish keeps it: a
-    new study doesn't reuse it, and the message says it is unfinished."""
+    new study doesn't reuse it."""
     (tmp_path / "old").mkdir()
 
     assert cli.reserve(tmp_path, "old", suffix_if_taken=True).name == "old-2"
-    with pytest.raises(FileExistsError, match="unfinished study"):
+    with pytest.raises(cli.UsageError, match="is taken"):
         cli.reserve(tmp_path, "old", suffix_if_taken=False)
 
 
 def test_a_taken_name_is_refused_before_running(tmp_path, experiment, capsys):
     """`--name` names the study's folder. A name taken by a saved study, or by a study
-    that didn't finish, is a usage error before anything runs, and the message says
-    which holds it."""
+    that didn't finish, is a usage error before anything runs."""
     # One quick method into a temporary results root
     command = results(tmp_path, "--method", "uniform_sampling", "--n-runs", "1")
-    experiment_dir = tmp_path / "illustrative_example"
+    experiment_dir = tmp_path / "small_example"
 
     # Taken by a saved study
     experiment([*command, "--name", "demo"])
@@ -591,14 +590,14 @@ def test_a_taken_name_is_refused_before_running(tmp_path, experiment, capsys):
     with pytest.raises(SystemExit) as exit_info:
         experiment([*command, "--name", "demo"])
     assert exit_info.value.code != 0
-    assert "taken by the saved study" in capsys.readouterr().err
+    assert "the study id demo is taken" in capsys.readouterr().err
 
     # Taken by a study that didn't finish
     experiment(["prepare", *command, "--name", "crashed"])
     task_list = (experiment_dir / "crashed" / "tasks.json").read_text()
     with pytest.raises(SystemExit):
         experiment([*command, "--name", "crashed"])
-    assert "taken by the unfinished study" in capsys.readouterr().err
+    assert "the study id crashed is taken" in capsys.readouterr().err
 
     # Nothing else was saved, and the unfinished study is untouched
     assert sorted(path.name for path in experiment_dir.iterdir()) == ["crashed", "demo"]
@@ -626,7 +625,7 @@ def test_a_taken_default_id_gets_a_suffix(tmp_path, experiment, monkeypatch):
     experiment(["prepare", *command])
 
     # The second got the suffix
-    experiment_dir = tmp_path / "illustrative_example"
+    experiment_dir = tmp_path / "small_example"
     assert sorted(path.name for path in experiment_dir.iterdir()) == [
         "20261020-132407",
         "20261020-132407-2",
@@ -643,7 +642,7 @@ def test_plot_flag_plots_straight_after_the_run(tmp_path, experiment):
         + ["--name", "demo", "--plot"]
     )
 
-    study_dir = tmp_path / "illustrative_example" / "demo"
+    study_dir = tmp_path / "small_example" / "demo"
     assert (study_dir / "figures" / "convergence.png").exists()
 
 
@@ -659,7 +658,7 @@ configurations = {
 
 if __name__ == "__main__":
     cli.main(
-        "illustrative_example",
+        "sweep_example",
         ex.problem,
         ex.measure,
         configurations,
@@ -685,10 +684,11 @@ def test_an_experiment_chooses_the_study_figures(tmp_path, experiment, capsys):
         + ["--n-workers", "4"],
         "import cli\nimport illustrative_example as ex\nimport hybrid_bo as hb\n"
         + SWEEP,
+        name="sweep_example",
     )
 
     # No convergence or regret, and no figure at a budget the runs don't reach
-    figures_dir = tmp_path / "illustrative_example" / "sweep" / "figures"
+    figures_dir = tmp_path / "sweep_example" / "sweep" / "figures"
     assert {path.name for path in figures_dir.glob("*.png")} == {
         "budget.png",
         "at_budget_3.png",
@@ -745,7 +745,9 @@ def test_hybrid_bo_with_two_unknown_states_gets_iteration_figures_without_gps(
     with two the CLI draws its figures without them rather than skipping the run.
     The oracle is a lambda, which tasks rebuild from the module."""
     # Run one iteration and plot it with the oracle
-    experiment(results(tmp_path, "--name", "demo", "--plot"), TWO_STATES)
+    experiment(
+        results(tmp_path, "--name", "demo", "--plot"), TWO_STATES, name="two_states"
+    )
 
     # The run has its iteration figure, and nothing was skipped
     study_dir = tmp_path / "two_states" / "demo"
@@ -757,19 +759,18 @@ def test_hybrid_bo_with_two_unknown_states_gets_iteration_figures_without_gps(
 
 
 def test_a_prepared_study_resumes_to_the_study_run_in_one_go(
-    tmp_path, experiment, experiment_folder, capsys
+    tmp_path, experiment, capsys
 ):
     """`prepare` writes the task list and runs nothing; `run-task` runs one task and
     saves its run, and does nothing for a task that is done; `resume` runs the tasks
-    left and assembles the study, which equals the study run in one go; naming its
-    methods in another order changes nothing."""
+    left and assembles the study, which equals the study run in one go."""
     # Prepare: the task list, the tasks in order, and how to run them
     command = results(
         tmp_path, "--method", "standard_bo", "--method", "uniform_sampling"
     )
     command += ["--n-runs", "2", "--seed", "0"]
     experiment(["prepare", *command, "--name", "prepared"])
-    study_dir = tmp_path / "illustrative_example" / "prepared"
+    study_dir = tmp_path / "small_example" / "prepared"
     task_list = json.loads((study_dir / "tasks.json").read_text())
     assert task_list["tasks"] == [
         ["standard_bo", 0],
@@ -781,11 +782,11 @@ def test_a_prepared_study_resumes_to_the_study_run_in_one_go(
     assert not (study_dir / "runs").exists()
 
     # Two tasks, as a scheduler runs them; the second time, task 1 is done
-    task = [sys.executable, "-m", "experiment_module", "run-task", "prepared"]
+    task = [sys.executable, "-m", "small_example", "run-task", "prepared"]
     for index in ("1", "2", "1"):
         subprocess.run(
             [*task, "--task-index", index, *results(tmp_path)],
-            cwd=experiment_folder,
+            cwd=EXPERIMENTS_DIR,
             check=True,
             capture_output=True,
         )
@@ -796,16 +797,12 @@ def test_a_prepared_study_resumes_to_the_study_run_in_one_go(
         "run-001.json",
     ]
 
-    # Act: resume the rest, its methods named in another order, then the same study
-    # in one go
-    reordered = ["--method", "uniform_sampling", "--method", "standard_bo"]
-    experiment(
-        ["resume", "prepared", *reordered, "--n-workers", "2", *results(tmp_path)]
-    )
+    # Act: resume the rest, then the same study in one go
+    experiment(["resume", "prepared", "--n-workers", "2", *results(tmp_path)])
     experiment([*command, "--name", "in-one-go", "--n-workers", "4"])
 
     assert run_file.read_text() == saved
-    assert_same(load(study_dir), load(tmp_path / "illustrative_example" / "in-one-go"))
+    assert_same(load(study_dir), load(tmp_path / "small_example" / "in-one-go"))
 
 
 def test_resume_refuses_a_finished_study(tmp_path, experiment, capsys):
@@ -826,13 +823,13 @@ def test_resume_refuses_a_finished_study(tmp_path, experiment, capsys):
 
 def test_resume_refuses_a_study_of_another_experiment(tmp_path, experiment, capsys):
     """`resume` refuses, naming what differs, when the experiment's configurations
-    or the flags given differ from the study's task list, so a resumed study never
-    mixes runs of two experiments; nothing runs then."""
+    differ from the study's task list, so a resumed study never mixes runs of two
+    experiments; nothing runs then."""
     # A study of one iteration, prepared
     experiment(
         ["prepare", *results(tmp_path, "--n-runs", "1", "--seed", "0", "--name", "s")]
     )
-    study_dir = tmp_path / "illustrative_example" / "s"
+    study_dir = tmp_path / "small_example" / "s"
     capsys.readouterr()
 
     # The experiment changed: two iterations
@@ -840,34 +837,28 @@ def test_resume_refuses_a_study_of_another_experiment(tmp_path, experiment, caps
         experiment(["resume", "s", *results(tmp_path)], small(n_iterations=2))
     assert exit_info.value.code != 0
     assert "differs from the experiment in configurations" in capsys.readouterr().err
-
-    # Another seed given
-    with pytest.raises(SystemExit):
-        experiment(["resume", "s", "--seed", "1", *results(tmp_path)])
-    assert "differs from the experiment in seed" in capsys.readouterr().err
     assert not (study_dir / "runs").exists()
 
 
-def test_run_task_refuses_another_code_version(
-    tmp_path, experiment, experiment_folder, monkeypatch
-):
+def test_run_task_refuses_another_code_version(tmp_path, experiment, monkeypatch):
     """A task refuses to run (exit status 2) unless the code version is the one the
-    study was prepared with, so every run of a study comes from the same code."""
+    study was prepared with, so every run of a study comes from the same code; the
+    message gives both versions."""
     # Prepared at another code version
     monkeypatch.setattr(cli, "code_version", lambda path: "abc1234")
     experiment(["prepare", *results(tmp_path, "--n-runs", "1", "--name", "old")])
 
     task = subprocess.run(
-        [sys.executable, "-m", "experiment_module", "run-task", "old"]
+        [sys.executable, "-m", "small_example", "run-task", "old"]
         + ["--task-index", "0", *results(tmp_path)],
-        cwd=experiment_folder,
+        cwd=EXPERIMENTS_DIR,
         capture_output=True,
         text=True,
         check=False,
     )
 
     assert task.returncode == 2
-    assert "code_version" in task.stderr
+    assert "code_version ('abc1234' in the study, " in task.stderr
 
 
 def failing(*args, **kwargs):
@@ -894,10 +885,11 @@ def test_a_run_that_failed_before_evaluating_is_done(tmp_path, experiment):
         results(tmp_path, "--n-runs", "2", "--seed", "0", "--name", "failed")
         + ["--n-workers", "4"],
         experiment_of(FAILING_BEFORE_EVALUATING),
+        name="custom_example",
     )
 
     # The failure markers, and the study without the failed runs
-    study_dir = tmp_path / "illustrative_example" / "failed"
+    study_dir = tmp_path / "custom_example" / "failed"
     assert (study_dir / "runs" / "failing" / "run-001.failed").exists()
     serial = hb.study(
         {
@@ -909,7 +901,7 @@ def test_a_run_that_failed_before_evaluating_is_done(tmp_path, experiment):
         ex.problem,
         ex.measure,
         StudySettings(n_runs=2, seed=0),
-        name="illustrative_example",
+        name="custom_example",
     )
     assert_same(load(study_dir), serial)
     assert "failing: no runs" in serial.artifact["methods"]
@@ -939,25 +931,30 @@ def test_a_task_that_fails_stops_the_study_and_leaves_it_resumable(
         experiment(
             results(tmp_path, "--n-runs", "1", "--name", "broken"),
             experiment_of(FAILING_TASK),
+            name="custom_example",
         )
 
     # Stopped, the failing task named, its traceback in its log, the other run kept
     assert exit_info.value.code == 1
-    study_dir = tmp_path / "illustrative_example" / "broken"
-    run_log = study_dir / "logs" / "failing" / "run-000.log"
+    study_dir = tmp_path / "custom_example" / "broken"
+    per_run_log = study_dir / "logs" / "failing" / "run-000.log"
     printed = capsys.readouterr().err
     assert (
-        f"Task 1 (failing/run-000) failed with exit status 1; its log is {run_log}"
-        in printed
+        "failing/run-000 failed with exit status 1; its per-run log is "
+        f"{per_run_log}" in printed
     )
     assert "resume broken" in printed
-    assert "RuntimeError: boom" in run_log.read_text()
+    assert "RuntimeError: boom" in per_run_log.read_text()
     assert (study_dir / "runs" / "quick" / "run-000.json").exists()
     assert not (study_dir / "artifact.json").exists()
 
     # The bug fixed, resume finishes the study
     monkeypatch.setenv("FIXED", "1")
-    experiment(["resume", "broken", *results(tmp_path)], experiment_of(FAILING_TASK))
+    experiment(
+        ["resume", "broken", *results(tmp_path)],
+        experiment_of(FAILING_TASK),
+        name="custom_example",
+    )
     assert [run.method for run in load(study_dir).runs] == ["quick", "failing"]
 
 
@@ -988,6 +985,7 @@ def test_workers_take_nested_functions_and_lambdas(tmp_path, experiment):
         results(tmp_path, "--n-runs", "2", "--n-workers", "2", "--name", "nested"),
         "import numpy as np\nimport cli\nimport illustrative_example as ex\n"
         "import hybrid_bo as hb\n" + NESTED_MEASUREMENT,
+        name="nested",
     )
 
     study = load(tmp_path / "nested" / "nested")
@@ -995,40 +993,96 @@ def test_workers_take_nested_functions_and_lambdas(tmp_path, experiment):
     assert study.artifact["measure"] == "y = sin(u), from a nested function."
 
 
-THREAD_REPORTING = """
-def thread_reporting(*args, **kwargs):
-    threads = {name: os.environ.get(name) for name in cli.THREAD_VARIABLES}
-    warnings.warn(f"threads: {threads}", UserWarning, stacklevel=2)
-    return hb.uniform_sampling(*args, **kwargs)
-
-configurations = {
-    "threads": hb.Configuration(method=thread_reporting, n_evaluations=2, n_initial=1)
-}
-"""
+def python(code):
+    """The command that runs the Python code `code` in a new process."""
+    return [sys.executable, "-c", code]
 
 
-def test_workers_run_single_threaded_blas_unless_set(tmp_path, experiment, monkeypatch):
-    """With several workers, tasks run BLAS and OpenMP on one thread each, so n
-    workers use n cores, except for a variable the user set, which is kept; this
+def test_the_launcher_stops_at_a_command_that_fails(tmp_path):
+    """`run_commands` runs commands in order and stops at the first that fails,
+    raising `CommandFailedError` with its name and exit status; the commands after
+    it never start."""
+    commands = {
+        "first": python("pass"),
+        "failing": python("raise SystemExit(3)"),
+        "never": python(f"open({str(tmp_path / 'started')!r}, 'w')"),
+    }
+
+    with pytest.raises(cli.CommandFailedError) as error:
+        cli.run_commands(commands, n_workers=1, cwd=tmp_path)
+    assert (error.value.name, error.value.status) == ("failing", 3)
+    assert not (tmp_path / "started").exists()
+
+
+def test_the_launcher_runs_single_threaded_blas_unless_set(tmp_path, monkeypatch):
+    """With several commands at once, each runs BLAS and OpenMP on one thread, so n
+    at once use n cores, except for a variable the user set, which is kept; this
     process's environment stays as it was."""
-    # The user set OpenMP's threads
+    # The user set OpenMP's threads; each command writes the thread variables it sees
     monkeypatch.setenv("OMP_NUM_THREADS", "3")
     for variable in cli.THREAD_VARIABLES[1:]:
         monkeypatch.delenv(variable, raising=False)
     before = dict(os.environ)
-
-    # Act: the tasks report their threads as warnings, in their per-run logs
-    experiment(
-        results(tmp_path, "--n-runs", "2", "--n-workers", "2", "--name", "threads"),
-        experiment_of(THREAD_REPORTING),
+    report = (
+        "import json, os, sys; json.dump({name: os.environ.get(name) for name in "
+        f"{cli.THREAD_VARIABLES!r}}}, open(sys.argv[1], 'w'))"
     )
+    commands = {
+        str(index): [*python(report), str(tmp_path / f"{index}.json")]
+        for index in range(2)
+    }
 
-    # Both runs had one thread, but OpenMP's three
-    expected = {name: "1" for name in cli.THREAD_VARIABLES} | {"OMP_NUM_THREADS": "3"}
-    logs = tmp_path / "illustrative_example" / "threads" / "logs" / "threads"
-    for index in (0, 1):
-        assert f"threads: {expected}" in (logs / f"run-00{index}.log").read_text()
+    cli.run_commands(commands, n_workers=2, cwd=tmp_path)
+
+    # One thread each, but OpenMP's three
+    expected = dict.fromkeys(cli.THREAD_VARIABLES, "1") | {"OMP_NUM_THREADS": "3"}
+    for index in range(2):
+        assert json.loads((tmp_path / f"{index}.json").read_text()) == expected
     assert dict(os.environ) == before
+
+
+def test_a_study_log_is_rebuilt_not_appended_to(tmp_path, experiment):
+    """Assembling a study writes each run's lines into the study log once, even when
+    an earlier assembly was interrupted after writing them: a resumed study's log
+    equals one assembled once."""
+    # A study, then its assembly undone, as if stopped before the artifact
+    command = results(tmp_path, "--method", "uniform_sampling", "--n-runs", "1")
+    experiment([*command, "--name", "twice"])
+    study_dir = tmp_path / "small_example" / "twice"
+    (study_dir / "artifact.json").unlink()
+
+    # Act: resume, which only assembles it
+    experiment(["resume", "twice", *results(tmp_path)])
+
+    # Each line of the run's per-run log once, tagged
+    lines = (study_dir / "study.log").read_text().splitlines()
+    tagged = [line for line in lines if line.startswith("uniform_sampling/run-000 ")]
+    per_run_log = study_dir / "logs" / "uniform_sampling" / "run-000.log"
+    assert len(tagged) == len(per_run_log.read_text().splitlines())
+
+
+def test_any_failure_says_how_to_resume(tmp_path, experiment, monkeypatch, capsys):
+    """A study that stops for any reason once its tasks have started, here an error
+    while assembling it, exits with status 1 and prints the command that finishes
+    it."""
+
+    def broken_assembly(*args, **kwargs):
+        """Fails as assembling a study might."""
+        raise ValueError("assembly failed")
+
+    monkeypatch.setattr(cli, "assemble_study", broken_assembly)
+
+    with pytest.raises(SystemExit) as exit_info:
+        experiment(
+            results(
+                tmp_path, "--method", "uniform_sampling", "--n-runs", "1", "--name", "x"
+            )
+        )
+
+    assert exit_info.value.code == 1
+    printed = capsys.readouterr().err
+    assert "assembly failed" in printed
+    assert "resume x" in printed
 
 
 # A study whose second configuration ignores Ctrl-C, as a run inside IPOPT does
@@ -1081,7 +1135,8 @@ def test_ctrl_c_stops_a_study_at_once(tmp_path, n_interrupts):
     (tmp_path / "stubborn.py").write_text(STUBBORN)
     started = tmp_path / "started"
     started.mkdir()
-    env = os.environ | {"STARTED": str(started), "PYTHONPATH": str(EXPERIMENTS_DIR)}
+    paths = os.pathsep.join([str(tmp_path), str(EXPERIMENTS_DIR)])
+    env = os.environ | {"STARTED": str(started), "PYTHONPATH": paths}
     study = subprocess.Popen(
         [sys.executable, "-m", "stubborn", "--n-workers", "2", "--name", "s"]
         + results(tmp_path),
