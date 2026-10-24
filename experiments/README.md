@@ -20,6 +20,12 @@ compare. `cli.py` is the shared command line, not an experiment.
   and unknown equations: two of its five squared distances are known equations and
   three are unknown states, with an oracle, comparing the same methods. Standard BO
   and Latin hypercube sampling behave exactly as on `langermann.py`.
+- `langermann_sweep.py`: a sweep over initial fractions on `langermann_partial.py`'s
+  problem for SoftSAA-EI, n_initial = 2, 4, ..., 38, each run to 40 evaluations. It
+  plots the budget heatmap, the regret against the initial fraction at a budget of
+  20, and the regret over evaluations by number of initial points instead of the
+  convergence and regret figures. The full study is about 18 hours on one core, so
+  run it with `--n-workers`.
 
 With more than one unknown state, hybrid BO's iteration figures are drawn without
 the GP panels.

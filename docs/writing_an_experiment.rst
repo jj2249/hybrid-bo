@@ -227,7 +227,8 @@ the evaluations of a run in all, and ``n_initial``, how many of them are initial
 points. The rest, ``n_evaluations - n_initial``, are iterations (design points for
 the baselines). Neither has a default, and ``n_initial`` must be at least 1 and at
 most ``n_evaluations``. A study runs ``configurations``, which maps a label to a
-configuration; the shipped experiments give every method the same budget:
+configuration; the shipped comparisons of methods give every method the same
+budget:
 
 .. literalinclude:: ../experiments/illustrative_example.py
    :language: python
@@ -236,7 +237,8 @@ configuration; the shipped experiments give every method the same budget:
 
 To compare splits of one budget between initial points and iterations, give one
 method several configurations, e.g. *initial fractions* ε = ``n_initial /
-n_evaluations`` of 0.2 and 0.5:
+n_evaluations`` of 0.2 and 0.5 (``experiments/langermann_sweep.py`` is a full
+sweep):
 
 .. code-block:: python
 

@@ -9,7 +9,7 @@ authors = [
 dependencies = ["casadi>=3.8.1,<4", "numpy>=2.5.3,<3", "scipy>=1.18.1,<2"]
 name = "hybrid-bo"
 requires-python = ">= 3.12"
-version = "0.4.0"
+version = "0.5.0"
 description = "A package for performing hybrid Bayesian optimization"
 readme = "README.md"
 license = "MIT"
