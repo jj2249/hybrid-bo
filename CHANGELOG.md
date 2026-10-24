@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- The experiment `langermann_sweep` (#147): a sweep of SoftSAA-EI over initial
+  fractions on `langermann_partial`'s problem, with n_initial = 2, 4, ..., 38 and 40
+  evaluations each, which plots `budget_heatmap`, `regret_at_budget` at a budget of
+  20 and `regret_by_initial_fraction`.
 - The experiment `langermann_partial` (#153): the Langermann function, box and
   optimum of `langermann`, with known and unknown equations. The squared distances
   from centers 1 and 4 are mechanistic states with known equations, and those from
