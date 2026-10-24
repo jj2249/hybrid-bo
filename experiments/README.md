@@ -16,6 +16,10 @@ compare. `cli.py` is the shared command line, not an experiment.
 - `langermann.py`: the Langermann function as a composite function, with no known
   equations and five unknown states (Astudillo & Frazier, App. D.1), with an oracle,
   comparing the same methods.
+- `langermann_partial.py`: the same Langermann function, box and optimum with known
+  and unknown equations: two of its five squared distances are known equations and
+  three are unknown states, with an oracle, comparing the same methods. Standard BO
+  and Latin hypercube sampling behave exactly as on `langermann.py`.
 
 With more than one unknown state, hybrid BO's iteration figures are drawn without
 the GP panels.
