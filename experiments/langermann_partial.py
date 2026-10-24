@@ -11,8 +11,8 @@ states y2, y3 and y5, which only the oracle knows. Hybrid BO models each unknown
 with its own GP and knows the known equations and f; standard BO models f directly,
 so it sees the plain Langermann function and behaves exactly as on `langermann`.
 
-Centers 1 and 4 have small weights and lie far from the optimum, so the terms that
-shape it are still learned. The known equations depend on u only, so no GP's
+Centers 1 and 4 have small weights (c = 1 and 2, of at most 5) and lie far from the
+optimum, so the terms that shape it are still learned. The known equations depend on u only, so no GP's
 uncertainty passes through them. f, the box and the optimum are those of Appendix D.1
 of Astudillo & Frazier, "Bayesian optimization of composite functions" (arXiv
 1906.01537). Run it, then plot the newest study:
