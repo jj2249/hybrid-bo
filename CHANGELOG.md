@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The experiment `langermann_partial` (#153): the Langermann function, box and
+  optimum of `langermann`, with known and unknown equations. The squared distances
+  from centers 1 and 4 are mechanistic states with known equations, and those from
+  centers 2, 3 and 5 are unknown states, so standard BO and Latin hypercube sampling
+  behave exactly as on `langermann`. SoftSAA-EI's temperature is 5e-3.
 - **Changes results:** The experiments' SoftSAA-EI temperatures are about 1e-3 times
   each optimum's magnitude, set from trial runs, instead of 1e-6, which took tiny
   local steps: 50e-3 for `illustrative_example` and `illustrative_example_2d`, 5e-3
