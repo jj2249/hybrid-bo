@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Changes results:** The experiments' SoftSAA-EI temperatures are about 1e-3 times
+  each optimum's magnitude, set from trial runs, instead of 1e-6, which took tiny
+  local steps: 50e-3 for `illustrative_example` and `illustrative_example_2d`, 5e-3
+  for `langermann`, and 100e-3 for `rosenbrock` (whose optimum is 0). The library is
+  unchanged; the illustrative example's `hybrid_bo_soft` regression baseline changes.
 - **Breaking:** Parallel studies are tasks over files, which checkpoint and resume
   (#143, #145, #156, ADR 0010). A study's runs are its tasks: `hb.study_tasks`,
   `hb.run_task` on each and `hb.assemble`, of which `hb.study` is the composition, so

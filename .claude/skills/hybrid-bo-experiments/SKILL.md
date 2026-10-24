@@ -48,7 +48,8 @@ shipped experiments giving every method the same budget), `study_settings`
   the solver, `jitter`, kernel priors, `ard`, `unknown_states_as_variables=True`). The
   settings and choice dataclasses, `GP`, `Configuration` and `StudySettings` are
   keyword-only:
-  `hb.SoftSAA(temperature=1e-6, n_scenarios=25, unknown_states_as_variables=False)`.
+  `hb.SoftSAA(temperature=5e-3, n_scenarios=25, unknown_states_as_variables=False)`
+  (the experiments take a temperature of about 1e-3 times the optimum's magnitude).
   Leaving one out, or passing one by position, raises `TypeError`.
 - Define the GP once as a module-level `gp`, each fitted
   hyperparameter its own variable so the experiment shows them all (see

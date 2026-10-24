@@ -640,7 +640,11 @@ SAA-EI stays the paper's and the two can be compared as settings of one study.
   worked example of [ADR 0009](docs/adr/0009-defaults-never-choose-the-method.md)). The
   log already gives a gradient at any temperature, so it only needs to be small: a
   measured point has no scenario spread and scores `τ log 2`, so a temperature
-  near the improvements makes the noise-free loop re-measure the incumbent.
+  near the improvements makes the noise-free loop re-measure the incumbent. Too
+  small, and it takes tiny local steps (its EI underflows away from the incumbent).
+  The experiments use about 1e-3 times the optimum's magnitude (5e-3 for Langermann,
+  50e-3 for the illustrative examples), set from trial runs; Rosenbrock, whose
+  optimum is 0, uses 100e-3.
 - **EI only.** LCB has no maximum to soften, so `LCB` with `SoftSAA` is a
   `ValueError`, not `NotImplementedError`.
 - **The stored value is −log SoftSAA-EI**, the objective the problem minimizes, as
