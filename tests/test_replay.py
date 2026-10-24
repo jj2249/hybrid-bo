@@ -38,7 +38,7 @@ from hybrid_bo import (
     plots,
 )
 from hybrid_bo.gp import predict
-from hybrid_bo.plots import _N_GRID, _N_GRID_2D, _replay
+from hybrid_bo.plots import _N_GRID, _replay
 from hybrid_bo.sampling import _start_bounds
 
 REFERENCES = Path(__file__).parent / "data" / "replay"
@@ -55,6 +55,9 @@ APPROXIMATIONS = {
     ),
 }
 EXAMPLES = {"1d": (ex.problem, ex.measure), "2d": (ex_2d.problem, ex_2d.measure)}
+# Grid points over each decision variable in 2D: fewer than the figure's 30, which
+# keeps the recorded values small; the replay takes any points
+N_GRID_2D = 10
 
 
 # `functools.cache` builds each run once, for every test that needs it
@@ -71,16 +74,16 @@ def hybrid_run(example: str, approximation: str) -> Run:
     return pickle.loads(pickle.dumps(run))
 
 
-def figure_grid(problem: Problem, run: Run, i: int) -> np.ndarray:
-    """The rows of u the iteration figure replays at: in 1D its 101 points over the
-    start bounds with the trial point inserted, in 2D the trial point, then its
-    30 x 30 grid."""
+def replay_grid(problem: Problem, run: Run, i: int) -> np.ndarray:
+    """The rows of u to replay at, as the iteration figure orders them: in 1D its 101
+    points over the start bounds with the trial point inserted, in 2D the trial
+    point, then a 10 x 10 grid over the start bounds."""
     trial = run.history.u[run.history.n_initial + i]
     lower, upper = _start_bounds(problem.system.u)
     if problem.system.n_u == 1:
         grid = np.linspace(lower[0], upper[0], _N_GRID)
         return np.sort(np.append(grid, trial))[:, np.newaxis]
-    u1, u2 = (np.linspace(lower[j], upper[j], _N_GRID_2D) for j in range(2))
+    u1, u2 = (np.linspace(lower[j], upper[j], N_GRID_2D) for j in range(2))
     U1, U2 = np.meshgrid(u1, u2)
     return np.vstack([trial, np.column_stack([U1.ravel(), U2.ravel()])])
 
@@ -107,7 +110,7 @@ def test_replay_matches_the_ipopt_replay(example, approximation, i):
     problem = EXAMPLES[example][0]
     run = hybrid_run(example, approximation)
     reference = np.load(REFERENCES / f"{example}-{approximation}-{i}.npz")
-    u = figure_grid(problem, run, i)
+    u = replay_grid(problem, run, i)
     np.testing.assert_array_equal(u, reference["u"])
 
     # Act
@@ -140,7 +143,7 @@ def test_both_formulations_replay_the_same_values(example):
             run.settings.approximation, unknown_states_as_variables=True
         ),
     )
-    u = figure_grid(problem, run, 1)
+    u = replay_grid(problem, run, 1)
 
     # Act
     values, f, _ = _replay(run, problem, 1, run.settings, u)
