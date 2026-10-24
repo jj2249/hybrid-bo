@@ -394,6 +394,12 @@ When something goes wrong
 - **ReconstructionWarning**: with an oracle, the measured variables don't pin the
   states down to the oracle's values (``g`` has several roots). Narrow the start
   bounds of the unmeasured states to the right branch, or measure other variables.
+- **ReplayWarning** when plotting: an iteration figure's replay of hybrid BO's
+  acquisition function found another root of the known equations at the trial
+  point than the run's solution (or none within the bounds), so the acquisition
+  panel may show another branch than the one the run optimized. The run itself is
+  unaffected; the figure is still drawn, and its 2D acquisition panel notes the
+  stored and replayed values.
 - **Starts stopped at IPOPT's iteration limit** (a warning naming the NLP's
   objective, such as ``negative_log_marginal_likelihood`` for a GP fit): the fit or
   acquisition problem is hard to solve, and the run is slow. A GP fit that also warns

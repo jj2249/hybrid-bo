@@ -111,6 +111,9 @@ testpaths = ["tests"]
 # Experiments are imported as top-level modules, as `python -m` runs them from
 # experiments/
 pythonpath = ["experiments"]
+# A replay that leaves the optimizer's branch is a bug in the tests' runs; a test that
+# expects it catches it with `pytest.warns`
+filterwarnings = ["error::hybrid_bo.errors.ReplayWarning"]
 
 [tool.ty.environment]
 python-version = "3.12"

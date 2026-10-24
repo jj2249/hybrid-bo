@@ -22,6 +22,14 @@
   study log starts each line of a run with its tag (`hybrid_bo/run-003`) and holds
   the runs' lines after the launcher's, in task order. The `<id>.log` and
   `<id>.logs` beside the study folders are gone. Results are unchanged.
+- Faster iteration figures for hybrid BO with mechanistic states (#154): the replay
+  of the acquisition function root-finds each scenario's states with Newton's method
+  (CasADi's `rootfinder`), mapped over the grid in rings outwards from the trial
+  point, instead of one IPOPT solve per grid point, and evaluates the acquisition
+  problem's objective there. A grid point whose root falls outside a state's bounds
+  is still a gap. A new `hb.ReplayWarning` says when the replay at the trial point
+  isn't the run's stored solution. Results are unchanged; figures differ from before
+  only by IPOPT's tolerance.
 - Figures of an initial-fraction sweep (#146): `hb.plots.budget_heatmap` (median
   log10 regret by budget and number of initial points, with lines of constant
   initial fraction and the best one at each budget), `hb.plots.regret_at_budget`

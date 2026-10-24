@@ -32,6 +32,7 @@ from hybrid_bo.errors import (
     NoSolutionError,
     OracleOptimumWarning,
     ReconstructionWarning,
+    ReplayWarning,
     RootFindingError,
 )
 from hybrid_bo.evaluation import Measure, oracle_measure, oracle_optimum
