@@ -287,7 +287,10 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - `plots.py`: static figures, no widgets and no `rng`. `convergence(study, ax)` and
   `regret(study, optimum, ax)` draw `evaluations` (median and IQR per method over
   evaluations, `_over_evaluations`). A sweep over initial fractions of one method
-  has `budget_heatmap`, `regret_at_budget(study, budget)` and
+  has `budget_heatmap(study, optimum, ax, tolerance)` (ε on x, budget on y, one
+  `PolyCollection` rectangle per cell spanning ε halfway to the neighboring
+  n_initial; median log10 regret, or with `tolerance` the fraction of runs within
+  it), `regret_at_budget(study, budget)` and
   `regret_by_initial_fraction`, all from `_sweep_regret` (regret per evaluation with
   each run's `history.n_initial`; `ValueError` unless every run has the same
   `artifact["method"]` and `repr(run.settings)`; of runs with the same n_initial

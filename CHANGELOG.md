@@ -2,10 +2,16 @@
 
 ## Unreleased
 
+- `hb.plots.budget_heatmap` (#147) draws the budget on y and the initial fraction
+  on x, so a row is the choice at one budget, and drops the lines of constant
+  initial fraction and of the best one at each budget. Its new `tolerance` colors
+  each cell by the fraction of runs whose regret is at most `tolerance` instead of
+  the median log10 regret.
 - The experiment `langermann_sweep` (#147): a sweep of SoftSAA-EI over initial
   fractions on `langermann_partial`'s problem, with n_initial = 2, 4, ..., 38 and 40
-  evaluations each, which plots `budget_heatmap`, `regret_at_budget` at a budget of
-  20 and `regret_by_initial_fraction`.
+  evaluations each, which plots `budget_heatmap` of the median regret and of the
+  runs within 0.027 of the optimum, `regret_at_budget` at budgets of 10, 20, 30 and
+  40, and `regret_by_initial_fraction`.
 - The experiment `langermann_partial` (#153): the Langermann function, box and
   optimum of `langermann`, with known and unknown equations. The squared distances
   from centers 1 and 4 are mechanistic states with known equations, and those from

@@ -57,11 +57,12 @@ The figures
   there are three, each refusing a study of more than one method (other settings
   count as another method):
 
-  - :py:func:`~hybrid_bo.plots.budget_heatmap`: the median log10 regret by budget
-    B (evaluations so far) and ``n_initial``, wherever ``n_initial < B``, with
-    dashed lines of constant ε and a line through the best ``n_initial`` at each
-    budget. One run per ``n_initial`` gives every budget it reaches, by the prefix
-    property.
+  - :py:func:`~hybrid_bo.plots.budget_heatmap`: the median log10 regret by ε (x)
+    and budget B (y, evaluations so far), wherever ``n_initial < B``, so each row is
+    the choice at one budget. With ``tolerance``, the fraction of runs whose regret
+    is at most ``tolerance`` instead: a median can't tell runs at the optimum from
+    runs stuck in a local minimum just above it. One run per ``n_initial`` gives
+    every budget it reaches, by the prefix property.
   - :py:func:`~hybrid_bo.plots.regret_at_budget`: the median regret and its IQR
     against ε at one budget.
   - :py:func:`~hybrid_bo.plots.regret_by_initial_fraction`: the median regret over
