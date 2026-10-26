@@ -14,7 +14,10 @@ variables; `rosenbrock.py` (P = 2) and `langermann.py` (P = 5) have no
 known equations (M = 0), and `langermann_partial.py` is `langermann.py` with explicit
 known equations of u alone (M = 2, P = 3); `langermann_sweep.py` is its sweep over
 initial fractions for one method (one configuration per `n_initial`, and the sweep's
-`figures`). Use GLOSSARY.md's terms. This file adds only what an agent needs on top.
+`figures`). `cstr_series_reaction.py` is a 1D chemical engineering experiment
+(M = 2, P = 1) whose unknown state is a log rate constant, so every GP scenario keeps
+the known equations solvable. Use GLOSSARY.md's terms. This file adds only what an
+agent needs on top.
 
 ## Layout contract
 
