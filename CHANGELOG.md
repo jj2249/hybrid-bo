@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.5.0 (2026-10-26)
+
 - `hb.plots.budget_heatmap` (#147) draws the budget on y and the initial fraction
   on x, so a row is the choice at one budget, and drops the lines of constant
   initial fraction and of the best one at each budget. Its new `tolerance` colors
