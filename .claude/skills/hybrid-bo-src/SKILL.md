@@ -430,6 +430,16 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `test_studies.py`, `test_views.py`, `test_run.py`, `test_replay.py` (the replay
   against values recorded from the IPOPT replay it replaced, `tests/data/replay/`)) compare against
   numpy/scipy references or closed forms. Add one when changing math.
+- A test that expects the same run on every machine needs a well-conditioned run:
+  enough initial points to identify the GP's hyperparameters. Machines differ in
+  the last digits (BLAS, libm, IPOPT), and with too few points the likelihood and
+  the acquisition function are flat, so the hyperparameter fit and the acquisition
+  solve magnify that into different points. On the 2D illustrative example with
+  SoftSAA-EI (#165), 2 initial points turned a 1e-12 change in them into 5e-4 in the
+  second trial point; 2d + 1 (5) kept it at 1e-11. Use at least 2d + 1 initial
+  points (1D needs 3; 2d + 1 is a rule of thumb, checked only on these examples).
+  To check a run, nudge its initial points by 1e-12 and compare the trial points.
+  Compare a run's points and values to a tolerance.
 - Tests follow the comment rules in CLAUDE.md Conventions (docstrings, commented
   blocks, a note on the first use of each pytest feature); `test_standard_bo.py` is
   the example.

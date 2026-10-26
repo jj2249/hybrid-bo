@@ -4,8 +4,8 @@ the iteration figures draw.
 The replay solves each scenario's equations with u fixed by Newton's method and
 evaluates the acquisition problem's objective there. The reference values in `tests/data/replay/`
 were recorded from the replay it replaced (#154), which solved the acquisition problem
-with IPOPT at each grid point, so they check the root-finder against an independent
-solver on the same runs.
+with IPOPT at each grid point (to a tolerance of 1e-12 since #165), so they check the
+root-finder against an independent solver on the same runs.
 """
 
 import functools
@@ -64,12 +64,13 @@ N_GRID_2D = 10
 @functools.cache
 def hybrid_run(example: str, approximation: str) -> Run:
     """A pickled hybrid BO run of an illustrative example with one of
-    `APPROXIMATIONS`: 2 initial points, then 2 iterations."""
+    `APPROXIMATIONS`: 2N + 1 initial points, which identify the GP's hyperparameters
+    so the run is the same on every machine (#165), then 2 iterations."""
     problem, measure = EXAMPLES[example]
     acquisition, approx = APPROXIMATIONS[approximation]
     settings = HybridBOSettings(gp=ex.gp, acquisition=acquisition, approximation=approx)
     rng = np.random.default_rng(0)
-    u = initial_points(problem.system.u, 2, rng)
+    u = initial_points(problem.system.u, 2 * problem.system.n_u + 1, rng)
     run = hybrid_bo(problem, measure, u, 2, rng, settings=settings)
     return pickle.loads(pickle.dumps(run))
 
@@ -102,16 +103,18 @@ def test_replay_matches_the_ipopt_replay(example, approximation, i):
     """The replayed acquisition values, f under each scenario and Lin-EI's std match
     the values the IPOPT replay recorded, with NaN at the same grid points (the
     recorded values have none; `test_a_root_outside_the_bounds_leaves_a_gap` checks
-    the gaps). The values and the std agree to 1e-5 relative, f to 1e-6 relative or
-    1e-5 absolute: IPOPT met the known equations only to its tolerance, which moves f
-    by up to about 1e-5 where it is steep (Newton's roots match scipy's brentq on
-    x + exp(x) = y to 1e-9)."""
+    the gaps). The values agree to 1e-6 relative and f to 1e-7: both solvers meet
+    the known equations to about 1e-9 (Newton's roots match scipy's brentq on
+    x + exp(x) = y to 1e-9), which leaves room for machines that round differently.
+    Lin-EI's std agrees to 1e-5 relative."""
     # Setup: the run and the recorded values
     problem = EXAMPLES[example][0]
     run = hybrid_run(example, approximation)
     reference = np.load(REFERENCES / f"{example}-{approximation}-{i}.npz")
+    # The trial point comes from the run, whose solves round differently on other
+    # machines, so it matches the recorded one only to a tolerance
     u = replay_grid(problem, run, i)
-    np.testing.assert_array_equal(u, reference["u"])
+    np.testing.assert_allclose(u, reference["u"], rtol=0, atol=1e-6)
 
     # Act
     assert run.settings is not None
@@ -119,8 +122,8 @@ def test_replay_matches_the_ipopt_replay(example, approximation, i):
 
     # Check: the values, and Lin-EI's std only with linearization
     assert f is not None
-    np.testing.assert_allclose(values, reference["values"], rtol=1e-5, atol=1e-12)
-    np.testing.assert_allclose(f, reference["f"], rtol=1e-6, atol=1e-5)
+    np.testing.assert_allclose(values, reference["values"], rtol=1e-6, atol=1e-12)
+    np.testing.assert_allclose(f, reference["f"], rtol=1e-7, atol=1e-7)
     if approximation == "lin":
         assert f_std is not None
         np.testing.assert_allclose(f_std, reference["f_std"], rtol=1e-5, atol=1e-12)
