@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- The experiment `cstr_series_reaction` (#168): a 1D chemical engineering example
+  for students. An isothermal CSTR runs A → B → C at a reactor temperature from 300
+  to 400 K, for the most B at the outlet. The mole balances and the Arrhenius
+  kinetics of B → C are known, and ln k_1 of the catalytic step A → B is the unknown
+  state. It compares SoftSAA-EI, standard BO and Latin hypercube sampling with 7
+  evaluations, 3 of them initial points.
+
 ## 0.5.1 (2026-10-26)
 
 - Assembling a study no longer fails on Windows (#163): the study log is closed
