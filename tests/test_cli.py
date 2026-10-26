@@ -1130,6 +1130,9 @@ def test_ctrl_c_stops_a_study_at_once(tmp_path, n_interrupts):
 
     `skipif` skips the test where the condition holds.
     """
+    # The skip, for ty, which checks `os.killpg` and `signal.SIGKILL` on the platform
+    # it runs on and doesn't read `skipif`
+    assert sys.platform != "win32"
     # Setup: the study in its own process group, as a terminal runs a command, with
     # two tasks at once
     (tmp_path / "stubborn.py").write_text(STUBBORN)
