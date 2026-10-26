@@ -1,7 +1,7 @@
 """A CSTR running the series reactions A -> B -> C, with the temperature to choose.
 
-One decision variable, the temperature T; two mechanistic states, the outlet
-concentrations c_A and c_B; and one unknown state, the rate constant k_1 of the
+One decision variable, the reactor temperature T; two mechanistic states, the outlet
+concentrations c_A and c_B; and one unknown state, the log rate constant ln k_1 of the
 catalytic step A -> B. The known equations are the steady-state mole balances on A and
 B, with the known Arrhenius kinetics of the breakdown B -> C; the catalyst's kinetics
 k_1(T) are known only to the oracle. The objective is the most B at the outlet. Since
@@ -10,6 +10,8 @@ bounds. Run it, then plot the newest study:
 
     pixi run experiment cstr_series_reaction [--n-runs 3 --plot ...]
     pixi run plot cstr_series_reaction
+
+`pixi run experiment cstr_series_reaction --help` lists the flags.
 """
 
 import functools
@@ -22,7 +24,7 @@ import hybrid_bo as hb
 # Fixed values: residence time V/F [min], feed concentration of A [mol/L], and the
 # reference temperature [K] the Arrhenius laws are written about, which keeps their
 # exponents of order 1
-tau = 10.0
+residence_time = 10.0
 c_A0 = 1.0
 T_ref = 350.0
 
@@ -30,6 +32,11 @@ T_ref = 350.0
 def k_2(T):
     """The known rate constant of the breakdown B -> C [1/min], E_2/R = 10000 K."""
     return 0.02 * cas.exp(-10000.0 * (1 / T - 1 / T_ref))
+
+
+def rate_1(v):
+    """The rate of the catalytic step A -> B [mol/(L min)], first order in A."""
+    return cas.exp(v.ln_k_1) * v.c_A
 
 
 # Problem: what we know about the physics, and what we want. Concentrations lie between
@@ -46,10 +53,8 @@ system = hb.System(
     x=[c_A, c_B],
     y=[ln_k_1],
     g=lambda v: [
-        c_A0 - v.c_A - tau * cas.exp(v.ln_k_1) * v.c_A,  # mole balance on A
-        tau * cas.exp(v.ln_k_1) * v.c_A
-        - v.c_B
-        - tau * k_2(v.T) * v.c_B,  # mole balance on B
+        c_A0 - v.c_A - residence_time * rate_1(v),  # mole balance on A
+        residence_time * (rate_1(v) - k_2(v.T) * v.c_B) - v.c_B,  # mole balance on B
     ],
     h_inputs=[T],  # ln k_1 = h(T)
     measured=[ln_k_1],
@@ -58,7 +63,7 @@ problem = hb.Problem(system, f=lambda v: -v.c_B)
 
 
 # Measurement: an oracle plays the real reactor. In a plant, k_1 would be inferred from
-# the measured outlet c_A as (c_A0 - c_A) / (tau c_A)
+# the measured outlet c_A as (c_A0 - c_A) / (residence_time c_A)
 def oracle(v):
     """The catalyst's kinetics ln k_1(T), k_1 in 1/min and E_1/R = 5000 K, hidden from
     the methods."""
@@ -84,8 +89,10 @@ gp = hb.gp.GP(
     noise_std=0.0,
 )
 
-# Methods: hybrid BO with SoftSAA-EI at a temperature of 5e-4, about 1e-3 times the
-# optimum's magnitude (about 0.56), standard BO, and Latin hypercube sampling
+# Methods: each takes (problem, measure, initial_points, n, rng), where n is the
+# number of iterations, or of design points for the baseline. Hybrid BO with SoftSAA-EI
+# at a SoftSAA temperature of 5e-4, about 1e-3 times the optimum's magnitude (about
+# 0.56), standard BO, and Latin hypercube sampling
 methods = {
     "hybrid_bo_soft": functools.partial(
         hb.hybrid_bo,
@@ -104,7 +111,8 @@ methods = {
 }
 
 # Configurations: every method with the same budget, 7 evaluations, the first 3 of
-# them initial points (so 4 iterations)
+# them initial points (so 4 iterations). With 2, the GP of ln k_1 is nearly flat and
+# hybrid BO spends its first iteration exploring
 configurations = {
     label: hb.Configuration(method=method, n_evaluations=7, n_initial=3)
     for label, method in methods.items()

@@ -28,7 +28,7 @@ compare. `cli.py` is the shared command line, not an experiment.
   instead of the
   convergence and regret figures. The full study is about 18 hours on one core, so
   run it with `--n-workers`.
-- `cstr_series_reaction.py`: a 1D chemical engineering example for students. A CSTR
+- `cstr_series_reaction.py`: a 1D chemical engineering experiment for students. A CSTR
   runs A → B → C at a reactor temperature to choose, for the most B at the outlet.
   The mole balances and the kinetics of B → C are known; ln k_1 of the catalytic step
   A → B is the unknown state, with an oracle, comparing SoftSAA-EI, standard BO and
