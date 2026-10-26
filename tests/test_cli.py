@@ -425,7 +425,8 @@ def test_the_experiment_runs_as_a_module_from_the_experiments_folder():
 
 def test_the_study_log_records_each_run_and_iteration(tmp_path, experiment):
     """A study saves its study log, `study.log`, in its folder: each configuration,
-    each task as it starts and finishes with a count, and every line of each run,
+    each task as it starts and finishes with a count, the runs it saved (logged after
+    the study log is rebuilt), and every line of each run,
     tagged with the run: each iteration with its time and the incumbent at INFO, and
     the time of each GP fit and multistart at DEBUG."""
     # One method, two runs of two iterations
@@ -441,6 +442,7 @@ def test_the_study_log_records_each_run_and_iteration(tmp_path, experiment):
     assert "Configuration standard_bo: 2 runs of 4 evaluations" in log
     assert "Started standard_bo/run-000" in log
     assert "Finished standard_bo/run-001: 2 of 2 done" in log
+    assert "standard_bo: saved 2 of 2 runs to" in log
 
     # INFO: each run, the initial points and each iteration
     assert "Run 1 of 2 finished in" in log
@@ -1130,6 +1132,9 @@ def test_ctrl_c_stops_a_study_at_once(tmp_path, n_interrupts):
 
     `skipif` skips the test where the condition holds.
     """
+    # The skip, for ty, which checks `os.killpg` and `signal.SIGKILL` on the platform
+    # it runs on and doesn't read `skipif`
+    assert sys.platform != "win32"
     # Setup: the study in its own process group, as a terminal runs a command, with
     # two tasks at once
     (tmp_path / "stubborn.py").write_text(STUBBORN)
