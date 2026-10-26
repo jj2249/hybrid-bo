@@ -17,7 +17,7 @@ import numpy as np
 import pytest
 import scipy
 from matplotlib.axes import Axes
-from matplotlib.collections import QuadMesh
+from matplotlib.collections import PolyCollection, QuadMesh
 from matplotlib.contour import ContourSet
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
@@ -321,26 +321,39 @@ def sweep_regret(n_initial: int) -> np.ndarray:
     return np.minimum.accumulate(np.array(rows), axis=1)
 
 
+def rectangles(ax: Axes) -> list[tuple[float, float, int, float]]:
+    """The heatmap's drawn cells as (low, high, budget, value): the span in initial
+    fraction, the budget at the center of the height, and the cell's value."""
+    (collection,) = [c for c in ax.collections if isinstance(c, PolyCollection)]
+    values = np.asarray(collection.get_array())
+    drawn = []
+    for path, value in zip(collection.get_paths(), values):
+        vertices = np.asarray(path.vertices)
+        low, bottom = vertices.min(axis=0)
+        high, top = vertices.max(axis=0)
+        drawn.append((float(low), float(high), round((bottom + top) / 2), float(value)))
+    return drawn
+
+
 def cells(ax: Axes) -> dict[tuple[int, int], float]:
-    """The heatmap's drawn cells, by (budget, n_initial) at their centers; cells
-    without a value are left out."""
-    (mesh,) = [c for c in ax.collections if isinstance(c, QuadMesh)]
-    corners = np.asarray(mesh.get_coordinates())
-    centers = (corners[:-1, :-1] + corners[1:, 1:]) / 2
-    values = np.ma.masked_invalid(np.ma.asarray(mesh.get_array())).reshape(
-        centers.shape[:2]
-    )
-    return {
-        (round(x), round(y)): float(value)
-        for (x, y), value in zip(centers.reshape(-1, 2), values.ravel())
-        if value is not np.ma.masked
-    }
+    """The heatmap's drawn cells, by (budget, n_initial): a cell's n_initial is the
+    one in `SWEEP_N_INITIALS` whose initial fraction it spans."""
+    drawn = {}
+    for low, high, budget, value in rectangles(ax):
+        (n_initial,) = [n for n in SWEEP_N_INITIALS if low < n / budget < high]
+        drawn[budget, n_initial] = value
+    return drawn
+
+
+def spans(ax: Axes, budget: int) -> list[tuple[float, float]]:
+    """The spans in initial fraction of the heatmap's cells at `budget`, in order."""
+    return sorted((low, high) for low, high, b, _ in rectangles(ax) if b == budget)
 
 
 def test_budget_heatmap_cells_are_the_median_log10_regret():
     """A cell at budget B and n_initial initial points is the median over the runs of
     log10 of the regret after B evaluations, and there is a cell wherever n_initial <
-    B."""
+    B; the initial fraction is on x and the budget on y."""
     # Act
     ax = plots.budget_heatmap(sweep_study())
 
@@ -358,47 +371,51 @@ def test_budget_heatmap_cells_are_the_median_log10_regret():
     assert drawn.keys() == expected.keys()
     for key, value in expected.items():
         assert np.isclose(drawn[key], value), key
-    assert ax.get_xlim() == (1.5, SWEEP_N_EVALUATIONS + 0.5)
-    assert ax.get_xlabel() == "evaluations (budget)"
-    assert ax.get_ylabel() == "initial points"
+    assert ax.get_xlim() == (0.0, 1.0)
+    assert ax.get_ylim() == (1.5, SWEEP_N_EVALUATIONS + 0.5)
+    assert ax.get_xlabel() == "initial fraction ε"
+    assert ax.get_ylabel() == "evaluations (budget)"
     plt.close("all")
 
 
-def test_budget_heatmap_marks_the_best_initial_fraction_at_each_budget():
-    """The line of the best initial fraction passes, at each budget, through the
-    n_initial with the lowest median log10 regret; dashed lines mark constant
-    initial fractions, n_initial = ε B."""
+def test_budget_heatmap_with_a_tolerance_draws_the_fraction_of_runs_within_it():
+    """With a tolerance, a cell is the fraction of runs whose regret after B
+    evaluations is at most the tolerance, on a color scale from 0 to 1."""
+    # Setup: the median regret of every run at its last evaluation, so some runs are
+    # within it and some aren't
+    tolerance = float(
+        np.median(np.concatenate([sweep_regret(n)[:, -1] for n in SWEEP_N_INITIALS]))
+    )
+
     # Act
+    ax = plots.budget_heatmap(sweep_study(), tolerance=tolerance)
+
+    # Check: every cell against numpy, and the color scale
+    for (budget, n_initial), value in cells(ax).items():
+        within = sweep_regret(n_initial)[:, budget - 1] <= tolerance
+        assert np.isclose(value, within.mean()), (budget, n_initial)
+    (collection,) = [c for c in ax.collections if isinstance(c, PolyCollection)]
+    assert collection.get_clim() == (0.0, 1.0)
+    plt.close("all")
+
+
+def test_budget_heatmap_cells_span_halfway_to_their_neighbors():
+    """A cell spans the initial fraction from halfway to the next smaller n_initial
+    to halfway to the next larger one (as far on the outside), over its budget, and
+    within [0, 1]: at budget 5 with n_initial 1, 2 and 4 that is 0.5-1.5, 1.5-3 and
+    3-5 initial points."""
     ax = plots.budget_heatmap(sweep_study())
 
-    # Expected: per budget, the n_initial of the lowest median log10 regret (numpy)
-    expected = []
-    for budget in range(2, SWEEP_N_EVALUATIONS + 1):
-        medians = {
-            n_initial: np.median(np.log10(sweep_regret(n_initial)[:, budget - 1]))
-            for n_initial in SWEEP_N_INITIALS
-            if n_initial < budget
-        }
-        expected.append(min(medians, key=medians.__getitem__))
-
-    # Check: the best line
-    best = drawn_line(ax, "best initial fraction")
-    budgets = range(2, SWEEP_N_EVALUATIONS + 1)
-    np.testing.assert_array_equal(np.asarray(best.get_xdata()), budgets)
-    np.testing.assert_array_equal(np.asarray(best.get_ydata()), expected)
-
-    # The lines of constant initial fraction
-    for epsilon in (0.25, 0.5):
-        drawn = drawn_line(ax, f"ε = {epsilon:g}")
-        x = np.asarray(drawn.get_xdata())
-        np.testing.assert_allclose(np.asarray(drawn.get_ydata()), epsilon * x)
+    np.testing.assert_allclose(
+        spans(ax, 5), [(0.5 / 5, 1.5 / 5), (1.5 / 5, 3 / 5), (3 / 5, 1.0)]
+    )
     plt.close("all")
 
 
 def test_budget_heatmap_leaves_out_budgets_without_cells():
     """A budget no run reaches with an iteration (here 4 and 5: the n_initial = 1
     runs end at 3 evaluations, and the n_initial = 5 runs have no iterations before
-    6) has no cells and no best initial fraction."""
+    6) has no cells."""
     # Setup: n_initial = 1 to 3 evaluations, n_initial = 5 to 7
     runs = [
         fake_run("hybrid_bo", 0, [3.0, 2.0, 1.0], [3.0, 2.0, 1.0], n_initial=1),
@@ -409,11 +426,8 @@ def test_budget_heatmap_leaves_out_budgets_without_cells():
     # Act
     ax = plots.budget_heatmap(study)
 
-    # Check: cells at budgets 2, 3, 6 and 7 only, and the best line through them
-    assert sorted(cells(ax)) == [(2, 1), (3, 1), (6, 5), (7, 5)]
-    best = drawn_line(ax, "best initial fraction")
-    np.testing.assert_array_equal(np.asarray(best.get_xdata()), [2, 3, 6, 7])
-    np.testing.assert_array_equal(np.asarray(best.get_ydata()), [1, 1, 5, 5])
+    # Check: cells at budgets 2, 3, 6 and 7 only
+    assert [budget for budget in range(2, 8) if spans(ax, budget)] == [2, 3, 6, 7]
     plt.close("all")
 
 
