@@ -22,8 +22,10 @@ compare. `cli.py` is the shared command line, not an experiment.
   and Latin hypercube sampling behave exactly as on `langermann.py`.
 - `langermann_sweep.py`: a sweep over initial fractions on `langermann_partial.py`'s
   problem for SoftSAA-EI, n_initial = 2, 4, ..., 38, each run to 40 evaluations. It
-  plots the budget heatmap, the regret against the initial fraction at a budget of
-  20, and the regret over evaluations by number of initial points instead of the
+  plots budget heatmaps of the median regret and of the fraction of runs that reach
+  the global optimum's basin, the regret against the initial fraction at budgets of
+  10, 20, 30 and 40, and the regret over evaluations by number of initial points
+  instead of the
   convergence and regret figures. The full study is about 18 hours on one core, so
   run it with `--n-workers`.
 

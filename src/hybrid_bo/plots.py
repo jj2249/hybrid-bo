@@ -56,7 +56,6 @@ _DECADES = 2  # a panel of f spanning more decades than this has a log color sca
 _ZERO_EI_COLOR = "lightgray"
 _EI_DECADES = 10  # the EI color scale stops this many decades below the largest EI
 _CONFIDENCE = 0.9  # probability inside the confidence bands
-_EPSILONS = (0.1, 0.25, 0.5, 0.75)  # initial fractions marked on the budget heatmap
 _RESIDUAL_TOLERANCE = 1e-8  # a replay's root solves each equation to this
 # The replay at the trial point is the stored solution to these, loose enough for
 # IPOPT's and Newton's tolerances, tight enough to tell another root
@@ -147,15 +146,20 @@ def _over_evaluations(
 
 
 def budget_heatmap(
-    study: Study, optimum: float | None = None, ax: "Axes | None" = None
+    study: Study,
+    optimum: float | None = None,
+    ax: "Axes | None" = None,
+    tolerance: float | None = None,
 ) -> "Axes":
-    """The median log10 regret of a sweep over initial fractions of one method, by
-    budget B (x, evaluations so far) and number of initial points (y), with a
-    colorbar. There is a cell wherever n_initial < B, read from the runs with that
-    n_initial after B evaluations (the prefix property), so one run per n_initial
-    gives every budget it reaches. Dashed lines mark constant initial fractions ε =
-    n_initial / B, and a line the best n_initial at each budget with a cell, the
-    lowest median.
+    """A sweep over initial fractions of one method by initial fraction ε =
+    n_initial / B (x) and budget B (y, evaluations so far), with a colorbar, so a
+    row is the choice of n_initial at one budget. A cell is the median log10 regret
+    over the runs or, with `tolerance`, the fraction of runs whose regret is at
+    most `tolerance` (a median can't tell runs at the optimum from runs stuck in a
+    local minimum just above it). There is a cell wherever n_initial < B, read from
+    the runs with that n_initial after B evaluations (the prefix property), so one
+    run per n_initial gives every budget it reaches. A cell spans ε halfway to the
+    neighboring numbers of initial points, so the cells of a row tile it.
 
     The oracle optimum is `optimum` if given, else the study's recorded one. Raises
     `ValueError` if the runs are of more than one method or the study has no
@@ -163,69 +167,57 @@ def budget_heatmap(
     """
     import matplotlib.pyplot as plt
     import polars as pl  # `_sweep_regret` checks it is installed
+    from matplotlib.collections import PolyCollection
 
-    # The cells: one row per n_initial, one column per budget, NaN without runs
+    # The cells: one per n_initial and budget with runs
+    regret = pl.col("regret")
+    value = (
+        regret.log10().median() if tolerance is None else (regret <= tolerance).mean()
+    )
     rows = _sweep_regret(study, optimum).filter(
         pl.col("n_initial") < pl.col("evaluation")
     )
-    cells = rows.group_by("n_initial", "evaluation").agg(
-        value=pl.col("regret").log10().median()
-    )
-    n_initials = sorted(cells["n_initial"].unique().to_list())
-    last = cells["evaluation"].to_numpy().max()
-    budgets = np.arange(n_initials[0] + 1, last + 1)
-    values = np.full((len(n_initials), len(budgets)), np.nan)
-    for n_initial, budget, value in cells.iter_rows():
-        values[n_initials.index(n_initial), budget - budgets[0]] = value
+    cells = rows.group_by("n_initial", "evaluation").agg(value=value)
 
-    # The heatmap, with cells centered on the budgets and the numbers of initial
-    # points; the lines below don't move its limits
+    # Each n_initial's span in initial points: halfway to its neighbors, and as far
+    # on the outside (half a point either side if it is the only one)
+    n_initials = np.sort(cells["n_initial"].unique().to_numpy())
+    middles = (n_initials[:-1] + n_initials[1:]) / 2
+    if len(n_initials) > 1:
+        edges = np.r_[
+            2 * n_initials[0] - middles[0], middles, 2 * n_initials[-1] - middles[-1]
+        ]
+    else:
+        edges = n_initials[0] + np.array([-0.5, 0.5])
+    spans = {n: (low, high) for n, low, high in zip(n_initials, edges[:-1], edges[1:])}
+
+    # The heatmap: one rectangle per cell, its span over its budget in ε (within
+    # [0, 1]), one unit of budget high
     if ax is None:
         with plt.style.context(STYLE):
             _, ax = plt.subplots()
-    mesh = ax.pcolormesh(
-        budgets, n_initials, np.ma.masked_invalid(values), shading="nearest"
+    rectangles, values = [], []
+    for n_initial, budget, cell_value in cells.iter_rows():
+        low, high = np.clip(np.array(spans[n_initial]) / budget, 0.0, 1.0)
+        bottom, top = budget - 0.5, budget + 0.5
+        rectangles.append([(low, bottom), (high, bottom), (high, top), (low, top)])
+        values.append(cell_value)
+    collection = PolyCollection(rectangles, array=np.array(values), edgecolors="face")
+    if tolerance is not None:
+        collection.set_clim(0.0, 1.0)
+    ax.add_collection(collection)
+    label = (
+        "median log$_{10}$ regret"
+        if tolerance is None
+        else f"fraction of runs with regret ≤ {tolerance:g}"
     )
-    ax.figure.colorbar(mesh, ax=ax, label="median log$_{10}$ regret")
-    ax.autoscale_view()
-    ax.autoscale(enable=False)
-
-    # Constant initial fractions, each labeled where it leaves the heatmap
-    (x_low, x_high), (_, y_high) = ax.get_xlim(), ax.get_ylim()
-    for epsilon in _EPSILONS:
-        ax.plot(
-            [x_low, x_high],
-            [epsilon * x_low, epsilon * x_high],
-            color="white",
-            linestyle="--",
-            linewidth=1,
-            label=f"ε = {epsilon:g}",
-        )
-        x_end = min(x_high, y_high / epsilon)
-        ax.annotate(
-            f"ε = {epsilon:g}",
-            (x_end, epsilon * x_end),
-            color="white",
-            fontsize="small",
-            horizontalalignment="right",
-            verticalalignment="bottom",
-        )
-
-    # The best n_initial at each budget that has a cell
-    has_cell = ~np.isnan(values).all(axis=0)
-    best = np.asarray(n_initials)[np.nanargmin(values[:, has_cell], axis=0)]
-    (best_line,) = ax.plot(
-        budgets[has_cell],
-        best,
-        color="black",
-        marker="o",
-        markersize=3,
-        label="best initial fraction",
-    )
-    ax.set_xlabel("evaluations (budget)")
-    ax.set_ylabel("initial points")
+    ax.figure.colorbar(collection, ax=ax, label=label)
+    budgets = cells["evaluation"].to_numpy()
+    ax.set_xlim(0.0, 1.0)
+    ax.set_ylim(budgets.min() - 0.5, budgets.max() + 0.5)
+    ax.set_xlabel("initial fraction ε")
+    ax.set_ylabel("evaluations (budget)")
     ax.grid(visible=False)
-    ax.legend(handles=[best_line], loc="upper left")
     return ax
 
 

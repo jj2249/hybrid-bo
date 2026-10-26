@@ -25,8 +25,10 @@ after 16, 28 s after 38). Run it in parallel, then plot the newest study:
 
 `--method n_initial_16 --method n_initial_36` runs only those configurations.
 
-`plot` draws the budget heatmap, the regret against the initial fraction at a budget
-of 20, and the regret over evaluations by number of initial points, besides the
+`plot` draws the budget heatmaps of the median regret and of the fraction of runs
+that reach the global optimum's basin, the regret against the initial fraction at
+budgets of 10, 20, 30 and 40, and the regret over evaluations by number of initial
+points, besides the
 iteration figures of run 0 of each configuration (without GP panels, since those
 draw one unknown state): 380 of them, one per iteration, which takes a while. `pixi run experiment langermann_sweep --help` lists the
 flags.
@@ -128,6 +130,12 @@ configurations = {
 # which the saved study keeps, so it can be run again exactly
 study_settings = hb.StudySettings(n_runs=10, seed=None)
 
+# The regret that counts as solved in the heatmap of solved runs: incumbents in the
+# global optimum's basin have regret up to about 0.026 after 40 evaluations, and the
+# local minimum near u = (2, 2), where many runs stop, has about 0.028, which the
+# median heatmap can't tell apart
+solved_regret = 0.027
+
 # Run or plot from the command line, drawing the sweep's figures instead of the
 # convergence and regret of every configuration. The oracle measurement is cheap, so
 # the iteration figures draw its oracle values over the grid of u
@@ -142,7 +150,15 @@ if __name__ == "__main__":
         true_curves=True,
         figures={
             "budget": hb.plots.budget_heatmap,
-            "at_budget_20": functools.partial(hb.plots.regret_at_budget, budget=20),
-            "regret_by_initial_fraction": hb.plots.regret_by_initial_fraction,
+            "budget_solved": functools.partial(
+                hb.plots.budget_heatmap, tolerance=solved_regret
+            ),
+            **{
+                f"at_budget_{budget}": functools.partial(
+                    hb.plots.regret_at_budget, budget=budget
+                )
+                for budget in (10, 20, 30, 40)
+            },
+            "regret_by_n_initial": hb.plots.regret_by_initial_fraction,
         },
     )
