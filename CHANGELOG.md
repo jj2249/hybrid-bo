@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Assembling a study no longer fails on Windows (#163): the study log is closed
+  before it is rebuilt, so its lines logged after the rebuild, such as the runs
+  saved, also reach the new study log on Linux and macOS.
+
 ## 0.5.0 (2026-10-26)
 
 - `hb.plots.budget_heatmap` (#147) draws the budget on y and the initial fraction

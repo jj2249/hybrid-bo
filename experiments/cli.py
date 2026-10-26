@@ -878,6 +878,16 @@ def _rebuild_study_log(study_dir: Path, tasks: Sequence[hb.Task]) -> None:
             tag = run_tag(task)
             lines += [f"{tag} {line}" for line in per_run_log.read_text().splitlines()]
     text = "".join(f"{line}\n" for line in lines)
+
+    # Close the handlers logging to the study log, which reopen it on their next
+    # record (in append mode): Windows can't replace an open file, and elsewhere
+    # they would go on writing to the replaced one
+    for handler in logging.getLogger().handlers:
+        if (
+            isinstance(handler, logging.FileHandler)
+            and Path(handler.baseFilename) == study_log.resolve()
+        ):
+            handler.close()
     _write_atomically(study_log, lambda path: path.write_text(text))
 
 
