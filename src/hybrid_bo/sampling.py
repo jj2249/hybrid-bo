@@ -18,11 +18,11 @@ def lhs(
     """
     d = len(lower)
     child = rng.spawn(1)[0]
-    within = child.uniform(size=(n, d))
+    within_stratum = child.uniform(size=(n, d))
     strata = np.tile(np.arange(1, n + 1), (d, 1))
-    for dimension in strata:
-        child.shuffle(dimension)
-    samples = (strata.T - within) / n
+    for strata_of_dimension in strata:
+        child.shuffle(strata_of_dimension)
+    samples = (strata.T - within_stratum) / n
     return lower + (upper - lower) * samples
 
 
