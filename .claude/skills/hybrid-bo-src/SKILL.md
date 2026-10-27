@@ -386,12 +386,14 @@ from its module (`from hybrid_bo.gp import fit_gp`).
      starts, in the order of `system.y`), then acquisition starts, then the
      evaluation.
 
-  **`lhs` doesn't consume the stream.** scipy's `LatinHypercube(rng=rng)` spawns the
-  next child of `rng`'s `SeedSequence`, so `lhs` calls (all `fsolve` starts,
+  **`lhs` doesn't consume the stream.** It draws from the next spawned child of
+  `rng`'s `SeedSequence`, exactly as scipy's `LatinHypercube(rng=rng)` does (it
+  reproduces that draw in numpy, to avoid importing `scipy.stats`), so `lhs` calls (all `fsolve` starts,
   multistart starts, LHS designs) are ordered only among themselves, and stream draws
   (`normal`, `uniform`, `standard_normal`) only among themselves. The regression
   baselines depend on both orders, so adding, removing or reordering a draw in either
-  is a logic change. `tests/test_sampling.py` pins this scipy behavior.
+  is a logic change. `tests/test_sampling.py` pins `lhs` to scipy's draw and its
+  spawning.
 - **Errors propagate** out of a method: a `HybridBOError` carries the partial run
   (`error.run`). Only `repeat` (and so `study`) catches them, per run: it logs the
   error and keeps the partial run.

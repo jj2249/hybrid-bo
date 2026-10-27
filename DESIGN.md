@@ -871,8 +871,9 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   the user set them. GNU parallel was rejected as the local launcher (it needs Perl
   and a POSIX shell, so not Windows), as were joblib/loky, submitit, Ray and Dask:
   none removes the log, warning and Ctrl-C handling, and pickled results don't give
-  resumable run files. A task costs about 1–2 s of startup (CasADi, scipy.stats),
-  negligible next to a Langermann run.
+  resumable run files. A task costs about 0.5–1 s of startup (CasADi,
+  scipy.optimize for the root finding), negligible next to a Langermann run; `lhs`
+  avoids `scipy.stats` (see "A generator has two independent sequences").
 - **An unfinished study** is a folder: the task list `tasks.json` (name, resolved
   seed, `n_runs`, each chosen configuration's budget, oracle optimum, code version,
   the problem's artifact text and the tasks as (label, index)), `study.log`,
@@ -997,17 +998,19 @@ in this order:
 Root-finding starts are drawn even without noise, because the reconstruction always
 runs. Each consumer draws only what it uses, when it uses it.
 
-**A generator has two independent sequences.** scipy's
-`qmc.LatinHypercube(d, rng=rng)` does not consume `rng`'s stream: it spawns the next
-child of `rng`'s `SeedSequence` (as `rng.spawn` does). So every `lhs` call (initial
+**A generator has two independent sequences.** `lhs` does not consume `rng`'s stream:
+it draws from the next spawned child of `rng`'s `SeedSequence` (`rng.spawn(1)[0]`),
+exactly as scipy's `qmc.LatinHypercube(d, rng=rng).random(n)` does. It draws that
+itself because importing `scipy.stats` took about a second per study task (#172).
+So every `lhs` call (initial
 points, fsolve and root-finding starts, multistart starts, LHS designs) is ordered only
 against other `lhs` calls and `spawn`s, and the stream draws (`normal`, `uniform`,
 `standard_normal`: noise, scenarios, the uniform design) only against each other. The
 order above holds within each sequence; the order *between* the two sequences (e.g.
-noise before or after the oracle's fsolve starts) has no effect on any value. New code must keep using
-`LatinHypercube(..., rng=rng)` for `lhs`, and must not add a `spawn` or an `lhs` call
-in the middle of a run, or the baselines move. `tests/test_sampling.py` pins this
-scipy behavior.
+noise before or after the oracle's fsolve starts) has no effect on any value. New code must keep `lhs` drawing
+what `LatinHypercube(..., rng=rng)` would, and must not add a `spawn` or an `lhs` call
+in the middle of a run, or the baselines move. `tests/test_sampling.py` pins `lhs`
+to scipy's draw and its spawning.
 
 ## Removed
 

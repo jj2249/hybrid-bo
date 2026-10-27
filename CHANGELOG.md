@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Study tasks start about a second faster (#172): `hb.sampling.lhs` draws the
+  same Latin hypercube as scipy's `qmc.LatinHypercube`, without importing
+  `scipy.stats`.
+
 ## 0.5.1 (2026-10-26)
 
 - Assembling a study no longer fails on Windows (#163): the study log is closed

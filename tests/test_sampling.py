@@ -1,7 +1,10 @@
-"""lhs and uniform vs the scipy/numpy calls they wrap.
+"""lhs and uniform vs the scipy/numpy calls they reproduce.
 
 The regression baselines depend on these drawing exactly as the code they replaced.
 """
+
+import subprocess
+import sys
 
 import numpy as np
 import pytest
@@ -13,12 +16,16 @@ LOWER = np.array([-2.0, 0.0, 10.0])
 UPPER = np.array([2.0, 1.0, 10.5])
 
 
-def test_lhs_matches_scipy():
-    """lhs is scipy's Latin hypercube from the same seed, stretched to the bounds."""
-    points = lhs(LOWER, UPPER, 7, np.random.default_rng(0))
+# `parametrize` runs the test once per entry of the list, each as its own test case
+@pytest.mark.parametrize(("n", "d", "seed"), [(7, 3, 0), (1, 1, 1), (20, 2, 2)])
+def test_lhs_matches_scipy(n, d, seed):
+    """lhs is scipy's Latin hypercube from the same seed, stretched to the bounds, for
+    several numbers of points and dimensions."""
+    lower, upper = LOWER[:d], UPPER[:d]
+    points = lhs(lower, upper, n, np.random.default_rng(seed))
 
-    samples = qmc.LatinHypercube(3, rng=np.random.default_rng(0)).random(7)
-    np.testing.assert_array_equal(points, LOWER + (UPPER - LOWER) * samples)
+    samples = qmc.LatinHypercube(d, rng=np.random.default_rng(seed)).random(n)
+    np.testing.assert_array_equal(points, lower + (upper - lower) * samples)
 
 
 def test_uniform_matches_numpy():
@@ -29,7 +36,6 @@ def test_uniform_matches_numpy():
     np.testing.assert_array_equal(points, LOWER + (UPPER - LOWER) * samples)
 
 
-# `parametrize` runs the test once per entry of the list, each as its own test case
 @pytest.mark.parametrize("sample", [lhs, uniform])
 def test_shape_and_bounds(sample):
     """Both samplers return one row per point, inside the bounds."""
@@ -56,3 +62,22 @@ def test_lhs_spawns_instead_of_consuming_the_stream():
 
     # ... and leaves the stream untouched
     assert rng.random() == np.random.default_rng(0).random()
+
+
+def test_lhs_does_not_import_scipy_stats():
+    """lhs draws without importing `scipy.stats`, which takes about a second, so a
+    study task that only draws its initial points starts quickly. Checked in a new
+    process, as this one has imported it."""
+    # A new process draws with lhs and reports whether scipy.stats got imported
+    code = (
+        "import sys; import numpy as np; from hybrid_bo.sampling import lhs; "
+        "lhs(np.zeros(2), np.ones(2), 3, np.random.default_rng(0)); "
+        "print('scipy.stats' in sys.modules)"
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+    )
+
+    # It didn't
+    assert result.stdout.strip() == "False"

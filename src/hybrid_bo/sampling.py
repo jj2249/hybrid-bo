@@ -1,7 +1,6 @@
 from collections.abc import Sequence
 
 import numpy as np
-import scipy
 
 from hybrid_bo.problem import Var
 
@@ -11,9 +10,19 @@ def lhs(
 ) -> np.ndarray:
     """n points from a Latin hypercube scaled to the box [lower, upper], shape (n, d).
 
-    `lower` and `upper` have shape (d,) and must be finite.
+    `lower` and `upper` have shape (d,) and must be finite. The draw is scipy's
+    `qmc.LatinHypercube(d, rng=rng).random(n)`, made here because importing
+    `scipy.stats` takes about a second in every study task: from the next spawned
+    child of `rng`, which leaves its stream untouched, a point within each of the n
+    strata, then a shuffle of the strata of each dimension.
     """
-    samples = scipy.stats.qmc.LatinHypercube(len(lower), rng=rng).random(n)
+    d = len(lower)
+    child = rng.spawn(1)[0]
+    within_stratum = child.uniform(size=(n, d))
+    strata = np.tile(np.arange(1, n + 1), (d, 1))
+    for strata_of_dimension in strata:
+        child.shuffle(strata_of_dimension)
+    samples = (strata.T - within_stratum) / n
     return lower + (upper - lower) * samples
 
 
