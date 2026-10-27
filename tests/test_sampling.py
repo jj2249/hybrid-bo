@@ -3,6 +3,9 @@
 The regression baselines depend on these drawing exactly as the code they replaced.
 """
 
+import subprocess
+import sys
+
 import numpy as np
 import pytest
 from scipy.stats import qmc
@@ -56,3 +59,20 @@ def test_lhs_spawns_instead_of_consuming_the_stream():
 
     # ... and leaves the stream untouched
     assert rng.random() == np.random.default_rng(0).random()
+
+
+def test_lhs_does_not_import_scipy_stats():
+    """lhs draws without importing `scipy.stats`, which takes about a second, so a
+    study task that only draws its initial points starts quickly. Checked in a new
+    process, as this one has imported it."""
+    code = (
+        "import sys; import numpy as np; from hybrid_bo.sampling import lhs; "
+        "lhs(np.zeros(2), np.ones(2), 3, np.random.default_rng(0)); "
+        "print('scipy.stats' in sys.modules)"
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+    )
+
+    assert result.stdout.strip() == "False"

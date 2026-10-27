@@ -871,8 +871,10 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   the user set them. GNU parallel was rejected as the local launcher (it needs Perl
   and a POSIX shell, so not Windows), as were joblib/loky, submitit, Ray and Dask:
   none removes the log, warning and Ctrl-C handling, and pickled results don't give
-  resumable run files. A task costs about 1–2 s of startup (CasADi, scipy.stats),
-  negligible next to a Langermann run.
+  resumable run files. A task costs about 0.5–1 s of startup (CasADi,
+  scipy.optimize for the root finding), negligible next to a Langermann run. `lhs`
+  draws scipy's Latin hypercube itself rather than import `scipy.stats`, which
+  took another second per task (#172).
 - **An unfinished study** is a folder: the task list `tasks.json` (name, resolved
   seed, `n_runs`, each chosen configuration's budget, oracle optimum, code version,
   the problem's artifact text and the tasks as (label, index)), `study.log`,
