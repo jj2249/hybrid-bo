@@ -43,7 +43,9 @@ lint = "ruff check --fix"
 format = "ruff format"
 typecheck = "ty check"
 test = "pytest"
-coverage = "pytest --cov=hybrid_bo --cov-report=term-missing"
+# Coverage starts before pytest: pytest imports hybrid_bo while reading
+# `filterwarnings`, which pytest-cov would miss
+coverage = "coverage run -m pytest && coverage report --show-missing && coverage html"
 check = { depends-on = ["lint", "format", "typecheck"] }
 setup-hooks = "pre-commit install"
 setup = { depends-on = ["setup-hooks"] }
@@ -114,6 +116,9 @@ pythonpath = ["experiments"]
 # A replay that leaves the optimizer's branch is a bug in the tests' runs; a test that
 # expects it catches it with `pytest.warns`
 filterwarnings = ["error::hybrid_bo.errors.ReplayWarning"]
+
+[tool.coverage.run]
+source = ["hybrid_bo"]
 
 [tool.ty.environment]
 python-version = "3.12"
