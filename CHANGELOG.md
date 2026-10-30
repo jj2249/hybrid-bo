@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Breaking:** The experiments `langermann_partial` and `langermann_sweep` are
+  removed, with the sweep's figures `hb.plots.budget_heatmap`,
+  `hb.plots.regret_at_budget` and `hb.plots.regret_by_initial_fraction`, and
+  `cli.main`'s `figures`: `plot` always draws convergence and regret.
 - Study tasks start about a second faster (#172): `hb.sampling.lhs` draws the
   same Latin hypercube as scipy's `qmc.LatinHypercube`, without importing
   `scipy.stats`.

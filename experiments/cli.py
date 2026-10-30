@@ -64,7 +64,7 @@ THREAD_VARIABLES = (
 STOP_TIMEOUT = 5.0
 POLL_INTERVAL = 0.05
 
-# The study figures `plot` draws unless the experiment passes its own, by file name
+# The study figures `plot` draws, by file name
 FIGURES: Mapping[str, Callable[[hb.Study], object]] = {
     "convergence": hb.plots.convergence,
     "regret": hb.plots.regret,
@@ -126,7 +126,6 @@ def main(
     *,
     optimum: float | None = None,
     true_curves: bool = False,
-    figures: Mapping[str, Callable[[hb.Study], object]] = FIGURES,
     argv: Sequence[str] | None = None,
 ) -> None:
     """Runs, prepares or resumes a study of the experiment, runs one of its tasks, or
@@ -136,7 +135,6 @@ def main(
     `study_settings` are the defaults the flags override. `optimum` is the stated
     oracle optimum, which regret is measured from. `true_curves` draws the
     measurement's values in the iteration figures, which only an oracle can afford.
-    `figures` are the study figures `plot` draws, by file name (default `FIGURES`).
 
     A study that doesn't finish exits with status 130 (Ctrl-C) or 1, after saying how
     to resume it.
@@ -183,14 +181,7 @@ def main(
 
         runs = _plot_runs(parser, parsed.plot_runs)
         with plt.style.context(hb.plots.STYLE):
-            plot(
-                name,
-                problem,
-                measure if true_curves else None,
-                study_dir,
-                runs=runs,
-                figures=figures,
-            )
+            plot(name, problem, measure if true_curves else None, study_dir, runs=runs)
 
 
 def _parsers(
@@ -947,11 +938,10 @@ def plot(
     study_dir: Path,
     *,
     runs: Sequence[int] | None,
-    figures: Mapping[str, Callable[[hb.Study], object]] = FIGURES,
 ) -> None:
     """Saves the figures of the study in `study_dir` to its `figures/` folder:
-    `<name>.png` for each of `figures` (by default `convergence.png` and
-    `regret.png`, when the study has an oracle optimum) and
+    `<name>.png` for each of `FIGURES` (`convergence.png`, and `regret.png` when the
+    study has an oracle optimum) and
     `<method>/run-000/iteration-00.png` for every iteration of each method's runs
     with these indices (None: every run), with the oracle values from `measure` if
     given; hybrid BO's are drawn without the GP panels when it has more than one
@@ -975,7 +965,7 @@ def plot(
 
     # The study figures, each skipped if the study can't give it (regret without
     # an oracle optimum)
-    for figure_name, figure in figures.items():
+    for figure_name, figure in FIGURES.items():
         try:
             figure(study)
         except ValueError as error:

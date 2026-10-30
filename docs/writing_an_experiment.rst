@@ -237,8 +237,7 @@ budget:
 
 To compare splits of one budget between initial points and iterations, give one
 method several configurations, e.g. *initial fractions* ε = ``n_initial /
-n_evaluations`` of 0.2 and 0.5 (``experiments/langermann_sweep.py`` is a full
-sweep):
+n_evaluations`` of 0.2 and 0.5:
 
 .. code-block:: python
 
@@ -256,25 +255,6 @@ same first evaluations as one with a smaller budget: the longest run gives the r
 of every smaller budget. The baselines draw their whole design at the start, so Latin
 hypercube sampling doesn't have this property, and uniform sampling has it only
 without measurement noise.
-
-A sweep of one method over many ``n_initial`` makes the convergence figure
-unreadable, so pass the sweep's figures to the command line instead (see
-:doc:`reading_results`):
-
-.. code-block:: python
-
-   cli.main(
-       "my_sweep", problem, measure, configurations, study_settings,
-       optimum=optimum,
-       figures={
-           "budget": hb.plots.budget_heatmap,
-           "at_budget_20": functools.partial(hb.plots.regret_at_budget, budget=20),
-           "regret_by_initial_fraction": hb.plots.regret_by_initial_fraction,
-       },
-   )
-
-``figures`` maps each figure's file name to a function of the study that draws it;
-the default is ``convergence`` and ``regret``.
 
 The GP
 ------
