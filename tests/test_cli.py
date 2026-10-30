@@ -648,56 +648,6 @@ def test_plot_flag_plots_straight_after_the_run(tmp_path, experiment):
     assert (study_dir / "figures" / "convergence.png").exists()
 
 
-SWEEP = """
-import functools
-
-configurations = {
-    f"uniform_sampling_{n_initial}": hb.Configuration(
-        method=hb.uniform_sampling, n_evaluations=4, n_initial=n_initial
-    )
-    for n_initial in (1, 2)
-}
-
-if __name__ == "__main__":
-    cli.main(
-        "sweep_example",
-        ex.problem,
-        ex.measure,
-        configurations,
-        ex.study_settings,
-        optimum=ex.optimum,
-        figures={
-            "budget": hb.plots.budget_heatmap,
-            "at_budget_3": functools.partial(hb.plots.regret_at_budget, budget=3),
-            "at_budget_9": functools.partial(hb.plots.regret_at_budget, budget=9),
-        },
-    )
-"""
-
-
-def test_an_experiment_chooses_the_study_figures(tmp_path, experiment, capsys):
-    """An experiment that passes `figures` gets those study figures, saved under
-    their names, instead of convergence and regret; one that can't be drawn is
-    skipped with a message."""
-    # A sweep of uniform sampling over 1 and 2 initial points, 4 evaluations, two runs,
-    # plotted with the experiment's figures
-    experiment(
-        results(tmp_path, "--n-runs", "2", "--name", "sweep", "--plot")
-        + ["--n-workers", "4"],
-        "import cli\nimport illustrative_example as ex\nimport hybrid_bo as hb\n"
-        + SWEEP,
-        name="sweep_example",
-    )
-
-    # No convergence or regret, and no figure at a budget the runs don't reach
-    figures_dir = tmp_path / "sweep_example" / "sweep" / "figures"
-    assert {path.name for path in figures_dir.glob("*.png")} == {
-        "budget.png",
-        "at_budget_3.png",
-    }
-    assert "no at_budget_9 figure" in capsys.readouterr().out
-
-
 TWO_STATES = """
 import functools
 

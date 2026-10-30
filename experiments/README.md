@@ -16,18 +16,6 @@ compare. `cli.py` is the shared command line, not an experiment.
 - `langermann.py`: the Langermann function as a composite function, with no known
   equations and five unknown states (Astudillo & Frazier, App. D.1), with an oracle,
   comparing the same methods.
-- `langermann_partial.py`: the same Langermann function, box and optimum with known
-  and unknown equations: two of its five squared distances are known equations and
-  three are unknown states, with an oracle, comparing the same methods. Standard BO
-  and Latin hypercube sampling behave exactly as on `langermann.py`.
-- `langermann_sweep.py`: a sweep over initial fractions on `langermann_partial.py`'s
-  problem for SoftSAA-EI, n_initial = 2, 4, ..., 38, each run to 40 evaluations. It
-  plots budget heatmaps of the median regret and of the fraction of runs that reach
-  the global optimum's basin, the regret against the initial fraction at budgets of
-  10, 20, 30 and 40, and the regret over evaluations by number of initial points
-  instead of the
-  convergence and regret figures. The full study is about 18 hours on one core, so
-  run it with `--n-workers`.
 
 With more than one unknown state, hybrid BO's iteration figures are drawn without
 the GP panels.

@@ -947,7 +947,7 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   there. The (point, scenario) pairs of a ring of points around the trial point are
   one mapped call, each ring started from the previous ones, so the replay keeps the
   branch the optimizer chose. One IPOPT solve per grid point took about 195 s for a 2D
-  figure of `langermann_partial` (25 scenarios, M = 2); a root-finder solves the same
+  figure of Langermann with M = 2 (25 scenarios); a root-finder solves the same
   systems without IPOPT's overhead. Roots are found without bounds and rejected
   outside them, which matches IPOPT whenever the root is unique. The trial point
   checks the replay: if its root isn't the stored solution, the figure warns with

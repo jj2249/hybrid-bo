@@ -11,10 +11,7 @@ rules, `Var`/`System`/`Problem`, oracle vs custom measurement, methods and setti
 the figures and the Polars views. `experiments/illustrative_example.py` is the
 reference experiment, and `illustrative_example_2d.py` its version with two decision
 variables; `rosenbrock.py` (P = 2) and `langermann.py` (P = 5) have no
-known equations (M = 0), and `langermann_partial.py` is `langermann.py` with explicit
-known equations of u alone (M = 2, P = 3); `langermann_sweep.py` is its sweep over
-initial fractions for one method (one configuration per `n_initial`, and the sweep's
-`figures`). Use GLOSSARY.md's terms. This file adds only what an agent needs on top.
+known equations (M = 0). Use GLOSSARY.md's terms. This file adds only what an agent needs on top.
 
 ## Layout contract
 
@@ -24,7 +21,7 @@ Problem, measurement (with a module-level `def oracle(v)` and the stated `optimu
 a benchmark), the BO methods' prior GP (`gp`), `methods` (or one `method`, for a
 sweep), `configurations` (each method as an `hb.Configuration(method=...,
 n_evaluations=..., n_initial=...)`, the comparisons giving every method the same
-budget, and `langermann_sweep.py` one per `n_initial`), `study_settings`
+budget), `study_settings`
 (`hb.StudySettings(n_runs=..., seed=...)`), then a `__main__` block calling
 `cli.main` with `configurations`.
 
@@ -167,9 +164,8 @@ every run's lines, once the study is assembled. `plot` loads the study given (an
 saying to resume it), else the finished one whose artifact was written last
 (`artifact.json`, or `study.json` in older studies), and saves `summary.csv` if the
 study has none (studies saved before summaries). Plotting draws the study figures
-`cli.main`'s `figures` names (default convergence and regret; a sweep over initial
-fractions passes `hb.plots.budget_heatmap` and its siblings, file name to function of
-the study; one that raises `ValueError` is skipped with a message), and the iteration
+convergence and regret (one that raises `ValueError`, such as regret without an
+oracle optimum, is skipped with a message), and the iteration
 figures of the runs `--plot-runs` names (indices or `all`, default `0`, of each
 method); on `run` and `resume`, `--plot-runs` implies `--plot`. Running with
 uncommitted or untracked files warns that the study won't be reproducible;

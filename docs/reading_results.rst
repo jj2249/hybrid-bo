@@ -52,21 +52,6 @@ The figures
   initial points cost a measurement too.
 - ``regret.png``: the median regret, on a log scale, as in the paper. Only with an
   oracle optimum.
-- An experiment can draw other study figures instead (``figures`` in ``cli.main``).
-  For a sweep of one method over initial fractions ε = ``n_initial / n_evaluations``
-  there are three, each refusing a study of more than one method (other settings
-  count as another method):
-
-  - :py:func:`~hybrid_bo.plots.budget_heatmap`: the median log10 regret by ε (x)
-    and budget B (y, evaluations so far), wherever ``n_initial < B``, so each row is
-    the choice at one budget. With ``tolerance``, the fraction of runs whose regret
-    is at most ``tolerance`` instead: a median can't tell runs at the optimum from
-    runs stuck in a local minimum just above it. One run per ``n_initial`` gives
-    every budget it reaches, by the prefix property.
-  - :py:func:`~hybrid_bo.plots.regret_at_budget`: the median regret and its IQR
-    against ε at one budget.
-  - :py:func:`~hybrid_bo.plots.regret_by_initial_fraction`: the median regret over
-    evaluations, one line per ``n_initial``, at most ``max_lines`` (8) of them.
 - ``<method>/run-000/iteration-00.png``: one figure per iteration of a run, the
   state before its trial point. Only for problems with one or two decision variables,
   and by default only for run 0 of each method: ``--plot-runs 0 3`` chooses the runs,
