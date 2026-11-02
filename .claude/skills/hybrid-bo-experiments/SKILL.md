@@ -69,7 +69,7 @@ budget), `study_settings`
 problem library, one per problem name: `benchmarks/s2mpj.py` builds one from any
 equality-constrained S2MPJ (CUTEst) problem, and its docstring states the rules
 (hidden element sum, states by pivoted QR of dg/dz with y held, box, SOLTN checked by
-IPOPT, 10d evaluations, 2d + 1 initial, 25d scenarios, temperature max(1e-3 |f*|, 1e-5)).
+IPOPT, 10d evaluations, 2d + 1 initial, 25d scenarios, temperature max(1e-3 |f*|, 1e-3)).
 Never copy or transcribe a library's problem into the repository.
 
 - `pixi run benchmark s2mpj HS27 [command] [flags]` is `python -m s2mpj HS27 ...` in

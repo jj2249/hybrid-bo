@@ -70,7 +70,7 @@ MAX_CONDITION = 1e8
 BOX_DECIMALS = 6
 
 # SoftSAA's smallest temperature, for f* near 0
-MIN_TEMPERATURE = 1e-5
+MIN_TEMPERATURE = 1e-3
 
 # Points sampled over the box for the range of the hidden term (y's start bounds)
 N_RANGE_POINTS = 256

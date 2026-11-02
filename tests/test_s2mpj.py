@@ -106,7 +106,8 @@ def test_hs27_splits_as_the_issue_works_it_through():
 def test_the_hs27_benchmark_is_hs27():
     """The HS27 benchmark's equations, measured at the solution's u = (1, 0), give
     y = 0, x = -1 and f = f* = 0.04; its budget is 10d = 20 evaluations, 2d + 1 = 5
-    of them initial, with 25d = 50 scenarios and a temperature of 1e-3 f*."""
+    of them initial, with 25d = 50 scenarios and the floor temperature 1e-3, as
+    1e-3 f* is below it."""
     # The experiment, and one evaluation at the solution's decision variables
     benchmark = s2mpj.benchmark_experiment("HS27")
     history = evaluate(
@@ -134,7 +135,7 @@ def test_the_hs27_benchmark_is_hs27():
     assert isinstance(method, functools.partial)
     settings = method.keywords["settings"]
     assert settings.approximation.n_scenarios == 50
-    assert settings.approximation.temperature == pytest.approx(4e-5)
+    assert settings.approximation.temperature == 1e-3
     assert benchmark.optimum == 0.04
     assert benchmark.notes["problem"] == "HS27"
     assert benchmark.notes["hidden_constraint"] == "CON1"
