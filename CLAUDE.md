@@ -30,6 +30,7 @@ pixi run plot illustrative_example [STUDY]   # figures of the newest (or named) 
 pixi run experiment illustrative_example plot [STUDY] --plot-runs all   # iteration figures of every run
 pixi run experiment illustrative_example resume STUDY [--n-workers 4] [--plot]   # finish a study that stopped
 pixi run -e experiments python scripts/my_study.py [flags]   # a study script outside experiments/
+pixi run benchmark s2mpj HS27 [flags]   # an S2MPJ problem by rules (fetches S2MPJ first)
 ```
 
 The pixi tasks run an experiment as a module from `experiments/` (`python -m
@@ -44,7 +45,11 @@ for a SLURM array). The `experiment`, `plot` and `docs` tasks set a
 `default-environment`, so they need no `-e`. `experiment` passes every flag through;
 `plot` takes only the study id, so plot with other flags as
 `pixi run experiment illustrative_example plot [STUDY] [--plot-runs ...]
-[--results-root ...]`.
+[--results-root ...]`. Benchmarks (`benchmarks/`, ADR 0012) build one experiment per
+problem name from an external problem library: `benchmarks/s2mpj.py` reads the name
+as its first argument and passes it to `hb.cli.main` as `arguments`, so tasks get it
+too. S2MPJ is fetched only by the `benchmark` task, in the `benchmarks` environment;
+`tests/test_s2mpj.py` skips without the checkout.
 
 The git hook hardcodes the pixi Python path. If commits fail with "`pre-commit`
 not found" after a Python upgrade, re-run `pixi run -e dev setup`.

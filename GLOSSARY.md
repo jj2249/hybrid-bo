@@ -159,6 +159,12 @@ methods, so its studies can be scored: oracle incumbents, and regret if the orac
 optimum is stated.
 _Avoid_: test case, toy problem
 
+**Problem suite**:
+A set of benchmark experiments built by the same rules from the problems of an external
+problem library, such as S2MPJ's CUTEst problems (`benchmarks/s2mpj.py`, ADR 0012),
+and scored together.
+_Avoid_: test set, benchmark set
+
 **Configuration**:
 A method with its own evaluation budget, labeled in a study. One method can have
 several configurations, with different settings or budgets.

@@ -987,6 +987,26 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   script: `plot` needs the experiment's problem, so every command goes through the
   script. Polars (to summarize) and matplotlib (to plot) are imported lazily, and
   are the extras `hybrid-bo[analysis]` and `hybrid-bo[plots]`.
+- **Script arguments** (#180). A script may read its own first arguments to choose
+  what it builds, and pass them to `hb.cli.main` as `arguments`: each task runs as
+  `python <script> <arguments> run-task`, messages show them, and the studies are
+  saved under `<script>/<arguments>/`. `notes` is text the script records beyond
+  what it passes (the S2MPJ commit and the split), in the task list and as the
+  artifact's `notes`. A study's folder holds one argument choice, so the task
+  list's name (`s2mpj/HS27`) records it, and `resume` compares it.
+- **Benchmarks from a problem library** (#180; ADR 0012). `benchmarks/s2mpj.py`
+  builds a benchmark experiment from any S2MPJ problem by rules, from S2MPJ's own
+  code: `pixi run benchmark s2mpj HS27`. The `benchmark` task fetches S2MPJ first,
+  at a pinned commit, into the git-ignored `benchmarks/.s2mpj/`
+  (`benchmarks/fetch_s2mpj.py`), in the `benchmarks` environment only; nothing under
+  `src/` or `experiments/` imports it. Equality constraints only for now (#179), and
+  one unknown equation: the element sum of one nonlinear constraint, picked with a
+  seed from sha256 of the name. The states come from a column-pivoted QR of dg/dz
+  with y held at z*, not dc/dz: the root-finding problem solves g for the states with
+  y measured, and with dc/dz HS6 gets a state that g doesn't contain. A constraint
+  that is its element sum plus a constant (HS7) leaves y a constant of g, so it is
+  refused as ill-conditioned. The module docstring has the rules, #181 the problems
+  they refuse and why.
 
 ## Order of random draws
 

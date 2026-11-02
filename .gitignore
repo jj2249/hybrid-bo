@@ -24,6 +24,9 @@ docs/_templates/
 *.pkl
 
 
+# S2MPJ, fetched at its pinned commit by `pixi run benchmark`
+/benchmarks/.s2mpj/
+
 # Studies saved by `pixi run experiment` and study scripts
 /results/
 

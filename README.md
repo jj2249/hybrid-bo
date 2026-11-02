@@ -28,6 +28,15 @@ Any script that ends with `hb.cli.main(...)` runs the same way, as
 `python my_study.py [--n-runs 3 --plot ...]`. Keep your own in `scripts/`, which git
 ignores; [scripts/README.md](scripts/README.md) has an example.
 
+## Benchmarks
+
+`benchmarks/` builds benchmark experiments by rules from an external problem library
+(ADR 0012). `pixi run benchmark s2mpj HS27 [--n-runs 3 --plot ...]` fetches
+[S2MPJ](https://github.com/GrattonToint/S2MPJ) at a pinned commit, builds a hybrid
+problem from its CUTEst problem HS27 and runs it as a study in
+`results/s2mpj/HS27/`. Any equality-constrained S2MPJ problem the rules support
+runs the same way; one they don't support is refused with the reason.
+
 ## Docs
 
 ```bash

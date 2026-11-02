@@ -8,6 +8,11 @@ CasADi: LGPL-3.0 license (<https://github.com/casadi/casadi/blob/main/LICENSE.tx
 - NumPy: BSD-3-Clause license (<https://github.com/numpy/numpy/blob/main/LICENSE.txt>)
 - SciPy: BSD-3-Clause license (<https://github.com/scipy/scipy/blob/main/LICENSE.txt>)
 
+Benchmarks (fetched by `pixi run benchmark` into benchmarks/.s2mpj/, not installed
+with the package):
+
+- S2MPJ: BSD-3-Clause license (<https://github.com/GrattonToint/S2MPJ/blob/main/LICENSE>)
+
 Optional dependencies:
 
 - matplotlib: Matplotlib license, based on PSF license (<https://github.com/matplotlib/matplotlib/blob/main/LICENSE/LICENSE>)

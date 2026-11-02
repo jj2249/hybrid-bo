@@ -63,6 +63,33 @@ budget), `study_settings`
   hb.gp.Matern52(lengthscale=lengthscale), noise_std=0.0)`. The shipped experiments
   share it between methods; each method fits its own GP to its own data.
 
+## Benchmarks from a problem library
+
+`benchmarks/` (ADR 0012) holds benchmark experiments built by rules from an external
+problem library, one per problem name: `benchmarks/s2mpj.py` builds one from any
+equality-constrained S2MPJ (CUTEst) problem, and its docstring states the rules
+(hidden element sum, states by pivoted QR of dg/dz with y held, box, SOLTN checked by
+IPOPT, 10d evaluations, 2d + 1 initial, 25d scenarios, temperature max(1e-3 |f*|, 1e-5)).
+Never copy or transcribe a library's problem into the repository.
+
+- `pixi run benchmark s2mpj HS27 [command] [flags]` is `python -m s2mpj HS27 ...` in
+  `benchmarks/`, after `fetch_s2mpj.py` puts S2MPJ at its pinned `COMMIT` in the
+  git-ignored `benchmarks/.s2mpj/`. Only the `benchmarks` environment has these
+  tasks; nothing under `src/` or `experiments/` imports S2MPJ. Studies go to
+  `results/s2mpj/HS27/`; plot with `pixi run benchmark s2mpj HS27 plot [STUDY]`.
+- The module reads the name as its first argument and passes it to `hb.cli.main` as
+  `arguments` (every task runs as `python s2mpj.py HS27 run-task ...`), and the S2MPJ
+  commit and the split as `notes` (task list and artifact).
+- The traced functions come from S2MPJ's own element and group functions, loaded a
+  second time from a patched source (`np.zeros(` to object arrays, `to_scalar` passing
+  symbols through): unpatched, symbols become NaN without raising. Every build
+  compares f and c with S2MPJ's float `fx`/`cx` in the box.
+- A problem outside the rules raises `s2mpj.UnsupportedProblemError` with a
+  `Reason` (#181 tracks lifting them). The build is deterministic (IPOPT from S2MPJ's
+  start, Latin hypercube points seeded from sha256 of the name), as every task
+  process rebuilds it and `resume` compares the problem's text.
+- `tests/test_s2mpj.py` skips the tests that read S2MPJ when the checkout is absent.
+
 ## Randomness
 
 Every draw of a study comes from `settings.seed`. Run `i` of every configuration gets

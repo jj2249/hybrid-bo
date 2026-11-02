@@ -726,19 +726,35 @@ if __name__ == "__main__":
 """
 
 
-def test_hybrid_bo_with_two_unknown_states_gets_iteration_figures_without_gps(
-    tmp_path, experiment, capsys
+# The same, with one unknown state y1 = u1 of one of the two decision variables, as
+# the S2MPJ benchmarks have it, and f = y1^2 + u2^2
+ONE_OF_TWO_INPUTS = TWO_STATES.replace(
+    """y1, y2 = hb.Var("y1", start=(-1.0, 1.0)), hb.Var("y2", start=(-1.0, 1.0))
+system = hb.System(u=[u1, u2], y=[y1, y2], h_inputs=[u1, u2], measured=[y1, y2])
+problem = hb.Problem(system, f=lambda v: v.y1**2 + v.y2**2)
+measure = hb.oracle_measure(system, lambda v: [v.u1, v.u2], noise_std=0.0)""",
+    """y1 = hb.Var("y1", start=(-1.0, 1.0))
+system = hb.System(u=[u1, u2], y=[y1], h_inputs=[u1], measured=[y1])
+problem = hb.Problem(system, f=lambda v: v.y1**2 + v.u2**2)
+measure = hb.oracle_measure(system, lambda v: [v.u1], noise_std=0.0)""",
+)
+
+
+@pytest.mark.parametrize(
+    "script", [TWO_STATES, ONE_OF_TWO_INPUTS], ids=["two_states", "one_of_two_inputs"]
+)
+def test_hybrid_bo_gets_iteration_figures_without_gps_it_cant_draw(
+    tmp_path, experiment, capsys, script
 ):
-    """The iteration figure draws hybrid BO's GP panels for one unknown state only, so
-    with two the CLI draws its figures without them rather than skipping the run.
+    """The iteration figure draws hybrid BO's GP panels for one unknown state over
+    every decision variable only, so with two unknown states, or `h_inputs` that
+    aren't u, the CLI draws its figures without them rather than skipping the run.
     The oracle is a lambda, which tasks rebuild from the module."""
     # Run one iteration and plot it with the oracle
-    experiment(
-        results(tmp_path, "--name", "demo", "--plot"), TWO_STATES, name="two_states"
-    )
+    experiment(results(tmp_path, "--name", "demo", "--plot"), script, name="demo")
 
     # The run has its iteration figure, and nothing was skipped
-    study_dir = tmp_path / "two_states" / "demo"
+    study_dir = tmp_path / "demo" / "demo"
     assert iteration_figures(study_dir) == {"hybrid_bo/run-000"}
     assert "no iteration figures" not in capsys.readouterr().out
 
@@ -997,6 +1013,82 @@ def test_workers_take_nested_functions_and_lambdas(tmp_path, experiment):
     study = load(tmp_path / "nested" / "nested")
     assert len(study.runs) == 2
     assert study.artifact["measure"] == "y = sin(u), from a nested function."
+
+
+# A script that builds its experiment from its own first argument, the number of
+# iterations, as the S2MPJ benchmark builds one from a problem name
+CHOSEN_BY_ARGUMENT = """
+import sys
+
+import illustrative_example as ex
+import hybrid_bo as hb
+
+if __name__ == "__main__":
+    n_iterations = sys.argv[1]
+    configurations = {
+        "uniform_sampling": hb.Configuration(
+            method=hb.uniform_sampling,
+            n_evaluations=2 + int(n_iterations),
+            n_initial=2,
+        )
+    }
+    hb.cli.main(
+        ex.problem,
+        ex.measure,
+        configurations,
+        ex.study_settings,
+        arguments=[n_iterations],
+        notes={"chosen by": f"{n_iterations} iterations"},
+    )
+"""
+
+
+def test_a_script_argument_reaches_every_task_and_resume(
+    tmp_path, experiment, experiment_folder, capsys
+):
+    """A script that reads its own first argument and passes it as `arguments` gets it
+    back in every task process and in the commands it prints. Its studies are saved
+    under `<script>/<argument>/`, and the task list and the artifact record its
+    notes."""
+    # Prepare a study with the argument 2, then run one task as a scheduler would
+    command = results(tmp_path, "--n-runs", "2", "--seed", "0", "--name", "s")
+    experiment(["2", "prepare", *command], CHOSEN_BY_ARGUMENT, name="chosen")
+    assert "chosen.py 2 run-task s --task-index K" in capsys.readouterr().out
+    study_dir = tmp_path / "chosen" / "2" / "s"
+    task_list = json.loads((study_dir / "tasks.json").read_text())
+    assert task_list["name"] == "chosen/2"
+    assert task_list["notes"] == {"chosen by": "2 iterations"}
+    script = experiment_folder / "chosen.py"
+    subprocess.run(
+        [sys.executable, str(script), "2", "run-task", "s", "--task-index", "0"]
+        + results(tmp_path),
+        check=True,
+        capture_output=True,
+    )
+
+    # Resume: the launcher passes the argument to the task left
+    experiment(
+        ["2", "resume", "s", *results(tmp_path)], CHOSEN_BY_ARGUMENT, name="chosen"
+    )
+
+    # Two runs of 2 iterations, and the notes in the artifact
+    study = load(study_dir)
+    assert study.name == "chosen/2"
+    assert [run.history.u.shape[0] for run in study.runs] == [4, 4]
+    assert study.artifact["notes"] == "chosen by: 2 iterations"
+
+
+def test_arguments_must_start_the_command_line(tmp_path, experiment, capsys):
+    """`arguments` are the first arguments of the command line, so a script that
+    passes others is a usage error."""
+    with pytest.raises(SystemExit) as exit_info:
+        experiment(
+            [*results(tmp_path), "2"],
+            CHOSEN_BY_ARGUMENT.replace("sys.argv[1]", "sys.argv[-1]"),
+            name="chosen",
+        )
+    assert exit_info.value.code == 2
+    assert "must start the command line" in capsys.readouterr().err
 
 
 def python(code):

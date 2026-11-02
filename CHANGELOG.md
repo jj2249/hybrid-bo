@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Benchmarks on S2MPJ problems (#180): `pixi run benchmark s2mpj <PROBLEM>` builds
+  a benchmark experiment from an equality-constrained S2MPJ (CUTEst) problem by
+  rules (ADR 0012), fetching S2MPJ at a pinned commit in the new `benchmarks`
+  environment; HS27 is the first. `hb.cli.main` takes `arguments`, the script's own
+  leading arguments, which every task gets and which name the study folder
+  (`results/s2mpj/HS27/`), and `notes`, recorded in the task list and the artifact.
 - **Breaking:** The study command line moved into the library as `hb.cli` (#177).
   An experiment ends with `hb.cli.main(problem, measure, configurations,
   study_settings, ...)`, without `import cli` or the name, which is now the
