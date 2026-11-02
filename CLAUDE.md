@@ -28,15 +28,18 @@ pixi run -e dev setup        # install pre-commit hooks (ruff and ty on commit)
 pixi run experiment illustrative_example [--n-runs 3 --plot ...]   # every method; --help lists the flags
 pixi run plot illustrative_example [STUDY]   # figures of the newest (or named) study, iterations of run 0
 pixi run experiment illustrative_example plot [STUDY] --plot-runs all   # iteration figures of every run
-pixi run experiment illustrative_example resume STUDY [--n-workers 4]   # finish a study that stopped
+pixi run experiment illustrative_example resume STUDY [--n-workers 4] [--plot]   # finish a study that stopped
+pixi run -e experiments python scripts/my_study.py [flags]   # a study script outside experiments/
 ```
 
 The pixi tasks run an experiment as a module from `experiments/` (`python -m
-illustrative_example ...`). The experiment ends with an explicit `cli.main(...)`
-call that passes everything it defines, its name first, which must be the module's; `experiments/cli.py` parses the flags and
-runs or plots. A study's runs are tasks, each run in its own process (`python -m
-<experiment> run-task`), which rebuilds the experiment from its module and saves its
-run file as it finishes; `prepare`, `run-task` and `resume` split a study up (e.g.
+illustrative_example ...`). An experiment is a script that ends with an explicit
+`hb.cli.main(...)` call passing everything it defines; its file name is its name.
+`hb.cli` (`src/hybrid_bo/cli.py`) parses the flags and runs or plots. Any script
+runs the same way as `python path/to/script.py ...`; personal ones go in the
+git-ignored `scripts/` (`scripts/README.md`). A study's runs are tasks, each run in
+its own process (`python <script> run-task`), which rebuilds the experiment from its
+script and saves its run file as it finishes; `prepare`, `run-task` and `resume` split a study up (e.g.
 for a SLURM array). The `experiment`, `plot` and `docs` tasks set a
 `default-environment`, so they need no `-e`. `experiment` passes every flag through;
 `plot` takes only the study id, so plot with other flags as
@@ -88,7 +91,8 @@ with a GitHub issue labeled `bug`: remove the marker when fixing the bug.
 - Functions take what they use. Randomness is an explicit `rng`.
 - Rows are points: a point is `(n,)`, a set is `(n_points, n)`, `f` is
   `(n_points,)`. Column vectors only in CasADi glue code.
-- The library never writes files on its own; saving is an explicit call (`hb.save`).
+- The library never writes files on its own; saving is an explicit call (`hb.save`),
+  or `hb.cli.main`, whose command line says what to write.
 - Errors raise specific exceptions; the caller decides whether to continue.
 - Annotate signatures and dataclass fields, not local variables. Type errors are
   fixed, not suppressed; if a suppression is unavoidable, use

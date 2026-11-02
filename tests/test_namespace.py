@@ -76,3 +76,4 @@ def test_internals_are_reachable_through_their_modules():
     assert callable(hb.gp.fit_gp)
     assert callable(hb.solvers.multistart)
     assert callable(hb.plots.convergence)
+    assert callable(hb.cli.main)

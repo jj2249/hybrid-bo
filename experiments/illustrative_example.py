@@ -13,7 +13,6 @@ knows. Run it, then plot the newest study:
 import functools
 
 import casadi as cas
-import cli
 
 import hybrid_bo as hb
 
@@ -111,8 +110,7 @@ study_settings = hb.StudySettings(n_runs=10, seed=None)
 # Run or plot from the command line. The oracle measurement is cheap, so the iteration
 # figures draw its true curves
 if __name__ == "__main__":
-    cli.main(
-        "illustrative_example",
+    hb.cli.main(
         problem,
         measure,
         configurations,

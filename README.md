@@ -24,6 +24,10 @@ The study and its figures are saved in `results/illustrative_example/`. Add
 run is saved as it finishes, so a study stopped by Ctrl-C or a crash finishes with
 `pixi run experiment illustrative_example resume STUDY`.
 
+Any script that ends with `hb.cli.main(...)` runs the same way, as
+`python my_study.py [--n-runs 3 --plot ...]`. Keep your own in `scripts/`, which git
+ignores; [scripts/README.md](scripts/README.md) has an example.
+
 ## Docs
 
 ```bash
