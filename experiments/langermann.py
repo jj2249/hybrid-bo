@@ -22,7 +22,6 @@ have no GP panels, since those draw one unknown state.
 import functools
 
 import casadi as cas
-import cli
 
 import hybrid_bo as hb
 
@@ -124,8 +123,7 @@ study_settings = hb.StudySettings(n_runs=10, seed=None)
 # Run or plot from the command line. The oracle measurement is cheap, so the
 # iteration figures draw its oracle values over the grid of u
 if __name__ == "__main__":
-    cli.main(
-        "langermann",
+    hb.cli.main(
         problem,
         measure,
         configurations,

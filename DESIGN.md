@@ -855,9 +855,9 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   variables set while workers started, and stopping workers through the pool's
   private `_processes`, since CasADi catches Ctrl-C inside IPOPT. It saved nothing
   until every run finished, and couldn't spread over a cluster.
-- **The experiment CLI runs tasks as processes over files** (#156; ADR 0010). Each
-  task is `python -m <experiment> run-task STUDY --task-index K`: a new process that
-  rebuilds the experiment from its module (so nothing is pickled, and lambdas work),
+- **The CLI runs tasks as processes over files** (#156; ADR 0010). Each
+  task is `python <script> run-task STUDY --task-index K`: a new process that
+  rebuilds the experiment from its script (so nothing is pickled, and lambdas work),
   runs `hb.run_task`, and saves its run file and per-run log. The process boundary
   does what the pool's plumbing did: each task logs to its own file and console,
   warnings are logged where they happen, BLAS reads its thread variables from the
@@ -888,11 +888,12 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   differs from the task list (it takes no flags that choose the study), so a resumed
   study equals one run in one go. Assembly writes the artifact last and rebuilds the
   study log rather than appending to it, so an interrupted assembly resumes cleanly.
-  The launcher is `cli.run_commands`, a runner of named commands that knows nothing of
-  studies (its tests run `python -c` commands); `cli.run_tasks` builds the tasks'
-  commands. Tasks run `python -m <name>` from `experiments/`, so an experiment's name
-  is its module's. The
-  folder is created when the id is reserved (an atomic `mkdir`), so an unfinished
+  The launcher is `cli._run_commands`, a runner of named commands that knows nothing
+  of studies (its tests run `python -c` commands); `cli._run_tasks` builds the tasks'
+  commands. Tasks run the script's path (`__main__`'s `__file__`) from the
+  launcher's folder, and the script's file name is the experiment's name. The task
+  list records what the script passes to `main`, not its path, so a study resumes
+  from a moved script. The folder is created when the id is reserved (an atomic `mkdir`), so an unfinished
   study keeps its id. Checkpointing within a run is out of scope: a task killed
   mid-run starts again. For SLURM: `prepare`, an array of `run-task --task-index
   $SLURM_ARRAY_TASK_ID` (a task already done exits 0, so resubmitting is safe), then
@@ -955,12 +956,13 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   (`predict` maps a numpy input over its rows): predicting 900 points at once built
   their whole covariance matrix and took 6 s. More than two decision variables need
   another design.
-- **Entry point** (#51; revised in #65; moved to `experiments/` in #69). An
-  experiment ends with an explicit call that passes everything it defines:
-  `cli.main(name, problem, measure, configurations, study_settings, optimum=...,
-  true_curves=...)`. Its flags override the study settings (`--n-runs`, `--seed`);
+- **Entry point** (#51; revised in #65; moved to `experiments/` in #69, into the
+  package as `hb.cli` in #177). An experiment is a script that ends with an explicit
+  call that passes everything it defines: `hb.cli.main(problem, measure,
+  configurations, study_settings, optimum=..., true_curves=...)`; its file name is
+  its name. Its flags override the study settings (`--n-runs`, `--seed`);
   budgets belong to configurations, so there is no `--n-iterations` (#144).
-  `experiments/cli.py` parses the flags (run by default, or `plot [STUDY]`), overrides
+  `hb.cli` parses the flags (run by default, or `plot [STUDY]`), overrides
   the settings and calls `hb.study` and `hb.save`, or `hb.load` and `hb.plots`.
   `pixi run experiment <name> [flags]` is `python -m <name> [flags]` run from
   `experiments/` (a task with no declared args, so flags pass through), and `pixi run
@@ -968,17 +970,23 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   the old `main.py` (removed in #65) discover the experiment and read its names
   with `getattr`; #65 dropped that because the experiment then didn't say what its names were for, and a
   typo silently changed the study. The cost is that no command lists every experiment.
-  A relative `--results-root` is relative to where pixi was started (`INIT_CWD`).
-  Results go to `results/<name>/<study id>/{artifact.json, runs/, summary.csv,
-  figures/}` at the repo root. Running prints `hb.summary` and saves it as
-  `summary.csv`; `plot` takes the study saved last by default, writes under
+  `--results-root` defaults to `results/`, and a relative one is relative to where
+  pixi was started (`INIT_CWD`), else the working folder: results go to
+  `results/<name>/<study id>/{artifact.json, runs/, summary.csv, figures/}` there.
+  Running saves `hb.summary` as `summary.csv`, then the artifact, then prints the
+  summary with ASCII borders, which a Windows pipe (cp1252) can encode (#170); `plot` takes the study saved last by default, writes under
   `figures/`, and saves `summary.csv` only if the study has none (older studies).
   `plot` draws iteration figures for the runs `--plot-runs` names (default run 0 of
   each method, `all` for every run), since a study of 10 runs and 20 iterations is
   hundreds of figures. `plot` passes the iteration figures nothing from the experiment's methods: each
   run's GP comes from its stored fitted GPs (#119), so a study run with another GP
-  than the experiment's current one still plots. The `hybrid-bo-experiments` skill has the details. The CLI stays in
-  `experiments/` for people who clone the repo; it is not part of the package.
+  than the experiment's current one still plots. The `hybrid-bo-experiments` skill has
+  the details. The CLI lived in `experiments/` until #177, which moved it into the
+  package so a script anywhere can use it, such as one in the git-ignored `scripts/`
+  for a person's throwaway studies. Only `main` is public. There is no console
+  script: `plot` needs the experiment's problem, so every command goes through the
+  script. Polars (to summarize) and matplotlib (to plot) are imported lazily, and
+  are the extras `hybrid-bo[analysis]` and `hybrid-bo[plots]`.
 
 ## Order of random draws
 

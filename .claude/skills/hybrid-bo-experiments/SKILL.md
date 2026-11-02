@@ -1,13 +1,13 @@
 ---
 name: hybrid-bo-experiments
-description: Use when writing, modifying or running an experiment under experiments/. Covers the layout of an experiment, how to define the Problem and the measurement, the method settings, saving runs, and common mistakes.
+description: Use when writing, modifying or running an experiment, in experiments/ or a study script in scripts/. Covers the layout of an experiment, how to define the Problem and the measurement, the method settings, saving runs, and common mistakes.
 ---
 
 # Writing and running experiments
 
 Read `docs/writing_an_experiment.rst` first: it is the user guide (layout, CasADi
 rules, `Var`/`System`/`Problem`, oracle vs custom measurement, methods and settings,
-`cli.main`, running, common errors). `docs/reading_results.rst` covers the saved study,
+`hb.cli.main`, running, common errors). `docs/reading_results.rst` covers the saved study,
 the figures and the Polars views. `experiments/illustrative_example.py` is the
 reference experiment, and `illustrative_example_2d.py` its version with two decision
 variables; `rosenbrock.py` (P = 2) and `langermann.py` (P = 5) have no
@@ -15,18 +15,22 @@ known equations (M = 0). Use GLOSSARY.md's terms. This file adds only what an ag
 
 ## Layout contract
 
-An experiment is one module under `experiments/`, importable as a top-level module
-(pytest and ty put `experiments/` on the path). At module level, in this order:
+An experiment is one script that ends by calling `hb.cli.main`: a shipped one under
+`experiments/`, importable as a top-level module (pytest and ty put `experiments/` on
+the path), or a person's own under `scripts/` (git-ignored but its README; see
+`scripts/README.md`), which `pixi run experiment` doesn't reach: run it as
+`pixi run -e experiments python scripts/<name>.py ...`. At module level, in this order:
 Problem, measurement (with a module-level `def oracle(v)` and the stated `optimum` for
 a benchmark), the BO methods' prior GP (`gp`), `methods` (or one `method`, for a
 sweep), `configurations` (each method as an `hb.Configuration(method=...,
 n_evaluations=..., n_initial=...)`, the comparisons giving every method the same
 budget), `study_settings`
 (`hb.StudySettings(n_runs=..., seed=...)`), then a `__main__` block calling
-`cli.main` with `configurations`.
+`hb.cli.main` with `configurations`.
 
-- Everything the command line uses is passed in the `cli.main` call (directly, or
-  inside `problem` and `measure`); nothing is read from the module by name.
+- Everything the command line uses is passed in the `hb.cli.main` call (directly,
+  or inside `problem` and `measure`); nothing is read from the module by name. The
+  script's file name without `.py` is the experiment's name (`results/<name>/`).
 - Importing the module runs nothing, so `tests/test_regression.py` reuses the
   illustrative example's `problem`, `measure`, `methods` and `configurations`, and
   `tests/conftest.py`'s `illustrative_problem` fixture is its `problem`. Changing the
@@ -109,14 +113,14 @@ oracle objective is below it.
     pixi run experiment <name> [--method M ...] [--n-runs 10] [--seed 0] [--n-workers 4] [--name ID] [--plot] [--plot-runs 0 3] [--require-clean]
     pixi run experiment <name> prepare [--method M ...] [--n-runs 10] [--seed 0] [--name ID]
     pixi run experiment <name> run-task STUDY --task-index K
-    pixi run experiment <name> resume STUDY [--n-workers 4] [--plot]
+    pixi run experiment <name> resume STUDY [--n-workers 4] [--plot] [--plot-runs 0 3]
     pixi run plot <name> [STUDY]
     pixi run experiment <name> plot [STUDY] [--plot-runs all] [--results-root DIR]
 
 `--method` takes configuration labels. There is no `--n-iterations`: budgets belong
-to configurations, so change them in the experiment (tests write small experiment
-modules, as `tests/test_cli.py`'s `small` does, and run them with its `experiment`
-fixture). A study's runs are tasks (one run of one configuration, `hb.Task`). `run`
+to configurations, so change them in the experiment (tests write small scripts, as
+`tests/test_cli.py`'s `small` does, and run them with its `experiment` fixture, which
+runs them in-process with `runpy.run_path`). A study's runs are tasks (one run of one configuration, `hb.Task`). `run`
 is `prepare`, then the tasks, then assembly:
 
 - `prepare` reserves the study id by creating the study folder (an atomic `mkdir`,
@@ -124,13 +128,15 @@ is `prepare`, then the tasks, then assembly:
   `tasks.json`: the seed (resolved if None), `n_runs`, each chosen configuration's
   budget, the oracle optimum, the code version, the problem's artifact text and the
   tasks as `[label, index]`, by label, then index.
-- The launcher (`cli.run_tasks` -> `cli.run_commands`, a generic runner of named
-  commands) runs each task as `python -m <name> run-task STUDY --task-index K` from
-  `experiments/`, keeping `--n-workers` running (default 1) in task order. The
-  `name` passed to `cli.main` must be the experiment's module name (a usage error
-  otherwise); tests write their experiment modules to a folder on `PYTHONPATH`. The
-  task rebuilds the experiment from its module, so nothing is pickled: lambdas and
-  nested functions are fine. A task saves `runs/<label>/run-003.json`
+- The launcher (`hb.cli._run_tasks` -> `_run_commands`, a generic runner of named
+  commands) runs each task as `python <script> run-task STUDY --task-index K`
+  from the launcher's folder, keeping
+  `--n-workers` running (default 1) in task order. The script is `__main__`'s
+  `__file__` (`sys.argv[0]` would be `ipykernel_launcher.py` in a notebook), so
+  `main` called outside a script file (a notebook, `python -c`) is a usage error. The
+  task rebuilds the experiment from its script, so nothing is pickled: lambdas and
+  nested functions are fine. The task list doesn't record the script's path, so a
+  moved script resumes; a renamed one is another experiment. A task saves `runs/<label>/run-003.json`
   (temporary file, then renamed), or `run-003.failed` for a run that failed before
   evaluating anything, and `logs/<label>/run-003.log` (DEBUG and above; the console
   gets INFO and above, tagged `<label>/run-003`). It exits 0 when the task is done,
@@ -138,25 +144,31 @@ is `prepare`, then the tasks, then assembly:
   the experiment or the code version differs from the task list. With more than one
   at a time, tasks get `OMP/OPENBLAS/MKL/VECLIB_*_NUM_THREADS=1` unless set; `-W`
   options are passed on.
-- Assembly loads the run files (`hb.load_run`), calls `hb.assemble`, writes
-  `artifact.json` (`hb.saving.save_artifact`; the study is finished exactly when it
-  exists, so it is written last, atomically), rebuilds `study.log` as the launcher's
-  lines then every per-run log, each line starting with its tag (dropping lines an
-  interrupted assembly tagged, so none appear twice), and writes `summary.csv`.
+- Assembly loads the run files (`hb.load_run`), calls `hb.assemble`, rebuilds
+  `study.log` as the launcher's lines then every per-run log, each line starting with
+  its tag (dropping lines an interrupted assembly tagged, so none appear twice),
+  writes `summary.csv`, then `artifact.json` (`hb.saving.save_artifact`; the study is
+  finished exactly when it exists, so it is written last but for the printing,
+  atomically), then prints the summary with ASCII borders (a Windows pipe is cp1252,
+  #170).
 
 Ctrl-C, a failing task, or any other error once the tasks have started stops the
 study at once (running tasks are terminated, finished runs kept), prints the `resume`
-command and exits 130 or 1. `resume STUDY [--n-workers N] [--require-clean]` takes
-everything else from the task list; it refuses a finished study and, naming the
+command and exits 130 or 1. `resume STUDY [--n-workers N] [--require-clean] [--plot] [--plot-runs ...]`
+takes everything else from the task list; it refuses a finished study and, naming the
 difference (both values for one-value fields), an experiment whose configurations,
 budgets, problem or measurement text, or code version differ from the task list;
-then it runs the tasks left and assembles. Helpers raise `cli.UsageError`, which
+then it runs the tasks left and assembles. Helpers raise `hb.cli._UsageError`, which
 `main` reports as a usage error. For a cluster, `prepare`, then a SLURM array of
 `run-task --task-index $SLURM_ARRAY_TASK_ID`, then `resume`.
 
-No command lists every experiment, and a typo in the name fails with "No module named
-...". A relative `--results-root` is relative to where pixi was started (`INIT_CWD`),
-not `experiments/`. The study id is `--name`, else the UTC time to the second at the
+No command lists every experiment, and a typo in `pixi run experiment <name>` fails
+with "No module named ...". `--results-root` defaults to `results/`, and a relative one
+is relative to where pixi was started (`INIT_CWD`, not `experiments/`), else the
+working folder. Messages and `--help` show the command as `python <script>` relative
+to that folder, prefixed `pixi run -e <env>` under pixi (`PIXI_ENVIRONMENT_NAME`).
+`hb.cli` needs Polars to run a study and matplotlib to plot (extras `analysis` and
+`plots`), both imported lazily so tasks start without them. The study id is `--name`, else the UTC time to the second at the
 start. A taken `--name` (by a saved or an unfinished study) is a usage error; a taken
 UTC time gets `-2`, `-3`, ... appended. The study log holds the launcher's lines
 (each configuration, each task started and finished with a count, warnings) and then

@@ -44,7 +44,7 @@ command that finishes it:
 
 ``resume`` runs only the tasks without a saved run, possibly with another number of
 workers or on another machine, then saves the study, which equals the study run in
-one go. It takes the study's methods, runs and seed from its task list, and refuses
+one go; ``--plot`` and ``--plot-runs`` plot it straight after, as on a run. It takes the study's methods, runs and seed from its task list, and refuses
 if the experiment or the code changed since the study started. Until it finishes,
 ``plot`` skips the study.
 
@@ -84,8 +84,10 @@ submit one array element per task, for example with this ``sweep.sbatch``:
 
 Things to know:
 
-- The results folder must be on storage every node shares (the default is
-  ``results/`` in the repository).
+- The results folder must be on storage every node shares. The default is
+  ``results/`` in the folder the command starts from, which for ``sbatch`` is the
+  folder you submit from, so submit from the repository or pass an absolute
+  ``--results-root`` to every command.
 - Each array element runs one task on one core. Set the thread variables yourself, as
   above: the single-threading of ``--n-workers`` applies only to the local launcher.
 - Every element gets the same time limit, so size ``--time`` for the slowest run, not
@@ -98,7 +100,8 @@ Things to know:
   after another, so rerun failed tasks through the array rather than leave them to
   it.
 - ``run-task`` is an ordinary command, so GNU parallel or any other launcher can run
-  the tasks too.
+  the tasks too. For a script outside ``experiments/``, each command is
+  ``pixi run -e experiments python scripts/my_study.py run-task sweep ...``.
 
 How the work is spread
 ----------------------

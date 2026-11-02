@@ -142,9 +142,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   settings in `methods`, `no runs` for a label without runs) and warns with
   `OracleOptimumWarning` if an evaluated point's `f_oracle` is below the optimum.
   Run i of configurations with the same `n_initial` shares initial points. Running
-  tasks elsewhere is the experiment CLI's job (processes over files). A study
-  doesn't stop on Ctrl-C while IPOPT runs (#155), since CasADi catches the
-  interrupt there; the CLI's does. Each configuration spawns its own
+  tasks elsewhere is `cli.py`'s job (processes over files). Each configuration spawns its own
   `SeedSequence` children: `lhs` spawns from them, so sharing them across
   configurations changes the later ones' initial points. Studies take a seed, not an
   `rng`: the settings alone reproduce a study. **Prefix property**: no BO method
@@ -186,6 +184,10 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   columns are named from the study's artifact (`_names` reads `Var(name='...')`).
   Polars is imported inside the functions (`_polars`), so `import hybrid_bo` works
   without it; a missing Polars raises `ImportError` naming `hybrid-bo[analysis]`.
+- `cli.py`: the study command line, `hb.cli.main` (ADR 0010; the
+  `hybrid-bo-experiments` skill has its commands and files). Only `main` is public.
+  It is the one module that writes files on its own, as the command line asks; it
+  imports Polars and matplotlib lazily, so tasks start without them.
 - `baselines.py`: `latin_hypercube_sampling` and `uniform_sampling` draw the whole
   design over the `u` start bounds, then `evaluate` initial points plus design in
   one call.
@@ -202,6 +204,10 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   stopped at IPOPT's iteration limit (`opti.stats()["return_status"]` is
   `Maximum_Iterations_Exceeded`) get one warning per call, giving their count and
   `nlp.f`'s name, before `NoSolutionError` if all fail. The caller draws the starts with `lhs`.
+  CasADi catches a Ctrl-C inside IPOPT and fails the solve (`NonIpopt_Exception_Thrown`,
+  which other callback errors give too), so `multistart` wraps the SIGINT handler
+  for each solve (`_interrupts_noticed`, main thread and a Python handler only) and
+  raises `KeyboardInterrupt` after a failed solve that saw one (#155).
 - `gp.py` (ADR 0008): GPs are data, frozen dataclasses from a closed set. `Param(init,
   bounds, log=True)` is a hyperparameter to fit (checked: init inside the bounds, positive
   bounds for log). Kernels `Matern12/32/52` and `SquaredExponential` (`lengthscale:

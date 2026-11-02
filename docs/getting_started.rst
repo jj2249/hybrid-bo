@@ -55,10 +55,11 @@ keeps its finished runs, and prints the command that finishes it:
 
 .. code-block:: bash
 
-   pixi run experiment illustrative_example resume STUDY [--n-workers 4]
+   pixi run experiment illustrative_example resume STUDY [--n-workers 4] [--plot]
 
-which runs only the runs that are missing. It refuses if the experiment or the code
-changed since the study started, so a resumed study equals one run in one go.
+which runs only the runs that are missing, and takes ``--plot`` and ``--plot-runs`` as
+a run does. It refuses if the experiment or the code changed since the study started,
+so a resumed study equals one run in one go.
 
 :doc:`running_large_studies` covers long studies: many runs on one machine, and
 SLURM clusters.

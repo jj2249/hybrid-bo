@@ -146,9 +146,11 @@ _Avoid_: re-solve, fixed-x evaluation
 ### Bayesian optimization
 
 **Experiment**:
-A problem, how it is measured, and the configurations to compare, stated together so
-they can be run as studies: "the flash unit experiment". Each time it is run it gives a
-new study.
+A problem, how it is measured, and the configurations to compare, stated together in
+a script that passes them to `hb.cli.main`, so they can be run as studies: "the flash
+unit experiment". The script's file name is the experiment's name. Each time it is run
+it gives a new study. The shipped ones are in `experiments/`; a person's own can live
+anywhere, such as the untracked `scripts/`.
 _Avoid_: example, case, test case, application
 
 **Benchmark experiment**:
@@ -195,16 +197,17 @@ _Avoid_: record, metadata, manifest, provenance
 **Task**:
 One run of a configuration in a study: the configuration's label, the configuration,
 the run's index and the seed spawned for it (`hb.Task`). A study is its tasks, each
-run on its own (`hb.run_task`), then assembled (`hb.assemble`); the experiment CLI runs
-each task in a process of its own.
+run on its own (`hb.run_task`), then assembled (`hb.assemble`); `hb.cli` runs each
+task in a process of its own.
 _Avoid_: job, work item
 
 **Task list**:
-The file `tasks.json` that the experiment CLI writes when it prepares a study: what
-the study will run (the seed, the number of runs, each configuration's budget, the
-oracle optimum, the code version, the problem and the measurement) and its tasks in
-order. Resuming checks the experiment against it. Unlike the artifact, it is written
-before anything runs.
+The file `tasks.json` that `hb.cli` writes when it prepares a study: what the study
+will run (the experiment's name, the seed, the number of runs, each configuration's
+budget, the oracle optimum, the code version, the problem and the measurement) and its
+tasks in order. These are what the script passes to `hb.cli.main`, not where it is:
+resuming checks the experiment against them, so a study resumes from its script moved
+elsewhere. Unlike the artifact, it is written before anything runs.
 _Avoid_: manifest, job list
 
 **Unfinished study**:
@@ -216,9 +219,9 @@ run, never part of one.
 _Avoid_: partial study
 
 **Launcher**:
-What starts a study's tasks and waits for them: the experiment CLI's `run` and
-`resume`, which keep `--n-workers` task processes running, or anything that runs
-`run-task` commands (a SLURM array, GNU parallel).
+What starts a study's tasks and waits for them: `hb.cli`'s `run` and `resume`, which
+keep `--n-workers` task processes running, or anything that runs `run-task` commands
+(a SLURM array, GNU parallel).
 _Avoid_: scheduler (SLURM's role), pool, worker
 
 **Study log**:

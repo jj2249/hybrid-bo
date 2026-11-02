@@ -1,6 +1,7 @@
 """NLPs and the multistart solver."""
 
 import logging
+import signal
 
 import casadi as cas
 import numpy as np
@@ -150,3 +151,48 @@ def test_other_failures_are_not_warned_about(caplog):
 
     assert caplog.records
     assert all(record.levelno == logging.DEBUG for record in caplog.records)
+
+
+class InterruptingObjective(cas.Callback):
+    """The double well's objective, evaluated in Python, which sends this process
+    SIGINT (Ctrl-C) on its first evaluation, so the interrupt arrives while IPOPT
+    runs."""
+
+    def __init__(self):
+        """Builds the callback, with finite-difference derivatives."""
+        super().__init__()
+        self.construct("interrupting", {"enable_fd": True})
+
+    def get_n_in(self):
+        """One input, w."""
+        return 1
+
+    def get_n_out(self):
+        """One output, f."""
+        return 1
+
+    def eval(self, args):
+        """Sends SIGINT, then evaluates the double well."""
+        signal.raise_signal(signal.SIGINT)
+        return [DOUBLE_WELL.f(args[0])]
+
+
+def test_ctrl_c_inside_ipopt_stops_multistart():
+    """Ctrl-C while IPOPT solves stops multistart with `KeyboardInterrupt`, although
+    CasADi catches the interrupt and reports a failed solve (#155), and the Ctrl-C
+    handler is put back afterwards."""
+    objective = InterruptingObjective()
+    nlp = NLP(
+        cas.Function("f", [w], [objective(w)]),
+        DOUBLE_WELL.lower,
+        DOUBLE_WELL.upper,
+    )
+    quasi_newton = Ipopt(
+        solver_options={"print_level": 0, "hessian_approximation": "limited-memory"}
+    )
+    handler = signal.getsignal(signal.SIGINT)
+
+    with pytest.raises(KeyboardInterrupt):
+        multistart(nlp, np.array([[1.5], [-1.5]]), quasi_newton)
+
+    assert signal.getsignal(signal.SIGINT) is handler

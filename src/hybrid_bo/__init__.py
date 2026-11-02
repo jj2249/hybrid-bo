@@ -10,6 +10,7 @@ from hybrid_bo import (
     acquisition,
     baselines,
     bo,
+    cli,
     errors,
     evaluation,
     gp,

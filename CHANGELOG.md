@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **Breaking:** The study command line moved into the library as `hb.cli` (#177).
+  An experiment ends with `hb.cli.main(problem, measure, configurations,
+  study_settings, ...)`, without `import cli` or the name, which is now the
+  script's file name. Any script runs as `python my_study.py [command] [flags]`, and
+  tasks run as `python <script> run-task`; `pixi run experiment` and `pixi run plot`
+  work as before. A git-ignored `scripts/` holds personal study scripts
+  (`scripts/README.md`). `--results-root` defaults to `results/` in the folder the
+  command starts from. The extras `hybrid-bo[analysis]` (Polars) and
+  `hybrid-bo[plots]` (matplotlib and Polars) exist.
+- `resume` takes `--plot` and `--plot-runs`, as `run` does (#171).
+- A study whose output is piped on Windows finishes (#170): the summary table is
+  printed with ASCII borders, after the artifact is written.
+- Ctrl-C stops `hb.solvers.multistart`, so `hb.study`, `hb.run_task` and a
+  `run-task` started by hand, while IPOPT solves (#155); CasADi caught it and
+  counted a failed start.
 - **Breaking:** The experiments `langermann_partial` and `langermann_sweep` are
   removed, with the sweep's figures `hb.plots.budget_heatmap`,
   `hb.plots.regret_at_budget` and `hb.plots.regret_by_initial_fraction`, and

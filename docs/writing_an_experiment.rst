@@ -1,9 +1,11 @@
 Writing an experiment
 =====================
 
-An experiment is one Python file in ``experiments/``. It states a problem, how the
-system is measured, and the methods to compare, then hands them to the command line,
-which runs them as a study and plots it. This page builds one block by block, quoting
+An experiment is one Python file: in ``experiments/`` if it ships with the
+repository, or anywhere else, such as the untracked ``scripts/`` for your own (see
+``scripts/README.md``). It states a problem, how the system is measured, and the
+methods to compare, then hands them to the command line, ``hb.cli``, which runs them
+as a study and plots it. This page builds one block by block, quoting
 ``experiments/illustrative_example.py``. The quickest start is to copy that file,
 
 .. code-block:: bash
@@ -11,7 +13,8 @@ which runs them as a study and plots it. This page builds one block by block, qu
    cp experiments/illustrative_example.py experiments/my_experiment.py
 
 change each block as described below, and run it with
-``pixi run experiment my_experiment``. The file name is the experiment's name; it must
+``pixi run experiment my_experiment``. The file name, without ``.py``, is the
+experiment's name, which names its results folder; for ``pixi run experiment`` it must
 be a valid Python module name (letters, digits and underscores).
 
 The problem
@@ -319,21 +322,20 @@ the saved study keeps.
    :start-at: # The study
    :end-before: # Run or plot
 
-The file ends by passing everything it defines to ``experiments/cli.py``. The first
-argument is the experiment's name, which names its results folder:
+The file ends by passing everything it defines to ``hb.cli.main``:
 
 .. literalinclude:: ../experiments/illustrative_example.py
    :language: python
    :start-at: # Run or plot
 
-The first argument is the experiment's name, which must be its file's name without
-``.py``: each run of a study starts the experiment again as ``python -m <name>``. For
-your own system, leave out ``optimum`` and ``true_curves``:
+Each run of a study starts the file again as ``python <file> run-task``, so
+everything the study needs must be in the file or what it imports. For your own
+system, leave out ``optimum`` and ``true_curves``:
 
 .. code-block:: python
 
    if __name__ == "__main__":
-       cli.main("my_experiment", problem, measure, configurations, study_settings)
+       hb.cli.main(problem, measure, configurations, study_settings)
 
 ``true_curves=True`` draws the true curves in the iteration figures by running the
 measurement on a grid, so use it only with an oracle.
@@ -347,8 +349,10 @@ Running
    pixi run experiment my_experiment --plot
    pixi run plot my_experiment
 
-The study is saved in ``results/my_experiment/<study id>/``; :doc:`reading_results`
-explains what is in it. Results are git-ignored. For a long study, see
+The study is saved in ``results/my_experiment/<study id>/`` in the folder you ran the
+command from; :doc:`reading_results` explains what is in it. Results are git-ignored.
+A file outside ``experiments/`` runs the same way with Python itself, e.g.
+``pixi run -e experiments python scripts/my_study.py --plot``. For a long study, see
 :doc:`running_large_studies`.
 
 The command line is a convenience. In a script or notebook, run the study and save it

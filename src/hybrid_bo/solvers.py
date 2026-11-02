@@ -6,8 +6,13 @@ problem from several starts and keeps the best solution. The caller draws the st
 """
 
 import logging
+import signal
+import threading
 import time
+from collections.abc import Generator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
+from types import FrameType
 from typing import Any
 
 import casadi as cas
@@ -59,7 +64,8 @@ def multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
     A start that fails is expected, so it is logged (at debug level, without a
     traceback) and skipped; so are the number that failed and the time taken, under
     the name of `nlp.f`. Starts that ran IPOPT to its iteration limit are also
-    counted in one warning. Raises `NoSolutionError` if every start fails.
+    counted in one warning. Raises `NoSolutionError` if every start fails, and
+    `KeyboardInterrupt` on Ctrl-C, even while IPOPT runs.
     """
     # The problem, with the bounds as constraints (as the pre-refactor optimizer had
     # them, so IPOPT takes the steps the regression baselines record)
@@ -80,8 +86,12 @@ def multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
         opti.set_initial(w, start)
         opti.solver("ipopt", solver.plugin_options, solver.solver_options)
         try:
-            solution = opti.solve()
+            with _interrupts_noticed() as interrupts:
+                solution = opti.solve()
         except RuntimeError as error:
+            # CasADi catches a Ctrl-C inside IPOPT and fails the solve instead
+            if interrupts:
+                raise KeyboardInterrupt from error
             _logger.debug("Start %d of %d failed: %s", i + 1, len(starts), error)
             n_failed += 1
             at_limit = opti.stats()["return_status"] == "Maximum_Iterations_Exceeded"
@@ -113,3 +123,27 @@ def multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
         msg = f"Every one of the {len(starts)} starts failed"
         raise NoSolutionError(msg)
     return Solution(best, f_best)
+
+
+@contextmanager
+def _interrupts_noticed() -> Generator[list[int]]:
+    """Yields a list that gets an entry for each Ctrl-C (SIGINT) during the block,
+    which is still handled as before. Only the main thread handles signals, and only
+    a Python handler can be wrapped, so otherwise the list stays empty."""
+    previous = signal.getsignal(signal.SIGINT)
+    interrupts = []
+    is_main_thread = threading.current_thread() is threading.main_thread()
+    if not (is_main_thread and callable(previous)):
+        yield interrupts
+        return
+
+    def noticing(signum: int, frame: FrameType | None) -> None:
+        """Records the interrupt, then handles it as the previous handler did."""
+        interrupts.append(signum)
+        previous(signum, frame)
+
+    signal.signal(signal.SIGINT, noticing)
+    try:
+        yield interrupts
+    finally:
+        signal.signal(signal.SIGINT, previous)

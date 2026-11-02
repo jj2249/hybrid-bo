@@ -1,12 +1,12 @@
-"""The command line of the experiments (experiments/cli.py, behind `pixi run experiment`
-and `pixi run plot`): running studies as tasks, resuming them and plotting them.
+"""The command line of study scripts (`hb.cli`, behind `pixi run experiment` and
+`pixi run plot` too): running studies as tasks, resuming them and plotting them.
 
-The tests write small experiment modules and run them as `python -m` runs an
-experiment, in this process (`runpy`), so the task processes the CLI starts rebuild
-the same experiment from the module.
+The tests write small study scripts and run them as `python script.py` would, in this
+process (`runpy`), so the task processes the CLI starts rebuild the same experiment
+from the script.
 """
 
-import importlib
+import io
 import json
 import logging
 import os
@@ -15,10 +15,10 @@ import signal
 import subprocess
 import sys
 import time
+import types
 from datetime import datetime
 from pathlib import Path
 
-import cli
 import illustrative_example as ex
 import numpy as np
 import polars as pl
@@ -29,6 +29,7 @@ import hybrid_bo as hb
 from hybrid_bo import (
     Configuration,
     StudySettings,
+    cli,
     initial_points,
     load,
     summary,
@@ -52,10 +53,9 @@ def small_configurations(n_iterations=1):
 
 
 def small(n_iterations=1, true_curves=False):
-    """The module `small_example`, a small test experiment: every method of the
+    """The script `small_example.py`, a small test experiment: every method of the
     illustrative example, as `small_configurations` gives them."""
     return f"""
-import cli
 import illustrative_example as ex
 import hybrid_bo as hb
 
@@ -65,8 +65,7 @@ configurations = {{
 }}
 
 if __name__ == "__main__":
-    cli.main(
-        "small_example",
+    hb.cli.main(
         ex.problem,
         ex.measure,
         configurations,
@@ -77,10 +76,10 @@ if __name__ == "__main__":
 """
 
 
-def experiment_of(configurations, *, name="custom_example", optimum=None):
-    """The module `name`, a test experiment on the illustrative example, with
-    `configurations`, the source of a dict of configurations that may use `cli`,
-    `ex` (the illustrative example), `hb`, `np`, `os`, `time` and `warnings`."""
+def experiment_of(configurations, *, optimum=None):
+    """A test script on the illustrative example, with `configurations`, the source
+    of a dict of configurations that may use `ex` (the illustrative example), `hb`,
+    `np`, `os`, `time` and `warnings`."""
     return f"""
 import os
 import time
@@ -88,15 +87,13 @@ import warnings
 
 import numpy as np
 
-import cli
 import illustrative_example as ex
 import hybrid_bo as hb
 
 {configurations}
 
 if __name__ == "__main__":
-    cli.main(
-        {name!r},
+    hb.cli.main(
         ex.problem,
         ex.measure,
         configurations,
@@ -112,7 +109,7 @@ if __name__ == "__main__":
 # variables for this test only
 @pytest.fixture
 def experiment_folder(tmp_path):
-    """The folder of the test's experiment modules."""
+    """The folder of the test's scripts."""
     folder = tmp_path / "modules"
     folder.mkdir()
     return folder
@@ -121,26 +118,18 @@ def experiment_folder(tmp_path):
 @pytest.fixture
 def experiment(experiment_folder, monkeypatch):
     """A function `experiment(argv, module=small(), name="small_example")` that
-    writes the experiment module `name` (source text `module`) to
-    `experiment_folder` and runs it with the command line `argv`, in this process, as
-    `python -m` would. Tasks run from `experiments/`, and import it from
-    `PYTHONPATH`."""
-    # The module importable here and in tasks, and no bytecode, which could be older
-    # than a module rewritten in the same second
-    monkeypatch.syspath_prepend(str(experiment_folder))
-    paths = os.pathsep.join([str(experiment_folder), str(EXPERIMENTS_DIR)])
-    monkeypatch.setenv("PYTHONPATH", paths)
-    monkeypatch.setenv("PYTHONDONTWRITEBYTECODE", "1")
-    monkeypatch.setattr(sys, "dont_write_bytecode", True)
+    writes the script `<name>.py` (source text `module`) to `experiment_folder` and
+    runs it with the command line `argv`, in this process, as `python <script>`
+    would. Its tasks import the illustrative example from `PYTHONPATH`."""
+    # The illustrative example importable in tasks
+    monkeypatch.setenv("PYTHONPATH", str(EXPERIMENTS_DIR))
 
     def run(argv, module=None, name="small_example"):
-        """Writes the module `name` and runs it with `argv`."""
-        (experiment_folder / f"{name}.py").write_text(
-            small() if module is None else module
-        )
-        importlib.invalidate_caches()
-        monkeypatch.setattr(sys, "argv", [name, *argv])
-        runpy.run_module(name, run_name="__main__", alter_sys=True)
+        """Writes the script `<name>.py` and runs it with `argv`."""
+        script = experiment_folder / f"{name}.py"
+        script.write_text(small() if module is None else module)
+        monkeypatch.setattr(sys, "argv", [str(script), *argv])
+        runpy.run_path(str(script), run_name="__main__")
 
     return run
 
@@ -328,7 +317,7 @@ def test_help_names_the_configurations_and_the_other_commands(experiment, capsys
     printed = " ".join(capsys.readouterr().out.split())
     assert ", ".join(ex.configurations) in printed
     assert "prepare | run-task | resume | plot" in printed
-    assert "pixi run plot small_example" in printed
+    assert "small_example.py plot [STUDY]" in printed
 
 
 def test_a_tree_that_is_not_clean_warns_but_still_prepares(
@@ -390,25 +379,29 @@ def test_plot_without_a_study_is_a_usage_error(tmp_path, experiment):
         experiment(["plot", *results(tmp_path)])
 
 
-def test_running_needs_the_experiment_to_be_a_module(tmp_path):
-    """Tasks run as `python -m <name>`, so running an experiment whose name names no
-    module is a usage error, before anything runs."""
+def test_running_needs_a_script(tmp_path, monkeypatch, capsys):
+    """Tasks run the script again, so `main` called outside a script file (a
+    notebook or `python -c`, whose `__main__` module has no file) is a usage error,
+    before anything runs."""
+    monkeypatch.setitem(sys.modules, "__main__", types.ModuleType("__main__"))
+    monkeypatch.chdir(tmp_path)
+
     with pytest.raises(SystemExit):
-        cli.main(
-            "no_such_experiment",
+        hb.cli.main(
             ex.problem,
             ex.measure,
             small_configurations(),
             ex.study_settings,
             argv=results(tmp_path, "--n-runs", "1"),
         )
-    assert not (tmp_path / "no_such_experiment").exists()
+    assert "must be called from a script file" in capsys.readouterr().err
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_the_experiment_runs_as_a_module_from_the_experiments_folder():
     """`pixi run experiment illustrative_example --help` is `python -m
-    illustrative_example --help` in `experiments/`: the script's own `cli.main` call
-    answers it."""
+    illustrative_example --help` in `experiments/`: the script's own `hb.cli.main`
+    call answers it."""
     result = subprocess.run(
         [sys.executable, "-m", "illustrative_example", "--help"],
         cwd=EXPERIMENTS_DIR,
@@ -417,7 +410,52 @@ def test_the_experiment_runs_as_a_module_from_the_experiments_folder():
         check=True,
     )
 
-    assert "pixi run experiment illustrative_example" in result.stdout
+    assert "illustrative_example.py" in result.stdout
+
+
+def test_a_script_anywhere_runs_and_resumes_after_moving(tmp_path, monkeypatch):
+    """A study script in any folder runs as `python script.py`, saving its studies to
+    `results/` in the folder it is run from, named by the script's file name. The
+    task list records what the script passes to `hb.cli.main`, so a study prepared
+    from it resumes from the script moved to another folder."""
+    # A script in its own folder, run from there by a new Python, outside pixi
+    folder = tmp_path / "scripts"
+    folder.mkdir()
+    (folder / "my_study.py").write_text(small())
+    env = {
+        name: value
+        for name, value in os.environ.items()
+        if name != "INIT_CWD" and not name.startswith("PIXI_")
+    } | {"PYTHONPATH": str(EXPERIMENTS_DIR)}
+
+    def python_script(script, *argv):
+        """Runs `python <script> argv` from `folder`."""
+        return subprocess.run(
+            [sys.executable, str(script), *argv],
+            cwd=folder,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+    # Run a study, and prepare another
+    command = ["--method", "uniform_sampling", "--n-runs", "1"]
+    python_script("my_study.py", *command, "--name", "ran")
+    prepared = python_script("my_study.py", "prepare", *command, "--name", "moved")
+    assert "python my_study.py run-task moved --task-index K" in prepared.stdout
+
+    # Move the script, then resume the prepared study from there
+    moved_to = tmp_path / "elsewhere"
+    moved_to.mkdir()
+    (folder / "my_study.py").rename(moved_to / "my_study.py")
+    python_script(moved_to / "my_study.py", "resume", "moved")
+
+    # Both studies finished, under results/ where they were run from
+    for study_id in ("ran", "moved"):
+        study = load(folder / "results" / "my_study" / study_id)
+        assert study.name == "my_study"
+        assert [run.method for run in study.runs] == ["uniform_sampling"]
 
 
 # Logs
@@ -574,9 +612,9 @@ def test_an_unfinished_study_keeps_its_id_taken(tmp_path):
     new study doesn't reuse it."""
     (tmp_path / "old").mkdir()
 
-    assert cli.reserve(tmp_path, "old", suffix_if_taken=True).name == "old-2"
-    with pytest.raises(cli.UsageError, match="is taken"):
-        cli.reserve(tmp_path, "old", suffix_if_taken=False)
+    assert cli._reserve(tmp_path, "old", suffix_if_taken=True).name == "old-2"
+    with pytest.raises(cli._UsageError, match="is taken"):
+        cli._reserve(tmp_path, "old", suffix_if_taken=False)
 
 
 def test_a_taken_name_is_refused_before_running(tmp_path, experiment, capsys):
@@ -653,7 +691,6 @@ import functools
 
 import casadi as cas
 
-import cli
 import illustrative_example as ex
 import hybrid_bo as hb
 
@@ -678,8 +715,7 @@ configurations = {
 }
 
 if __name__ == "__main__":
-    cli.main(
-        "two_states",
+    hb.cli.main(
         problem,
         measure,
         configurations,
@@ -711,7 +747,7 @@ def test_hybrid_bo_with_two_unknown_states_gets_iteration_figures_without_gps(
 
 
 def test_a_prepared_study_resumes_to_the_study_run_in_one_go(
-    tmp_path, experiment, capsys
+    tmp_path, experiment, experiment_folder, capsys
 ):
     """`prepare` writes the task list and runs nothing; `run-task` runs one task and
     saves its run, and does nothing for a task that is done; `resume` runs the tasks
@@ -734,11 +770,11 @@ def test_a_prepared_study_resumes_to_the_study_run_in_one_go(
     assert not (study_dir / "runs").exists()
 
     # Two tasks, as a scheduler runs them; the second time, task 1 is done
-    task = [sys.executable, "-m", "small_example", "run-task", "prepared"]
+    script = experiment_folder / "small_example.py"
+    task = [sys.executable, str(script), "run-task", "prepared"]
     for index in ("1", "2", "1"):
         subprocess.run(
             [*task, "--task-index", index, *results(tmp_path)],
-            cwd=EXPERIMENTS_DIR,
             check=True,
             capture_output=True,
         )
@@ -755,6 +791,25 @@ def test_a_prepared_study_resumes_to_the_study_run_in_one_go(
 
     assert run_file.read_text() == saved
     assert_same(load(study_dir), load(tmp_path / "small_example" / "in-one-go"))
+
+
+def test_resume_plots_with_plot_or_plot_runs(tmp_path, experiment):
+    """`resume` takes `--plot` and `--plot-runs` as the run command does, plotting the
+    study once it is finished."""
+    # Two studies prepared, then resumed with each flag
+    command = results(tmp_path, "--method", "uniform_sampling", "--n-runs", "2")
+    for study_id in ("plot", "plot-runs"):
+        experiment(["prepare", *command, "--name", study_id])
+    experiment(["resume", "plot", "--plot", *results(tmp_path)])
+    experiment(["resume", "plot-runs", "--plot-runs", "1", *results(tmp_path)])
+
+    # Convergence, and the iteration figures of the runs chosen
+    experiment_dir = tmp_path / "small_example"
+    assert (experiment_dir / "plot" / "figures" / "convergence.png").exists()
+    assert iteration_figures(experiment_dir / "plot") == {"uniform_sampling/run-000"}
+    assert iteration_figures(experiment_dir / "plot-runs") == {
+        "uniform_sampling/run-001"
+    }
 
 
 def test_resume_refuses_a_finished_study(tmp_path, experiment, capsys):
@@ -792,7 +847,9 @@ def test_resume_refuses_a_study_of_another_experiment(tmp_path, experiment, caps
     assert not (study_dir / "runs").exists()
 
 
-def test_run_task_refuses_another_code_version(tmp_path, experiment, monkeypatch):
+def test_run_task_refuses_another_code_version(
+    tmp_path, experiment, experiment_folder, monkeypatch
+):
     """A task refuses to run (exit status 2) unless the code version is the one the
     study was prepared with, so every run of a study comes from the same code; the
     message gives both versions."""
@@ -801,9 +858,8 @@ def test_run_task_refuses_another_code_version(tmp_path, experiment, monkeypatch
     experiment(["prepare", *results(tmp_path, "--n-runs", "1", "--name", "old")])
 
     task = subprocess.run(
-        [sys.executable, "-m", "small_example", "run-task", "old"]
-        + ["--task-index", "0", *results(tmp_path)],
-        cwd=EXPERIMENTS_DIR,
+        [sys.executable, str(experiment_folder / "small_example.py"), "run-task"]
+        + ["old", "--task-index", "0", *results(tmp_path)],
         capture_output=True,
         text=True,
         check=False,
@@ -923,9 +979,7 @@ configurations = {
 }
 
 if __name__ == "__main__":
-    cli.main(
-        "nested", ex.problem, measurement(), configurations, ex.study_settings
-    )
+    hb.cli.main(ex.problem, measurement(), configurations, ex.study_settings)
 """
 
 
@@ -935,7 +989,7 @@ def test_workers_take_nested_functions_and_lambdas(tmp_path, experiment):
     two workers."""
     experiment(
         results(tmp_path, "--n-runs", "2", "--n-workers", "2", "--name", "nested"),
-        "import numpy as np\nimport cli\nimport illustrative_example as ex\n"
+        "import numpy as np\nimport illustrative_example as ex\n"
         "import hybrid_bo as hb\n" + NESTED_MEASUREMENT,
         name="nested",
     )
@@ -960,8 +1014,8 @@ def test_the_launcher_stops_at_a_command_that_fails(tmp_path):
         "never": python(f"open({str(tmp_path / 'started')!r}, 'w')"),
     }
 
-    with pytest.raises(cli.CommandFailedError) as error:
-        cli.run_commands(commands, n_workers=1, cwd=tmp_path)
+    with pytest.raises(cli._CommandFailedError) as error:
+        cli._run_commands(commands, n_workers=1)
     assert (error.value.name, error.value.status) == ("failing", 3)
     assert not (tmp_path / "started").exists()
 
@@ -972,22 +1026,22 @@ def test_the_launcher_runs_single_threaded_blas_unless_set(tmp_path, monkeypatch
     process's environment stays as it was."""
     # The user set OpenMP's threads; each command writes the thread variables it sees
     monkeypatch.setenv("OMP_NUM_THREADS", "3")
-    for variable in cli.THREAD_VARIABLES[1:]:
+    for variable in cli._THREAD_VARIABLES[1:]:
         monkeypatch.delenv(variable, raising=False)
     before = dict(os.environ)
     report = (
         "import json, os, sys; json.dump({name: os.environ.get(name) for name in "
-        f"{cli.THREAD_VARIABLES!r}}}, open(sys.argv[1], 'w'))"
+        f"{cli._THREAD_VARIABLES!r}}}, open(sys.argv[1], 'w'))"
     )
     commands = {
         str(index): [*python(report), str(tmp_path / f"{index}.json")]
         for index in range(2)
     }
 
-    cli.run_commands(commands, n_workers=2, cwd=tmp_path)
+    cli._run_commands(commands, n_workers=2)
 
     # One thread each, but OpenMP's three
-    expected = dict.fromkeys(cli.THREAD_VARIABLES, "1") | {"OMP_NUM_THREADS": "3"}
+    expected = dict.fromkeys(cli._THREAD_VARIABLES, "1") | {"OMP_NUM_THREADS": "3"}
     for index in range(2):
         assert json.loads((tmp_path / f"{index}.json").read_text()) == expected
     assert dict(os.environ) == before
@@ -1013,6 +1067,26 @@ def test_a_study_log_is_rebuilt_not_appended_to(tmp_path, experiment):
     assert len(tagged) == len(per_run_log.read_text().splitlines())
 
 
+def test_a_study_finishes_printing_to_a_cp1252_stream(
+    tmp_path, experiment, monkeypatch
+):
+    """A study whose output goes to a pipe or a file on Windows, encoded as cp1252,
+    which has no box-drawing characters, still finishes, and prints its summary table
+    (#170)."""
+    # The console, as Windows encodes a pipe
+    stdout = io.TextIOWrapper(io.BytesIO(), encoding="cp1252")
+    monkeypatch.setattr(sys, "stdout", stdout)
+
+    experiment(
+        results(tmp_path, "--method", "uniform_sampling", "--n-runs", "1")
+        + ["--name", "piped"]
+    )
+
+    assert (tmp_path / "small_example" / "piped" / "artifact.json").exists()
+    stdout.flush()
+    assert "uniform_sampling" in stdout.buffer.getvalue().decode("cp1252")
+
+
 def test_any_failure_says_how_to_resume(tmp_path, experiment, monkeypatch, capsys):
     """A study that stops for any reason once its tasks have started, here an error
     while assembling it, exits with status 1 and prints the command that finishes
@@ -1022,7 +1096,7 @@ def test_any_failure_says_how_to_resume(tmp_path, experiment, monkeypatch, capsy
         """Fails as assembling a study might."""
         raise ValueError("assembly failed")
 
-    monkeypatch.setattr(cli, "assemble_study", broken_assembly)
+    monkeypatch.setattr(cli, "_assemble_study", broken_assembly)
 
     with pytest.raises(SystemExit) as exit_info:
         experiment(
@@ -1045,7 +1119,6 @@ import os
 import pathlib
 import time
 
-import cli
 import illustrative_example as ex
 import hybrid_bo as hb
 
@@ -1065,35 +1138,32 @@ configurations = {
 }
 
 if __name__ == "__main__":
-    cli.main(
-        "stubborn", ex.problem, ex.measure, configurations, hb.StudySettings(n_runs=2)
-    )
+    hb.cli.main(ex.problem, ex.measure, configurations, hb.StudySettings(n_runs=2))
 """
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="sends SIGINT to a process group")
 @pytest.mark.parametrize("n_interrupts", [1, 2])
-def test_ctrl_c_stops_a_study_at_once(tmp_path, n_interrupts):
+@pytest.mark.parametrize("n_workers", [1, 2])
+def test_ctrl_c_stops_a_study_at_once(tmp_path, n_interrupts, n_workers):
     """Ctrl-C (SIGINT to the terminal's process group) stops a study within seconds,
-    even while its runs ignore the interrupt, with exit status 130 and the command
-    that resumes it. It leaves no task process behind, and the finished runs saved.
-    Under pixi, which passes a Ctrl-C on to the process it runs, the study gets it
-    twice.
+    one task at a time or two, even while its runs ignore the interrupt, with exit
+    status 130 and the command that resumes it. It leaves no task process behind, and
+    the finished runs saved. Under pixi, which passes a Ctrl-C on to the process it
+    runs, the study gets it twice.
 
     `skipif` skips the test where the condition holds.
     """
     # The skip, for ty, which checks `os.killpg` and `signal.SIGKILL` on the platform
     # it runs on and doesn't read `skipif`
     assert sys.platform != "win32"
-    # Setup: the study in its own process group, as a terminal runs a command, with
-    # two tasks at once
+    # Setup: the study in its own process group, as a terminal runs a command
     (tmp_path / "stubborn.py").write_text(STUBBORN)
     started = tmp_path / "started"
     started.mkdir()
-    paths = os.pathsep.join([str(tmp_path), str(EXPERIMENTS_DIR)])
-    env = os.environ | {"STARTED": str(started), "PYTHONPATH": paths}
+    env = os.environ | {"STARTED": str(started), "PYTHONPATH": str(EXPERIMENTS_DIR)}
     study = subprocess.Popen(
-        [sys.executable, "-m", "stubborn", "--n-workers", "2", "--name", "s"]
+        [sys.executable, "stubborn.py", "--n-workers", str(n_workers), "--name", "s"]
         + results(tmp_path),
         cwd=tmp_path,
         env=env,
@@ -1102,11 +1172,12 @@ def test_ctrl_c_stops_a_study_at_once(tmp_path, n_interrupts):
         start_new_session=True,
     )
 
-    # Act: Ctrl-C once both stubborn runs are running
+    # Act: Ctrl-C once as many stubborn runs as workers are running
     deadline = time.monotonic() + 60
-    while len(list(started.iterdir())) < 2 and time.monotonic() < deadline:
+    while len(list(started.iterdir())) < n_workers and time.monotonic() < deadline:
         time.sleep(0.2)
-    assert len(list(started.iterdir())) == 2, "the stubborn runs never started"
+    n_started = len(list(started.iterdir()))
+    assert n_started == n_workers, "the stubborn runs never started"
     for _ in range(n_interrupts):
         os.killpg(study.pid, signal.SIGINT)
         time.sleep(0.01)

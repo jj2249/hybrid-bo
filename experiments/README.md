@@ -1,7 +1,8 @@
 # Experiments
 
 Each file here is an experiment: a problem, how it is measured, and the methods to
-compare. `cli.py` is the shared command line, not an experiment.
+compare, passed to the library's command line, `hb.cli.main`. For your own
+throwaway studies, use `scripts/` instead ([scripts/README.md](../scripts/README.md)).
 
 - `illustrative_example.py`: the illustrative example of the
   [paper](https://arxiv.org/abs/2603.11199), with an oracle.
@@ -33,7 +34,7 @@ the console and saves it as `study.log` in its folder, and each run's lines in
 Ctrl-C or a crash keeps its finished runs and prints the command that finishes it:
 
 ```bash
-pixi run experiment <name> resume STUDY [--n-workers 4]
+pixi run experiment <name> resume STUDY [--n-workers 4] [--plot]
 ```
 
 A `--name` that is already taken, by a saved or an unfinished study, is refused

@@ -1,11 +1,11 @@
-# Parallel studies are processes over files, in the experiment CLI
+# Parallel studies are processes over files, in the CLI
 
-**Parallelism and checkpointing live in the experiment CLI, as one process per task
-that saves its own files, not in the library.** A study's runs are its tasks
+**Parallelism and checkpointing live in the CLI (`hb.cli`), as one process per task
+that saves its own files, not in `hb.study`.** A study's runs are its tasks
 (`hb.study_tasks`). `hb.study` runs them one after another in the caller's process
-(`hb.run_task`) and assembles the study (`hb.assemble`). The experiment CLI instead
-runs each task as `python -m <experiment> run-task STUDY --task-index K`, a new
-process that rebuilds the experiment from its module, saves its run file as soon as
+(`hb.run_task`) and assembles the study (`hb.assemble`). The CLI instead
+runs each task as `python <script> run-task STUDY --task-index K`, a new
+process that rebuilds the experiment from its script, saves its run file as soon as
 the run finishes, and writes its own per-run log. The study is assembled from the run
 files when every task is done. The files on disk are the checkpoint: `resume` runs only
 the tasks without a saved run.
@@ -16,8 +16,10 @@ are raised. BLAS reads its thread variables from the task's environment. Stoppin
 task is `terminate()`, which works while CasADi swallows Ctrl-C inside IPOPT. The CLI's
 launcher uses only public `subprocess` calls, so it runs the same on Windows and
 macOS, and `run-task` is an ordinary command that a SLURM array or GNU parallel can
-run too. The library still never writes files on its own: every file is written by the
-CLI through explicit saving calls (`hb.save_run`, `hb.saving.save_artifact`).
+run too. The rest of the library still never writes files on its own: the CLI writes
+a study's files (the task list, run files with `hb.save_run`, logs, the summary, the
+artifact with `hb.saving.save_artifact`, figures) because its command line asks for
+them.
 
 ## Considered Options
 
@@ -40,10 +42,16 @@ CLI through explicit saving calls (`hb.save_run`, `hb.saving.save_artifact`).
 - Each task re-imports CasADi and scipy and rebuilds the problem, about 1–2 s per
   task: noticeable for the illustrative example's sub-second runs, negligible for
   Langermann's (about 90 s each).
-- A task rebuilds the experiment from its module, so nothing is pickled: lambdas and
-  nested functions work. In return, the name an experiment passes to `cli.main` must
-  be its module's, and a resumed or scheduled task refuses to run unless the
-  experiment and the code version match the study's task list.
+- A task rebuilds the experiment from its script, so nothing is pickled: lambdas and
+  nested functions work. In return, `hb.cli.main` must be called from a script file,
+  and a resumed or scheduled task refuses to run unless the experiment and the code
+  version match the study's task list.
+- The CLI began in `experiments/cli.py`, outside the package, with tasks run as
+  `python -m <name>` from that folder, so an experiment's name had to be its
+  module's. #177 moved it into the package as `hb.cli`, so a script anywhere (such
+  as the git-ignored `scripts/`) can use it: tasks run the script's path, and its
+  file name is the experiment's name. The task list records what the script passes
+  to `main`, not its path, so a study resumes from a moved script.
 - A run killed partway starts again from scratch; checkpointing within a run is out of
   scope.
 - In-process `hb.study` is serial again and stays the easiest form to debug, but it
