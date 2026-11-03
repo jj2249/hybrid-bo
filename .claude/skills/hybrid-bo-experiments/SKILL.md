@@ -70,12 +70,14 @@ S2MPJ's CUTEst problems, one ordinary experiment file per problem (`hs27.py`). R
 one as `pixi run benchmark hs27 [command] [flags]`, which is `python -m hs27` in
 `benchmarks/s2mpj/`, with studies in `results/hs27/`. The files need no S2MPJ.
 
-- **Never edit a generated file by hand**, and never hand-write one. Change the rules
-  in `benchmarks/generate_s2mpj.py` (its docstring states them: the hidden term of
-  one hidden constraint is y, the states come from a pivoted QR of dg/dv with y held,
-  the bounds, SOLTN checked by IPOPT, 10d evaluations with 2d + 1 initial, 25d
-  scenarios and the temperature rule). Raise `GENERATOR_VERSION` if what it writes
-  changes, then regenerate with `pixi run -e benchmarks generate-s2mpj [NAMES...]`.
+- **Never edit a generated file by hand**, and never hand-write one, even when the
+  way experiments are written changes (a new `hb` API, a renamed setting): a change
+  like that also goes into `benchmarks/s2mpj_experiment.py.template`, the text of
+  every generated file. Change the rules in `benchmarks/generate_s2mpj.py`
+  (`benchmarks/README.md` states them and works HS27 through). Raise
+  `GENERATOR_VERSION`, then regenerate every file with
+  `pixi run -e benchmarks generate-s2mpj`; a test compares each committed file
+  with its regeneration.
   That is the only task that fetches S2MPJ (at `fetch_s2mpj.COMMIT`, into the
   git-ignored `benchmarks/.s2mpj/`). It rewrites `SUITE.md`, the table of every
   in-scope problem, generated or refused with a `Reason` (#181 tracks lifting them).

@@ -1010,12 +1010,18 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   - **The printer.** g, h and f are written as Python by a small printer over the
     CasADi expression tree (`to_python`). CasADi's `str()` shares terms as `@1=`,
     which isn't Python. The parentheses keep the tree, so the file computes exactly
-    what the trace does.
+    what the trace does. It writes only what the tree holds (`a + -4.2 * b`, not
+    `a - 4.2 * b`), which keeps it small.
+  - **The template.** Everything in a generated file that isn't the problem's own
+    data is `benchmarks/s2mpj_experiment.py.template`, filled in with
+    `string.Template`. A change to how experiments are written is one edit there and
+    a regeneration, never an edit to the generated files.
   - **Determinism.** v* is rounded to 6 decimals, the file goes through `ruff
     format`, and regenerating gives the same bytes. Generated files have LF endings
-    on every platform (`.gitattributes`), so a test can compare them byte for byte.
-  - **Where to look.** The generator's docstring has the rules, `SUITE.md` the
-    problems they refuse and why, and #181 how to lift each reason.
+    on every platform (`.gitattributes`), so a test compares every committed file
+    with its regeneration byte for byte, which also catches hand edits.
+  - **Where to look.** `benchmarks/README.md` has the rules and HS27 worked through,
+    `SUITE.md` the problems they refuse and why, and #181 how to lift each reason.
 
 ## Order of random draws
 

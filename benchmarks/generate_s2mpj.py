@@ -2,32 +2,14 @@
 ordinary experiment file in `benchmarks/s2mpj/` (ADR 0012), and `SUITE.md` there, the
 table of every in-scope problem: generated, or refused with the reason.
 
-The rules turn an equality-constrained problem min f(v) s.t. c(v) = 0, over S2MPJ's
-variables v, into a hybrid one:
+`benchmarks/README.md` states the rules that split a problem into a hybrid one, and
+works HS27 through; `split` applies them. Each file is `s2mpj_experiment.py.template`
+filled in, and is checked against S2MPJ's float evaluation before it is written.
 
-- the hidden constraint j: one nonlinear constraint, picked at random with a seed
-  from sha256 of the problem name. Its hidden term, the weighted sum of its elements
-  N_j, is the unknown state y; the oracle is y = N_j(v), and the hidden term's
-  variables are the `h_inputs`;
-- the known equations g: every constraint, with N_j replaced by y in constraint j;
-- the mechanistic states: the m variables that a column-pivoted QR of dg/dv (y held)
-  at the solution v* picks, ties going to variables outside N_j, as the root-finding
-  problem solves g for them with y measured. The decision variables are the other
-  d = n - m;
-- the bounds: S2MPJ's finite bounds, and for each infinite one the edge of the hull
-  of S2MPJ's start and v* (rounded to `SOLUTION_DECIMALS`), widened by max(1, half
-  the hull's width). The mechanistic states keep S2MPJ's bounds and take these as
-  start bounds; y's start bounds cover the hidden term's range within them;
-- the oracle optimum: the problem file's `# LO SOLTN`, which IPOPT must reach from
-  S2MPJ's start;
-- the configurations: hybrid BO with SAA-EI and with SoftSAA-EI, standard BO and
-  Latin hypercube sampling, each with 10d evaluations, 2d + 1 of them initial, 25d
-  scenarios and SoftSAA's temperature from `temperature`.
-
-The generated files are never edited by hand: a change for one problem goes into the
-rules here, and `GENERATOR_VERSION` goes up with any change to what they write.
-Every file is checked against S2MPJ's float evaluation as it is written. Regenerate
-named problems, or every in-scope one:
+The generated files are never edited by hand. A change to the rules, or to how
+experiments are written, goes into this module or the template, raises
+`GENERATOR_VERSION`, and every file is regenerated. Regenerate named problems, or
+every in-scope one:
 
     pixi run -e benchmarks generate-s2mpj [NAMES...]
 """
@@ -39,11 +21,12 @@ import hashlib
 import importlib.util
 import keyword
 import shutil
+import string
 import subprocess
 import sys
 import tempfile
 import types
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -71,6 +54,12 @@ GENERATOR_VERSION = 1
 
 # Where the generated experiments and SUITE.md go
 OUTPUT_DIR = Path(__file__).parent / "s2mpj"
+
+# Every generated experiment, with `$name` fields: a change to how the benchmarks are
+# written goes here (or into the rules), then every file is regenerated
+TEMPLATE = string.Template(
+    (Path(__file__).parent / "s2mpj_experiment.py.template").read_text()
+)
 
 # The suite: problems with equality constraints only and at most this many variables
 MAX_VARIABLES = 10
@@ -140,13 +129,15 @@ class Origin:
 
 @dataclass(frozen=True, kw_only=True)
 class Outcome:
-    """What the rules made of one in-scope problem, for SUITE.md: n and m (None if it
-    didn't load), and the hidden constraint's name, or why it was refused."""
+    """What the rules made of one problem: n and m (None if it didn't load), and the
+    hidden constraint's name and the generated experiment's checked text, or why it
+    was refused."""
 
     name: str
     n: int | None
     m: int | None
     hidden: str | None = None
+    text: str | None = None
     error: UnsupportedProblemError | None = None
 
 
@@ -453,17 +444,8 @@ def _printed(e: cas.SX) -> tuple[str, int]:
         value = float(e)
         return _literal(value), _UNARY if value < 0 else _ATOM
 
-    # A sum minus a constant, rather than plus a negative one
-    op = e.op()
-    if op in (cas.OP_ADD, cas.OP_SUB) and _is_negative_constant(e.dep(1)):
-        left, precedence = _printed(e.dep(0))
-        sign = "-" if op == cas.OP_ADD else "+"
-        return (
-            f"{_wrap(left, precedence < _SUM)} {sign} {_literal(-float(e.dep(1)))}",
-            _SUM,
-        )
-
     # Binary operators, with the parentheses that keep the expression's tree
+    op = e.op()
     if op in _BINARY or op == cas.OP_SQ:
         symbol, own = _BINARY.get(op, ("**", _POWER))
         left, left_precedence = _printed(e.dep(0))
@@ -476,10 +458,6 @@ def _printed(e: cas.SX) -> tuple[str, int]:
         else:
             left = _wrap(left, left_precedence < own)
             right = _wrap(right, right_precedence <= own)
-
-        # a + -b as a - b, and a - -b as a + b: negation is exact, so they are equal
-        if own == _SUM and right.startswith("-"):
-            symbol, right = "-" if symbol == "+" else "+", right[1:]
         return f"{left} {symbol} {right}", own
 
     # Unary operators and functions
@@ -504,11 +482,6 @@ def _wrap(text: str, needed: bool) -> str:
     return f"({text})" if needed else text
 
 
-def _is_negative_constant(e: cas.SX) -> bool:
-    """Whether the expression is a constant below 0."""
-    return bool(e.is_constant()) and float(e) < 0
-
-
 def _literal(value: float) -> str:
     """A finite number as Python: an integer without `.0`, otherwise its repr, which
     reads back as the same float.
@@ -527,40 +500,44 @@ def _literal(value: float) -> str:
 # The generated experiment
 
 
-def variable_names(source: Source) -> list[str]:
-    """The names of the generated file's variables: S2MPJ's, when each can name a
-    `Var` and a Python variable in the file, else X1, ..., Xn."""
-    names = list(source.variable_names)
-    is_usable = len(set(names)) == len(names) and all(
-        name.isidentifier()
-        and not keyword.iskeyword(name)
-        and not name.startswith("_")
-        and name not in _FILE_NAMES
-        and not hasattr(builtins, name)
-        for name in names
-    )
-    return names if is_usable else [f"X{i + 1}" for i in range(len(names))]
+def variable_names(source: Source) -> tuple[str, ...]:
+    """S2MPJ's names of the variables, which the generated file uses for its `Var`s
+    and its Python variables.
+
+    Raises `ValueError` if one can't name both.
+    """
+    for name in source.variable_names:
+        is_usable = (
+            name.isidentifier()
+            and not keyword.iskeyword(name)
+            and not name.startswith("_")
+            and name not in _FILE_NAMES
+            and not hasattr(builtins, name)
+        )
+        if not is_usable:
+            msg = f"S2MPJ's variable name {name!r} can't name a variable in the file"
+            raise ValueError(msg)
+    return source.variable_names
 
 
 def experiment_text(source: Source, chosen: Split, origin: Origin) -> str:
-    """The generated experiment file of the problem, before formatting.
+    """The generated experiment file of the problem: `TEMPLATE` filled in, before
+    formatting.
 
-    Raises `ValueError` if an expression can't be written as Python.
+    Raises `ValueError` if a name or an expression can't be written as Python.
     """
     names = variable_names(source)
     d = len(chosen.decisions)
-    constraint = source.constraint_names[chosen.hidden]
 
     # The equations in the variables' names
     v = cas.vertcat(*(cas.SX.sym(name) for name in names))
-    y = cas.SX.sym("y")
-    g = known_equations(source, v, y, chosen.hidden)
+    g = known_equations(source, v, cas.SX.sym("y"), chosen.hidden)
     g_lines = "\n".join(
         f"        {to_python(g[j])},  # {source.constraint_names[j]}"
         for j in range(source.m)
     )
-    h_text = to_python(source.element_sums(v)[chosen.hidden])
-    f_text = to_python(source.f(v)[0])
+    h = to_python(source.element_sums(v)[chosen.hidden])
+    f = to_python(source.f(v)[0])
 
     # The variables: decision variables within the bounds, mechanistic states with
     # S2MPJ's bounds and the rules' bounds as start bounds
@@ -578,178 +555,38 @@ def experiment_text(source: Source, chosen: Split, origin: Origin) -> str:
             ] + [f"start=({lower}, {upper})"]
         return f'{names[i]} = hb.Var("{names[i]}", {", ".join(arguments)})'
 
-    variables = "\n".join(var(i) for i in (*chosen.decisions, *chosen.states))
-    y_start = f"{_literal(chosen.y_start[0])}, {_literal(chosen.y_start[1])}"
-    start = _wrapped(
-        f"{names[i]} = {_literal(origin.start[i])}" for i in range(source.n)
-    )
-    solution = _wrapped(
-        f"{names[i]} = {_literal(origin.solution[i])}" for i in range(source.n)
-    )
-    u_list = ", ".join(names[i] for i in chosen.decisions)
-    x_list = ", ".join(names[i] for i in chosen.states)
-    h_inputs = ", ".join(names[i] for i in chosen.h_inputs)
-    module = source.name.lower()
     tau = temperature(origin.optimum)
-    body = f'''"""{source.name} from S2MPJ (CUTEst) as a benchmark experiment, run with SAA-EI,
-SoftSAA-EI, standard BO and Latin hypercube sampling.
-
-Generated by benchmarks/generate_s2mpj.py (version {GENERATOR_VERSION}) from S2MPJ commit
-{origin.commit}. Don't edit it: change the generator and
-regenerate (ADR 0012).
-
-- The hidden constraint is {constraint}. Its hidden term, the weighted sum of its
-  elements, is the unknown equation y = h; the known equations g are S2MPJ's
-  constraints with y in place of that term.
-- S2MPJ's start:
-{start}.
-- The solution v*, IPOPT's from S2MPJ's start, rounded to {SOLUTION_DECIMALS} decimals:
-{solution}.
-- The oracle optimum is f* = {origin.stated_optimum}, as the problem file states it
-  (SOLTN); IPOPT's is {origin.ipopt_optimum:.6g}.
-- SoftSAA's temperature is 1e-3 if the stated f* is 0, else
-  max(1e-3 |f*|, {_literal(MIN_TEMPERATURE)}): here {_literal(tau)}.
-
-Run it, then plot the newest study:
-
-    pixi run benchmark {module} [--n-runs 3 --plot ...]
-    pixi run benchmark {module} plot
-
-`pixi run benchmark {module} --help` lists the flags.
-"""
-
-import functools
-
-import casadi as cas
-
-import hybrid_bo as hb
-
-# Problem: S2MPJ's variables, the decision variables within the bounds the rules
-# give them (S2MPJ's where finite, else the hull of its start and v*, widened), the
-# mechanistic states with S2MPJ's bounds and those as start bounds. y's start bounds
-# cover the hidden term's range within them
-{variables}
-y = hb.Var("y", start=({y_start}))
-
-
-def g(v):
-    """The known equations, 0 = g: S2MPJ's constraints, with {constraint}'s hidden
-    term replaced by y."""
-    return [
-{g_lines}
-    ]
-
-
-def h(v):
-    """The unknown equation y = h, hidden from the methods: {constraint}'s hidden
-    term."""
-    return [{h_text}]
-
-
-def f(v):
-    """The objective, S2MPJ's."""
-    return {f_text}
-
-
-system = hb.System(
-    u=[{u_list}],
-    x=[{x_list}],
-    y=[y],
-    g=g,
-    h_inputs=[{h_inputs}],
-    measured=[y],
-)
-problem = hb.Problem(system, f=f)
-
-# Measurement: an oracle plays the real system
-measure = hb.oracle_measure(system, h, noise_std=0.0)
-
-# The oracle optimum, as the problem file states it: the study measures regret from
-# it, the methods never see it
-optimum = {_literal(origin.optimum)}
-
-# The prior GP of every BO method, which each fits to its own data: a zero mean and an
-# output scale times a Matern-5/2 kernel, both fitted within these bounds (in scaled
-# units), and no noise, as the measurement has none (the library's jitter keeps the
-# kernel matrix invertible)
-outputscale = hb.gp.Param(1.0, bounds=(0.1, 10.0))
-lengthscale = hb.gp.Param(1.0, bounds=(1e-3, 1e2))
-gp = hb.gp.GP(
-    mean=hb.gp.Zero(),
-    kernel=outputscale * hb.gp.Matern52(lengthscale=lengthscale),
-    noise_std=0.0,
-)
-
-# Methods: each takes (problem, measure, initial_points, n, rng), where n is the
-# number of iterations, or of design points for the baseline. Hybrid BO with SAA-EI
-# and with SoftSAA-EI, both with 25d = {25 * d} scenarios
-methods = {{
-    "hybrid_bo": functools.partial(
-        hb.hybrid_bo,
-        settings=hb.HybridBOSettings(
-            gp=gp,
-            acquisition=hb.EI(),
-            approximation=hb.SAA(n_scenarios={25 * d}),
+    uses_casadi = "cas." in g_lines + h + f
+    return TEMPLATE.substitute(
+        name=source.name,
+        module=source.name.lower(),
+        version=GENERATOR_VERSION,
+        commit=origin.commit,
+        constraint=source.constraint_names[chosen.hidden],
+        decimals=SOLUTION_DECIMALS,
+        points="\n".join(
+            f"  {names[i]}: start {_literal(origin.start[i])}, "
+            f"v* {_literal(origin.solution[i])}"
+            for i in range(source.n)
         ),
-    ),
-    "hybrid_bo_soft": functools.partial(
-        hb.hybrid_bo,
-        settings=hb.HybridBOSettings(
-            gp=gp,
-            acquisition=hb.EI(),
-            approximation=hb.SoftSAA(temperature={_literal(tau)}, n_scenarios={25 * d}),
-        ),
-    ),
-    "standard_bo": functools.partial(
-        hb.standard_bo, settings=hb.StandardBOSettings(gp=gp, acquisition=hb.EI())
-    ),
-    "latin_hypercube_sampling": hb.latin_hypercube_sampling,
-}}
-
-# Configurations: every method with 10d = {10 * d} evaluations, the first 2d + 1 = {2 * d + 1} of
-# them initial points
-configurations = {{
-    label: hb.Configuration(method=method, n_evaluations={10 * d}, n_initial={2 * d + 1})
-    for label, method in methods.items()
-}}
-
-# The study, which the command line's flags override. Seed None draws a fresh seed,
-# which the saved study keeps, so it can be run again exactly
-study_settings = hb.StudySettings(n_runs=10, seed=None)
-
-# Where the experiment comes from, recorded in the task list and the artifact
-notes = {{
-    "problem": "{source.name}",
-    "s2mpj_commit": "{origin.commit}",
-    "generator_version": "{GENERATOR_VERSION}",
-    "hidden_constraint": "{constraint}",
-}}
-
-# Run or plot from the command line. The oracle measurement is cheap, so the
-# iteration figures draw its oracle values
-if __name__ == "__main__":
-    hb.cli.main(
-        problem,
-        measure,
-        configurations,
-        study_settings,
-        optimum=optimum,
-        true_curves=True,
-        notes=notes,
+        stated_optimum=origin.stated_optimum,
+        ipopt_optimum=f"{origin.ipopt_optimum:.6g}",
+        min_temperature=_literal(MIN_TEMPERATURE),
+        temperature=_literal(tau),
+        casadi_import="import casadi as cas\n\n" if uses_casadi else "",
+        variables="\n".join(var(i) for i in (*chosen.decisions, *chosen.states)),
+        y_start=f"{_literal(chosen.y_start[0])}, {_literal(chosen.y_start[1])}",
+        g_lines=g_lines,
+        h=h,
+        f=f,
+        u=", ".join(names[i] for i in chosen.decisions),
+        x=", ".join(names[i] for i in chosen.states),
+        h_inputs=", ".join(names[i] for i in chosen.h_inputs),
+        optimum=_literal(origin.optimum),
+        n_scenarios=25 * d,
+        n_evaluations=10 * d,
+        n_initial=2 * d + 1,
     )
-'''
-    uses_casadi = "cas." in g_lines + h_text + f_text
-    return body if uses_casadi else body.replace("import casadi as cas\n\n", "")
-
-
-def _wrapped(items: Iterable[str]) -> str:
-    """The items joined by commas into lines indented by 2, without breaking one."""
-    lines = [""]
-    for item in items:
-        if lines[-1] and len(lines[-1]) + len(item) > 80:
-            lines.append("")
-        lines[-1] += f"{', ' if lines[-1] else ''}{item}"
-    return ",\n".join(f"  {line}" for line in lines)
 
 
 def formatted(text: str) -> str:
@@ -817,28 +654,57 @@ def check_experiment(experiment: types.ModuleType, source: Source) -> None:
         _check_agrees(source, point, values, "the generated file")
 
 
-def generate(name: str, output_dir: Path = OUTPUT_DIR) -> Path:
-    """Writes the generated experiment of the S2MPJ problem `name` to `output_dir`,
-    once it is checked, and returns its path.
+def outcome(name: str) -> Outcome:
+    """What the rules make of the problem `name`: its generated experiment's text,
+    checked against S2MPJ, or why it is refused.
 
-    Raises what `read` and `split` raise, and `UnsupportedProblemError` if an
-    expression can't be written or the file doesn't match S2MPJ, writing nothing.
+    Raises `FileNotFoundError` without the checkout and `ValueError` if S2MPJ has
+    no such problem.
     """
-    # The file's text
-    source = read(name)
-    chosen, origin = split(source)
+    # The problem, and its split
     try:
+        source = read(name)
+    except UnsupportedProblemError as error:
+        return Outcome(name=name, n=None, m=None, error=error)
+    try:
+        chosen, origin = split(source)
         text = formatted(experiment_text(source, chosen, origin))
-    except ValueError as error:
-        raise UnsupportedProblemError(name, Reason.UNTRACEABLE, str(error)) from None
+    except UnsupportedProblemError as error:
+        return Outcome(name=name, n=source.n, m=source.m, error=error)
+    except ValueError as error:  # a name or an expression it can't write
+        error = UnsupportedProblemError(name, Reason.UNTRACEABLE, str(error))
+        return Outcome(name=name, n=source.n, m=source.m, error=error)
 
-    # Checked as a module from a temporary folder, then written
+    # The text checked as a module from a temporary folder
     with tempfile.TemporaryDirectory() as folder:
         checked = Path(folder) / f"{name.lower()}.py"
         checked.write_text(text, encoding="utf-8", newline="\n")
-        check_experiment(load_experiment(checked), source)
-    path = output_dir / f"{name.lower()}.py"
-    path.write_text(text, encoding="utf-8", newline="\n")
+        try:
+            check_experiment(load_experiment(checked), source)
+        except UnsupportedProblemError as error:
+            return Outcome(name=name, n=source.n, m=source.m, error=error)
+    hidden = source.constraint_names[chosen.hidden]
+    return Outcome(name=name, n=source.n, m=source.m, hidden=hidden, text=text)
+
+
+def generate(name: str, output_dir: Path = OUTPUT_DIR) -> Path:
+    """Writes the generated experiment of the S2MPJ problem `name` to `output_dir`
+    and returns its path.
+
+    Raises what `outcome` raises, and its `UnsupportedProblemError` if the problem
+    is refused, writing nothing.
+    """
+    result = outcome(name)
+    if result.error is not None:
+        raise result.error
+    return _write(result, output_dir)
+
+
+def _write(result: Outcome, output_dir: Path) -> Path:
+    """Writes the generated experiment of a problem the rules accept, and returns its
+    path."""
+    path = output_dir / f"{result.name.lower()}.py"
+    path.write_text(str(result.text), encoding="utf-8", newline="\n")
     return path
 
 
@@ -879,20 +745,6 @@ def in_scope() -> list[str]:
         if is_in_scope:
             names.append(name)
     return names
-
-
-def outcome(name: str) -> Outcome:
-    """What the rules make of the problem `name`."""
-    try:
-        source = read(name)
-    except UnsupportedProblemError as error:
-        return Outcome(name=name, n=None, m=None, error=error)
-    try:
-        chosen, _ = split(source)
-    except UnsupportedProblemError as error:
-        return Outcome(name=name, n=source.n, m=source.m, error=error)
-    hidden = source.constraint_names[chosen.hidden]
-    return Outcome(name=name, n=source.n, m=source.m, hidden=hidden)
 
 
 def suite_table(outcomes: Sequence[Outcome]) -> str:
@@ -949,29 +801,41 @@ def main(argv: Sequence[str] | None = None) -> int:
     spelled = {name.lower(): name for name in problem_names()}
     names = [spelled.get(name.lower(), name) for name in requested]
 
-    # What the rules make of every in-scope problem, for SUITE.md, and the files of
-    # problems they no longer generate
-    outcomes = [outcome(name) for name in in_scope()]
-    to_write = names or [result.name for result in outcomes if result.error is None]
+    # What the rules make of every in-scope problem, for SUITE.md, and of any named
+    # one outside the scope
+    in_scope_outcomes = [outcome(name) for name in in_scope()]
+    outcomes = {result.name: result for result in in_scope_outcomes}
+    status = 0
+    for name in names:
+        try:
+            outcomes.setdefault(name, outcome(name))
+        except ValueError as error:
+            print(error, file=sys.stderr)
+            status = 1
+    to_write = [
+        result
+        for name, result in outcomes.items()
+        if (name in names or not names) and result.error is None
+    ]
+
+    # The files of problems the rules no longer generate go, when generating all
     if not names:
-        kept = {f"{name.lower()}.py" for name in to_write}
+        kept = {f"{result.name.lower()}.py" for result in to_write}
         for path in OUTPUT_DIR.glob("*.py"):
             if path.name not in kept:
                 path.unlink()
                 print(f"Removed {path}")
 
-    # The experiments, each checked before it is written
-    status = 0
-    for name in to_write:
-        try:
-            path = generate(name)
-        except (UnsupportedProblemError, ValueError) as error:
+    # The experiments, each checked already, and the refused named problems
+    for result in to_write:
+        print(f"Generated {_write(result, OUTPUT_DIR)}")
+    for name in names:
+        error = outcomes[name].error if name in outcomes else None
+        if error is not None:
             print(error, file=sys.stderr)
             status = 1
-            continue
-        print(f"Generated {path}")
     suite = OUTPUT_DIR / "SUITE.md"
-    suite.write_text(suite_table(outcomes), encoding="utf-8", newline="\n")
+    suite.write_text(suite_table(in_scope_outcomes), encoding="utf-8", newline="\n")
     print(f"Wrote {suite}")
     return status
 

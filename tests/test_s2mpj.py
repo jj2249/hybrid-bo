@@ -267,14 +267,14 @@ def test_printed_expressions_compute_the_same_values():
         assert float(values[0]) == float(values[1]), text
 
 
-def test_printed_expressions_read_as_a_person_would_write_them():
-    """Only the parentheses the tree needs, and a sum minus a product rather than
-    plus a negative one."""
+def test_printed_expressions_have_only_the_parentheses_the_tree_needs():
+    """A sum on the right of a minus, or inside a product, is parenthesized; a
+    product inside a sum isn't."""
     a, b, c = (cas.SX.sym(name) for name in "abc")
 
     assert gen.to_python(a - (b - c)) == "v.a - (v.b - v.c)"
     assert gen.to_python((a + b) * c) == "(v.a + v.b) * v.c"
-    assert gen.to_python(a + -4.2 * b**2) == "v.a - 4.2 * v.b ** 2"
+    assert gen.to_python(a + b * c) == "v.a + v.b * v.c"
 
 
 @needs_ruff
@@ -358,12 +358,15 @@ def test_a_generated_benchmark_matches_s2mpj(path):
 
 @needs_checkout
 @needs_ruff
-def test_regenerating_hs27_reproduces_the_committed_file(tmp_path):
-    """The generator is deterministic and the committed file isn't edited by hand:
-    generating HS27 again gives the committed file byte for byte."""
-    path = gen.generate("HS27", output_dir=tmp_path)
+@pytest.mark.parametrize("path", GENERATED, ids=[path.stem for path in GENERATED])
+def test_regenerating_reproduces_the_committed_file(path, tmp_path):
+    """The generator is deterministic and no committed file is edited by hand:
+    generating the problem again gives its file byte for byte. A change to the
+    template or the rules fails this until every file is regenerated."""
+    name = gen.load_experiment(path).notes["problem"]
+    regenerated = gen.generate(name, output_dir=tmp_path)
 
-    assert path.read_bytes() == (gen.OUTPUT_DIR / "hs27.py").read_bytes()
+    assert regenerated.read_bytes() == path.read_bytes()
 
 
 # S2MPJ's problems
