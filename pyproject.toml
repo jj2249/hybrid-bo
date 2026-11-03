@@ -90,8 +90,9 @@ dev = { features = ["dev", "docs", "experiments"], solve-group = "default" }
 target-version = "py312"
 line-length = 88
 
-# Add to Ruff's default exclusions.
-extend-exclude = [".pixi"]
+# Add to Ruff's default exclusions: the environments, and the clone of the S2MPJ
+# problems (third-party code, not ours to lint or reformat)
+extend-exclude = [".pixi", "benchmarks/.s2mpj"]
 
 [tool.ruff.lint]
 ignore = ["E501"]
@@ -133,4 +134,5 @@ python-version = "3.12"
 extra-paths = ["experiments"]
 
 [tool.ty.src]
-exclude = [".pixi"]
+# As Ruff's exclusions
+exclude = [".pixi", "benchmarks/.s2mpj"]
