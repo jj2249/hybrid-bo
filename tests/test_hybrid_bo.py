@@ -555,7 +555,7 @@ def two_fitted_gps():
 
 def test_scenario_unknown_states_have_one_gp_per_unknown_state():
     """Each scenario's unknown state j is mean_j + std_j * z_sj, from GP j at the
-    scenario's arguments of h, for numpy and CasADi inputs alike."""
+    scenario's arguments of h."""
     # Reference: each GP's prediction at each scenario's (u, x1), by numpy
     problem, fitted = two_state_problem(), two_fitted_gps()
     u, x = np.array([0.3]), np.array([[-0.4], [0.8]])
@@ -565,15 +565,13 @@ def test_scenario_unknown_states_have_one_gp_per_unknown_state():
         [mean + std * SCENARIOS_2.z[:, j] for j, (mean, std) in enumerate(predictions)]
     )
 
-    # Numeric, then symbolic evaluated at the same point
-    numeric = _scenario_unknown_states(problem.system, fitted, SCENARIOS_2, u, x)
+    # Symbolic, evaluated at the same point
     u_sym, x_sym = cas.SX.sym("u", 1, 1), cas.SX.sym("x", 2, 1)
     symbolic = cas.Function(
         "y",
         [u_sym, x_sym],
         [_scenario_unknown_states(problem.system, fitted, SCENARIOS_2, u_sym, x_sym)],
     )(u, x).full()
-    np.testing.assert_allclose(numeric, expected, rtol=1e-12)
     np.testing.assert_allclose(symbolic, expected, rtol=1e-10)
 
 

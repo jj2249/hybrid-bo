@@ -568,8 +568,17 @@ decision vector `w`.
 
 - **The acquisition problem owns its variable order.** `_pack` and `_unpack` are the
   only code that knows it; the trial point, the scenario states read back from a
-  solution (`_scenario_states`), the iteration plots' replay and the tests all go
-  through them, so changing the order breaks nothing silently. `_pack` needs no
+  solution, the replay and the tests all go through them (or through the problem's
+  own functions of w), so changing the order breaks nothing silently.
+- **The acquisition problem says what it computed.** Besides the objective and the
+  constraints, hybrid BO's problem carries `scenario_values(w)`: f under each
+  scenario, the scenarios' unknown states and the std of f (linearization's s, else
+  the weighted std over the scenarios), built from the same expressions as the
+  objective. The loop reads the stored scenario states from it, and `replay`
+  (ADR 0005) solves the problem's own constraints with u fixed and evaluates the
+  objective and `scenario_values`, so the figures can't drift from what the method
+  minimized. `bo.iteration_problem(run, problem, i)` rebuilds an iteration's problem
+  from a run. `_pack` needs no
   layout, so the builders use it for the symbols, the bounds and the start bounds
   alike.
 
@@ -592,7 +601,7 @@ decision vector `w`.
   `Linearization` (below). The approximation decides which scenarios the problem is
   built over and how its objective combines them; the scenario machinery (`x_s` and
   `g` per scenario, the optional tie of `y_s` to the GP, `_pack`/`_unpack`,
-  `_scenario_states`) is shared. Settings that only make sense for one approximation
+  `scenario_values`) is shared. Settings that only make sense for one approximation
   live on it (`n_scenarios` on `SAA`).
 - `unknown_states_as_variables` (on every approximation): if True, each scenario's unknown states are variables
   of the acquisition problem tied to the GP by an equality constraint (paper, Problem 8),

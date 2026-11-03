@@ -16,10 +16,10 @@ import numpy as np
 
 from hybrid_bo.acquisition import (
     SAA,
+    AcquisitionProblem,
     AcquisitionSolution,
     Linearization,
     SoftSAA,
-    _scenario_states,
     _unpack,
     hybrid_acquisition,
     nominal_scenario,
@@ -272,11 +272,10 @@ def hybrid_bo(
         solution = multistart(acquisition_problem.nlp, starts, settings.solver)
 
         # The trial point, and the scenario states at the solution
-        u, _, _ = _unpack(acquisition_problem, solution.w)
-        x, y = _scenario_states(
-            system, fitted, scenarios, acquisition_problem, solution.w
-        )
-        return u, fitted, AcquisitionSolution(solution.f, x, y)
+        u, x, _ = _unpack(acquisition_problem, solution.w)
+        assert acquisition_problem.scenario_values is not None
+        _, y, _ = acquisition_problem.scenario_values(solution.w)
+        return u, fitted, AcquisitionSolution(solution.f, x, y.full())
 
     try:
         run = optimization_loop(
@@ -294,3 +293,27 @@ def hybrid_bo(
             error.run = replace(error.run, scenarios=scenarios)
         raise
     return replace(run, scenarios=scenarios)
+
+
+def iteration_problem(run: Run, problem: Problem, i: int) -> AcquisitionProblem:
+    """Iteration i's acquisition problem (from 0), rebuilt as the run's method built
+    it: from the iteration's stored surrogate, the run's scenarios, the incumbent
+    before trial point i and the run's settings.
+
+    Raises `ValueError` for a baseline's run, which solves no acquisition problem.
+    """
+    surrogate = run.surrogates[i]
+    incumbent = float(incumbents(run.history)[run.history.n_initial + i - 1])
+    match run.settings:
+        case StandardBOSettings(acquisition=acquisition):
+            return standard_acquisition(problem, surrogate[0], incumbent, acquisition)
+        case HybridBOSettings(acquisition=acquisition, approximation=approximation):
+            assert run.scenarios is not None  # hybrid BO runs hold their scenarios
+            return hybrid_acquisition(
+                problem, surrogate, run.scenarios, incumbent, acquisition, approximation
+            )
+        case None:
+            msg = f"{run.method} is a baseline, which solves no acquisition problem"
+            raise ValueError(msg)
+        case _:
+            assert_never(run.settings)
