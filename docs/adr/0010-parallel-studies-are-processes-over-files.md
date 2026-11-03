@@ -52,6 +52,9 @@ them.
   as the git-ignored `scripts/`) can use it: tasks run the script's path, and its
   file name is the experiment's name. The task list records what the script passes
   to `main`, not its path, so a study resumes from a moved script.
+- The rules for the files (the task list, when a task is done, assembling) live in
+  `hybrid_bo.study_folder`, apart from the CLI's command line, launcher and logging,
+  so they can be tested without starting processes.
 - A run killed partway starts again from scratch; checkpointing within a run is out of
   scope.
 - In-process `hb.study` is serial again and stays the easiest form to debug, but it

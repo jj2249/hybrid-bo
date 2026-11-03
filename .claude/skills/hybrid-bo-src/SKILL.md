@@ -187,7 +187,22 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - `cli.py`: the study command line, `hb.cli.main` (ADR 0010; the
   `hybrid-bo-experiments` skill has its commands and files). Only `main` is public.
   It is the one module that writes files on its own, as the command line asks; it
-  imports Polars and matplotlib lazily, so tasks start without them.
+  imports Polars and matplotlib lazily, so tasks start without them. It parses the
+  flags, launches tasks and logs; the study folder is `study_folder.py`'s.
+- `study_folder.py`: the study folder (GLOSSARY), internal (not in `hb`; `hb.cli`
+  is its one user). `Experiment` (script, problem, measure, configurations,
+  optimum; `.name` is the script's stem), `TaskList` (`tasks.json`) and
+  `StudyFolder(path, task_list)`, which only `prepare(experiment_dir, experiment,
+  labels, *, n_runs, seed, version, study_id, suffix_if_taken)` (reserves the id by
+  `mkdir`, writes the task list) and `open_study(study_dir, experiment, version)`
+  (reads it, refuses one that differs, naming the fields) give. `tasks`, `task`,
+  `tasks_left` (with indices), `is_done` (run file or `.failed` marker),
+  `save_result(folder, task, run | None)` (atomic), `per_run_log`, `study_log`,
+  `run_tag`, `study_settings`, `is_finished`, `finished_study` (for `plot`) and
+  `assemble_study` (loads the runs, `assemble`, rebuilds the study log, saves the
+  artifact; the caller closes file handlers on the study log first, and writes the
+  summary after). Everything it refuses raises `StudyFolderError` (`errors.py`).
+  The code version is an argument, so tests pass any string.
 - `baselines.py`: `latin_hypercube_sampling` and `uniform_sampling` draw the whole
   design over the `u` start bounds, then `evaluate` initial points plus design in
   one call.
@@ -337,7 +352,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   error, and `.run`, the partial run when raised in a method), `RootFindingError`,
   `NoSolutionError`, `ReconstructionWarning`, `OracleOptimumWarning`, `ReplayWarning`
   (an iteration figure's replay left the optimizer's branch at the trial point), and
-  `StudyFormatError` (a `ValueError`: a saved study this version can't load). The library
+  `StudyFormatError` (a `ValueError`: a saved study this version can't load) and
+  `StudyFolderError` (a study folder refused: taken id, no or a differing task list,
+  no such task). The library
   raises these, never bare `Exception` (ruff `TRY002`/`BLE001` apply everywhere).
   It imports `History` and `Run` only for type checking, since `run.py` imports
   `gp.py`, which imports `errors.py`.

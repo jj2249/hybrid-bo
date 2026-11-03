@@ -210,6 +210,13 @@ resuming checks the experiment against them, so a study resumes from its script 
 elsewhere. Unlike the artifact, it is written before anything runs.
 _Avoid_: manifest, job list
 
+**Study folder**:
+The folder `results/<experiment>/<study id>/` that holds a study's task list, run
+files, failure markers, per-run logs and study log, then its artifact, summary and
+figures. Creating it reserves the study id; the study is finished exactly when its
+artifact is there.
+_Avoid_: results dir, output dir, run folder
+
 **Unfinished study**:
 A study folder without an artifact: its task list, its study log, and the run files
 and per-run logs of the tasks done so far. It can't be loaded or plotted; `resume`

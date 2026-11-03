@@ -158,8 +158,9 @@ command and exits 130 or 1. `resume STUDY [--n-workers N] [--require-clean] [--p
 takes everything else from the task list; it refuses a finished study and, naming the
 difference (both values for one-value fields), an experiment whose configurations,
 budgets, problem or measurement text, or code version differ from the task list;
-then it runs the tasks left and assembles. Helpers raise `hb.cli._UsageError`, which
-`main` reports as a usage error. For a cluster, `prepare`, then a SLURM array of
+then it runs the tasks left and assembles. The study folder's rules are
+`hybrid_bo.study_folder`'s, which raises `StudyFolderError`; it and the CLI's own
+`_UsageError` are reported by `main` as a usage error. For a cluster, `prepare`, then a SLURM array of
 `run-task --task-index $SLURM_ARRAY_TASK_ID`, then `resume`.
 
 No command lists every experiment, and a typo in `pixi run experiment <name>` fails

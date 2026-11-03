@@ -33,6 +33,12 @@ class StudyFormatError(ValueError):
     GPs were data. Rerun it, or load it with the version that saved it."""
 
 
+class StudyFolderError(Exception):
+    """A study folder can't be used as asked: its study id is taken, it holds no
+    unfinished study, its task list differs from the experiment, or it has no such
+    task."""
+
+
 class ReconstructionWarning(UserWarning):
     """The root-finding problem found a different root from the oracle values.
 

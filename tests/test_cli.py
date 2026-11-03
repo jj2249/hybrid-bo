@@ -607,16 +607,6 @@ def test_running_twice_in_one_process_logs_each_record_once(tmp_path, experiment
 # Study ids
 
 
-def test_an_unfinished_study_keeps_its_id_taken(tmp_path):
-    """A study's folder reserves its id, so a study that didn't finish keeps it: a
-    new study doesn't reuse it."""
-    (tmp_path / "old").mkdir()
-
-    assert cli._reserve(tmp_path, "old", suffix_if_taken=True).name == "old-2"
-    with pytest.raises(cli._UsageError, match="is taken"):
-        cli._reserve(tmp_path, "old", suffix_if_taken=False)
-
-
 def test_a_taken_name_is_refused_before_running(tmp_path, experiment, capsys):
     """`--name` names the study's folder. A name taken by a saved study, or by a study
     that didn't finish, is a usage error before anything runs."""
@@ -826,47 +816,6 @@ def test_resume_refuses_a_finished_study(tmp_path, experiment, capsys):
         experiment(["resume", "done", *results(tmp_path)])
     assert exit_info.value.code != 0
     assert "is finished" in capsys.readouterr().err
-
-
-def test_resume_refuses_a_study_of_another_experiment(tmp_path, experiment, capsys):
-    """`resume` refuses, naming what differs, when the experiment's configurations
-    differ from the study's task list, so a resumed study never mixes runs of two
-    experiments; nothing runs then."""
-    # A study of one iteration, prepared
-    experiment(
-        ["prepare", *results(tmp_path, "--n-runs", "1", "--seed", "0", "--name", "s")]
-    )
-    study_dir = tmp_path / "small_example" / "s"
-    capsys.readouterr()
-
-    # The experiment changed: two iterations
-    with pytest.raises(SystemExit) as exit_info:
-        experiment(["resume", "s", *results(tmp_path)], small(n_iterations=2))
-    assert exit_info.value.code != 0
-    assert "differs from the experiment in configurations" in capsys.readouterr().err
-    assert not (study_dir / "runs").exists()
-
-
-def test_run_task_refuses_another_code_version(
-    tmp_path, experiment, experiment_folder, monkeypatch
-):
-    """A task refuses to run (exit status 2) unless the code version is the one the
-    study was prepared with, so every run of a study comes from the same code; the
-    message gives both versions."""
-    # Prepared at another code version
-    monkeypatch.setattr(cli, "code_version", lambda path: "abc1234")
-    experiment(["prepare", *results(tmp_path, "--n-runs", "1", "--name", "old")])
-
-    task = subprocess.run(
-        [sys.executable, str(experiment_folder / "small_example.py"), "run-task"]
-        + ["old", "--task-index", "0", *results(tmp_path)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-    assert task.returncode == 2
-    assert "code_version ('abc1234' in the study, " in task.stderr
 
 
 def failing(*args, **kwargs):
@@ -1096,7 +1045,7 @@ def test_any_failure_says_how_to_resume(tmp_path, experiment, monkeypatch, capsy
         """Fails as assembling a study might."""
         raise ValueError("assembly failed")
 
-    monkeypatch.setattr(cli, "_assemble_study", broken_assembly)
+    monkeypatch.setattr(cli, "assemble_study", broken_assembly)
 
     with pytest.raises(SystemExit) as exit_info:
         experiment(

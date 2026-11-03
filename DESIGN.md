@@ -888,6 +888,12 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   differs from the task list (it takes no flags that choose the study), so a resumed
   study equals one run in one go. Assembly writes the artifact last and rebuilds the
   study log rather than appending to it, so an interrupted assembly resumes cleanly.
+  These rules are `hybrid_bo.study_folder`'s (internal, not in `hb`): `prepare` and
+  `open_study` give a `StudyFolder` whose task list was written or checked against
+  the `Experiment`, and `tasks_left`, `save_result` and `assemble_study` work on it,
+  so the rules are tested in-process (`tests/test_study_folder.py`). It raises
+  `StudyFolderError`, which the CLI reports as a usage error, and touches no logging
+  configuration: the CLI closes its handlers on the study log before assembling.
   The launcher is `cli._run_commands`, a runner of named commands that knows nothing
   of studies (its tests run `python -c` commands); `cli._run_tasks` builds the tasks'
   commands. Tasks run the script's path (`__main__`'s `__file__`) from the
