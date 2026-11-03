@@ -340,20 +340,15 @@ system, leave out ``optimum`` and ``true_curves``:
 ``true_curves=True`` draws the true curves in the iteration figures by running the
 measurement on a grid, so use it only with an oracle.
 
-A file that builds a different experiment for each of its own arguments (as
-``benchmarks/s2mpj.py`` builds one per S2MPJ problem name) reads them from the start
-of the command line and passes them as ``arguments``; every run then starts as
-``python <file> <arguments> run-task``, and the studies are saved under
-``results/<file>/<arguments>/``. ``notes`` records anything else about the
-experiment in the study's artifact:
+``notes`` records anything else about the experiment, such as where it comes from,
+in the study's task list and its artifact. The generated benchmarks in
+``benchmarks/s2mpj/`` record their S2MPJ commit this way:
 
 .. code-block:: python
 
    if __name__ == "__main__":
-       name = sys.argv[1]
-       ...  # build the experiment of `name`
        hb.cli.main(problem, measure, configurations, study_settings,
-                   arguments=[name], notes={"source": "..."})
+                   notes={"source": "..."})
 
 Running
 -------

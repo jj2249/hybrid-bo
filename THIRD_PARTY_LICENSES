@@ -8,10 +8,11 @@ CasADi: LGPL-3.0 license (<https://github.com/casadi/casadi/blob/main/LICENSE.tx
 - NumPy: BSD-3-Clause license (<https://github.com/numpy/numpy/blob/main/LICENSE.txt>)
 - SciPy: BSD-3-Clause license (<https://github.com/scipy/scipy/blob/main/LICENSE.txt>)
 
-Benchmarks (fetched by `pixi run benchmark` into benchmarks/.s2mpj/, not installed
-with the package):
+Benchmarks (fetched by `pixi run -e benchmarks generate-s2mpj` into
+benchmarks/.s2mpj/, not installed with the package; the benchmark experiments in
+benchmarks/s2mpj/ are generated from its problems):
 
-- S2MPJ: BSD-3-Clause license (<https://github.com/GrattonToint/S2MPJ/blob/main/LICENSE>)
+- S2MPJ (Gratton & Toint): BSD-3-Clause license (<https://github.com/GrattonToint/S2MPJ/blob/main/LICENSE>)
 
 Optional dependencies:
 

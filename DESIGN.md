@@ -987,26 +987,35 @@ it. Polars and matplotlib are optional (imported on first use; they are in the
   script: `plot` needs the experiment's problem, so every command goes through the
   script. Polars (to summarize) and matplotlib (to plot) are imported lazily, and
   are the extras `hybrid-bo[analysis]` and `hybrid-bo[plots]`.
-- **Script arguments** (#180). A script may read its own first arguments to choose
-  what it builds, and pass them to `hb.cli.main` as `arguments`: each task runs as
-  `python <script> <arguments> run-task`, messages show them, and the studies are
-  saved under `<script>/<arguments>/`. `notes` is text the script records beyond
-  what it passes (the S2MPJ commit and the split), in the task list and as the
-  artifact's `notes`. A study's folder holds one argument choice, so the task
-  list's name (`s2mpj/HS27`) records it, and `resume` compares it.
-- **Benchmarks from a problem library** (#180; ADR 0012). `benchmarks/s2mpj.py`
-  builds a benchmark experiment from any S2MPJ problem by rules, from S2MPJ's own
-  code: `pixi run benchmark s2mpj HS27`. The `benchmark` task fetches S2MPJ first,
-  at a pinned commit, into the git-ignored `benchmarks/.s2mpj/`
-  (`benchmarks/fetch_s2mpj.py`), in the `benchmarks` environment only; nothing under
-  `src/` or `experiments/` imports it. Equality constraints only for now (#179), and
-  one unknown equation: the element sum of one nonlinear constraint, picked with a
-  seed from sha256 of the name. The states come from a column-pivoted QR of dg/dz
-  with y held at z*, not dc/dz: the root-finding problem solves g for the states with
-  y measured, and with dc/dz HS6 gets a state that g doesn't contain. A constraint
-  that is its element sum plus a constant (HS7) leaves y a constant of g, so it is
-  refused as ill-conditioned. The module docstring has the rules, #181 the problems
-  they refuse and why.
+- **Notes** (#180). `notes` is text a script records about its experiment beyond
+  what it passes to `hb.cli.main` (a generated benchmark's S2MPJ commit and hidden
+  constraint), in the task list and as the artifact's `notes`.
+- **Benchmarks generated from a problem library** (#180; ADR 0012).
+  `benchmarks/generate_s2mpj.py` applies the rules to S2MPJ problems once, offline,
+  and writes one ordinary experiment per problem to `benchmarks/s2mpj/<name>.py`,
+  run as `pixi run benchmark hs27`. Only generating needs S2MPJ: `pixi run -e
+  benchmarks generate-s2mpj [NAMES...]` fetches it first, at a pinned commit, into
+  the git-ignored `benchmarks/.s2mpj/` (`benchmarks/fetch_s2mpj.py`).
+  - **A hard boundary.** Only `benchmarks/s2mpj_source.py` touches S2MPJ's code. It
+    traces a problem once into a `Source`, a record of f(v), c(v, s) with the
+    element sums s given, the element sums N(v), the bounds and the names. The rules
+    see only that record, which is also how the tests build problems by hand.
+  - **The rules.** Equality constraints only for now (#179), and one unknown
+    equation: the hidden term of the hidden constraint, one nonlinear constraint
+    picked with a seed from sha256 of the name. A hidden constraint that is its
+    hidden term plus a constant (HS7) leaves y a constant of g, so it is refused.
+  - **The states** come from a column-pivoted QR of dg/dv with y held at v*, not
+    dc/dv. The root-finding problem solves g for the states with y measured, and
+    with dc/dv HS6 gets a state that g doesn't contain.
+  - **The printer.** g, h and f are written as Python by a small printer over the
+    CasADi expression tree (`to_python`). CasADi's `str()` shares terms as `@1=`,
+    which isn't Python. The parentheses keep the tree, so the file computes exactly
+    what the trace does.
+  - **Determinism.** v* is rounded to 6 decimals, the file goes through `ruff
+    format`, and regenerating gives the same bytes. Generated files have LF endings
+    on every platform (`.gitattributes`), so a test can compare them byte for byte.
+  - **Where to look.** The generator's docstring has the rules, `SUITE.md` the
+    problems they refuse and why, and #181 how to lift each reason.
 
 ## Order of random draws
 

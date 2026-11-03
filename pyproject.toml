@@ -75,13 +75,18 @@ polars = ">=2.0.0,<3"
 [tool.pixi.feature.experiments.tasks]
 experiment = { cmd = "python -m", cwd = "experiments", default-environment = "experiments", description = "Run an experiment as a study: pixi run experiment <name> [flags]" }
 plot = { cmd = "python -m {{ name }} plot {{ study }}", cwd = "experiments", default-environment = "experiments", args = ["name", { arg = "study", default = "" }], description = "Plot a saved study of an experiment (default: the newest)" }
+# The same for a generated benchmark experiment (`benchmarks/s2mpj/`, ADR 0012), which
+# needs no S2MPJ: pixi run benchmark hs27 [flags]
+benchmark = { cmd = "python -m", cwd = "benchmarks/s2mpj", default-environment = "experiments", description = "Run a generated benchmark as a study: pixi run benchmark <name> [flags]" }
 
-# Benchmarks built by rules from an external problem library (`benchmarks/`, ADR
-# 0012). `benchmark` fetches S2MPJ at its pinned commit first (`fetch_s2mpj.py`), so
-# only this environment ever fetches or imports it: pixi run benchmark s2mpj HS27
+# Generating the benchmark experiments from S2MPJ (`benchmarks/`, ADR 0012): only
+# this environment fetches or imports S2MPJ, and it formats the files with ruff
+[tool.pixi.feature.benchmarks.dependencies]
+ruff = ">=0.16.10,<0.17"
+
 [tool.pixi.feature.benchmarks.tasks]
 fetch-s2mpj = { cmd = "python fetch_s2mpj.py", cwd = "benchmarks", description = "Fetch S2MPJ at its pinned commit into benchmarks/.s2mpj/" }
-benchmark = { cmd = "python -m", cwd = "benchmarks", depends-on = ["fetch-s2mpj"], default-environment = "benchmarks", description = "Run a benchmark as a study: pixi run benchmark s2mpj <PROBLEM> [flags]" }
+generate-s2mpj = { cmd = "python generate_s2mpj.py", cwd = "benchmarks", depends-on = ["fetch-s2mpj"], default-environment = "benchmarks", description = "Generate benchmarks/s2mpj/ from S2MPJ: pixi run -e benchmarks generate-s2mpj [NAMES...]" }
 
 [tool.pixi.environments]
 # The library only
@@ -91,7 +96,7 @@ experiments = { features = ["experiments", "docs"], solve-group = "default" }
 # Working on the library: adds tests, lint and type check. ty needs the experiments
 # feature to resolve the matplotlib imports in experiments/
 dev = { features = ["dev", "docs", "experiments"], solve-group = "default" }
-# Running benchmarks: the experiments environment, plus fetching S2MPJ
+# Generating benchmarks: the experiments environment, plus fetching S2MPJ and ruff
 benchmarks = { features = ["experiments", "benchmarks"], solve-group = "default" }
 
 [tool.ruff]

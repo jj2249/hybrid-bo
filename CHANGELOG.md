@@ -2,12 +2,19 @@
 
 ## Unreleased
 
-- Benchmarks on S2MPJ problems (#180): `pixi run benchmark s2mpj <PROBLEM>` builds
-  a benchmark experiment from an equality-constrained S2MPJ (CUTEst) problem by
-  rules (ADR 0012), fetching S2MPJ at a pinned commit in the new `benchmarks`
-  environment; HS27 is the first. `hb.cli.main` takes `arguments`, the script's own
-  leading arguments, which every task gets and which name the study folder
-  (`results/s2mpj/HS27/`), and `notes`, recorded in the task list and the artifact.
+- Benchmarks generated from S2MPJ problems (#180; ADR 0012):
+  `benchmarks/generate_s2mpj.py` applies rules to the equality-constrained S2MPJ
+  (CUTEst) problems with n ≤ 10 and writes one ordinary experiment per problem to
+  `benchmarks/s2mpj/`, 12 so far. Each is checked against S2MPJ as it is written.
+  `benchmarks/s2mpj/SUITE.md` lists every in-scope problem, generated or refused with
+  the reason. Run one as `pixi run benchmark hs27`; regenerate with
+  `pixi run -e benchmarks generate-s2mpj [NAMES...]`, the only task that fetches
+  S2MPJ, at a pinned commit.
+- `hb.cli.main` takes `notes`, text about the experiment that it records in the task
+  list and as the artifact's `notes` (#180).
+- `hb.cli` draws hybrid BO's iteration figures without the GP panels when
+  `h_inputs` aren't u, as it already did with more than one unknown state (#180).
+  The GP panels plot y over u, so they can't be drawn there.
 - **Breaking:** The study command line moved into the library as `hb.cli` (#177).
   An experiment ends with `hb.cli.main(problem, measure, configurations,
   study_settings, ...)`, without `import cli` or the name, which is now the

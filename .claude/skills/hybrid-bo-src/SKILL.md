@@ -187,10 +187,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - `cli.py`: the study command line, `hb.cli.main` (ADR 0010; the
   `hybrid-bo-experiments` skill has its commands and files). Only `main` is public.
   It is the one module that writes files on its own, as the command line asks; it
-  imports Polars and matplotlib lazily, so tasks start without them. `arguments`
-  (the script's own leading arguments, e.g. a problem name) go to every task and name
-  the study folder (`<script>/<arguments>`); `notes` go into the task list and the
-  artifact's `notes`.
+  imports Polars and matplotlib lazily, so tasks start without them. `notes` go into
+  the task list and the artifact's `notes`.
 - `baselines.py`: `latin_hypercube_sampling` and `uniform_sampling` draw the whole
   design over the `u` start bounds, then `evaluate` initial points plus design in
   one call.

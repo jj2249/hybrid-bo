@@ -2,8 +2,8 @@
 pinned commit into the git-ignored `benchmarks/.s2mpj/`: a sparse checkout of
 `s2mpjlib.py` and `python_problems/` only, as the repository is about 150 MB.
 
-The `benchmark` pixi task runs it first; it does nothing when the checkout is already
-at the commit. Run it alone as `pixi run -e benchmarks fetch-s2mpj`.
+The `generate-s2mpj` pixi task runs it first; it does nothing when the checkout is
+already at the commit. Run it alone as `pixi run -e benchmarks fetch-s2mpj`.
 """
 
 import subprocess

@@ -123,12 +123,10 @@ class _CommandFailedError(Exception):
 @dataclass(frozen=True, kw_only=True)
 class _Experiment:
     """What a study script defines that its studies depend on: the script, whose file
-    name (without `.py`) and arguments name its studies, and the problem,
-    measurement, configurations, stated oracle optimum and notes it passes to
-    `main`."""
+    name (without `.py`) is the name of its studies, and the problem, measurement,
+    configurations, stated oracle optimum and notes it passes to `main`."""
 
     script: Path
-    arguments: tuple[str, ...]
     problem: Problem
     measure: Measure
     configurations: Mapping[str, Configuration]
@@ -137,9 +135,8 @@ class _Experiment:
 
     @property
     def name(self) -> str:
-        """The name of the script's studies: its file name without `.py`, then each
-        of its arguments, joined by `/` (`s2mpj/HS27`)."""
-        return "/".join((self.script.stem, *self.arguments))
+        """The name of the script's studies: its file name without `.py`."""
+        return self.script.stem
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -168,7 +165,6 @@ def main(
     *,
     optimum: float | None = None,
     true_curves: bool = False,
-    arguments: Sequence[str] = (),
     notes: Mapping[str, str] | None = None,
     argv: Sequence[str] | None = None,
 ) -> None:
@@ -183,39 +179,30 @@ def main(
     from. `true_curves` draws the measurement's values in the iteration figures,
     which only an oracle can afford.
 
-    `arguments` are the script's own arguments, which it read from the start of the
-    command line to choose what it builds (the S2MPJ benchmark's problem name):
-    `argv` defaults to `sys.argv` after them, each task runs as `python <script>
-    <arguments> run-task`, and the studies are saved under `<script>/<arguments>/`
-    (`results/s2mpj/HS27/`). `notes` are text that describes the experiment beyond
-    what it passes here (the S2MPJ commit), recorded in the task list and, as
-    `notes`, in the study's artifact.
+    `notes` are text that describes the experiment beyond what it passes here (a
+    generated benchmark's S2MPJ commit), recorded in the task list and, as `notes`,
+    in the study's artifact.
 
     A study that doesn't finish exits with status 130 (Ctrl-C) or 1, after saying how
     to resume it. Raises `ImportError`, naming the extra, when running a study without
     Polars or plotting without matplotlib.
     """
-    # The experiment, and the command line after the script's own arguments
+    # The command: the first argument if it names one, else a run
+    args = list(sys.argv[1:] if argv is None else argv)
+    command, rest = (
+        (args[0], args[1:]) if args[:1] and args[0] in _COMMANDS else ("run", args)
+    )
+    script = _script()
+    parser = _parsers(script, configurations)[command]
+    parsed = parser.parse_args(rest)
     experiment = _Experiment(
-        script=_script(),
-        arguments=tuple(arguments),
+        script=script,
         problem=problem,
         measure=measure,
         configurations=configurations,
         optimum=optimum,
         notes=dict(notes or {}),
     )
-    args = list(sys.argv[1:] if argv is None else argv)
-    if argv is None:
-        _check_arguments(experiment.arguments, args)
-        args = args[len(experiment.arguments) :]
-
-    # The command: the first argument if it names one, else a run
-    command, rest = (
-        (args[0], args[1:]) if args[:1] and args[0] in _COMMANDS else ("run", args)
-    )
-    parser = _parsers(experiment)[command]
-    parsed = parser.parse_args(rest)
     experiment_dir = _from_init_cwd(parsed.results_root) / experiment.name
 
     try:
@@ -266,28 +253,6 @@ def _script() -> Path:
     return Path(main_file).resolve()
 
 
-def _check_arguments(arguments: tuple[str, ...], command_line: list[str]) -> None:
-    """Checks that the script's `arguments` start its command line, and that each
-    can name a folder: tasks get them there, and the studies are saved under them.
-
-    Exits with a usage error (status 2) otherwise.
-    """
-    usage = argparse.ArgumentParser(prog="hb.cli.main").error
-    if command_line[: len(arguments)] != list(arguments):
-        usage(
-            f"the script's arguments {list(arguments)} must start the command line, "
-            f"which is {command_line}"
-        )
-    for argument in arguments:
-        is_folder_name = (
-            argument not in ("", ".", "..")
-            and not argument.startswith("-")
-            and not any(separator in argument for separator in "/\\")
-        )
-        if not is_folder_name:
-            usage(f"the script's argument {argument!r} can't name a folder")
-
-
 def _pyplot() -> ModuleType:
     """`matplotlib.pyplot`, imported here so tasks, which never plot, start without
     it. Raises `ImportError`, naming the extra, when it isn't installed."""
@@ -302,14 +267,15 @@ def _pyplot() -> ModuleType:
     return plt
 
 
-def _parsers(experiment: _Experiment) -> dict[str, argparse.ArgumentParser]:
-    """The parsers of the commands of the experiment's script, by name."""
-    program = _program(experiment)
-    configurations = experiment.configurations
+def _parsers(
+    script: Path, configurations: Mapping[str, Configuration]
+) -> dict[str, argparse.ArgumentParser]:
+    """The parsers of the commands of the script, by name."""
+    program = _program(script)
     parsers = {
         "run": argparse.ArgumentParser(
             prog=program,
-            description=f"Run the configurations of {experiment.name} as a study and "
+            description=f"Run the configurations of {script.stem} as a study and "
             "save it.",
             epilog=(
                 f"Other commands: {program} prepare | run-task | resume | plot. "
@@ -330,7 +296,7 @@ def _parsers(experiment: _Experiment) -> dict[str, argparse.ArgumentParser]:
         ),
         "plot": argparse.ArgumentParser(
             prog=f"{program} plot",
-            description=f"Plot a saved study of {experiment.name} into its figures/ "
+            description=f"Plot a saved study of {script.stem} into its figures/ "
             "folder.",
         ),
     }
@@ -422,22 +388,21 @@ def _from_init_cwd(path: Path) -> Path:
     return (Path(os.environ.get("INIT_CWD", ".")) / path).resolve()
 
 
-def _program(experiment: _Experiment) -> str:
-    """The command that runs the experiment's script from the folder the command was
-    started from: `python <script> <arguments>`, in pixi's environment if this runs
-    in one, with the script's path relative to that folder when it is inside it."""
-    script = experiment.script
+def _program(script: Path) -> str:
+    """The command that runs the script from the folder the command was started from:
+    `python <script>`, in pixi's environment if this runs in one, with the script's
+    path relative to that folder when it is inside it."""
     start = _from_init_cwd(Path())
     shown = script.relative_to(start) if script.is_relative_to(start) else script
     environment = os.environ.get("PIXI_ENVIRONMENT_NAME")
     python = "python" if environment is None else f"pixi run -e {environment} python"
-    return " ".join((python, shown.as_posix(), *experiment.arguments))
+    return f"{python} {shown.as_posix()}"
 
 
-def _command(experiment: _Experiment, command: str, results_root: Path) -> str:
-    """The command line of the experiment's script with `command` after its own
-    arguments, and the results root as the user gave it, if it isn't the default."""
-    line = f"{_program(experiment)} {command}"
+def _command(script: Path, arguments: str, results_root: Path) -> str:
+    """The command line of the script with `arguments`, and the results root as the
+    user gave it, if it isn't the default."""
+    line = f"{_program(script)} {arguments}"
     if results_root != _RESULTS_ROOT:
         line += f" --results-root {results_root}"
     return line
@@ -500,11 +465,13 @@ def _run_study(
                 version,
             )
         if command == "prepare":
-            _print_tasks(experiment, study_dir, task_list, parsed.results_root)
+            _print_tasks(experiment.script, study_dir, task_list, parsed.results_root)
             return study_dir
         if command == "run":
             _log_configurations(task_list)
-        resume = _command(experiment, f"resume {study_dir.name}", parsed.results_root)
+        resume = _command(
+            experiment.script, f"resume {study_dir.name}", parsed.results_root
+        )
         try:
             _run_tasks(
                 experiment,
@@ -668,13 +635,11 @@ def _log_configurations(task_list: _TaskList) -> None:
 
 
 def _print_tasks(
-    experiment: _Experiment, study_dir: Path, task_list: _TaskList, results_root: Path
+    script: Path, study_dir: Path, task_list: _TaskList, results_root: Path
 ) -> None:
     """Prints the prepared study's number of tasks and how to run task K."""
     n_tasks = len(task_list.tasks)
-    line = _command(
-        experiment, f"run-task {study_dir.name} --task-index K", results_root
-    )
+    line = _command(script, f"run-task {study_dir.name} --task-index K", results_root)
     print(
         f"Prepared {study_dir} with {n_tasks} tasks. Run task K (0 to {n_tasks - 1}):"
     )
@@ -842,9 +807,9 @@ def _run_tasks(
     n_workers: int,
     results_root: Path,
 ) -> None:
-    """Runs the study's tasks that aren't done, each as `python <script>
-    <arguments> run-task` from this process's folder, `n_workers` at a time
-    (`_run_commands`), named by their tags, with this process's warning options.
+    """Runs the study's tasks that aren't done, each as `python <script> run-task`
+    from this process's folder, `n_workers` at a time (`_run_commands`), named by
+    their tags, with this process's warning options.
 
     Raises `_CommandFailedError`, naming the task, if one fails, and
     `KeyboardInterrupt` on Ctrl-C, after stopping the tasks running.
@@ -854,7 +819,6 @@ def _run_tasks(
             sys.executable,
             *(f"-W{option}" for option in sys.warnoptions),
             str(experiment.script),
-            *experiment.arguments,
             "run-task",
             study_dir.name,
             "--task-index",

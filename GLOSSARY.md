@@ -161,9 +161,20 @@ _Avoid_: test case, toy problem
 
 **Problem suite**:
 A set of benchmark experiments built by the same rules from the problems of an external
-problem library, such as S2MPJ's CUTEst problems (`benchmarks/s2mpj.py`, ADR 0012),
-and scored together.
+problem library and scored together, such as those generated from S2MPJ's CUTEst
+problems into `benchmarks/s2mpj/` (ADR 0012).
 _Avoid_: test set, benchmark set
+
+**Hidden constraint**:
+In a benchmark experiment generated from a constrained problem, the constraint whose
+hidden term becomes the unknown equation. The other constraints, and the hidden
+constraint with y in place of its hidden term, are the known equations.
+
+**Hidden term**:
+The part of the hidden constraint that becomes the unknown state y, with the oracle
+y = h(x, u). For an S2MPJ problem, it is the weighted sum of the constraint's
+elements.
+_Avoid_: element sum (except for S2MPJ's own structure), hidden part
 
 **Configuration**:
 A method with its own evaluation budget, labeled in a study. One method can have

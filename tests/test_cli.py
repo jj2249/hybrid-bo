@@ -1015,21 +1015,16 @@ def test_workers_take_nested_functions_and_lambdas(tmp_path, experiment):
     assert study.artifact["measure"] == "y = sin(u), from a nested function."
 
 
-# A script that builds its experiment from its own first argument, the number of
-# iterations, as the S2MPJ benchmark builds one from a problem name
-CHOSEN_BY_ARGUMENT = """
-import sys
-
+# A script that records notes about its experiment, as a generated S2MPJ benchmark
+# records the S2MPJ commit
+WITH_NOTES = """
 import illustrative_example as ex
 import hybrid_bo as hb
 
 if __name__ == "__main__":
-    n_iterations = sys.argv[1]
     configurations = {
         "uniform_sampling": hb.Configuration(
-            method=hb.uniform_sampling,
-            n_evaluations=2 + int(n_iterations),
-            n_initial=2,
+            method=hb.uniform_sampling, n_evaluations=4, n_initial=2
         )
     }
     hb.cli.main(
@@ -1037,58 +1032,24 @@ if __name__ == "__main__":
         ex.measure,
         configurations,
         ex.study_settings,
-        arguments=[n_iterations],
-        notes={"chosen by": f"{n_iterations} iterations"},
+        notes={"source": "a test"},
     )
 """
 
 
-def test_a_script_argument_reaches_every_task_and_resume(
-    tmp_path, experiment, experiment_folder, capsys
-):
-    """A script that reads its own first argument and passes it as `arguments` gets it
-    back in every task process and in the commands it prints. Its studies are saved
-    under `<script>/<argument>/`, and the task list and the artifact record its
-    notes."""
-    # Prepare a study with the argument 2, then run one task as a scheduler would
+def test_notes_are_recorded_in_the_task_list_and_the_artifact(tmp_path, experiment):
+    """`notes` passed to `main` are saved in the task list before anything runs, and
+    in the artifact of the study once `resume` finishes it."""
+    # Prepare a study, which saves its task list, then resume it, which runs it
     command = results(tmp_path, "--n-runs", "2", "--seed", "0", "--name", "s")
-    experiment(["2", "prepare", *command], CHOSEN_BY_ARGUMENT, name="chosen")
-    assert "chosen.py 2 run-task s --task-index K" in capsys.readouterr().out
-    study_dir = tmp_path / "chosen" / "2" / "s"
+    experiment(["prepare", *command], WITH_NOTES, name="noted")
+    study_dir = tmp_path / "noted" / "s"
     task_list = json.loads((study_dir / "tasks.json").read_text())
-    assert task_list["name"] == "chosen/2"
-    assert task_list["notes"] == {"chosen by": "2 iterations"}
-    script = experiment_folder / "chosen.py"
-    subprocess.run(
-        [sys.executable, str(script), "2", "run-task", "s", "--task-index", "0"]
-        + results(tmp_path),
-        check=True,
-        capture_output=True,
-    )
+    assert task_list["notes"] == {"source": "a test"}
+    experiment(["resume", "s", *results(tmp_path)], WITH_NOTES, name="noted")
 
-    # Resume: the launcher passes the argument to the task left
-    experiment(
-        ["2", "resume", "s", *results(tmp_path)], CHOSEN_BY_ARGUMENT, name="chosen"
-    )
-
-    # Two runs of 2 iterations, and the notes in the artifact
-    study = load(study_dir)
-    assert study.name == "chosen/2"
-    assert [run.history.u.shape[0] for run in study.runs] == [4, 4]
-    assert study.artifact["notes"] == "chosen by: 2 iterations"
-
-
-def test_arguments_must_start_the_command_line(tmp_path, experiment, capsys):
-    """`arguments` are the first arguments of the command line, so a script that
-    passes others is a usage error."""
-    with pytest.raises(SystemExit) as exit_info:
-        experiment(
-            [*results(tmp_path), "2"],
-            CHOSEN_BY_ARGUMENT.replace("sys.argv[1]", "sys.argv[-1]"),
-            name="chosen",
-        )
-    assert exit_info.value.code == 2
-    assert "must start the command line" in capsys.readouterr().err
+    # The notes in the artifact, one line per note
+    assert load(study_dir).artifact["notes"] == "source: a test"
 
 
 def python(code):
