@@ -33,6 +33,10 @@ than relying on argument position.
   noisy data interpolates the noise, and an oracle measurement left at 0 benchmarks a
   different problem. The measurement and the GP each state it, so an experiment that
   forgets one fails instead of silently disagreeing with the other.
+- **`known_constraints`.** Hybrid BO's aggregation defaults to `None`, which is valid
+  only when the problem has no known inequality constraints: then there is nothing to
+  choose. A problem with known inequality constraints and no aggregation raises, so the
+  default never picks how they are handled (ADR 0011).
 
 ## Considered Options
 

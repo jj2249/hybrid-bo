@@ -10,7 +10,8 @@ a hybrid model that the optimizer plans with. Notation follows
 ### The problem
 
 **Problem**:
-A system together with an objective. The same problem is solved by different methods.
+A system together with an objective and its known inequality constraints, if any. The
+same problem is solved by different methods.
 _Avoid_: case, benchmark
 
 **System**:
@@ -90,6 +91,19 @@ The equations `0 = h(x, y, u)` whose form is not known, written explicitly as
 `y = h(x, u)`; hybrid BO learns them with a GP.
 _Avoid_: h_unknown
 
+**Known inequality constraints** (`c`, K constraints):
+The requirements `c(x, y, u) ≤ 0` whose form is known. An evaluation that violates one
+still succeeds, with states and an objective; it is an infeasible evaluation. There may
+be none (K = 0).
+_Avoid_: known constraints, constraints (on their own), g_known
+
+**Unknown inequality constraints**:
+Conditions on the system whose form is not known and which are never measured: an
+evaluation that violates one fails, and only that it failed is observed. They are not
+part of the problem; in a benchmark experiment the oracle holds them.
+_Avoid_: unknown constraints, hidden constraints (an S2MPJ term), failure conditions,
+g_unknown
+
 **Bounds**:
 The box a variable must stay in, possibly infinite. Bounds on decision variables are
 part of the problem statement, not a setting of the method.
@@ -103,7 +117,8 @@ The scalar `f(x, y, u)` to minimize.
 _Avoid_: cost, target
 
 **Oracle**:
-A known stand-in for the unknown equations, used only in benchmark experiments to play
+A known stand-in for the unknown equations, and for the unknown inequality constraints if
+there are any, used only in benchmark experiments to play
 the part of the real system. Real systems have no oracle. An in silico simulation of a
 plant is not an oracle: to the library it is a real system, run by a custom measurement.
 _Avoid_: ground truth, true system
@@ -127,7 +142,27 @@ _Avoid_: experiment, query, black box, trial
 
 **Evaluation**:
 Running the system at given decision variables and obtaining its states and objective.
+It either succeeds, as a feasible or an infeasible evaluation, or fails.
 _Avoid_: simulation (except the oracle simulation), query
+
+**Feasible evaluation**:
+An evaluation that succeeded and satisfies every known inequality constraint.
+
+**Infeasible evaluation**:
+An evaluation that succeeded but violates a known inequality constraint. It has states
+and an objective, and the surrogate model learns from it like any other.
+_Avoid_: failed evaluation, violating evaluation
+
+**Failed evaluation**:
+An evaluation at decision variables that violate an unknown inequality constraint, so the
+system gives no states and no objective. Only its success label is observed. Whether it
+satisfies the known inequality constraints can't be known.
+_Avoid_: infeasible evaluation, infeasible trial, crashed evaluation
+
+**Success label**:
+Whether an evaluation succeeded (1) or failed (0): evidence about the unknown
+inequality constraints alone, since only they fail an evaluation.
+_Avoid_: feasibility label, feasibility flag
 
 **Measured variables**:
 The states the system's sensors read at each evaluation, as many as there are unknown
@@ -251,15 +286,22 @@ One step of the optimization loop.
 _Avoid_: run, step
 
 **Incumbent**:
-The best measured objective value so far. The point that measured it is the
-incumbent's point, the one the optimizer believes is best.
+The best measured objective value among the feasible evaluations so far; there is none
+until a feasible evaluation exists. The point that measured it is the incumbent's point,
+the one the optimizer believes is best.
 _Avoid_: best value, current best
 
 **Oracle incumbent** (`oracle_incumbents`):
 The oracle objective at the incumbent's point: what acting on the run would give.
 The benchmark metric. Under noise it can be worse than the best oracle objective so far;
-without noise it equals it.
+without noise it equals it. There is none until there is an incumbent.
 _Avoid_: incumbents_no_noise, true incumbent
+
+**Oracle feasibility**:
+Whether an evaluation's oracle values satisfy the known inequality constraints. Under
+noise, a feasible evaluation, even the incumbent's, can be infeasible by its oracle
+values.
+_Avoid_: true feasibility
 
 **Oracle optimum** (`f*`):
 The best objective value the oracle allows: the reference that regret is measured
@@ -269,7 +311,8 @@ _Avoid_: true optimum, global optimum
 
 **Regret**:
 The oracle incumbent minus the oracle optimum, after each evaluation. Counted over
-evaluations, not iterations, because initial points are not free.
+evaluations, not iterations, because initial points are not free. Like the oracle
+incumbent, there is none before the first feasible evaluation.
 _Avoid_: simple regret, error
 
 **Initial points**:
@@ -292,6 +335,47 @@ bound (LCB). Standard BO computes it analytically from the GP's mean and varianc
 hybrid BO computes it by an approximation. SAA-EI, SoftSAA-EI and Lin-EI are the same
 acquisition function under three approximations.
 _Avoid_: formulation_acq, acquisition formulation
+
+**Success classifier**:
+The model of the probability of success, learned from the success labels.
+_Avoid_: feasibility classifier, constraint model
+
+**Probability of success** (`p_C`):
+The success classifier's probability that an evaluation at given decision variables
+would not violate any unknown inequality constraint.
+_Avoid_: probability of feasibility (for this alone)
+
+**Probability of feasibility** (`p_f`):
+The probability that an evaluation at given decision variables would be a feasible
+evaluation: the probability of success combined with the known inequality constraints.
+_Avoid_: feasibility probability, P(feasible)
+
+**Imputation**:
+Giving each failed evaluation a made-up objective, worse than the worst measured one, so
+standard BO's GP can learn from it.
+_Avoid_: padding, penalty value
+
+**CBO**:
+Standard BO with a success classifier: a baseline for hybrid BO's feasibility handling.
+_Avoid_: constrained standard BO, CEI-BO
+
+**Feasibility handling**:
+How a BO method's acquisition problem accounts for the probability of feasibility:
+*explicit*, a chance constraint that it is at least the minimum probability of
+feasibility (β), or *implicit*, weighting EI by it (constrained EI). Until there is an
+incumbent, the acquisition problem maximizes the probability of feasibility instead.
+_Avoid_: explicit/implicit formulation, constraint handling
+
+**Aggregation**:
+How hybrid BO combines the scenarios' known inequality constraints with the probability
+of success into the probability of feasibility. The *indicator mean* multiplies the
+probability of success by the weighted mean of the scenarios' constraint indicators.
+_Avoid_: known-constraint handling, Monte Carlo estimate, Independent (the thesis's name)
+
+**Constraint indicator**:
+Whether a scenario satisfies every known inequality constraint, either exactly (1 or 0)
+or softened by a logistic function of each constraint with a stated slope.
+_Avoid_: feasibility indicator, step function
 
 **Approximation**:
 How hybrid BO computes its acquisition function, which has no closed form under the
