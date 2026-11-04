@@ -30,6 +30,7 @@ pixi run plot illustrative_example [STUDY]   # figures of the newest (or named) 
 pixi run experiment illustrative_example plot [STUDY] --plot-runs all   # iteration figures of every run
 pixi run experiment illustrative_example resume STUDY [--n-workers 4] [--plot]   # finish a study that stopped
 pixi run -e experiments python scripts/my_study.py [flags]   # a study script outside experiments/
+pixi run benchmark -r 3 -j 4 [-d "experiment[module=rosenbrock]"]   # every experiment (or one) with Benchopt
 ```
 
 The pixi tasks run an experiment as a module from `experiments/` (`python -m

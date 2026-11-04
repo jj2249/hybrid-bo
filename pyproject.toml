@@ -68,6 +68,10 @@ docs = { cmd = "sphinx-build -b html docs docs/_build/html", default-environment
 matplotlib = ">=3.11.2,<4"
 polars = ">=2.0.0,<3"
 
+# Not on conda-forge
+[tool.pixi.feature.experiments.pypi-dependencies]
+benchopt = ">=1.10.0,<2"
+
 # Each runs an experiment's script as a module from experiments/ (`hb.cli` runs any
 # script as `python script.py` too). `experiment` declares no args, so the
 # experiment's name and every flag pass through; see
@@ -75,6 +79,7 @@ polars = ">=2.0.0,<3"
 [tool.pixi.feature.experiments.tasks]
 experiment = { cmd = "python -m", cwd = "experiments", default-environment = "experiments", description = "Run an experiment as a study: pixi run experiment <name> [flags]" }
 plot = { cmd = "python -m {{ name }} plot {{ study }}", cwd = "experiments", default-environment = "experiments", args = ["name", { arg = "study", default = "" }], description = "Plot a saved study of an experiment (default: the newest)" }
+benchmark = { cmd = "benchopt run .", cwd = "experiments", default-environment = "experiments", description = "Run the experiments with Benchopt: pixi run benchmark [flags]" }
 
 [tool.pixi.environments]
 # The library only
@@ -110,6 +115,8 @@ known-first-party = ["hybrid_bo"]
 [tool.ruff.lint.per-file-ignores]
 # Re-exports define the public API
 "__init__.py" = ["F401"]
+# Benchopt reads its parameters from plain class attributes, which ty wants unannotated
+"experiments/{datasets,solvers,plots}/*.py" = ["RUF012"]
 
 [tool.ruff.format]
 # Use double quotes and standard Ruff formatting.

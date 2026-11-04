@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The experiments also run with [Benchopt](https://benchopt.github.io):
+  `pixi run benchmark -r 3 -d "experiment[module=rosenbrock]"` runs a study with
+  repetitions, parallel runs (`-j 4`) and resuming, and saves each run in full under
+  `experiments/outputs/runs/`. `experiments/` holds the Benchopt classes, beside the
+  unchanged experiments.
 - **Breaking:** The study command line moved into the library as `hb.cli` (#177).
   An experiment ends with `hb.cli.main(problem, measure, configurations,
   study_settings, ...)`, without `import cli` or the name, which is now the

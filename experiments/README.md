@@ -48,3 +48,35 @@ assembles the study. `docs/running_large_studies.rst` has a full `sbatch` script
 To write your own, see
 [Writing an experiment](../docs/writing_an_experiment.rst) (build the docs with
 `pixi run docs`).
+
+## With Benchopt
+
+This folder is also a [Benchopt](https://benchopt.github.io) benchmark, which runs the
+same experiments and their configurations, unchanged:
+
+```bash
+pixi run benchmark -r 3 -j 4                                     # every experiment, 3 runs each
+pixi run benchmark -r 3 -d "experiment[module=rosenbrock]"       # one experiment
+pixi run benchmark -r 3 -s "method[label=hybrid_bo]"             # one method
+```
+
+`-r` is the number of runs and `-j` the number of processes, and `--seed` sets the
+study's seed. Run i of every method starts from the same initial points. Add
+`--no-plot --no-html` to skip the report, which takes much longer than a small study.
+
+Results go to `outputs/benchopt_run_<time>.parquet`, one row per evaluation, and each
+run in full to `outputs/runs/<module>/<code>/<label>/seed-<seed>.json`, which
+`hb.load_run` reads. A stopped study finishes by running the same command again: Benchopt
+skips the runs it has. `code` hashes the experiments and the library, so a change to
+either runs everything again rather than returning old results.
+
+The report has `regret` (the median regret over the evaluations) and `summary` (each
+method's runs, complete runs and final regret). A run that fails with an unexpected
+exception prints its traceback, is missing from the results and doesn't change the
+exit code, so check the runs in `summary`.
+
+- `objective.py`: scores a run, one row per evaluation.
+- `datasets/experiment.py`: every experiment in this folder, found by file name.
+- `solvers/method.py`: every configuration of the experiments, by label.
+- `plots/`: the `regret` and `summary` views.
+- `benchmark_utils/`: what they share, including the hash of the code.

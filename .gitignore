@@ -37,3 +37,7 @@ docs/_templates/
 # Coverage data
 .coverage
 htmlcov/
+
+# Benchopt, in experiments/
+/experiments/outputs/
+/experiments/__cache__/

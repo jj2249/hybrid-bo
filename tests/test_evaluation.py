@@ -13,6 +13,7 @@ from pathlib import Path
 import casadi as cas
 import numpy as np
 import pytest
+from benchmark_utils import MODULES
 from scipy.special import lambertw
 
 import hybrid_bo
@@ -283,16 +284,8 @@ def test_oracle_must_give_one_value_per_unknown_state():
         )
 
 
-# Every experiment module under experiments/ (all but the CLI)
-EXPERIMENTS = sorted(
-    path.stem
-    for path in (Path(__file__).parent.parent / "experiments").glob("*.py")
-    if path.stem not in {"__init__", "cli"}
-)
-
-
 # `parametrize` runs the test once per experiment, with its module name as `name`
-@pytest.mark.parametrize("name", EXPERIMENTS)
+@pytest.mark.parametrize("name", MODULES)
 def test_every_experiment_measurement_has_the_same_repr_in_another_process(name):
     """Each experiment's measurement is described by the same text in another
     process, as a study's tasks rebuild it there and `resume` compares it with the
