@@ -14,6 +14,7 @@ from hybrid_bo import (
     evaluation,
     gp,
     history,
+    hybrid_model,
     plots,
     problem,
     run,
@@ -40,6 +41,7 @@ from hybrid_bo.history import (
     incumbents,
     oracle_incumbents,
 )
+from hybrid_bo.hybrid_model import fit_surrogate, nominal_optimum
 from hybrid_bo.problem import Problem, System, Var
 from hybrid_bo.run import Run
 from hybrid_bo.sampling import initial_points

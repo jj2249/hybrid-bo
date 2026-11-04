@@ -22,9 +22,7 @@ from hybrid_bo.acquisition import (
     AcquisitionSolution,
     Linearization,
     SoftSAA,
-    _unpack,
     hybrid_acquisition,
-    nominal_scenario,
     saa_scenarios,
     standard_acquisition,
 )
@@ -32,7 +30,13 @@ from hybrid_bo.errors import HybridBOError
 from hybrid_bo.evaluation import Measure, evaluate
 from hybrid_bo.gp import GP, FittedGP, fit_gp
 from hybrid_bo.history import History, _concatenate, incumbents
-from hybrid_bo.problem import Problem, _h_inputs
+from hybrid_bo.hybrid_model import (
+    _unpack,
+    fit_surrogate,
+    nominal_scenario,
+    solve_scenario_problem,
+)
+from hybrid_bo.problem import Problem
 from hybrid_bo.run import Run, run_artifact
 from hybrid_bo.sampling import _starting_points, lhs
 from hybrid_bo.settings import HybridBOSettings, MethodSettings, StandardBOSettings
@@ -285,9 +289,16 @@ def hybrid_bo(
         problem: Problem, history: History, rng: np.random.Generator
     ) -> tuple[np.ndarray, tuple[FittedGP, ...], AcquisitionSolution]:
         """Fits the GPs to the points so far and solves the acquisition problem."""
-        # One GP per unknown state, in the order of y, on the same arguments of h
-        X = np.column_stack(_h_inputs(system, history.u, history.x))
-        fitted = tuple(fit_gp(gp, X, y, rng, n_starts_gp, solver) for y in history.y.T)
+        fitted = fit_surrogate(
+            system,
+            u=history.u,
+            x=history.x,
+            y=history.y,
+            gp=gp,
+            rng=rng,
+            n_starts=n_starts_gp,
+            solver=solver,
+        )
         incumbent = float(incumbents(history)[-1])
         acquisition_problem = hybrid_acquisition(
             problem,
@@ -297,14 +308,12 @@ def hybrid_bo(
             acquisition,
             approximation,
         )
-        starts = lhs(*acquisition_problem.start_bounds, n_starts, rng)
-        solution = multistart(acquisition_problem.nlp, starts, solver)
-
-        # The trial point, and the scenario states at the solution
-        u, x, _ = _unpack(acquisition_problem, solution.w)
-        assert acquisition_problem.scenario_values is not None
-        _, y, _ = acquisition_problem.scenario_values(solution.w)
-        return u, fitted, AcquisitionSolution(solution.f, x, y.full())
+        solution = solve_scenario_problem(acquisition_problem, n_starts, rng, solver)
+        return (
+            solution.u,
+            fitted,
+            AcquisitionSolution(solution.value, solution.x, solution.y),
+        )
 
     try:
         run = optimization_loop(

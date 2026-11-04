@@ -272,6 +272,12 @@ _Avoid_: xi, gaussian_standard_samples
 **Scenario weights** (`w`, one per scenario):
 The weight of each scenario in the acquisition function's average; `1/S` for SAA.
 
+**Scenario problem** (`scenario_problem`):
+The hybrid model as an optimization problem: given scenarios, each with its own states
+under the known equations and the surrogate model, and a given objective of them. Hybrid
+BO's acquisition problem is one, with an acquisition function as the objective; the
+nominal optimum's is another, over the nominal scenario, with `f` as the objective.
+
 **Nominal states** (`x̄`, `ȳ`):
 The states the hybrid model gives when the GP is replaced by its mean: the mechanistic
 states solve the known equations with the unknown states at the GP's mean there. They
@@ -280,8 +286,15 @@ _Avoid_: mean states, mean realization
 
 **Nominal scenario**:
 The scenario with zero scenario draws and weight 1, whose states are the nominal states:
-linearization's only scenario.
+the only scenario of linearization and of the nominal optimum.
 _Avoid_: mean scenario, zero scenario
+
+**Nominal optimum** (`nominal_optimum`):
+The lowest objective the hybrid model allows with the GP replaced by its mean: the scenario
+problem of the nominal scenario, minimizing `f`. Solved once from fitted GPs, with no
+acquisition function and no measurements, so it is no method, and it can sit where the GP
+only extrapolates.
+_Avoid_: model optimum, surrogate optimum, predicted optimum
 
 **Linearization**:
 The approximation that expands the objective to first order in the scenario draws

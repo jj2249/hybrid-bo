@@ -7,6 +7,10 @@
   shares them, and the docs quote them there. `rosenbrock` and `langermann` are in the
   `v0.6.0` tag.
 - The install commands name a release, so a script's library can't change under it (#204).
+- `hb.nominal_optimum` optimizes the hybrid model with the GPs replaced by their mean, with
+  no Bayesian optimization, and `hb.fit_surrogate` fits the GPs to data of your own (#197).
+- **Breaking:** Hybrid BO is built on a new core, `hb.hybrid_model` (#197):
+  `hb.acquisition.Scenarios` and `nominal_scenario` moved there. Results don't change.
 
 ## 0.6.0 (2026-11-04)
 

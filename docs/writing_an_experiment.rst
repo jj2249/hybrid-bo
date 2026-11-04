@@ -276,6 +276,32 @@ To keep finished runs through a long study, save each with
 :py:func:`~hybrid_bo.saving.save_run` as it finishes, and skip the files that exist.
 :doc:`reading_results` explains what is saved.
 
+Optimizing data you already have
+--------------------------------
+
+With measurements of your own, you can get an optimum with no ``measure`` and no
+optimization loop. :py:func:`~hybrid_bo.hybrid_model.fit_surrogate` fits the prior GP to
+each unknown state, and :py:func:`~hybrid_bo.hybrid_model.nominal_optimum` solves the
+hybrid model once with each GP replaced by its mean:
+
+.. code-block:: python
+
+   rng = np.random.default_rng(0)
+   fitted = hb.fit_surrogate(system, u=u, x=x, y=y, gp=gp, rng=rng)
+   solution = hb.nominal_optimum(problem, fitted, rng, n_starts=30)
+   print(solution.u, solution.x, solution.y, solution.f)
+
+The training data have a row per point: ``u`` of shape ``(n, N)``, ``x`` ``(n, M)`` and
+``y`` ``(n, P)``. They hold every state, as nothing solves the root-finding problem here,
+and without known equations you leave out ``x``.
+
+.. warning::
+
+   There is no uncertainty in this problem, so it trusts the GP's mean even far from the
+   data, and the optimum can sit where the model is only extrapolating. Check the
+   solution against your data, or measure it. To choose where to measure next, use
+   hybrid BO, whose acquisition function accounts for what the GP doesn't know.
+
 When something goes wrong
 -------------------------
 

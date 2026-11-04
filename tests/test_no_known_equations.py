@@ -18,11 +18,11 @@ import pytest
 
 import hybrid_bo as hb
 from hybrid_bo.acquisition import (
-    _pack,
     hybrid_acquisition,
     saa_scenarios,
     standard_acquisition,
 )
+from hybrid_bo.hybrid_model import _pack
 from hybrid_bo.saving import _encode
 
 # Hybrid BO with each approximation, both ways where it applies, and the other methods

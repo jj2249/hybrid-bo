@@ -79,6 +79,7 @@ The original code was hard to change for three reasons:
   ([ADR 0005](docs/adr/0005-iteration-plots-replay-the-acquisition-problem.md)).
 - **A slim top level** (#52). `hb.*` holds what a typical script uses: `Var`, `System`,
   `Problem`, `Measure`, `oracle_measure`, `initial_points`, the methods,
+  `fit_surrogate`, `nominal_optimum`,
   `EI`, `LCB`, `oracle_optimum`, `save_run`, `load_run`, `save_runs`, `load_runs`, `Run`, `History`,
   `incumbents`, `oracle_incumbents`, `check_oracle_optimum`, the errors and `plots`. Everything else is reached through its module (`hb.gp.fit_gp`,
   `hb.solvers.multistart`). A new name joins the top level only if the example
@@ -472,6 +473,82 @@ only operator; `kernel * kernel` raises `TypeError` (the kernels share `_Scalabl
   correct intercept (`lower - min * slope`), evaluated so that [0, 1] reproduces the
   legacy values bit for bit.
 
+### Hybrid model (`hybrid_model.py`)
+
+```python
+@dataclass(frozen=True)
+class Scenarios:
+    z: np.ndarray  # (S, P)
+    w: np.ndarray  # (S,), >= 0 and sums to 1, else ValueError
+
+
+def nominal_scenario(n_y: int) -> Scenarios: ...  # z = 0, w = 1
+
+
+@dataclass(frozen=True)
+class ScenarioProblem:
+    nlp: NLP
+    start_bounds: tuple[np.ndarray, np.ndarray]  # (lower, upper), for lhs
+    n_u: int  # the variable order of w, read by _unpack
+    n_x: int = 0
+    n_scenarios: int = 0  # standard BO: w is u alone
+    unknown_states_as_variables: bool = False
+    scenario_values: cas.Function | None = None
+
+
+def _pack(u, x=None, y=None): ...  # numpy or CasADi
+def _unpack(problem: ScenarioProblem, w) -> tuple[u, x, y | None]: ...
+
+
+def scenario_problem(
+    problem,
+    fitted,
+    scenarios,
+    objective,  # (f, x, y, u) expressions -> (objective, std of f)
+    unknown_states_as_variables,
+    name,
+) -> ScenarioProblem: ...
+def solve_scenario_problem(problem, n_starts, rng, solver) -> ScenarioSolution: ...
+def fit_surrogate(
+    system, *, u, y, gp, rng, x=None, n_starts=10, solver=Ipopt()
+) -> tuple[FittedGP, ...]: ...
+def nominal_optimum(
+    problem,
+    fitted,
+    rng,
+    *,
+    n_starts=10,
+    solver=Ipopt(),
+    unknown_states_as_variables=True,
+) -> NominalOptimum: ...  # u, x, y, f
+```
+
+- **Hybrid BO is built on the hybrid model, not the other way round (#197).** Everything
+  that solves the hybrid model has the same variables, bounds and `g`, with `y` tied to
+  the GP. What differs is the scenarios and the objective:
+
+  | | Scenarios | Objective |
+  |---|---|---|
+  | `nominal_optimum` | the nominal scenario | `f` |
+  | SAA-EI, SoftSAA-EI, SAA-LCB | S scenarios | an acquisition function of the `f_s` |
+  | Lin-EI | the nominal scenario | EI of `f` with its sensitivity |
+
+  So `scenario_problem` takes both, `hybrid_acquisition` supplies an objective, and
+  `hybrid_bo` is the loop around them: `fit_surrogate`, `solve_scenario_problem`,
+  evaluate. `acquisition.py` imports `hybrid_model.py`, never the reverse. The objective
+  is a function because it is built from the problem's own symbols. It also states the
+  std of `f` that `scenario_values` reports, which is 0 for the nominal optimum.
+- **`AcquisitionProblem` is `ScenarioProblem`.** An acquisition problem is a scenario
+  problem whose objective is an acquisition function; the alias keeps that name where
+  it is the one meant.
+- **`fit_surrogate` takes arrays, not a `History`.** Data that never came from a run has
+  no `f` or `n_initial`, and the fit reads none of them. It takes `u`, `x` and `y`, and
+  `hybrid_bo` passes the history's. It doesn't solve the root-finding problem: without
+  a measurement the caller gives every state.
+- **`nominal_optimum` is not a method.** It measures nothing, so it has no run, no
+  artifact and no settings, only a solution. It has no uncertainty in it, so it trusts
+  the GP's mean even far from the data.
+
 ### Acquisition (`acquisition.py`)
 
 ```python
@@ -486,27 +563,10 @@ class LCB:
     std_factor: float  # finite and >= 0, else ValueError
 
 
-@dataclass(frozen=True)
-class Scenarios:
-    z: np.ndarray  # (S, P)
-    w: np.ndarray  # (S,), >= 0 and sums to 1, else ValueError
-
-
 def saa_scenarios(n: int, n_y: int, rng) -> Scenarios: ...  # z ~ N(0, I), w = 1/S
 
 
-@dataclass(frozen=True)
-class AcquisitionProblem:
-    nlp: NLP
-    start_bounds: tuple[np.ndarray, np.ndarray]  # (lower, upper), for lhs
-    n_u: int  # the variable order of w, read by _unpack
-    n_x: int = 0
-    n_scenarios: int = 0  # standard BO: w is u alone
-    unknown_states_as_variables: bool = False
-
-
-def _pack(u, x=None, y=None): ...  # numpy or CasADi
-def _unpack(problem: AcquisitionProblem, w) -> tuple[u, x, y | None]: ...
+AcquisitionProblem = ScenarioProblem
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -797,7 +857,8 @@ Every draw in a run comes from that run's generator, in this order:
    the draws are those of a single GP fit.
 
 Root-finding starts are drawn even without noise, because the reconstruction always
-runs. Each consumer draws only what it uses, when it uses it.
+runs. Each consumer draws only what it uses, when it uses it. Outside a run,
+`fit_surrogate` and `nominal_optimum` draw only their `lhs` starts, in that order.
 
 **A generator has two independent sequences.** `lhs` does not consume `rng`'s stream:
 it draws from the next spawned child of `rng`'s `SeedSequence` (`rng.spawn(1)[0]`),

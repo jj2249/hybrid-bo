@@ -77,6 +77,20 @@ figure.savefig("regret.png")
 
 `tests/illustrative_example.py` is a complete script.
 
+With data you already have, you need no measurement and no loop: fit the GPs, then solve
+the hybrid model once with each GP replaced by its mean:
+
+```python
+gp = hb.gp.GP(mean=hb.gp.Zero(), kernel=hb.gp.Matern52(), noise_std=0.0)
+rng = np.random.default_rng(0)
+fitted = hb.fit_surrogate(system, u=u, x=x, y=y, gp=gp, rng=rng)  # a row per point
+solution = hb.nominal_optimum(problem, fitted, rng)
+print(solution.u, solution.f)
+```
+
+There is no uncertainty in this problem, so it trusts the GP's mean even far from the
+data, and the optimum can sit where the model is only extrapolating.
+
 ## Docs
 
 ```bash

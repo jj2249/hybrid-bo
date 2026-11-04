@@ -22,13 +22,10 @@ from hybrid_bo import (
     oracle_measure,
     standard_bo,
 )
-from hybrid_bo.acquisition import (
-    AcquisitionSolution,
-    _pack,
-    standard_acquisition,
-)
+from hybrid_bo.acquisition import AcquisitionSolution, standard_acquisition
 from hybrid_bo.bo import optimization_loop
 from hybrid_bo.gp import FittedGP, fit_gp, predict
+from hybrid_bo.hybrid_model import _pack
 from hybrid_bo.run import run_artifact
 from hybrid_bo.settings import StandardBOSettings
 

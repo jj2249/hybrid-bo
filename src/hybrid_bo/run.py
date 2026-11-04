@@ -7,9 +7,10 @@ from dataclasses import dataclass, field, is_dataclass
 
 import numpy as np
 
-from hybrid_bo.acquisition import AcquisitionSolution, Scenarios
+from hybrid_bo.acquisition import AcquisitionSolution
 from hybrid_bo.gp import FittedGP
 from hybrid_bo.history import History
+from hybrid_bo.hybrid_model import Scenarios
 from hybrid_bo.problem import Problem, _as_text
 from hybrid_bo.settings import MethodSettings
 
