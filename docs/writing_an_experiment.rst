@@ -295,9 +295,9 @@ solves the hybrid model once with each GP replaced by its mean:
 
 The measurements have a row per point: ``u`` of shape ``(n, N)`` and ``measured``
 ``(n, P)``, its columns in the order of ``system.measured``. A ``u`` or a measured variable
-outside its bounds is kept, with an ``OutOfBoundsWarning``. If some rows have no root, a
-``RootFindingError`` names them all and its ``history`` holds the others, so you can carry
-on without them. The GP's ``noise_std`` applies to all the data. The search is local from
+outside its bounds is kept, with an ``OutOfBoundsWarning``. If some rows have no root or
+hold a NaN, a ``RootFindingError`` names them all and its ``history`` holds the others, so
+you can carry on without them. The GP's ``noise_std`` applies to all the data. The search is local from
 each start, so raise ``n_starts`` if ``f`` has several minima.
 
 .. warning::

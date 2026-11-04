@@ -402,6 +402,7 @@ def test_reconstruct_solves_the_unmeasured_states_of_given_measurements(
 ):
     """Given u and y, `reconstruct` gives x from x + exp(x) = y, in closed form with
     the Lambert W function, and f at those states, calling no measurement."""
+    # Three measurements of y
     u = np.array([[-1.0], [0.0], [1.0]])
     measured = np.array([[-0.5], [0.3], [1.0]])
 
@@ -430,25 +431,21 @@ def test_reconstruct_solves_the_unmeasured_states_of_given_measurements(
         (np.zeros((4, 2)), np.zeros((4, 1)), "u need shape"),
         (np.zeros((4, 1)), np.zeros(4), "measured variables need shape"),
         (np.zeros((4, 1)), np.zeros((3, 1)), "measured variables need shape"),
-        (np.zeros((4, 1)), np.full((4, 1), np.nan), "finite"),
-        (np.full((4, 1), np.inf), np.zeros((4, 1)), "finite"),
     ],
-    ids=["flat u", "too many u", "flat measured", "fewer measured", "nan", "inf"],
+    ids=["flat u", "too many u", "flat measured", "fewer measured"],
 )
 def test_reconstruct_rejects_malformed_measurements(
     illustrative_problem, u, measured, message
 ):
-    """Measurements need a row per point, a column per variable and finite values."""
+    """Measurements need a row per point and a column per variable."""
     with pytest.raises(ValueError, match=message):
         reconstruct(
             illustrative_problem, u=u, measured=measured, rng=np.random.default_rng(0)
         )
 
 
-def test_reconstruct_names_every_row_without_a_root_and_keeps_the_others():
-    """With x^2 = y there is no root at y < 0: every row is tried, one error names both
-    bad rows, and `error.history` holds the rows that worked."""
-    # A system where a negative measurement has no root
+def square_root_problem() -> Problem:
+    """x^2 = y with x in [0, 3]: y < 0 has no root and y > 9 has none within the bounds."""
     u_var, x_var = Var("u", -1.0, 1.0), Var("x", 0.0, 3.0)
     y_var = Var("y", start=(-2.0, 2.0))
     system = System(
@@ -459,11 +456,19 @@ def test_reconstruct_names_every_row_without_a_root_and_keeps_the_others():
         h_inputs=[u_var],
         measured=[y_var],
     )
-    problem = Problem(system, f=lambda v: v.x)
-    u = np.array([[-0.5], [0.0], [0.25], [0.5]])
-    measured = np.array([[1.0], [-1.0], [4.0], [-2.0]])
+    return Problem(system, f=lambda v: v.x)
 
-    with pytest.raises(RootFindingError, match=r"rows \[1, 3\]") as caught:
+
+def test_reconstruct_names_every_bad_row_and_keeps_the_others():
+    """Every row is tried, one error names the bad rows, and `error.history` holds the
+    rows that worked. A row is bad with no root, with a root outside the bounds of the
+    unmeasured states, or with a value that isn't finite."""
+    # Good, no root, good, root outside the bounds, not finite
+    problem = square_root_problem()
+    u = np.array([[-0.5], [0.0], [0.25], [0.5], [0.75]])
+    measured = np.array([[1.0], [-1.0], [4.0], [16.0], [np.nan]])
+
+    with pytest.raises(RootFindingError, match=r"rows \[1, 3, 4\]") as caught:
         reconstruct(problem, u=u, measured=measured, rng=np.random.default_rng(0))
 
     # The two good rows, in order, with their roots
@@ -472,6 +477,39 @@ def test_reconstruct_names_every_row_without_a_root_and_keeps_the_others():
     np.testing.assert_array_equal(history.u, u[[0, 2]])
     np.testing.assert_allclose(history.x, [[1.0], [2.0]], atol=1e-8)
     assert history.n_initial == 2
+
+
+def test_a_reconstruction_with_no_good_rows_has_an_empty_history():
+    """When every row fails, `error.history` has no points and no oracle values."""
+    problem = square_root_problem()
+    measured = np.array([[-1.0], [-2.0]])
+
+    with pytest.raises(RootFindingError, match=r"rows \[0, 1\]") as caught:
+        reconstruct(
+            problem, u=np.zeros((2, 1)), measured=measured, rng=np.random.default_rng(0)
+        )
+
+    history = caught.value.history
+    assert history is not None
+    assert len(history.u) == 0
+    assert history.f_oracle is None
+
+
+def test_a_row_that_is_not_finite_is_a_bad_row_with_no_known_equations():
+    """With M = 0 nothing is solved, so no root can fail: a NaN is still a bad row."""
+    u_var, y_var = Var("u", -1.0, 1.0), Var("y", -1.0, 1.0)
+    system = System(u=[u_var], y=[y_var], h_inputs=[u_var], measured=[y_var])
+    problem = Problem(system, f=lambda v: v.y)
+    measured = np.array([[0.5], [np.nan]])
+
+    with pytest.raises(RootFindingError, match=r"rows \[1\]") as caught:
+        reconstruct(
+            problem, u=np.zeros((2, 1)), measured=measured, rng=np.random.default_rng(0)
+        )
+
+    history = caught.value.history
+    assert history is not None
+    np.testing.assert_array_equal(history.y, [[0.5]])
 
 
 def test_reconstruct_warns_of_values_outside_their_bounds_and_keeps_them():
@@ -498,6 +536,7 @@ def test_reconstruct_warns_of_values_outside_their_bounds_and_keeps_them():
             problem, u=u, measured=measured, rng=np.random.default_rng(0)
         )
 
+    # One warning, naming the rows of each variable, and every row kept
     assert len(caught) == 1
     message = str(caught[0].message)
     assert "u at rows [1]" in message

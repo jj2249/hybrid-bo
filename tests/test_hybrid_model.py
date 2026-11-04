@@ -28,9 +28,11 @@ def test_a_gp_of_the_unknown_equation_gives_the_oracle_optimum():
     u = np.linspace(-2.0, 2.0, 30)[:, np.newaxis]
     history = hb.reconstruct(ex.problem, u=u, measured=np.sin(u), rng=rng)
 
+    # The surrogate model, and the hybrid model's solution with it
     fitted = hb.fit_surrogate(ex.system, history, gp=ex.gp, rng=rng)
     solution = hb.optimize_hybrid_model(ex.problem, fitted, rng, n_starts=30)
 
+    # The same optimum as with the oracle
     optimum = hb.oracle_optimum(ex.problem, ex.oracle, rng, n_starts=30)
     np.testing.assert_allclose(solution.f, optimum, rtol=1e-4)
     np.testing.assert_allclose(solution.u, [-0.45], atol=5e-3)
@@ -58,16 +60,19 @@ def test_the_solution_solves_the_hybrid_model():
 def test_the_solution_stays_within_the_bounds_of_the_unknown_states():
     """With y = sin(u) bounded by 0.2, f = (y - 0.5)^2 is lowest at the bound, not at
     y = 0.5."""
+    # A system with bounds on y, and data that leave them
     u_var, y_var = hb.Var("u", -2.0, 2.0), hb.Var("y", -0.2, 0.2)
     system = hb.System(u=[u_var], y=[y_var], h_inputs=[u_var], measured=[y_var])
     problem = hb.Problem(system, f=lambda v: (v.y - 0.5) ** 2)
     u = np.linspace(-2.0, 2.0, 25)[:, np.newaxis]
 
-    # The data leave the bounds of y, which `reconstruct` warns of and keeps
+    # `reconstruct` warns of those data and keeps them
     rng = np.random.default_rng(0)
     # `warns` passes only if the block gives that warning
     with pytest.warns(hb.OutOfBoundsWarning):
         history = hb.reconstruct(problem, u=u, measured=np.sin(u), rng=rng)
+
+    # The solution stops at the bound
     fitted = hb.fit_surrogate(system, history, gp=ex.gp, rng=rng)
     solution = hb.optimize_hybrid_model(problem, fitted, rng)
 
@@ -75,7 +80,7 @@ def test_the_solution_stays_within_the_bounds_of_the_unknown_states():
 
 
 def test_a_surrogate_model_can_take_a_mechanistic_state():
-    """With x among the arguments of h, the GP is trained on the reconstructed x: here
+    """With x among the arguments of h, the GP is fitted to the reconstructed x: here
     y = x exactly, and x comes only from the root-finding problem."""
     # h takes x, and x is not measured: g says x = y
     u_var, x_var = hb.Var("u", -2.0, 2.0), hb.Var("x", -2.0, 2.0)
@@ -91,10 +96,12 @@ def test_a_surrogate_model_can_take_a_mechanistic_state():
     problem = hb.Problem(system, f=lambda v: v.x)
     u = np.linspace(-1.0, 1.0, 9)[:, np.newaxis]
 
+    # The fit reads the reconstructed x
     rng = np.random.default_rng(0)
     history = hb.reconstruct(problem, u=u, measured=u, rng=rng)
     fitted = hb.fit_surrogate(system, history, gp=ex.gp, rng=rng)
 
+    # The GP's mean follows y = x
     mean, _ = predict(fitted[0], np.array([[0.3]]))
     np.testing.assert_allclose(mean, [0.3], atol=1e-2)
 
@@ -108,11 +115,13 @@ def test_optimize_hybrid_model_works_with_no_known_equations():
     problem = hb.Problem(system, f=lambda v: (v.y - 0.5) ** 2)
     u = np.linspace(-2.0, 2.0, 25)[:, np.newaxis]
 
+    # The pipeline
     rng = np.random.default_rng(0)
     history = hb.reconstruct(problem, u=u, measured=np.sin(u), rng=rng)
     fitted = hb.fit_surrogate(system, history, gp=ex.gp, rng=rng)
     solution = hb.optimize_hybrid_model(problem, fitted, rng)
 
+    # No mechanistic states, and the optimum
     assert solution.x.shape == (0,)
     np.testing.assert_allclose(solution.u, [np.pi / 6], atol=1e-3)
     np.testing.assert_allclose(solution.y, [0.5], atol=1e-4)
@@ -156,5 +165,6 @@ def test_optimize_hybrid_model_works_with_two_unknown_states():
 
 def test_optimize_hybrid_model_needs_one_gp_per_unknown_state():
     """A surrogate model of the wrong size raises `ValueError`."""
+    # `raises` passes only if the block raises that exception
     with pytest.raises(ValueError, match="one fitted GP per unknown state"):
         hb.optimize_hybrid_model(ex.problem, (), np.random.default_rng(0))

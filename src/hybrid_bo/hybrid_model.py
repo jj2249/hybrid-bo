@@ -318,8 +318,8 @@ def optimize_hybrid_model(
         fitted,
         nominal_scenario(problem.system.n_y),
         lambda f, _x, _y, _u: (f, Symbolic(0)),  # one scenario: f has no spread
-        True,
-        "nominal_optimum",
+        unknown_states_as_variables=True,
+        objective_name="nominal_optimum",
     )
     solution = solve_scenario_problem(nominal, n_starts, rng, solver)
     return NominalOptimum(solution.u, solution.x[0], solution.y[0], solution.value)

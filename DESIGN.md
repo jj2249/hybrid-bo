@@ -259,8 +259,9 @@ def evaluate(
   branch.
 - **Measurements from elsewhere.** `reconstruct(problem, *, u, measured, rng)` is
   `evaluate` without the measurement: no oracle values, and every row is tried, since
-  plant data can have several bad rows. `RootFindingError` names them and keeps the
-  others as `error.history`, so the caller decides whether to carry on. A `u` or a
+  plant data can have several bad rows, a missing value among them. `RootFindingError`
+  names them and keeps the others as `error.history`, so the caller decides whether to
+  carry on. A `u` or a
   measured variable outside its bounds is still a measurement, so it is kept, with
   `OutOfBoundsWarning`. An unmeasured root outside its bounds is a failed row, because
   the bounds may be what picks the right root.

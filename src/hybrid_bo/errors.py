@@ -50,8 +50,8 @@ class OutOfBoundsWarning(UserWarning):
     """Given measurements hold a decision variable or a measured variable outside its
     bounds.
 
-    It is still a measurement, so it is kept: it informs the GP, though the hybrid
-    model's optimum stays within the bounds. Widen the bounds if the data are right.
+    It is still a measurement, so it is kept: it informs the GP, though the nominal
+    optimum stays within the bounds. Widen the bounds if the data are right.
     """
 
 
