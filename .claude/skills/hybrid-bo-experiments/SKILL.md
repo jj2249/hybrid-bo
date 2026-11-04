@@ -1,21 +1,21 @@
 ---
 name: hybrid-bo-experiments
-description: Use when writing, modifying or running an experiment in experiments/, or a script that calls the library's methods. Covers the layout of an experiment, how to define the Problem and the measurement, the methods, saving runs, and common mistakes.
+description: Use when writing, modifying or running an experiment, a script that calls the library's methods. Covers the layout of an experiment, how to define the Problem and the measurement, the methods, saving runs, and common mistakes.
 ---
 
 # Writing and running experiments
 
 Read `docs/writing_an_experiment.rst` first: it is the user guide (layout, CasADi
 rules, `Var`/`System`/`Problem`, oracle vs custom measurement, methods and settings,
-running, common errors). `docs/reading_results.rst` covers a run, saving and the figures. `experiments/illustrative_example.py` is the reference
-experiment, and `illustrative_example_2d.py` its version with two decision variables;
-`rosenbrock.py` (P = 2) and `langermann.py` (P = 5) have no known equations (M = 0).
+running, common errors). `docs/reading_results.rst` covers a run, saving and the figures. `tests/illustrative_example.py` is the reference
+experiment, and `illustrative_example_2d.py` its version with two decision variables.
+Studies live in a repository of their own, with `hybrid-bo` installed as a package.
 Use GLOSSARY.md's terms. This file adds only what an agent needs on top.
 
 ## Layout contract
 
-An experiment is one plain script under `experiments/`, importable as a top-level module
-(pytest and ty put `experiments/` on the path). At module level, in this order: Problem,
+An experiment is one plain script. The two in `tests/` are importable as top-level modules
+(pytest and ty put `tests/` on the path). At module level, in this order: Problem,
 measurement (with a module-level `def oracle(v)` and the stated `optimum`), the BO
 methods' prior GP (`gp`), `N_INITIAL`, `N_ITERATIONS` and `N_RUNS`, then a small function
 per method, `def hybrid_bo(rng) -> hb.Run`, which calls the library. A `__main__` block
@@ -86,7 +86,7 @@ if a run evaluates a point whose oracle objective is below it.
 
 ## Running
 
-    pixi run -e experiments python experiments/<experiment>.py <name>
+    pixi run -e experiments python tests/illustrative_example.py <name>
 
 Saving goes to `results/<experiment>/<name>/` (git-ignored). The script makes that folder
 before its runs, so a name in use fails at once, and `hb.save_runs` takes an empty folder

@@ -75,7 +75,7 @@ hb.plots.regret(runs, optimum, ax)
 figure.savefig("regret.png")
 ```
 
-`experiments/` has complete scripts.
+`tests/illustrative_example.py` is a complete script.
 
 ## Docs
 

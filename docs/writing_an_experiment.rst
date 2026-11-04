@@ -3,13 +3,13 @@ Writing an experiment
 
 An experiment is one Python script: a problem, how the system is measured, and the
 methods to compare. It runs on its own, with nothing around it. This page builds one
-block by block, quoting ``experiments/illustrative_example.py``. The quickest start is
+block by block, quoting ``tests/illustrative_example.py``. The quickest start is
 to copy that file, change each block as described below, and run it:
 
 .. code-block:: bash
 
-   cp experiments/illustrative_example.py my_experiment.py
-   python my_experiment.py
+   cp tests/illustrative_example.py my_experiment.py
+   python my_experiment.py first-try
 
 The problem
 -----------
@@ -67,7 +67,7 @@ box from which initial points and solver starting points are drawn. Bounds defau
 infinite; start bounds default to the bounds when both are finite, so an unbounded
 variable needs ``start``. Make start bounds a realistic range of the variable.
 
-.. literalinclude:: ../experiments/illustrative_example.py
+.. literalinclude:: ../tests/illustrative_example.py
    :language: python
    :start-at: u = hb.Var(
    :end-before: system = hb.System(
@@ -80,7 +80,7 @@ must be as many measured variables as unknown states, so the root-finding proble
 recover the rest. The :py:class:`~hybrid_bo.problem.Problem` adds the objective ``f``,
 which is minimized.
 
-.. literalinclude:: ../experiments/illustrative_example.py
+.. literalinclude:: ../tests/illustrative_example.py
    :language: python
    :start-at: system = hb.System(
    :end-before: # Measurement:
@@ -107,7 +107,7 @@ the oracle together. The methods only see the measured variables, with normal no
 of the standard deviation you state (``noise_std``, 0 for none); a run also keeps the
 true (*oracle*) values, so the methods can be scored.
 
-.. literalinclude:: ../experiments/illustrative_example.py
+.. literalinclude:: ../tests/illustrative_example.py
    :language: python
    :start-at: # Measurement:
    :end-before: # Methods:
@@ -151,14 +151,14 @@ Methods
 A *method* is how the problem is solved. Each is a function you call directly, and a
 script usually wraps each call in a small function of its own:
 
-.. literalinclude:: ../experiments/illustrative_example.py
+.. literalinclude:: ../tests/illustrative_example.py
    :language: python
    :start-at: # Every method's budget
    :end-before: def hybrid_bo_lin
 
 The prior GP is defined once above them:
 
-.. literalinclude:: ../experiments/illustrative_example.py
+.. literalinclude:: ../tests/illustrative_example.py
    :language: python
    :start-at: # The prior GP
    :end-before: # Every method's budget
@@ -259,7 +259,7 @@ Running
 
 The end of the file repeats each method over seeds, then saves and plots:
 
-.. literalinclude:: ../experiments/illustrative_example.py
+.. literalinclude:: ../tests/illustrative_example.py
    :language: python
    :start-at: # Every method's runs from the same seeds
 
