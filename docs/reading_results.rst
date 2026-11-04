@@ -70,7 +70,7 @@ A study
    runs/<module>/<code>/<label>/   each run in full, as seed-<seed>.json
 
 The report has Benchopt's plots and two of ours, ``regret`` (the median regret of each
-method over the evaluations, lower is better) and ``summary``: each method's runs,
+method over the evaluations, with its interquartile range; lower is better) and ``summary``: each method's runs,
 complete runs and the quartiles of the final regret. **Check the runs in ``summary``.**
 A run that stops with a ``HybridBOError`` counts as incomplete, and one that fails with
 any other exception prints a traceback and is missing from the results, without

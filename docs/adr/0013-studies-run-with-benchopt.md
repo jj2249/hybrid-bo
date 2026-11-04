@@ -41,7 +41,7 @@ Benchopt's table of results.
   results and leaves the exit code at 0. Benchopt has no option for this. A
   `HybridBOError` keeps the partial run, which the `summary` view counts as incomplete.
 - Benchopt's curves need a point per solver call, and a run is one call, so `regret` is
-  a view of ours. Its traces have no vertical band: it draws the median alone.
+  a view of ours, the median with its quartiles.
 - Per-run logs and `--require-clean` are gone, and so is `git` in a run's artifact: a
   git lookup from an installed package answers for the user's repository (#198).
 - Studies saved by earlier versions don't load: read them with version 0.5, or rerun.

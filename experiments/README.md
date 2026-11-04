@@ -35,7 +35,8 @@ run in full to `outputs/runs/<module>/<code>/<label>/seed-<seed>.json`, which
 skips the runs it has. `code` hashes the experiments and the library, so a change to
 either runs everything again rather than returning old results.
 
-The report has `regret` (the median regret over the evaluations) and `summary` (each
+The report has `regret` (the median regret over the evaluations, with its interquartile
+range) and `summary` (each
 method's runs, complete runs and final regret). A run that fails with an unexpected
 exception prints its traceback, is missing from the results and doesn't change the
 exit code, so check the runs in `summary`.

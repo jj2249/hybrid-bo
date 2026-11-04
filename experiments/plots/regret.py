@@ -1,4 +1,4 @@
-"""The median regret of each method over the evaluations."""
+"""The median regret of each method over the evaluations, with its quartiles."""
 
 from typing import Any
 
@@ -18,15 +18,19 @@ class Plot(BasePlot):
     def plot(  # ty: ignore[invalid-method-override]
         self, df: pd.DataFrame, dataset: str, objective: str
     ) -> list[dict[str, Any]]:
-        """A curve per method, the median over its runs at each evaluation."""
+        """A curve per method, the median over its runs at each evaluation, in a band
+        from the first to the third quartile."""
         df = df.query("dataset_name == @dataset and objective_name == @objective")
         curves = []
         for method, rows in df.groupby("solver_name"):
-            median = rows.groupby("objective_evaluation")["objective_regret"].median()
+            regret = rows.groupby("objective_evaluation")["objective_regret"]
+            median = regret.median()
             curves.append(
                 {
                     "x": median.index.tolist(),
                     "y": median.tolist(),
+                    "y_low": regret.quantile(0.25).tolist(),
+                    "y_high": regret.quantile(0.75).tolist(),
                     "label": method,
                     **self.get_style(method),
                 }

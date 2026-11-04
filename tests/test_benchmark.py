@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 
 import pandas as pd
+import pytest
 from benchmark_utils import FOLDER, MODULES, fingerprint
 from plots.regret import Plot as Regret
 from plots.summary import Plot as Summary
@@ -51,8 +52,9 @@ def test_fingerprint_changes_with_the_experiment(tmp_path: Path):
     assert fingerprint(tmp_path) != before
 
 
-def test_regret_is_the_median_over_runs():
-    """Each method's curve is its median regret at each evaluation."""
+def test_regret_is_the_median_over_runs_with_its_quartiles():
+    """Each method's curve is its median regret at each evaluation, in a band from the
+    first to the third quartile."""
     df = results(
         [
             ("a", 0, 1, 1.0, 1.0),
@@ -68,6 +70,9 @@ def test_regret_is_the_median_over_runs():
 
     assert curve["x"] == [1, 2]
     assert curve["y"] == [3.0, 0.3]
+    # `pytest.approx` compares with a tolerance
+    assert curve["y_low"] == pytest.approx([2.0, 0.2])
+    assert curve["y_high"] == pytest.approx([5.5, 0.4])
 
 
 def test_summary_counts_complete_runs():
