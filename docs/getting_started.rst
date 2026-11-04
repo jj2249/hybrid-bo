@@ -112,8 +112,10 @@ methods, repeat them over seeds in a loop, and keep a list of runs per label:
        "standard_bo": [standard(seed) for seed in range(10)],
    }
    hb.save_runs(runs, "results/first-try")
-   hb.plots.regret(runs, optimum=-50.4608)
-   plt.savefig("regret.png")
+
+   figure, ax = plt.subplots()
+   hb.plots.regret(runs, -50.4608, ax)
+   figure.savefig("regret.png")
 
 The scripts in ``experiments/`` do this in full. :doc:`reading_results` explains what is
 saved.

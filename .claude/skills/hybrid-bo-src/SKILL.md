@@ -256,7 +256,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   before trial point i from `incumbents`, `run.settings`; `ValueError` for a
   baseline), for the replay.
 - `plots.py`: static figures, no widgets and no `rng`. `regret(runs, optimum, ax)` and
-  `convergence(runs, ax)` draw a list of runs per label (median and IQR over evaluations,
+  `convergence(runs, ax)` draw a list of runs per label on the caller's required axes (median and IQR over evaluations,
   `_over_evaluations`, in numpy). `iteration(run, problem, i, *, measure, gp,
   scenarios, acquisition) -> Figure` draws the state before trial point i over the
   `u` start bounds, with one figure legend (`_figure_legend`); it dispatches on

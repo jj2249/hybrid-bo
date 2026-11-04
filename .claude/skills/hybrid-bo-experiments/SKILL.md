@@ -19,7 +19,8 @@ An experiment is one plain script under `experiments/`, importable as a top-leve
 measurement (with a module-level `def oracle(v)` and the stated `optimum`), the BO
 methods' prior GP (`gp`), `N_INITIAL`, `N_ITERATIONS` and `N_RUNS`, then a small function
 per method, `def hybrid_bo(rng) -> hb.Run`, which calls the library. A `__main__` block
-loops over seeds, then calls `hb.save_runs` and `hb.plots.regret`.
+loops over seeds, then calls `hb.save_runs`, makes a figure with `plt.subplots()` and
+draws on it with `hb.plots.regret(runs, optimum, ax)`.
 
 - Importing the module runs nothing, so `tests/test_regression.py` reuses the
   illustrative example's `gp`, `problem` and `measure`, and

@@ -138,5 +138,6 @@ if __name__ == "__main__":
         for method in methods
     }
     folder = hb.save_runs(runs, "results/rosenbrock")
-    hb.plots.regret(runs, optimum)
-    plt.savefig(folder / "regret.png")
+    figure, ax = plt.subplots()
+    hb.plots.regret(runs, optimum, ax)
+    figure.savefig(folder / "regret.png")

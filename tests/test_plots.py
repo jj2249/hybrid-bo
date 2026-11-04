@@ -732,10 +732,13 @@ def test_regret_and_convergence_draw_the_median_and_quartiles_of_each_label():
     }
 
     # Act
-    regret = plots.regret(runs, optimum=0.0)
-    convergence = plots.convergence(runs)
+    _, (regret_ax, convergence_ax) = plt.subplots(2)
+    regret = plots.regret(runs, 0.0, regret_ax)
+    convergence = plots.convergence(runs, convergence_ax)
 
-    # Check: the median at each evaluation, on a log scale for regret
+    # Check: each draws on the axes it was given, the median at each evaluation, on a
+    # log scale for regret
+    assert regret is regret_ax and convergence is convergence_ax
     (line,) = regret.get_lines()
     np.testing.assert_allclose(np.asarray(line.get_xdata()), [1, 2])
     np.testing.assert_allclose(np.asarray(line.get_ydata()), [5.0, 1.5])

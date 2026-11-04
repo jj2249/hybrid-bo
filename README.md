@@ -63,7 +63,10 @@ To compare methods, loop over seeds, then save and plot what you got:
 ```python
 runs = {"hybrid_bo": [...], "standard_bo": [...]}  # a list of runs per label
 hb.save_runs(runs, "results/first-try")
-hb.plots.regret(runs, optimum)
+
+figure, ax = plt.subplots()
+hb.plots.regret(runs, optimum, ax)
+figure.savefig("regret.png")
 ```
 
 `experiments/` has complete scripts.

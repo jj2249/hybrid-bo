@@ -40,13 +40,10 @@ _EI_DECADES = 10  # the EI color scale stops this many decades below the largest
 _CONFIDENCE = 0.9  # probability inside the confidence bands
 
 
-def convergence(runs: Mapping[str, Sequence[Run]], ax: "Axes | None" = None) -> "Axes":
-    """The incumbent of each label's runs over the evaluations, on `ax` or a new
-    figure's axes: the oracle incumbent if the runs have an oracle, else the measured
-    one. Draws the median, with the interquartile range shaded.
-
-    Raises `ImportError` without matplotlib.
-    """
+def convergence(runs: Mapping[str, Sequence[Run]], ax: "Axes") -> "Axes":
+    """Draws the incumbent of each label's runs over the evaluations on `ax`, and
+    returns it: the oracle incumbent if the runs have an oracle, else the measured one,
+    as the median with the interquartile range shaded."""
     curves = {
         label: [_incumbents(run) for run in group] for label, group in runs.items()
     }
@@ -55,14 +52,10 @@ def convergence(runs: Mapping[str, Sequence[Run]], ax: "Axes | None" = None) -> 
     return ax
 
 
-def regret(
-    runs: Mapping[str, Sequence[Run]], optimum: float, ax: "Axes | None" = None
-) -> "Axes":
-    """The regret of each label's runs over the evaluations, measured from the oracle
-    optimum `optimum`, as in `convergence`, on a log y-axis (the paper's figure).
-
-    Raises `ImportError` without matplotlib.
-    """
+def regret(runs: Mapping[str, Sequence[Run]], optimum: float, ax: "Axes") -> "Axes":
+    """Draws the regret of each label's runs over the evaluations on `ax`, and returns
+    it: measured from the oracle optimum `optimum`, as in `convergence`, on a log y-axis
+    (the paper's figure)."""
     curves = {
         label: [_incumbents(run) - optimum for run in group]
         for label, group in runs.items()
@@ -80,18 +73,9 @@ def _incumbents(run: Run) -> np.ndarray:
     return oracle_incumbents(run.history)
 
 
-def _over_evaluations(
-    curves: Mapping[str, Sequence[np.ndarray]], ax: "Axes | None"
-) -> "Axes":
-    """The median and the interquartile range of each label's curves at each
-    evaluation, on `ax` or a new figure's axes. A shorter run counts up to its last
-    evaluation."""
-    import matplotlib.pyplot as plt
-
-    if ax is None:
-        with plt.style.context(STYLE):
-            _, ax = plt.subplots()
-
+def _over_evaluations(curves: Mapping[str, Sequence[np.ndarray]], ax: "Axes") -> "Axes":
+    """Draws the median and the interquartile range of each label's curves at each
+    evaluation on `ax`. A shorter run counts up to its last evaluation."""
     # Per label: runs as rows, NaN past a run's last evaluation
     for label, group in curves.items():
         rows = np.full((len(group), max(len(curve) for curve in group)), np.nan)

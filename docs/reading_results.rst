@@ -77,16 +77,17 @@ A list of runs per label is all the library needs:
 
 :py:func:`~hybrid_bo.plots.regret` draws the median regret of each label over the
 evaluations, with its interquartile range, and
-:py:func:`~hybrid_bo.plots.convergence` the incumbent the same way. Each returns the
-matplotlib axes, so adjust the figure as you like:
+:py:func:`~hybrid_bo.plots.convergence` the incumbent the same way. You make the figure,
+and each draws on the axes you give it, so one panel of a larger figure works the same:
 
 .. code-block:: python
 
    import matplotlib.pyplot as plt
 
-   ax = hb.plots.regret(runs, optimum=-50.4608)
+   figure, ax = plt.subplots()
+   hb.plots.regret(runs, -50.4608, ax)
    ax.set_title("Illustrative example")
-   plt.savefig("regret.pdf")
+   figure.savefig("regret.pdf")
 
 :py:func:`~hybrid_bo.history.check_oracle_optimum` warns with
 :py:class:`~hybrid_bo.errors.OracleOptimumWarning` if a run evaluated a point below the
