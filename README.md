@@ -8,13 +8,19 @@ built on [CasADi](https://web.casadi.org/).
 
 ## Install
 
-Not on PyPI yet, so install it from the repository:
+Not on PyPI yet, so install a release from the repository, with Python 3.12 or later and
+git:
 
 ```bash
-pip install "hybrid-bo[plots] @ git+https://github.com/jj2249/hybrid-bo.git"
+pip install "hybrid-bo[plots] @ git+https://github.com/jj2249/hybrid-bo.git@v0.6.0"
 ```
 
-`plots` adds matplotlib, for the iteration figures. To work on the repository, install
+`plots` adds matplotlib, for the figures. The tag at the end fixes the version, so the
+library can't change under your work: the
+[releases](https://github.com/jj2249/hybrid-bo/releases) list the newer ones, and
+changing the tag upgrades. Write your scripts anywhere, in a repository of your own.
+
+To work on the library itself, install
 [pixi](https://pixi.sh), then fork and clone it: the first `pixi run` installs
 everything the project needs.
 

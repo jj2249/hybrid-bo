@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The install commands name a release, so a script's library can't change under it (#204).
+
 ## 0.6.0 (2026-11-04)
 
 - **Breaking:** The library has no study runner any more (ADR 0013, #199): a script runs
