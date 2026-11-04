@@ -130,4 +130,8 @@ def load_run(path: str | Path) -> Run:
 
     Raises `RunFormatError` if the file doesn't hold a run of this version.
     """
-    return _decode(json.loads(Path(path).read_text()), Run)
+    try:
+        return _decode(json.loads(Path(path).read_text()), Run)
+    except (KeyError, TypeError) as error:
+        msg = f"{path} doesn't hold a run of this version: {error!r}"
+        raise RunFormatError(msg) from error

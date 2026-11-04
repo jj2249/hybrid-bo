@@ -2,7 +2,7 @@
 them, and their iteration figures.
 
 pytest runs every function whose name starts with `test_`. A test argument named like
-a fixture below (here `study_1d`) is filled in by pytest with that fixture's value;
+a fixture below (here `runs_1d`) is filled in by pytest with that fixture's value;
 `tmp_path` is pytest's own fixture, a fresh temporary folder for the test.
 """
 

@@ -39,10 +39,13 @@ class Solver(BaseSolver):
     def run(self, stop_val: object) -> None:
         """Draws the initial points and runs the method. A `HybridBOError` keeps the
         partial run, which then reports as incomplete."""
+        # The initial points, from the run's generator
         chosen = self.experiment
         problem, measure = chosen.problem, chosen.measure
         rng = np.random.default_rng(self.seed)
         initial_points = hb.initial_points(problem.system.u, chosen.n_initial, rng)
+
+        # The method, keeping what a failed run got as far as
         n = chosen.n_evaluations - chosen.n_initial
         try:
             self.result = chosen.methods[self.label](
@@ -52,10 +55,12 @@ class Solver(BaseSolver):
             if error.run is None:
                 raise
             self.result = error.run
-        self.budget = chosen.n_evaluations
-        hb.save_run(self.result, self._replaced_run_file())
 
-    def _replaced_run_file(self) -> Path:
+        # The run in full, beside the rows Benchopt keeps
+        self.budget = chosen.n_evaluations
+        hb.save_run(self.result, self._fresh_run_file())
+
+    def _fresh_run_file(self) -> Path:
         """Where the run is saved, with any earlier file of it gone. Not Benchopt's
         run folder, which holds only what its run didn't find in the cache."""
         module = self.experiment.__name__

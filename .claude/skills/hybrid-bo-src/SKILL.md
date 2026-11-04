@@ -84,8 +84,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `oracle_measure(system, oracle, noise_std, ...)` (`noise_std` required) traces
   the oracle like `g` (`_trace_oracle`) and returns an `OracleSimulation`, a frozen,
   callable dataclass holding the system, the traced oracle and the settings (#141);
-  its repr is the artifact's text, which `resume` compares across processes, so it
-  must not depend on the process (no addresses).
+  its repr is the artifact's text, so it must not depend on the process (no
+  addresses).
   `oracle_optimum(problem, oracle, rng)` solves min f s.t. g = 0, y = oracle by
   `multistart` from `lhs` starts over the start bounds of (u, x, y).
   `evaluate(problem, measure, u, rng)` runs the measurement per row, then always

@@ -111,6 +111,7 @@ def test_a_larger_budget_passes_through_the_evaluations_of_a_smaller_one(method)
     assert_same(long.scenarios, short.scenarios, "scenarios")
 
 
+# `tmp_path` is a pytest fixture: a new, empty folder for this test
 @pytest.mark.parametrize("label", ex.methods)
 def test_load_run_after_save_run_gives_the_run_back(label, tmp_path):
     """Every method's run loads back equal to the one saved, arrays bit for bit."""
@@ -276,6 +277,25 @@ def test_load_rejects_a_gp_part_of_the_wrong_type(tmp_path):
     # `pytest.raises` passes only if the block raises this exception, with a message
     # matching the regular expression `match`
     with pytest.raises(hb.errors.RunFormatError, match="'Zero'"):
+        hb.load_run(path)
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda data: data | {"index": 0},  # a field a run no longer has
+        lambda data: {key: data[key] for key in data if key != "history"},
+    ],
+    ids=["old_field", "missing_field"],
+)
+def test_load_rejects_a_file_that_is_not_a_run_of_this_version(change, tmp_path):
+    """A run saved by an older version, with a field `Run` no longer has or without
+    one it needs, raises `RunFormatError`, not an error from inside the loader."""
+    # Save a run, then change its fields
+    path = hb.save_run(hb.Run(history_of(0), {}, "m"), tmp_path / "run.json")
+    path.write_text(json.dumps(change(json.loads(path.read_text()))))
+
+    with pytest.raises(hb.errors.RunFormatError, match="of this version"):
         hb.load_run(path)
 
 

@@ -1,9 +1,9 @@
-"""Systems with no known equations (M = 0), end to end: every method runs, studies save
+"""Systems with no known equations (M = 0), end to end: every method runs, runs save
 and load, and the iteration figures draw. Hybrid BO is then BO of a composite function
 f(y, u) with y = h(u) (Astudillo & Frazier, arXiv 1906.01537).
 
 pytest runs every function whose name starts with `test_`. A test argument named like
-a fixture below (here `study_1d`) is filled in by pytest with that fixture's value;
+a fixture below (here `runs_1d`) is filled in by pytest with that fixture's value;
 `tmp_path` is pytest's own fixture, a fresh temporary folder for the test.
 """
 

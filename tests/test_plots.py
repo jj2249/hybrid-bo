@@ -1,5 +1,4 @@
-"""Static plots: convergence and regret across a study's runs, and the figure of one
-iteration of a run.
+"""Static plots: the figure of one iteration of a run.
 
 The plots are drawn without a window (the Agg backend, set in `conftest.py`), and the
 tests read the drawn data back from the matplotlib axes by their labels.

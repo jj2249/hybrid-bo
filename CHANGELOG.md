@@ -6,7 +6,8 @@
   machinery has left the library (ADR 0013, #196, #199). `hb.cli`, `hb.studies`
   (`hb.study`, `hb.Configuration`, `hb.StudySettings`, `hb.Study`, `hb.repeat`,
   `hb.Task`, ...), `hb.views` (`hb.summary`, `hb.evaluations`, `hb.hyperparameters`),
-  `hb.save`, `hb.load`, `hb.plots.convergence` and `hb.plots.regret` are gone, with the
+  `hb.save`, `hb.load`, `hb.plots.convergence`, `hb.plots.regret`,
+  `hb.OracleOptimumWarning` and `hb.run.code_version` and `is_clean` are gone, with the
   `hybrid-bo[analysis]` extra and `pixi run experiment` and `pixi run plot`. Call
   `hb.hybrid_bo`, `hb.standard_bo` and the baselines from a script, and save a run with
   `hb.save_run`; `pixi run benchmark` runs `experiments/`, which is a Benchopt benchmark

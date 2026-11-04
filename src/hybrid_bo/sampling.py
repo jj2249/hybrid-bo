@@ -12,9 +12,9 @@ def lhs(
 
     `lower` and `upper` have shape (d,) and must be finite. The draw is scipy's
     `qmc.LatinHypercube(d, rng=rng).random(n)`, made here because importing
-    `scipy.stats` takes about a second: from the next spawned
-    child of `rng`, which leaves its stream untouched, a point within each of the n
-    strata, then a shuffle of the strata of each dimension.
+    `scipy.stats` takes about a second: from the next spawned child of `rng`, which
+    leaves its stream untouched, a point within each of the n strata, then a shuffle of
+    the strata of each dimension.
     """
     d = len(lower)
     child = rng.spawn(1)[0]

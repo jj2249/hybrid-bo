@@ -15,8 +15,7 @@ functions" (arXiv 1906.01537), to 2D.
 
 Run it with `pixi run benchmark -d "experiment[module=rosenbrock]"`.
 
-Hybrid BO's iteration figures
-have no GP panels, since those draw one unknown state.
+Hybrid BO's iteration figures have no GP panels, since those draw one unknown state.
 """
 
 import functools

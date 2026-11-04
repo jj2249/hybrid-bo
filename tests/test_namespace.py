@@ -54,6 +54,12 @@ def test_top_level_holds_only_user_facing_names():
     assert names == USER_FACING
 
 
+def test_the_study_machinery_has_left_the_library():
+    """Studies run with Benchopt (ADR 0013), so these modules stay out of `hb`, which
+    the check of the names above doesn't see, as it leaves out modules."""
+    assert not {"cli", "studies", "views"} & set(vars(hb))
+
+
 def test_internals_are_reachable_through_their_modules():
     """Submodules are attributes of `hb`, so `hb.gp.fit_gp` works after
     `import hybrid_bo as hb`."""

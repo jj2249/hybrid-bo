@@ -25,8 +25,8 @@ pixi run benchmark -r 3 -d "experiment[module=rosenbrock]"       # one experimen
 pixi run benchmark -r 3 -s "method[label=hybrid_bo]"             # one method
 ```
 
-`-r` is the number of runs and `-j` the number of processes, and `--seed` sets the
-study's seed. Run i of every method starts from the same initial points. Add
+`-r` is the number of runs (default 1) and `-j` the number of processes, and `--seed`
+sets the study's seed (default 0). Run i of every method starts from the same initial points. Add
 `--no-plot --no-html` to skip the report, which takes much longer than a small study.
 
 Results go to `outputs/benchopt_run_<time>.parquet`, one row per evaluation, and each
@@ -36,10 +36,9 @@ skips the runs it has. `code` hashes the experiments and the library, so a chang
 either runs everything again rather than returning old results.
 
 The report has `regret` (the median regret over the evaluations, with its interquartile
-range) and `summary` (each
-method's runs, complete runs and final regret). A run that fails with an unexpected
-exception prints its traceback, is missing from the results and doesn't change the
-exit code, so check the runs in `summary`.
+range) and `summary` (each method's runs, complete runs and final regret). A run that
+fails with an unexpected exception prints its traceback, is missing from the results
+and doesn't change the exit code, so check the runs in `summary`.
 
 ## Adding an experiment
 

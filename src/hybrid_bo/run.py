@@ -24,15 +24,14 @@ class Run:
     the problem or any user callable, so it saves as JSON (`hb.save_run`) and loads
     without the code that produced it (ADR 0003).
     `method` is the method's name. `surrogates` has one fitted surrogate model per
-    iteration, the one behind
-    that iteration's trial point: a tuple of one fitted GP per unknown state, in the
-    order of the system's y, for hybrid BO, and a 1-tuple of the GP of f for standard
-    BO. `acquisitions` has the solution of that iteration's acquisition problem;
-    both are empty for the baselines. `scenarios` are hybrid
-    BO's, the same in every iteration, and None for the other methods. `settings` are
-    the BO method's settings in full, which the iteration plots replay, and None for
-    the baselines; the artifact holds them as text, for people. So every saved run has
-    the same fields.
+    iteration, the one behind that iteration's trial point: a tuple of one fitted GP
+    per unknown state, in the order of the system's y, for hybrid BO, and a 1-tuple of
+    the GP of f for standard BO. `acquisitions` has the solution of that iteration's
+    acquisition problem; both are empty for the baselines. `scenarios` are hybrid BO's,
+    the same in every iteration, and None for the other methods. `settings` are the BO
+    method's settings in full, which the iteration plots replay, and None for the
+    baselines; the artifact holds them as text, for people. So every saved run has the
+    same fields.
     """
 
     history: History
@@ -108,7 +107,7 @@ def run_artifact(
 ) -> dict[str, str]:
     """How a run is produced, as text: the problem's variables, structure and
     equations, the measurement, the method and its settings, the generator and the
-    package and code versions.
+    package versions.
 
     Call it before the method draws anything, so the generator's state is the one
     the run starts from. The measurement is described as `problem_artifact` says.
