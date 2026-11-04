@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The S2MPJ benchmarks live in a project of their own, `hybrid-bo-s2mpj`.
 - **Breaking:** `experiments/` is gone: studies live in a repository of their own, with
   `hybrid-bo` installed as a package. The illustrative examples moved to `tests/`, which
   shares them, and the docs quote them there. `rosenbrock` and `langermann` are in the
