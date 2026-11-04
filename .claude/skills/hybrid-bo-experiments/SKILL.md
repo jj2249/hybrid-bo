@@ -1,57 +1,43 @@
 ---
 name: hybrid-bo-experiments
-description: Use when writing, modifying or running an experiment, in experiments/ or a study script in scripts/. Covers the layout of an experiment, how to define the Problem and the measurement, the method settings, saving runs, and common mistakes.
+description: Use when writing, modifying or running an experiment in experiments/, or a script that calls the library's methods. Covers the layout of an experiment, how to define the Problem and the measurement, the methods, saving runs, and common mistakes.
 ---
 
 # Writing and running experiments
 
 Read `docs/writing_an_experiment.rst` first: it is the user guide (layout, CasADi
 rules, `Var`/`System`/`Problem`, oracle vs custom measurement, methods and settings,
-`hb.cli.main`, running, common errors). `docs/reading_results.rst` covers the saved study,
-the figures and the Polars views. `experiments/illustrative_example.py` is the
-reference experiment, and `illustrative_example_2d.py` its version with two decision
-variables; `rosenbrock.py` (P = 2) and `langermann.py` (P = 5) have no
-known equations (M = 0). Use GLOSSARY.md's terms. This file adds only what an agent needs on top.
+running, common errors). `docs/reading_results.rst` covers a run, saving and the figures. `experiments/illustrative_example.py` is the reference
+experiment, and `illustrative_example_2d.py` its version with two decision variables;
+`rosenbrock.py` (P = 2) and `langermann.py` (P = 5) have no known equations (M = 0).
+Use GLOSSARY.md's terms. This file adds only what an agent needs on top.
 
 ## Layout contract
 
-An experiment is one script that ends by calling `hb.cli.main`: a shipped one under
-`experiments/`, importable as a top-level module (pytest and ty put `experiments/` on
-the path), or a person's own under `scripts/` (git-ignored but its README; see
-`scripts/README.md`), which `pixi run experiment` doesn't reach: run it as
-`pixi run -e experiments python scripts/<name>.py ...`. At module level, in this order:
-Problem, measurement (with a module-level `def oracle(v)` and the stated `optimum` for
-a benchmark), the BO methods' prior GP (`gp`), `methods` (or one `method`, for a
-sweep), `configurations` (each method as an `hb.Configuration(method=...,
-n_evaluations=..., n_initial=...)`, the comparisons giving every method the same
-budget), `study_settings`
-(`hb.StudySettings(n_runs=..., seed=...)`), then a `__main__` block calling
-`hb.cli.main` with `configurations`.
+An experiment is one plain script under `experiments/`, importable as a top-level module
+(pytest and ty put `experiments/` on the path). At module level, in this order: Problem,
+measurement (with a module-level `def oracle(v)` and the stated `optimum`), the BO
+methods' prior GP (`gp`), `N_INITIAL`, `N_ITERATIONS` and `N_RUNS`, then a small function
+per method, `def hybrid_bo(rng) -> hb.Run`, which calls the library. A `__main__` block
+loops over seeds, then calls `hb.save_runs`, makes a figure with `plt.subplots()` and
+draws on it with `hb.plots.regret(runs, optimum, ax)`.
 
-- Everything the command line uses is passed in the `hb.cli.main` call (directly,
-  or inside `problem` and `measure`); nothing is read from the module by name. The
-  script's file name without `.py` is the experiment's name (`results/<name>/`).
 - Importing the module runs nothing, so `tests/test_regression.py` reuses the
-  illustrative example's `problem`, `measure`, `methods` and `configurations`, and
+  illustrative example's `gp`, `problem` and `measure`, and
   `tests/conftest.py`'s `illustrative_problem` fixture is its `problem`. Changing the
   illustrative experiment's problem, measurement or settings moves the regression
   baselines: that is a *logic* change.
 - A custom measurement is `(u (N,), rng) -> measured (P,)`; its docstring (else its
   name) describes it in each run's artifact; a dataclass measurement is described by
   its repr.
-- A BO method's settings are required, since they name its GP: bind them with
-  `functools.partial(hb.hybrid_bo, settings=hb.HybridBOSettings(gp=gp, ...))`, never
-  put `hb.hybrid_bo` or `hb.standard_bo` in `methods` bare. `settings` is
-  keyword-only, after `rng`.
 - Defaults never choose the method (ADR 0009): a default may set how hard or how
   precisely we search, never what we search for. So these are required and spelled
-  out in every experiment: `acquisition` (`hb.EI()` or `hb.LCB(std_factor=...)`) on
-  both settings, `approximation` on `HybridBOSettings`, `n_scenarios` on `hb.SAA` and
+  out in every experiment: `gp` and `acquisition` (`hb.EI()` or
+  `hb.LCB(std_factor=...)`) on both BO methods, `approximation` on `hb.hybrid_bo`, `n_scenarios` on `hb.SAA` and
   `hb.SoftSAA` (with `temperature`), and `noise_std` on `hb.oracle_measure` and
   `hb.gp.GP`. Search effort and numerics keep defaults (`n_starts`, `n_starts_gp`,
   the solver, `jitter`, kernel priors, `ard`, `unknown_states_as_variables=True`). The
-  settings and choice dataclasses, `GP`, `Configuration` and `StudySettings` are
-  keyword-only:
+  methods, the choice dataclasses and `GP` are keyword-only:
   `hb.SoftSAA(temperature=5e-3, n_scenarios=25, unknown_states_as_variables=False)`
   (the experiments take a temperature of about 1e-3 times the optimum's magnitude).
   Leaving one out, or passing one by position, raises `TypeError`.
@@ -65,25 +51,20 @@ budget), `study_settings`
 
 ## Randomness
 
-Every draw of a study comes from `settings.seed`. Run `i` of every configuration gets
-the `i`th child of the seed, so run `i` of each configuration with the same `n_initial`
-starts from the same initial points. Within `hb.repeat`, run `i` draws
-`hb.initial_points(system.u, n_initial, rng)` and runs the method for `n_evaluations -
-n_initial` iterations, both from that generator. A BO run with a larger budget passes
-through the same first evaluations as one with a smaller budget (the prefix property),
-so a budget sweep needs one configuration per `n_initial`, at the largest budget; the
-baselines draw their whole design first: Latin hypercube sampling lacks it, and
-uniform sampling has it only with a measurement that draws nothing. Outside a study, do the same by hand:
-`np.random.default_rng(seed).spawn(n_runs)`, and draw nothing else from a run's
-generator.
+`rng` is one generator per run. With `n_initial` the method draws its initial points from
+it first, so the same seed gives every method the same initial points; `initial_points=`
+gives them instead. A BO run with a larger budget passes through the same first
+evaluations as one with a smaller budget (the prefix property); the baselines draw their
+whole design first: Latin hypercube sampling lacks it, and uniform sampling has it only
+with a measurement that draws nothing. Draw nothing else from a run's generator.
 
 ## Oracle optimum
 
-State it as a module-level `optimum`; the study never computes it (a 10-start search
-found a local minimum for the illustrative example, #62). Find it once with
+State it as a module-level `optimum`; nothing computes it (a 10-start search found a
+local minimum for the illustrative example, #62). Find it once with
 `hb.oracle_optimum(problem, oracle, rng, n_starts=200)`, check it, and say how in a
-comment. `hb.study` warns with `OracleOptimumWarning` if a run evaluates a point whose
-oracle objective is below it.
+comment. `hb.check_oracle_optimum(history, optimum)` warns with `OracleOptimumWarning`
+if a run evaluates a point whose oracle objective is below it.
 
 ## Pitfalls
 
@@ -92,93 +73,23 @@ oracle objective is below it.
 - `System` takes keyword arguments only. Without known equations, leave out both
   `x` and `g` (M = 0); giving one without the other raises `ValueError`.
 - Exactly one measured variable per unknown state. With `P > 1` unknown states,
-  `plots.iteration` draws hybrid BO only with `gp=False` (else `ValueError`), so the
-  CLI draws those runs' iteration figures without the GP panels.
+  `plots.iteration` draws hybrid BO only with `gp=False` (else `ValueError`).
 - With measurement noise, state it in the GP too, as the same number:
   `GP(..., noise_std=0.01)` for `oracle_measure(..., noise_std=0.01)`. `noise_std`
   is in measured units; kernel hyperparameters (`Param` bounds, fixed lengthscales) are in
   scaled units (inputs onto [0, 1], outputs standardized). Don't convert the noise by
   hand.
-- `true_curves=True` runs the measurement over the plot grid: only for an oracle.
-- The iteration figures need one or two decision variables; otherwise `plot` prints
-  why and skips that run's figures. They are drawn for run 0 of each method unless
-  `--plot-runs` names other runs (or `all`). They replay each run from what it stored (its fitted
-  GPs and its settings), so nothing from the experiment's methods is passed and a
-  study plots after the methods change.
-- Studies saved before #119 (GPs as data) or #120 (runs hold their settings) don't
-  load: `hb.load` raises `StudyFormatError`. Rerun them.
+- Passing `measure` to `plots.iteration` runs it over the plot grid: only for an oracle.
+- The iteration figures need one or two decision variables. They replay each run from
+  what it stored (its fitted GPs and its settings), so nothing from the experiment's
+  methods is passed and a saved run plots after the methods change.
 
 ## Running
 
-    pixi run experiment <name> [--method M ...] [--n-runs 10] [--seed 0] [--n-workers 4] [--name ID] [--plot] [--plot-runs 0 3] [--require-clean]
-    pixi run experiment <name> prepare [--method M ...] [--n-runs 10] [--seed 0] [--name ID]
-    pixi run experiment <name> run-task STUDY --task-index K
-    pixi run experiment <name> resume STUDY [--n-workers 4] [--plot] [--plot-runs 0 3]
-    pixi run plot <name> [STUDY]
-    pixi run experiment <name> plot [STUDY] [--plot-runs all] [--results-root DIR]
+    pixi run -e experiments python experiments/<experiment>.py <name>
 
-`--method` takes configuration labels. There is no `--n-iterations`: budgets belong
-to configurations, so change them in the experiment (tests write small scripts, as
-`tests/test_cli.py`'s `small` does, and run them with its `experiment` fixture, which
-runs them in-process with `runpy.run_path`). A study's runs are tasks (one run of one configuration, `hb.Task`). `run`
-is `prepare`, then the tasks, then assembly:
-
-- `prepare` reserves the study id by creating the study folder (an atomic `mkdir`,
-  so studies started at once never share an id) and writes its task list
-  `tasks.json`: the seed (resolved if None), `n_runs`, each chosen configuration's
-  budget, the oracle optimum, the code version, the problem's artifact text and the
-  tasks as `[label, index]`, by label, then index.
-- The launcher (`hb.cli._run_tasks` -> `_run_commands`, a generic runner of named
-  commands) runs each task as `python <script> run-task STUDY --task-index K`
-  from the launcher's folder, keeping
-  `--n-workers` running (default 1) in task order. The script is `__main__`'s
-  `__file__` (`sys.argv[0]` would be `ipykernel_launcher.py` in a notebook), so
-  `main` called outside a script file (a notebook, `python -c`) is a usage error. The
-  task rebuilds the experiment from its script, so nothing is pickled: lambdas and
-  nested functions are fine. The task list doesn't record the script's path, so a
-  moved script resumes; a renamed one is another experiment. A task saves `runs/<label>/run-003.json`
-  (temporary file, then renamed), or `run-003.failed` for a run that failed before
-  evaluating anything, and `logs/<label>/run-003.log` (DEBUG and above; the console
-  gets INFO and above, tagged `<label>/run-003`). It exits 0 when the task is done,
-  also if it was already, 1 on an unexpected exception (traceback in its log), 2 if
-  the experiment or the code version differs from the task list. With more than one
-  at a time, tasks get `OMP/OPENBLAS/MKL/VECLIB_*_NUM_THREADS=1` unless set; `-W`
-  options are passed on.
-- Assembly loads the run files (`hb.load_run`), calls `hb.assemble`, rebuilds
-  `study.log` as the launcher's lines then every per-run log, each line starting with
-  its tag (dropping lines an interrupted assembly tagged, so none appear twice),
-  writes `summary.csv`, then `artifact.json` (`hb.saving.save_artifact`; the study is
-  finished exactly when it exists, so it is written last but for the printing,
-  atomically), then prints the summary with ASCII borders (a Windows pipe is cp1252,
-  #170).
-
-Ctrl-C, a failing task, or any other error once the tasks have started stops the
-study at once (running tasks are terminated, finished runs kept), prints the `resume`
-command and exits 130 or 1. `resume STUDY [--n-workers N] [--require-clean] [--plot] [--plot-runs ...]`
-takes everything else from the task list; it refuses a finished study and, naming the
-difference (both values for one-value fields), an experiment whose configurations,
-budgets, problem or measurement text, or code version differ from the task list;
-then it runs the tasks left and assembles. Helpers raise `hb.cli._UsageError`, which
-`main` reports as a usage error. For a cluster, `prepare`, then a SLURM array of
-`run-task --task-index $SLURM_ARRAY_TASK_ID`, then `resume`.
-
-No command lists every experiment, and a typo in `pixi run experiment <name>` fails
-with "No module named ...". `--results-root` defaults to `results/`, and a relative one
-is relative to where pixi was started (`INIT_CWD`, not `experiments/`), else the
-working folder. Messages and `--help` show the command as `python <script>` relative
-to that folder, prefixed `pixi run -e <env>` under pixi (`PIXI_ENVIRONMENT_NAME`).
-`hb.cli` needs Polars to run a study and matplotlib to plot (extras `analysis` and
-`plots`), both imported lazily so tasks start without them. The study id is `--name`, else the UTC time to the second at the
-start. A taken `--name` (by a saved or an unfinished study) is a usage error; a taken
-UTC time gets `-2`, `-3`, ... appended. The study log holds the launcher's lines
-(each configuration, each task started and finished with a count, warnings) and then
-every run's lines, once the study is assembled. `plot` loads the study given (an unfinished one is a usage error
-saying to resume it), else the finished one whose artifact was written last
-(`artifact.json`, or `study.json` in older studies), and saves `summary.csv` if the
-study has none (studies saved before summaries). Plotting draws the study figures
-convergence and regret (one that raises `ValueError`, such as regret without an
-oracle optimum, is skipped with a message), and the iteration
-figures of the runs `--plot-runs` names (indices or `all`, default `0`, of each
-method); on `run` and `resume`, `--plot-runs` implies `--plot`. Running with
-uncommitted or untracked files warns that the study won't be reproducible;
-`--require-clean` refuses to run instead.
+Saving goes to `results/<experiment>/<name>/` (git-ignored). The script makes that folder
+before its runs, so a name in use fails at once, and `hb.save_runs` takes an empty folder
+and refuses any other. A failed run stops the script unless it catches `hb.HybridBOError`, whose `run`
+holds the partial run. For parallel runs, `joblib` works with functions defined in a
+script, with results identical to serial runs.

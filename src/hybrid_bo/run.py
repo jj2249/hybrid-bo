@@ -1,12 +1,9 @@
 """A run of a method, as pure data (ADR 0003), and its artifact: how it was produced."""
 
-import functools
 import importlib.metadata
 import inspect
 import platform
-import subprocess
 from dataclasses import dataclass, field, is_dataclass
-from pathlib import Path
 
 import numpy as np
 
@@ -24,71 +21,26 @@ class Run:
     which says, as text, how they were produced.
 
     Holds only data (arrays, numbers, strings and frozen dataclasses of them), never
-    the problem or any user callable, so it saves as JSON (`hb.save`) and loads
-    without the code that produced it (ADR 0003, ADR 0004).
-    `method` is the label the run was run under: the key of its configuration in the
-    study, or the method's name when run on its own. `index` is its position among
-    that configuration's runs in a study, so run i of every configuration with the
-    same number of initial points starts from the same initial points.
-    `n_evaluations` is its configuration's evaluation budget, initial points
-    included, which a run that stopped short didn't reach; None for a run made
-    outside a study. `surrogates` has one fitted surrogate model per iteration, the one behind
-    that iteration's trial point: a tuple of one fitted GP per unknown state, in the
-    order of the system's y, for hybrid BO, and a 1-tuple of the GP of f for standard
-    BO. `acquisitions` has the solution of that iteration's acquisition problem;
-    both are empty for the baselines. `scenarios` are hybrid
-    BO's, the same in every iteration, and None for the other methods. `settings` are
-    the BO method's settings in full, which the iteration plots replay, and None for
-    the baselines; the artifact holds them as text, for people. So every saved run has
-    the same fields.
+    the problem or any user callable, so it saves as JSON (`hb.save_run`) and loads
+    without the code that produced it (ADR 0003).
+    `method` is the method's name. `surrogates` has one fitted surrogate model per
+    iteration, the one behind that iteration's trial point: a tuple of one fitted GP
+    per unknown state, in the order of the system's y, for hybrid BO, and a 1-tuple of
+    the GP of f for standard BO. `acquisitions` has the solution of that iteration's
+    acquisition problem; both are empty for the baselines. `scenarios` are hybrid BO's,
+    the same in every iteration, and None for the other methods. `settings` are the BO
+    method's settings in full, which the iteration plots replay, and None for the
+    baselines; the artifact holds them as text, for people. So every saved run has the
+    same fields.
     """
 
     history: History
     artifact: dict[str, str]
     method: str
-    index: int = 0
     surrogates: list[tuple[FittedGP, ...]] = field(default_factory=list)
     acquisitions: list[AcquisitionSolution] = field(default_factory=list)
     scenarios: Scenarios | None = None
     settings: MethodSettings | None = None
-    n_evaluations: int | None = None
-
-
-def _git(path: Path, *args: str) -> str:
-    """What `git *args` prints, run in the folder `path`.
-
-    Raises `OSError` without git and `CalledProcessError` outside a git checkout.
-    """
-    result = subprocess.run(
-        ["git", *args], cwd=path, capture_output=True, text=True, check=True
-    )
-    return result.stdout
-
-
-def code_version(path: Path) -> str:
-    """The git commit of the checkout holding the folder `path`, marked `-dirty` if a
-    committed file has changed and `-untracked` if a file that isn't ignored was never
-    added, or "unknown" outside a git checkout. Only a version with neither mark is
-    clean (`is_clean`), so a study recording it can be reproduced."""
-    try:
-        described = _git(path, "describe", "--always", "--dirty").strip()
-        status = _git(path, "status", "--porcelain", "--untracked-files=normal")
-    except (OSError, subprocess.CalledProcessError):
-        return "unknown"
-    has_untracked = any(line.startswith("??") for line in status.splitlines())
-    return f"{described}-untracked" if has_untracked else described
-
-
-def is_clean(version: str) -> bool:
-    """Whether the code version `version` (from `code_version`) pins the code: a
-    commit, with nothing changed or untracked."""
-    return version != "unknown" and not version.endswith(("-dirty", "-untracked"))
-
-
-@functools.cache
-def _code_version() -> str:
-    """The code version of the package source (`code_version`), found once."""
-    return code_version(Path(__file__).parent)
 
 
 def _version(distribution: str) -> str:
@@ -136,11 +88,9 @@ def _generator_artifact(rng: np.random.Generator) -> dict[str, str]:
 
 
 def _versions_artifact() -> dict[str, str]:
-    """The versions of hybrid_bo (with its git commit), Python and the numerical
-    packages."""
+    """The versions of hybrid_bo, Python and the numerical packages."""
     return {
         "hybrid_bo": _version("hybrid-bo"),
-        "git": _code_version(),
         "python": platform.python_version(),
         "casadi": _version("casadi"),
         "numpy": _version("numpy"),
@@ -157,7 +107,7 @@ def run_artifact(
 ) -> dict[str, str]:
     """How a run is produced, as text: the problem's variables, structure and
     equations, the measurement, the method and its settings, the generator and the
-    package and code versions.
+    package versions.
 
     Call it before the method draws anything, so the generator's state is the one
     the run starts from. The measurement is described as `problem_artifact` says.

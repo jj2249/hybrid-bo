@@ -28,9 +28,9 @@ class NoSolutionError(HybridBOError):
     """Every start of a multistart solve failed."""
 
 
-class StudyFormatError(ValueError):
-    """A saved study is in a format this version can't load, such as one saved before
-    GPs were data. Rerun it, or load it with the version that saved it."""
+class RunFormatError(ValueError):
+    """A saved run is in a format this version can't load. Rerun it, or load it with
+    the version that saved it."""
 
 
 class ReconstructionWarning(UserWarning):

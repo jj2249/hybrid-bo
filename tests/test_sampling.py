@@ -65,9 +65,8 @@ def test_lhs_spawns_instead_of_consuming_the_stream():
 
 
 def test_lhs_does_not_import_scipy_stats():
-    """lhs draws without importing `scipy.stats`, which takes about a second, so a
-    study task that only draws its initial points starts quickly. Checked in a new
-    process, as this one has imported it."""
+    """lhs draws without importing `scipy.stats`, which takes about a second. Checked
+    in a new process, as this one has imported it."""
     # A new process draws with lhs and reports whether scipy.stats got imported
     code = (
         "import sys; import numpy as np; from hybrid_bo.sampling import lhs; "

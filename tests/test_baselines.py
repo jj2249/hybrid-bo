@@ -33,7 +33,7 @@ def illustrative_run(problem, method, rng=None) -> Run:
         problem.system, oracle=lambda v: [cas.sin(v.u)], noise_std=0.0
     )
     u = initial_points(problem.system.u, 2, rng)
-    return method(problem, measure, u, 3, rng)
+    return method(problem, measure, initial_points=u, n_iterations=3, rng=rng)
 
 
 class _DataOnlyUnpickler(pickle.Unpickler):
@@ -62,7 +62,9 @@ def test_initial_points_come_first(illustrative_problem, method):
         noise_std=0.0,
     )
 
-    run = method(illustrative_problem, measure, u, 3, rng)
+    run = method(
+        illustrative_problem, measure, initial_points=u, n_iterations=3, rng=rng
+    )
 
     assert run.history.n_initial == 2
     assert run.history.u.shape == (5, 1)
@@ -110,7 +112,7 @@ def test_artifact_describes_the_problem_method_and_versions(illustrative_problem
     for package in ("casadi", "numpy", "scipy"):
         assert artifact[package] == importlib.metadata.version(package)
     assert artifact["hybrid_bo"] == importlib.metadata.version("hybrid-bo")
-    assert artifact["git"]
+    assert "git" not in artifact  # a git lookup would answer for the user's repository
 
 
 def test_artifact_holds_the_seed_and_spawn_key(illustrative_problem):
@@ -141,9 +143,9 @@ def test_custom_measure_is_recorded_by_docstring_or_name(illustrative_problem):
         latin_hypercube_sampling(
             illustrative_problem,
             measure,
-            np.array([[0.5]]),
-            1,
-            np.random.default_rng(0),
+            initial_points=np.array([[0.5]]),
+            n_iterations=1,
+            rng=np.random.default_rng(0),
         ).artifact
         for measure in (plant, described_plant)
     ]
@@ -169,9 +171,9 @@ def test_failed_evaluation_carries_the_partial_run(illustrative_problem, method)
         method(
             illustrative_problem,
             measure,
-            np.array([[-0.5], [0.5]]),
-            2,
-            np.random.default_rng(0),
+            initial_points=np.array([[-0.5], [0.5]]),
+            n_iterations=2,
+            rng=np.random.default_rng(0),
         )
 
     # The run holds the two initial points

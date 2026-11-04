@@ -9,19 +9,58 @@ keys of its result files (`ResultsBO`) to compare. The acquisition problems' sol
 """
 
 import json
+from functools import partial
 from pathlib import Path
 
 import illustrative_example as ex
 import numpy as np
 import pytest
 
-from hybrid_bo import Run, incumbents, initial_points, oracle_incumbents
+from hybrid_bo import (
+    EI,
+    SAA,
+    Linearization,
+    Run,
+    SoftSAA,
+    hybrid_bo,
+    incumbents,
+    latin_hypercube_sampling,
+    oracle_incumbents,
+    standard_bo,
+    uniform_sampling,
+)
 
 BASELINE_DIR = Path(__file__).parent / "data" / "regression"
 RTOL, ATOL = 1e-6, 1e-8
 
 # Small, seeded runs so the test is fast and deterministic
 SEED, N_ITERATIONS = 0, 2
+
+# The illustrative example's methods, with their labels in the stored results
+_SUBSTITUTED = {"unknown_states_as_variables": False}
+METHODS = {
+    "hybrid_bo": partial(
+        hybrid_bo,
+        gp=ex.gp,
+        acquisition=EI(),
+        approximation=SAA(n_scenarios=25, **_SUBSTITUTED),
+    ),
+    "hybrid_bo_lin": partial(
+        hybrid_bo,
+        gp=ex.gp,
+        acquisition=EI(),
+        approximation=Linearization(**_SUBSTITUTED),
+    ),
+    "hybrid_bo_soft": partial(
+        hybrid_bo,
+        gp=ex.gp,
+        acquisition=EI(),
+        approximation=SoftSAA(temperature=50e-3, n_scenarios=25, **_SUBSTITUTED),
+    ),
+    "standard_bo": partial(standard_bo, gp=ex.gp, acquisition=EI()),
+    "latin_hypercube_sampling": latin_hypercube_sampling,
+    "uniform_sampling": uniform_sampling,
+}
 
 
 def as_baseline_columns(run: Run) -> dict[str, np.ndarray]:
@@ -63,14 +102,19 @@ def run_method(method: str) -> dict[str, np.ndarray]:
     `ResultsBO` keys."""
     # As in the experiment: one generator per run, initial points drawn from it
     rng = np.random.default_rng(SEED).spawn(1)[0]
-    u = initial_points(ex.system.u, ex.configurations[method].n_initial, rng)
-    run = ex.methods[method](ex.problem, ex.measure, u, N_ITERATIONS, rng=rng)
+    run = METHODS[method](
+        ex.problem,
+        ex.measure,
+        n_initial=ex.N_INITIAL,
+        n_iterations=N_ITERATIONS,
+        rng=rng,
+    )
     return as_baseline_columns(run)
 
 
 # `parametrize` runs the test once per method, each as its own test case. The other
 # argument is a fixture from `conftest.py`, filled in by pytest
-@pytest.mark.parametrize("method", list(ex.methods))
+@pytest.mark.parametrize("method", list(METHODS))
 def test_illustrative_example(method, update_baselines):
     """The method reproduces its stored results on the illustrative example."""
     actual = run_method(method)

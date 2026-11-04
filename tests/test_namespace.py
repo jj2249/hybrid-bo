@@ -14,9 +14,7 @@ USER_FACING = {
     # Run a method
     "initial_points",
     "hybrid_bo",
-    "HybridBOSettings",
     "standard_bo",
-    "StandardBOSettings",
     "EI",
     "LCB",
     "SAA",
@@ -24,30 +22,18 @@ USER_FACING = {
     "Linearization",
     "latin_hypercube_sampling",
     "uniform_sampling",
-    # Run a study, and save and load it
-    "Configuration",
-    "StudySettings",
-    "Study",
-    "repeat",
-    "study",
+    # Save and load a run
     "oracle_optimum",
-    "save",
-    "load",
-    # Run a study's tasks elsewhere, and save and load its runs one by one
-    "Task",
-    "study_tasks",
-    "run_task",
-    "assemble",
     "save_run",
     "load_run",
+    "save_runs",
+    "load_runs",
     # Look at the results
     "Run",
     "History",
     "incumbents",
     "oracle_incumbents",
-    "evaluations",
-    "summary",
-    "hyperparameters",
+    "check_oracle_optimum",
     # Errors
     "HybridBOError",
     "NoSolutionError",
@@ -70,10 +56,15 @@ def test_top_level_holds_only_user_facing_names():
     assert names == USER_FACING
 
 
+def test_the_study_machinery_has_left_the_library():
+    """A script runs the methods itself (ADR 0013), so these modules stay out of `hb`,
+    which the check of the names above doesn't see, as it leaves out modules."""
+    assert not {"cli", "studies", "views"} & set(vars(hb))
+
+
 def test_internals_are_reachable_through_their_modules():
     """Submodules are attributes of `hb`, so `hb.gp.fit_gp` works after
     `import hybrid_bo as hb`."""
     assert callable(hb.gp.fit_gp)
     assert callable(hb.solvers.multistart)
-    assert callable(hb.plots.convergence)
-    assert callable(hb.cli.main)
+    assert callable(hb.plots.iteration)

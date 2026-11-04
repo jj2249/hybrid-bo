@@ -218,7 +218,7 @@ def oracle_optimum(
     problem: by `multistart` from `n_starts` Latin hypercube starts over the start
     bounds of u, x and y, so it is the best local optimum found, which can miss the
     global one: use it to find a benchmark experiment's optimum once, from many
-    starts, and state that value in the study. Raises `ValueError` if the oracle
+    starts, and state that value in the experiment. Raises `ValueError` if the oracle
     doesn't give one value per unknown state, and `NoSolutionError` if every start
     fails.
     """

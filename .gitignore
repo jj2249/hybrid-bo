@@ -24,12 +24,6 @@ docs/_templates/
 *.pkl
 
 
-# Studies saved by `pixi run experiment` and study scripts
-/results/
-
-# Personal study scripts, all but the README (scripts/README.md)
-/scripts/*
-!/scripts/README.md
 
 # Personal Claude Code settings (shared skills in .claude/skills are committed)
 .claude/settings.local.json
@@ -37,3 +31,8 @@ docs/_templates/
 # Coverage data
 .coverage
 htmlcov/
+
+
+# Results and personal scripts, kept out of the repository
+/results/
+/scripts/

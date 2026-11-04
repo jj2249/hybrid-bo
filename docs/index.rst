@@ -6,14 +6,10 @@ Bayesian optimization of partially known systems with hybrid models
 system are used as they are, and a Gaussian process learns the unknown ones. The paper
 explains the method; these pages explain how to use the library.
 
-- :doc:`getting_started`: install, run the illustrative experiment and look at what it
-  produced.
+- :doc:`getting_started`: install, and run hybrid BO and standard BO in a script.
 - :doc:`writing_an_experiment`: state your own problem and measurement, choose the
   methods and run them.
-- :doc:`running_large_studies`: long studies on many cores or a SLURM cluster, and
-  resuming a study that stopped.
-- :doc:`reading_results`: the saved study, the summary, the figures, and the study in
-  Python.
+- :doc:`reading_results`: a run, its figures, and the results of many runs.
 
 Import the package as ``import hybrid_bo as hb``: the top level holds what a typical
 experiment uses, the rest is in its module (``hb.gp.GP``). The
@@ -25,5 +21,4 @@ experiment uses, the rest is in its module (``hb.gp.GP``). The
 
    getting_started
    writing_an_experiment
-   running_large_studies
    reading_results

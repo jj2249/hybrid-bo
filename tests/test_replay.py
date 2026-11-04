@@ -25,7 +25,6 @@ from hybrid_bo import (
     EI,
     LCB,
     SAA,
-    HybridBOSettings,
     Linearization,
     Problem,
     ReplayWarning,
@@ -37,9 +36,12 @@ from hybrid_bo import (
     initial_points,
     plots,
 )
+from hybrid_bo.acquisition import Replay, replay
+from hybrid_bo.bo import iteration_problem
 from hybrid_bo.gp import predict
-from hybrid_bo.plots import _N_GRID, _replay
+from hybrid_bo.plots import _N_GRID
 from hybrid_bo.sampling import _start_bounds
+from hybrid_bo.settings import HybridBOSettings
 
 REFERENCES = Path(__file__).parent / "data" / "replay"
 
@@ -71,7 +73,9 @@ def hybrid_run(example: str, approximation: str) -> Run:
     settings = HybridBOSettings(gp=ex.gp, acquisition=acquisition, approximation=approx)
     rng = np.random.default_rng(0)
     u = initial_points(problem.system.u, 2 * problem.system.n_u + 1, rng)
-    run = hybrid_bo(problem, measure, u, 2, rng, settings=settings)
+    run = hybrid_bo(
+        problem, measure, initial_points=u, n_iterations=2, rng=rng, **vars(settings)
+    )
     return pickle.loads(pickle.dumps(run))
 
 
@@ -87,6 +91,14 @@ def replay_grid(problem: Problem, run: Run, i: int) -> np.ndarray:
     u1, u2 = (np.linspace(lower[j], upper[j], N_GRID_2D) for j in range(2))
     U1, U2 = np.meshgrid(u1, u2)
     return np.vstack([trial, np.column_stack([U1.ravel(), U2.ravel()])])
+
+
+def replay_at(run: Run, problem: Problem, i: int, u: np.ndarray) -> Replay:
+    """Iteration i's acquisition problem replayed at the rows of u, which hold the
+    trial point."""
+    trial = run.history.u[run.history.n_initial + i]
+    at_trial = int(np.flatnonzero(np.all(u == trial, axis=1))[0])
+    return replay(iteration_problem(run, problem, i), run.acquisitions[i], u, at_trial)
 
 
 CASES = [
@@ -106,7 +118,8 @@ def test_replay_matches_the_ipopt_replay(example, approximation, i):
     the gaps). The values agree to 1e-6 relative and f to 1e-7: both solvers meet
     the known equations to about 1e-9 (Newton's roots match scipy's brentq on
     x + exp(x) = y to 1e-9), which leaves room for machines that round differently.
-    Lin-EI's std agrees to 1e-5 relative."""
+    Lin-EI's std agrees to 1e-5 relative; the other approximations' std of f is the
+    weighted std of f over the scenarios."""
     # Setup: the run and the recorded values
     problem = EXAMPLES[example][0]
     run = hybrid_run(example, approximation)
@@ -117,18 +130,22 @@ def test_replay_matches_the_ipopt_replay(example, approximation, i):
     np.testing.assert_allclose(u, reference["u"], rtol=0, atol=1e-6)
 
     # Act
-    assert run.settings is not None
-    values, f, f_std = _replay(run, problem, i, run.settings, u)
+    replayed = replay_at(run, problem, i, u)
 
-    # Check: the values, and Lin-EI's std only with linearization
-    assert f is not None
-    np.testing.assert_allclose(values, reference["values"], rtol=1e-6, atol=1e-12)
+    # Check: the values, f, and the std of f, Lin-EI's s or over the scenarios
+    assert replayed.f is not None and replayed.f_std is not None
+    f, f_std = replayed.f, replayed.f_std
+    np.testing.assert_allclose(
+        replayed.values, reference["values"], rtol=1e-6, atol=1e-12
+    )
     np.testing.assert_allclose(f, reference["f"], rtol=1e-7, atol=1e-7)
     if approximation == "lin":
-        assert f_std is not None
         np.testing.assert_allclose(f_std, reference["f_std"], rtol=1e-5, atol=1e-12)
     else:
-        assert f_std is None
+        assert run.scenarios is not None
+        w = run.scenarios.w
+        expected = np.sqrt((f - (f @ w)[:, np.newaxis]) ** 2 @ w)
+        np.testing.assert_allclose(f_std, expected, rtol=1e-9, atol=1e-12)
 
 
 @pytest.mark.parametrize("example", list(EXAMPLES))
@@ -149,13 +166,15 @@ def test_both_formulations_replay_the_same_values(example):
     u = replay_grid(problem, run, 1)
 
     # Act
-    values, f, _ = _replay(run, problem, 1, run.settings, u)
-    values_as_variables, f_as_variables, _ = _replay(run, problem, 1, as_variables, u)
+    substituted = replay_at(run, problem, 1, u)
+    variables = replay_at(replace(run, settings=as_variables), problem, 1, u)
 
     # Check: the acquisition values and f under each scenario
-    assert f is not None and f_as_variables is not None
-    np.testing.assert_allclose(values_as_variables, values, rtol=1e-9, atol=1e-12)
-    np.testing.assert_allclose(f_as_variables, f, rtol=1e-9, atol=1e-12)
+    assert substituted.f is not None and variables.f is not None
+    np.testing.assert_allclose(
+        variables.values, substituted.values, rtol=1e-9, atol=1e-12
+    )
+    np.testing.assert_allclose(variables.f, substituted.f, rtol=1e-9, atol=1e-12)
 
 
 def bounded_problem(x_upper: float) -> Problem:

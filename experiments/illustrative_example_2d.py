@@ -7,18 +7,17 @@ and f = (6x - 2)^2 sin(12x - 4); the unknown equation is y = sin(u1) cos(u2), wh
 only the oracle knows. f depends on u only through y, so its minimum is attained
 along a curve in the plane of u. With one unknown state and two decision variables,
 the iteration figures draw every panel: a row of y (oracle, GP mean, GP std) and a
-row of f. Run it, then plot the newest study:
+row of f.
 
-    pixi run experiment illustrative_example_2d [--n-runs 3 --plot ...]
-    pixi run plot illustrative_example_2d
-    pixi run experiment illustrative_example_2d plot --plot-runs all
-
-`pixi run experiment illustrative_example_2d --help` lists the flags.
+Run it with `pixi run -e experiments python experiments/illustrative_example_2d.py NAME`.
 """
 
-import functools
+import sys
+from pathlib import Path
 
 import casadi as cas
+import matplotlib.pyplot as plt
+import numpy as np
 
 import hybrid_bo as hb
 
@@ -67,63 +66,99 @@ gp = hb.gp.GP(
     noise_std=0.0,
 )
 
-# Methods: each takes (problem, measure, initial_points, n, rng), where n is the
-# number of iterations, or of design points for the baseline. Hybrid BO substitutes
-# the GP prediction for the unknown state, with SAA-EI, with Lin-EI and with
-# SoftSAA-EI at a temperature of 50e-3, about 1e-3 times the optimum's magnitude
-# (about 50)
-methods = {
-    "hybrid_bo": functools.partial(
-        hb.hybrid_bo,
-        settings=hb.HybridBOSettings(
-            gp=gp,
-            acquisition=hb.EI(),
-            approximation=hb.SAA(n_scenarios=25, unknown_states_as_variables=False),
-        ),
-    ),
-    "hybrid_bo_lin": functools.partial(
-        hb.hybrid_bo,
-        settings=hb.HybridBOSettings(
-            gp=gp,
-            acquisition=hb.EI(),
-            approximation=hb.Linearization(unknown_states_as_variables=False),
-        ),
-    ),
-    "hybrid_bo_soft": functools.partial(
-        hb.hybrid_bo,
-        settings=hb.HybridBOSettings(
-            gp=gp,
-            acquisition=hb.EI(),
-            approximation=hb.SoftSAA(
-                temperature=50e-3, n_scenarios=25, unknown_states_as_variables=False
-            ),
-        ),
-    ),
-    "standard_bo": functools.partial(
-        hb.standard_bo, settings=hb.StandardBOSettings(gp=gp, acquisition=hb.EI())
-    ),
-    "latin_hypercube_sampling": hb.latin_hypercube_sampling,
-}
+# Every method's budget: 6 initial points, 2(N + 1), then 10 iterations
+N_INITIAL = 6
+N_ITERATIONS = 10
+N_RUNS = 10
 
-# Configurations: every method with the same budget, 16 evaluations, the first 6 of
-# them initial points, 2(N + 1) (so 10 iterations)
-configurations = {
-    label: hb.Configuration(method=method, n_evaluations=16, n_initial=6)
-    for label, method in methods.items()
-}
+# Methods: each is one run from the generator `rng`. Hybrid BO substitutes the GP
+# prediction for the unknown state, with SAA-EI, with Lin-EI and with SoftSAA-EI at a
+# temperature of 50e-3, about 1e-3 times the optimum's magnitude (about 50)
 
-# The study, which the command line's flags override. Seed None draws a fresh seed,
-# which the saved study keeps, so it can be run again exactly
-study_settings = hb.StudySettings(n_runs=10, seed=None)
 
-# Run or plot from the command line. The oracle measurement is cheap, so the
-# iteration figures draw its oracle values over the grid of u
-if __name__ == "__main__":
-    hb.cli.main(
+def hybrid_bo(rng: np.random.Generator) -> hb.Run:
+    """Hybrid BO with SAA-EI."""
+    return hb.hybrid_bo(
         problem,
         measure,
-        configurations,
-        study_settings,
-        optimum=optimum,
-        true_curves=True,
+        n_initial=N_INITIAL,
+        n_iterations=N_ITERATIONS,
+        rng=rng,
+        gp=gp,
+        acquisition=hb.EI(),
+        approximation=hb.SAA(n_scenarios=25, unknown_states_as_variables=False),
     )
+
+
+def hybrid_bo_lin(rng: np.random.Generator) -> hb.Run:
+    """Hybrid BO with Lin-EI."""
+    return hb.hybrid_bo(
+        problem,
+        measure,
+        n_initial=N_INITIAL,
+        n_iterations=N_ITERATIONS,
+        rng=rng,
+        gp=gp,
+        acquisition=hb.EI(),
+        approximation=hb.Linearization(unknown_states_as_variables=False),
+    )
+
+
+def hybrid_bo_soft(rng: np.random.Generator) -> hb.Run:
+    """Hybrid BO with SoftSAA-EI."""
+    return hb.hybrid_bo(
+        problem,
+        measure,
+        n_initial=N_INITIAL,
+        n_iterations=N_ITERATIONS,
+        rng=rng,
+        gp=gp,
+        acquisition=hb.EI(),
+        approximation=hb.SoftSAA(
+            temperature=50e-3, n_scenarios=25, unknown_states_as_variables=False
+        ),
+    )
+
+
+def standard_bo(rng: np.random.Generator) -> hb.Run:
+    """Standard BO with EI."""
+    return hb.standard_bo(
+        problem,
+        measure,
+        n_initial=N_INITIAL,
+        n_iterations=N_ITERATIONS,
+        rng=rng,
+        gp=gp,
+        acquisition=hb.EI(),
+    )
+
+
+def latin_hypercube_sampling(rng: np.random.Generator) -> hb.Run:
+    """Latin hypercube sampling."""
+    return hb.latin_hypercube_sampling(
+        problem, measure, n_initial=N_INITIAL, n_iterations=N_ITERATIONS, rng=rng
+    )
+
+
+# Every method's runs from the same seeds, so run i of each starts from the same initial
+# points, then the results and their figure
+if __name__ == "__main__":
+    # The study's name, its folder made first so a name in use fails before the runs
+    folder = Path("results/illustrative_example_2d", sys.argv[1])
+    folder.mkdir(parents=True)
+
+    methods = (
+        hybrid_bo,
+        hybrid_bo_lin,
+        hybrid_bo_soft,
+        standard_bo,
+        latin_hypercube_sampling,
+    )
+    runs = {
+        method.__name__: [method(np.random.default_rng(seed)) for seed in range(N_RUNS)]
+        for method in methods
+    }
+    hb.save_runs(runs, folder)
+    figure, ax = plt.subplots()
+    hb.plots.regret(runs, optimum, ax)
+    figure.savefig(folder / "regret.png")

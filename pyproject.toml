@@ -16,10 +16,8 @@ license = "MIT"
 license-files = ["LICENSE"]
 
 [project.optional-dependencies]
-# Polars for the views (`hb.summary`) and for running studies with `hb.cli`, which
-# summarizes them; matplotlib as well for `hb.plots` and plotting studies
-analysis = ["polars>=2.0.0,<3"]
-plots = ["matplotlib>=3.11.2,<4", "polars>=2.0.0,<3"]
+# matplotlib for `hb.plots`
+plots = ["matplotlib>=3.11.2,<4"]
 
 [build-system]
 build-backend = "hatchling.build"
@@ -66,20 +64,11 @@ docs = { cmd = "sphinx-build -b html docs docs/_build/html", default-environment
 
 [tool.pixi.feature.experiments.dependencies]
 matplotlib = ">=3.11.2,<4"
-polars = ">=2.0.0,<3"
-
-# Each runs an experiment's script as a module from experiments/ (`hb.cli` runs any
-# script as `python script.py` too). `experiment` declares no args, so the
-# experiment's name and every flag pass through; see
-# `pixi run experiment illustrative_example --help`
-[tool.pixi.feature.experiments.tasks]
-experiment = { cmd = "python -m", cwd = "experiments", default-environment = "experiments", description = "Run an experiment as a study: pixi run experiment <name> [flags]" }
-plot = { cmd = "python -m {{ name }} plot {{ study }}", cwd = "experiments", default-environment = "experiments", args = ["name", { arg = "study", default = "" }], description = "Plot a saved study of an experiment (default: the newest)" }
 
 [tool.pixi.environments]
 # The library only
 default = { solve-group = "default" }
-# Writing and running experiments: the library, matplotlib, Polars and the docs
+# Writing and running experiments: the library, matplotlib and the docs
 experiments = { features = ["experiments", "docs"], solve-group = "default" }
 # Working on the library: adds tests, lint and type check. ty needs the experiments
 # feature to resolve the matplotlib imports in experiments/
@@ -90,8 +79,9 @@ dev = { features = ["dev", "docs", "experiments"], solve-group = "default" }
 target-version = "py312"
 line-length = 88
 
-# Add to Ruff's default exclusions.
-extend-exclude = [".pixi"]
+# Add to Ruff's default exclusions: the environments, and the clone of the S2MPJ
+# problems (third-party code, not ours to lint or reformat)
+extend-exclude = [".pixi", "benchmarks/.s2mpj"]
 
 [tool.ruff.lint]
 ignore = ["E501"]
@@ -117,8 +107,7 @@ quote-style = "double"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Experiments are imported as top-level modules, as `python -m` runs them from
-# experiments/
+# Experiments are imported as top-level modules
 pythonpath = ["experiments"]
 # A replay that leaves the optimizer's branch is a bug in the tests' runs; a test that
 # expects it catches it with `pytest.warns`
@@ -133,4 +122,5 @@ python-version = "3.12"
 extra-paths = ["experiments"]
 
 [tool.ty.src]
-exclude = [".pixi"]
+# As Ruff's exclusions
+exclude = [".pixi", "benchmarks/.s2mpj"]

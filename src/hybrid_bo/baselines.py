@@ -12,7 +12,7 @@ from hybrid_bo.errors import HybridBOError
 from hybrid_bo.evaluation import Measure, evaluate
 from hybrid_bo.problem import Problem
 from hybrid_bo.run import Run, run_artifact
-from hybrid_bo.sampling import _start_bounds, lhs, uniform
+from hybrid_bo.sampling import _start_bounds, _starting_points, lhs, uniform
 
 
 def _run_design(
@@ -45,38 +45,48 @@ def _run_design(
 def latin_hypercube_sampling(
     problem: Problem,
     measure: Measure,
-    initial_points: np.ndarray,
-    n_points: int,
+    *,
+    n_iterations: int,
     rng: np.random.Generator,
+    n_initial: int | None = None,
+    initial_points: np.ndarray | None = None,
 ) -> Run:
-    """Evaluates the initial points (n, N), then `n_points` points from a Latin
+    """Evaluates `initial_points` (n, N), or `n_initial` points drawn from `rng`, then
+    `n_iterations` points from a Latin
     hypercube over the start bounds of `u`, drawn before any evaluation.
 
-    Raises what `evaluate` raises; a `HybridBOError` carries the partial run as
+    Raises `ValueError` unless exactly one of `n_initial` and `initial_points` is
+    given, and what `evaluate` raises; a `HybridBOError` carries the partial run as
     `error.run`.
     """
     artifact = run_artifact(
-        problem, measure, rng, "latin_hypercube_sampling", f"n_points={n_points}"
+        problem, measure, rng, "latin_hypercube_sampling", f"n_points={n_iterations}"
     )
-    design = lhs(*_start_bounds(problem.system.u), n_points, rng)
-    return _run_design(problem, measure, initial_points, design, rng, artifact)
+    start = _starting_points(problem.system.u, n_initial, initial_points, rng)
+    design = lhs(*_start_bounds(problem.system.u), n_iterations, rng)
+    return _run_design(problem, measure, start, design, rng, artifact)
 
 
 def uniform_sampling(
     problem: Problem,
     measure: Measure,
-    initial_points: np.ndarray,
-    n_points: int,
+    *,
+    n_iterations: int,
     rng: np.random.Generator,
+    n_initial: int | None = None,
+    initial_points: np.ndarray | None = None,
 ) -> Run:
-    """Evaluates the initial points (n, N), then `n_points` points drawn uniformly
+    """Evaluates `initial_points` (n, N), or `n_initial` points drawn from `rng`, then
+    `n_iterations` points drawn uniformly
     from the start bounds of `u`, drawn before any evaluation.
 
-    Raises what `evaluate` raises; a `HybridBOError` carries the partial run as
+    Raises `ValueError` unless exactly one of `n_initial` and `initial_points` is
+    given, and what `evaluate` raises; a `HybridBOError` carries the partial run as
     `error.run`.
     """
     artifact = run_artifact(
-        problem, measure, rng, "uniform_sampling", f"n_points={n_points}"
+        problem, measure, rng, "uniform_sampling", f"n_points={n_iterations}"
     )
-    design = uniform(*_start_bounds(problem.system.u), n_points, rng)
-    return _run_design(problem, measure, initial_points, design, rng, artifact)
+    start = _starting_points(problem.system.u, n_initial, initial_points, rng)
+    design = uniform(*_start_bounds(problem.system.u), n_iterations, rng)
+    return _run_design(problem, measure, start, design, rng, artifact)

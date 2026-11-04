@@ -2,11 +2,11 @@
 them, and their iteration figures.
 
 pytest runs every function whose name starts with `test_`. A test argument named like
-a fixture below (here `study_1d`) is filled in by pytest with that fixture's value;
+a fixture below (here `runs_1d`) is filled in by pytest with that fixture's value;
 `tmp_path` is pytest's own fixture, a fresh temporary folder for the test.
 """
 
-import functools
+import dataclasses
 from typing import Any
 
 import casadi as cas
@@ -52,41 +52,41 @@ def benchmark_problem(n_u: int) -> tuple[hb.Problem, hb.Measure]:
     return problem, measure
 
 
-def two_state_study(n_u: int, approximations: dict[str, Any]) -> hb.Study:
-    """One hybrid BO run per approximation on the test system: 2 initial points, 2
-    iterations."""
+def two_state_runs(n_u: int, approximations: dict[str, Any]) -> list[hb.Run]:
+    """One hybrid BO run per approximation on the test system, named by its label,
+    from seed 0: 2 initial points, 2 iterations."""
     problem, measure = benchmark_problem(n_u)
-    configurations = {
-        label: hb.Configuration(
-            method=functools.partial(
-                hb.hybrid_bo,
-                settings=hb.HybridBOSettings(
-                    gp=ex.gp, acquisition=hb.EI(), approximation=approximation
-                ),
-            ),
-            n_evaluations=4,
+    runs = []
+    for label, approximation in approximations.items():
+        rng = np.random.default_rng(0)
+        run = hb.hybrid_bo(
+            problem,
+            measure,
             n_initial=2,
+            n_iterations=2,
+            rng=rng,
+            gp=ex.gp,
+            acquisition=hb.EI(),
+            approximation=approximation,
         )
-        for label, approximation in approximations.items()
-    }
-    settings = hb.StudySettings(n_runs=1, seed=0)
-    return hb.study(configurations, problem, measure, settings)
+        runs.append(dataclasses.replace(run, method=label))
+    return runs
 
 
 # A fixture is a value pytest builds once and passes to every test that names it as an
 # argument; `scope="module"` shares it between the tests of this file, since runs are
 # slow to produce
 @pytest.fixture(scope="module")
-def study_1d() -> hb.Study:
-    """The study with one decision variable and every approximation."""
-    return two_state_study(1, APPROXIMATIONS)
+def runs_1d() -> list[hb.Run]:
+    """The runs with one decision variable and every approximation."""
+    return two_state_runs(1, APPROXIMATIONS)
 
 
-def test_each_iteration_fits_one_gp_per_unknown_state(study_1d):
+def test_each_iteration_fits_one_gp_per_unknown_state(runs_1d):
     """Every approximation runs its 2 iterations, and each iteration's surrogate holds
     two fitted GPs, one per unknown state, on the same arguments of h and fitted to
     that unknown state's values."""
-    for run in study_1d.runs:
+    for run in runs_1d:
         assert len(run.surrogates) == 2, run.method
         for i, surrogate in enumerate(run.surrogates):
             assert len(surrogate) == 2
@@ -105,20 +105,20 @@ def test_each_iteration_fits_one_gp_per_unknown_state(study_1d):
         assert all(a.y.shape == (n_scenarios, 2) for a in run.acquisitions)
 
 
-def test_the_study_saves_and_loads_equal(study_1d, tmp_path):
-    """A study with two GPs per iteration loads back equal to the one saved."""
-    loaded = hb.load(hb.save(study_1d, tmp_path / "study"))
+def test_a_run_saves_and_loads_equal(runs_1d, tmp_path):
+    """A run with two GPs per iteration loads back equal to the one saved."""
+    loaded = hb.load_run(hb.save_run(runs_1d[0], tmp_path / "run.json"))
 
-    assert _encode(loaded) == _encode(study_1d)
-    assert all(len(s) == 2 for run in loaded.runs for s in run.surrogates)
+    assert _encode(loaded) == _encode(runs_1d[0])
+    assert all(len(surrogate) == 2 for surrogate in loaded.surrogates)
 
 
-def test_iteration_figures_replay_without_the_gp_panels(study_1d):
+def test_iteration_figures_replay_without_the_gp_panels(runs_1d):
     """With two unknown states, the iteration figure draws the scenarios and the
     replayed acquisition function, whose curve passes through the stored value at the
     trial point (SoftSAA's -log EI drawn as -EI)."""
     problem, _ = benchmark_problem(1)
-    for run in study_1d.runs:
+    for run in runs_1d:
         figure = hb.plots.iteration(run, problem, 1, gp=False)
 
         # Two panels: the scenarios and the acquisition function
@@ -135,7 +135,7 @@ def test_iteration_figures_replay_without_the_gp_panels(study_1d):
     plt.close("all")
 
 
-def test_iteration_figures_refuse_the_gp_panels(study_1d):
+def test_iteration_figures_refuse_the_gp_panels(runs_1d):
     """The GP panels draw one unknown state, so asking for them with two raises
     `ValueError` saying to pass gp=False."""
     problem, _ = benchmark_problem(1)
@@ -143,7 +143,7 @@ def test_iteration_figures_refuse_the_gp_panels(study_1d):
     # `pytest.raises` passes only if the block raises this exception, with a message
     # matching the regular expression `match`
     with pytest.raises(ValueError, match="gp=False"):
-        hb.plots.iteration(study_1d.runs[0], problem, 0)
+        hb.plots.iteration(runs_1d[0], problem, 0)
 
 
 def test_2d_iteration_figure_replays_without_the_gp_panels():
@@ -151,7 +151,7 @@ def test_2d_iteration_figure_replays_without_the_gp_panels():
     and log10 EI, whose note gives the same stored and replayed value."""
     # Setup: one SAA run with two decision variables
     problem, _ = benchmark_problem(2)
-    (run,) = two_state_study(2, {"saa": APPROXIMATIONS["saa"]}).runs
+    (run,) = two_state_runs(2, {"saa": APPROXIMATIONS["saa"]})
 
     figure = hb.plots.iteration(run, problem, 1, gp=False)
 

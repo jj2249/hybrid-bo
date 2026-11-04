@@ -1,12 +1,13 @@
-"""Systems with no known equations (M = 0), end to end: every method runs, studies save
+"""Systems with no known equations (M = 0), end to end: every method runs, runs save
 and load, and the iteration figures draw. Hybrid BO is then BO of a composite function
 f(y, u) with y = h(u) (Astudillo & Frazier, arXiv 1906.01537).
 
 pytest runs every function whose name starts with `test_`. A test argument named like
-a fixture below (here `study_1d`) is filled in by pytest with that fixture's value;
+a fixture below (here `runs_1d`) is filled in by pytest with that fixture's value;
 `tmp_path` is pytest's own fixture, a fresh temporary folder for the test.
 """
 
+import dataclasses
 import functools
 
 import casadi as cas
@@ -26,7 +27,7 @@ from hybrid_bo.saving import _encode
 
 # Hybrid BO with each approximation, both ways where it applies, and the other methods
 HYBRID = {
-    f"{label}-{as_variables}": hb.HybridBOSettings(
+    f"{label}-{as_variables}": hb.settings.HybridBOSettings(
         gp=ex.gp,
         acquisition=hb.EI(),
         approximation=approximation(as_variables),
@@ -41,24 +42,24 @@ HYBRID = {
     }.items()
 }
 METHODS = {
-    label: functools.partial(hb.hybrid_bo, settings=settings)
+    label: functools.partial(hb.hybrid_bo, **vars(settings))
     for label, settings in HYBRID.items()
 } | {
-    "standard": functools.partial(
-        hb.standard_bo, settings=hb.StandardBOSettings(gp=ex.gp, acquisition=hb.EI())
-    ),
+    "standard": functools.partial(hb.standard_bo, gp=ex.gp, acquisition=hb.EI()),
     "lhs": hb.latin_hypercube_sampling,
     "uniform": hb.uniform_sampling,
 }
-SETTINGS = hb.StudySettings(n_runs=1, seed=0)
 
 
-def configurations_of(methods: dict) -> dict[str, hb.Configuration]:
-    """Each method by its label, with 2 initial points and 2 iterations."""
-    return {
-        label: hb.Configuration(method=method, n_evaluations=4, n_initial=2)
-        for label, method in methods.items()
-    }
+def runs_of(methods: dict, problem: hb.Problem, measure: hb.Measure) -> list[hb.Run]:
+    """A run of each method from seed 0, named by its label: 2 initial points and 2
+    iterations."""
+    runs = []
+    for label, method in methods.items():
+        rng = np.random.default_rng(0)
+        run = method(problem, measure, n_initial=2, n_iterations=2, rng=rng)
+        runs.append(dataclasses.replace(run, method=label))
+    return runs
 
 
 def composite_problem(n_u: int) -> tuple[hb.Problem, hb.Measure]:
@@ -82,68 +83,59 @@ def composite_problem(n_u: int) -> tuple[hb.Problem, hb.Measure]:
 # argument; `scope="module"` shares it between the tests of this file, since runs are
 # slow to produce
 @pytest.fixture(scope="module")
-def study_1d() -> hb.Study:
+def runs_1d() -> list[hb.Run]:
     """Every method on the test system with one decision variable."""
     problem, measure = composite_problem(1)
-    return hb.study(configurations_of(METHODS), problem, measure, SETTINGS)
+    return runs_of(METHODS, problem, measure)
 
 
-def test_every_method_runs_without_known_equations(study_1d):
+def test_every_method_runs_without_known_equations(runs_1d):
     """Every method finishes its 2 iterations (design points, for the baselines),
     with no mechanistic states in its history and, for hybrid BO, none in its
     scenario states; the artifact says there are no known equations."""
-    assert [run.method for run in study_1d.runs] == list(METHODS)
-    for run in study_1d.runs:
+    assert [run.method for run in runs_1d] == list(METHODS)
+    for run in runs_1d:
         assert len(run.history.f) == 4, run.method
         assert run.history.x.shape == (4, 0)
         assert run.artifact["g"] == "none"
-    for run in (run for run in study_1d.runs if run.method in HYBRID):
+    for run in (run for run in runs_1d if run.method in HYBRID):
         assert len(run.surrogates) == 2
         assert all(solution.x.shape[1] == 0 for solution in run.acquisitions)
 
 
-def test_the_oracle_optimum_summary_and_regret_work_without_known_equations(study_1d):
+def test_the_oracle_optimum_works_without_known_equations():
     """The oracle optimum of a system without known equations is the minimum of the
-    composite objective (here by a dense grid over u), and the summary and the
-    convergence and regret plots of its study draw from it."""
-    # Act: the oracle optimum, then the study's views and plots
+    composite objective (here by a dense grid over u)."""
     problem, _ = composite_problem(1)
     optimum = hb.oracle_optimum(
         problem, lambda v: [cas.sin(v.u1) + v.u1 / 2], np.random.default_rng(0)
     )
-    summary = hb.summary(study_1d)
-    convergence = hb.plots.convergence(study_1d)
-    regret = hb.plots.regret(study_1d, optimum)
 
-    # Check: the optimum against the grid; one summary row and one curve per method
+    # Check: the optimum against the grid
     u = np.linspace(-2.0, 2.0, 400_001)
     f = (np.sin(u) + u / 2 - 0.3) ** 2 + u**2 / 10
     # `pytest.approx` compares with a tolerance
     assert optimum == pytest.approx(f.min(), abs=1e-8)
-    assert summary["method"].to_list() == list(METHODS)
-    assert len(convergence.get_lines()) >= len(METHODS)
-    assert len(regret.get_lines()) >= len(METHODS)
-    plt.close("all")
 
 
-def test_the_study_saves_and_loads_equal(study_1d, tmp_path):
-    """A study of a system without known equations loads back equal to the one saved,
+def test_a_run_saves_and_loads_equal(runs_1d, tmp_path):
+    """A run of a system without known equations loads back equal to the one saved,
     its empty arrays (states, oracle states and scenario states of shape (., 0))
     included."""
-    loaded = hb.load(hb.save(study_1d, tmp_path / "study"))
+    run = hb.load_run(hb.save_run(runs_1d[0], tmp_path / "run.json"))
 
-    assert _encode(loaded) == _encode(study_1d)
-    run, solution = loaded.runs[0], loaded.runs[0].acquisitions[0]
+    assert _encode(run) == _encode(runs_1d[0])
+    solution = run.acquisitions[0]
     assert run.history.x_oracle is not None and solution.x is not None
     assert run.history.x.shape == run.history.x_oracle.shape == (4, 0)
     assert solution.x.shape == (5, 0)
 
 
-def test_iteration_figures_draw_without_known_equations(study_1d):
+def test_iteration_figures_draw_without_known_equations(runs_1d):
     """Every BO method's iteration figure draws with one decision variable, its GP
     panel (y over u for hybrid BO), scenarios and acquisition function included."""
     problem, measure = composite_problem(1)
-    bo_runs = (run for run in study_1d.runs if run.method in [*HYBRID, "standard"])
+    bo_runs = (run for run in runs_1d if run.method in [*HYBRID, "standard"])
     for run in bo_runs:
         figure = hb.plots.iteration(run, problem, 1, measure=measure)
         assert len(figure.axes) == (3 if run.method in HYBRID else 2), run.method
@@ -156,7 +148,7 @@ def test_2d_iteration_figure_draws_without_known_equations():
     # Setup: one SAA run with two decision variables
     problem, measure = composite_problem(2)
     methods = {"saa": METHODS["saa-False"]}
-    (run,) = hb.study(configurations_of(methods), problem, measure, SETTINGS).runs
+    (run,) = runs_of(methods, problem, measure)
 
     figure = hb.plots.iteration(run, problem, 1, measure=measure)
 
@@ -191,9 +183,15 @@ def test_with_f_y_hybrid_bo_is_standard_bo():
     )
     initial = np.array([[-1.5], [-0.2], [0.4], [1.3]])
     runs = {
-        name: method(problem, measure, initial, 1, np.random.default_rng(0))
+        name: method(
+            problem,
+            measure,
+            initial_points=initial,
+            n_iterations=1,
+            rng=np.random.default_rng(0),
+        )
         for name, method in {
-            "hybrid": functools.partial(hb.hybrid_bo, settings=HYBRID["saa-False"]),
+            "hybrid": functools.partial(hb.hybrid_bo, **vars(HYBRID["saa-False"])),
             "standard": METHODS["standard"],
         }.items()
     }
