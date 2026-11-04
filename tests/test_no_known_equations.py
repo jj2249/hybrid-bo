@@ -27,7 +27,7 @@ from hybrid_bo.saving import _encode
 
 # Hybrid BO with each approximation, both ways where it applies, and the other methods
 HYBRID = {
-    f"{label}-{as_variables}": hb.HybridBOSettings(
+    f"{label}-{as_variables}": hb.settings.HybridBOSettings(
         gp=ex.gp,
         acquisition=hb.EI(),
         approximation=approximation(as_variables),
@@ -42,12 +42,10 @@ HYBRID = {
     }.items()
 }
 METHODS = {
-    label: functools.partial(hb.hybrid_bo, settings=settings)
+    label: functools.partial(hb.hybrid_bo, **vars(settings))
     for label, settings in HYBRID.items()
 } | {
-    "standard": functools.partial(
-        hb.standard_bo, settings=hb.StandardBOSettings(gp=ex.gp, acquisition=hb.EI())
-    ),
+    "standard": functools.partial(hb.standard_bo, gp=ex.gp, acquisition=hb.EI()),
     "lhs": hb.latin_hypercube_sampling,
     "uniform": hb.uniform_sampling,
 }
@@ -59,8 +57,7 @@ def runs_of(methods: dict, problem: hb.Problem, measure: hb.Measure) -> list[hb.
     runs = []
     for label, method in methods.items():
         rng = np.random.default_rng(0)
-        initial_points = hb.initial_points(problem.system.u, 2, rng)
-        run = method(problem, measure, initial_points, 2, rng=rng)
+        run = method(problem, measure, n_initial=2, n_iterations=2, rng=rng)
         runs.append(dataclasses.replace(run, method=label))
     return runs
 
@@ -186,9 +183,15 @@ def test_with_f_y_hybrid_bo_is_standard_bo():
     )
     initial = np.array([[-1.5], [-0.2], [0.4], [1.3]])
     runs = {
-        name: method(problem, measure, initial, 1, np.random.default_rng(0))
+        name: method(
+            problem,
+            measure,
+            initial_points=initial,
+            n_iterations=1,
+            rng=np.random.default_rng(0),
+        )
         for name, method in {
-            "hybrid": functools.partial(hb.hybrid_bo, settings=HYBRID["saa-False"]),
+            "hybrid": functools.partial(hb.hybrid_bo, **vars(HYBRID["saa-False"])),
             "standard": METHODS["standard"],
         }.items()
     }

@@ -2,20 +2,21 @@
 
 ## Unreleased
 
-- **Breaking:** Studies run with [Benchopt](https://benchopt.github.io), and the study
-  machinery has left the library (ADR 0013, #196, #199). `hb.cli`, `hb.studies`
-  (`hb.study`, `hb.Configuration`, `hb.StudySettings`, `hb.Study`, `hb.repeat`,
-  `hb.Task`, ...), `hb.views` (`hb.summary`, `hb.evaluations`, `hb.hyperparameters`),
-  `hb.save`, `hb.load`, `hb.plots.convergence`, `hb.plots.regret` and
-  `hb.run.code_version` and `is_clean` are gone, with the
-  `hybrid-bo[analysis]` extra and `pixi run experiment` and `pixi run plot`. Call
-  `hb.hybrid_bo`, `hb.standard_bo` and the baselines from a script, and save a run with
-  `hb.save_run`; `pixi run benchmark` runs `experiments/`, which is a Benchopt benchmark
-  and lists its budgets as `n_evaluations` and `n_initial`. `Run` loses `index` and
-  `n_evaluations`, `hybrid-bo[plots]` needs only matplotlib, and
-  `hb.errors.StudyFormatError` is `RunFormatError`. Studies saved by earlier versions
-  don't load: read them with 0.5. `hb.check_oracle_optimum(history, optimum)` gives
-  `OracleOptimumWarning`, which a study warned with, and the benchmark calls it.
+- **Breaking:** The library has no study runner any more (ADR 0013, #199): a script runs
+  the methods. `hb.cli`, `hb.studies` (`hb.study`, `hb.Configuration`,
+  `hb.StudySettings`, `hb.Study`, `hb.repeat`, `hb.Task`, ...), `hb.views` (`hb.summary`,
+  `hb.evaluations`, `hb.hyperparameters`), `hb.save`, `hb.load` and `hb.run.code_version`
+  and `is_clean` are gone, with the `hybrid-bo[analysis]` extra, Polars, `scripts/` and
+  `pixi run experiment` and `pixi run plot`. `hb.save_runs` and `hb.load_runs` keep a
+  list of runs per label, `hb.plots.regret` and `hb.plots.convergence` take one, and
+  `hb.check_oracle_optimum` warns if a run went below the stated optimum. `Run` loses
+  `index` and `n_evaluations`, and `hb.errors.StudyFormatError` is `RunFormatError`.
+  Studies saved by earlier versions don't load: read them with 0.5.
+- **Breaking:** `hb.hybrid_bo`, `hb.standard_bo` and the baselines take keyword arguments:
+  `hb.hybrid_bo(problem, measure, n_initial=2, n_iterations=5, rng=rng, gp=gp,
+  acquisition=hb.EI(), approximation=hb.SAA(n_scenarios=25))`. `n_initial` draws the
+  initial points, or pass `initial_points=` to give them. The settings classes left the
+  top level: they are `hb.settings`' record of a run.
 - A run's artifact no longer records `git`, which answered for the user's repository
   when the library was installed in it (#198).
 - `hb.plots.iteration`'s replay moved into `hb.acquisition` (`replay`, #194).

@@ -32,9 +32,6 @@ docs/_templates/
 .coverage
 htmlcov/
 
-# Benchopt, in experiments/
-/experiments/outputs/
-/experiments/__cache__/
 
 # Results and personal scripts, kept out of the repository
 /results/

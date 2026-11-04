@@ -25,7 +25,6 @@ from hybrid_bo import (
     EI,
     LCB,
     SAA,
-    HybridBOSettings,
     Linearization,
     Problem,
     ReplayWarning,
@@ -42,6 +41,7 @@ from hybrid_bo.bo import iteration_problem
 from hybrid_bo.gp import predict
 from hybrid_bo.plots import _N_GRID
 from hybrid_bo.sampling import _start_bounds
+from hybrid_bo.settings import HybridBOSettings
 
 REFERENCES = Path(__file__).parent / "data" / "replay"
 
@@ -73,7 +73,9 @@ def hybrid_run(example: str, approximation: str) -> Run:
     settings = HybridBOSettings(gp=ex.gp, acquisition=acquisition, approximation=approx)
     rng = np.random.default_rng(0)
     u = initial_points(problem.system.u, 2 * problem.system.n_u + 1, rng)
-    run = hybrid_bo(problem, measure, u, 2, rng, settings=settings)
+    run = hybrid_bo(
+        problem, measure, initial_points=u, n_iterations=2, rng=rng, **vars(settings)
+    )
     return pickle.loads(pickle.dumps(run))
 
 

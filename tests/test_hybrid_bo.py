@@ -17,7 +17,6 @@ from hybrid_bo import (
     EI,
     LCB,
     SAA,
-    HybridBOSettings,
     Linearization,
     Problem,
     RootFindingError,
@@ -42,6 +41,7 @@ from hybrid_bo.acquisition import (
 )
 from hybrid_bo.evaluation import evaluate
 from hybrid_bo.gp import FittedGP, Matern52, Scale, fit_gp, predict
+from hybrid_bo.settings import HybridBOSettings
 
 # Three scenarios with unequal weights, so a plain mean would give other values
 SCENARIOS = Scenarios(z=np.array([[-1.0], [0.5], [2.0]]), w=np.array([0.2, 0.3, 0.5]))
@@ -94,7 +94,9 @@ def illustrative_run(problem, settings, seed=0) -> Run:
     measure = oracle_measure(
         problem.system, oracle=lambda v: [cas.sin(v.u)], noise_std=0.0
     )
-    return hybrid_bo(problem, measure, u, 2, rng, settings=settings)
+    return hybrid_bo(
+        problem, measure, initial_points=u, n_iterations=2, rng=rng, **vars(settings)
+    )
 
 
 # Scenarios
@@ -935,7 +937,14 @@ def test_linearization_draws_nothing_from_the_generator(illustrative_problem):
         settings = HybridBOSettings(
             gp=ex.gp, acquisition=EI(), approximation=approximation
         )
-        hybrid_bo(illustrative_problem, measure, u, 0, rng, settings=settings)
+        hybrid_bo(
+            illustrative_problem,
+            measure,
+            initial_points=u,
+            n_iterations=0,
+            rng=rng,
+            **vars(settings),
+        )
         states[type(approximation)] = rng.bit_generator.state
 
     # The initial points' evaluation alone
@@ -985,31 +994,20 @@ def test_artifact_holds_the_settings_and_the_gp_over_the_arguments_of_h(
     assert artifact["gp"] == repr(ex.gp)
 
 
-def test_settings_are_required_and_keyword_only(illustrative_problem):
-    """Hybrid BO has no default settings, since its GP is stated by the experiment,
-    and the settings are keyword-only, so they can't be passed in `rng`'s place."""
+def test_what_chooses_the_method_is_required_and_keyword_only(illustrative_problem):
+    """Hybrid BO has no default GP, acquisition function or approximation, and every
+    argument after the measurement is keyword-only."""
     measure = oracle_measure(
         illustrative_problem.system,
         oracle=lambda v: [cas.sin(v.u)],
         noise_std=0.0,
     )
-    u = np.array([[-0.5], [0.5]])
+    rng = np.random.default_rng(0)
 
     with pytest.raises(TypeError, match="gp"):
-        HybridBOSettings()  # ty: ignore[missing-argument]
-    with pytest.raises(TypeError, match="settings"):
-        hybrid_bo(illustrative_problem, measure, u, 0, np.random.default_rng(0))  # ty: ignore[missing-argument]
+        hybrid_bo(illustrative_problem, measure, n_iterations=0, rng=rng)  # ty: ignore[missing-argument]
     with pytest.raises(TypeError):
-        hybrid_bo(  # ty: ignore[missing-argument]
-            illustrative_problem,
-            measure,
-            u,
-            0,
-            np.random.default_rng(0),
-            HybridBOSettings(  # ty: ignore[too-many-positional-arguments]
-                gp=ex.gp, acquisition=EI(), approximation=SAA(n_scenarios=25)
-            ),
-        )
+        hybrid_bo(illustrative_problem, measure, 0, rng)  # ty: ignore[missing-argument, too-many-positional-arguments]
 
 
 def test_run_pickles_without_the_code_that_produced_it(
@@ -1049,12 +1047,12 @@ def test_failed_evaluation_carries_the_partial_run_with_its_scenarios(
         hybrid_bo(
             illustrative_problem,
             measure,
-            np.array([[-0.5], [0.5]]),
-            2,
-            np.random.default_rng(0),
-            settings=HybridBOSettings(
-                gp=ex.gp, acquisition=EI(), approximation=SAA(n_scenarios=5)
-            ),
+            initial_points=np.array([[-0.5], [0.5]]),
+            n_iterations=2,
+            rng=np.random.default_rng(0),
+            gp=ex.gp,
+            acquisition=EI(),
+            approximation=SAA(n_scenarios=5),
         )
 
     run = info.value.run

@@ -65,17 +65,10 @@ docs = { cmd = "sphinx-build -b html docs docs/_build/html", default-environment
 [tool.pixi.feature.experiments.dependencies]
 matplotlib = ">=3.11.2,<4"
 
-# Not on conda-forge
-[tool.pixi.feature.experiments.pypi-dependencies]
-benchopt = ">=1.10.0,<2"
-
-[tool.pixi.feature.experiments.tasks]
-benchmark = { cmd = "benchopt run .", cwd = "experiments", default-environment = "experiments", description = "Run the experiments with Benchopt: pixi run benchmark [flags]" }
-
 [tool.pixi.environments]
 # The library only
 default = { solve-group = "default" }
-# Writing and running experiments: the library, matplotlib, Benchopt and the docs
+# Writing and running experiments: the library, matplotlib and the docs
 experiments = { features = ["experiments", "docs"], solve-group = "default" }
 # Working on the library: adds tests, lint and type check. ty needs the experiments
 # feature to resolve the matplotlib imports in experiments/
@@ -107,8 +100,6 @@ known-first-party = ["hybrid_bo"]
 [tool.ruff.lint.per-file-ignores]
 # Re-exports define the public API
 "__init__.py" = ["F401"]
-# Benchopt reads its parameters from plain class attributes, which ty wants unannotated
-"experiments/{datasets,solvers,plots}/*.py" = ["RUF012"]
 
 [tool.ruff.format]
 # Use double quotes and standard Ruff formatting.
@@ -116,7 +107,7 @@ quote-style = "double"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Experiments are imported as top-level modules, as Benchopt's classes import them
+# Experiments are imported as top-level modules
 pythonpath = ["experiments"]
 # A replay that leaves the optimizer's branch is a bug in the tests' runs; a test that
 # expects it catches it with `pytest.warns`

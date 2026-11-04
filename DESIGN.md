@@ -71,15 +71,15 @@ The original code was hard to change for three reasons:
   impossible and the regression baselines did not move, the new code simply does not
   reproduce it.
 - **Saving.** The library never writes files on its own; saving is an explicit call.
-  `hb.save_run`/`hb.load_run` write and read a run as JSON.
-- **Studies run with Benchopt** ([ADR 0013](docs/adr/0013-studies-run-with-benchopt.md)).
-  The library is the optimization. A script calls the methods directly, and
-  `experiments/` is a Benchopt benchmark for repeating and comparing them.
+  `hb.save_run`/`hb.load_run` write and read a run as JSON, and `hb.save_runs`/
+  `hb.load_runs` a list of runs per label.
+- **A script runs the methods** ([ADR 0013](docs/adr/0013-scripts-run-the-methods.md)).
+  The library is the optimization. Repeating a method over seeds is a loop in the script.
 - **Iteration plots replay the acquisition problem**
   ([ADR 0005](docs/adr/0005-iteration-plots-replay-the-acquisition-problem.md)).
 - **A slim top level** (#52). `hb.*` holds what a typical script uses: `Var`, `System`,
-  `Problem`, `Measure`, `oracle_measure`, `initial_points`, the methods and their
-  settings, `EI`, `LCB`, `oracle_optimum`, `save_run`, `load_run`, `Run`, `History`,
+  `Problem`, `Measure`, `oracle_measure`, `initial_points`, the methods,
+  `EI`, `LCB`, `oracle_optimum`, `save_run`, `load_run`, `save_runs`, `load_runs`, `Run`, `History`,
   `incumbents`, `oracle_incumbents`, `check_oracle_optimum`, the errors and `plots`. Everything else is reached through its module (`hb.gp.fit_gp`,
   `hb.solvers.multistart`). A new name joins the top level only if the example
   or a typical analysis script would use it.
@@ -87,8 +87,6 @@ The original code was hard to change for three reasons:
 ## Example
 
 ```python
-import functools
-
 import casadi as cas
 import numpy as np
 
@@ -118,18 +116,19 @@ def oracle(v):
 
 measure = hb.oracle_measure(system, oracle, noise_std=0.0)
 
-# Method: how we search, its settings bound with functools.partial. The GP, the
-# acquisition function and its approximation have no defaults (ADR 0009)
+# Method: how we search. The GP, the acquisition function and its approximation have no
+# defaults (ADR 0009)
 gp = hb.gp.GP(mean=hb.gp.Zero(), kernel=hb.gp.Matern52(), noise_std=0.0)
-settings = hb.HybridBOSettings(
-    gp=gp, acquisition=hb.EI(), approximation=hb.SAA(n_scenarios=25)
+run = hb.hybrid_bo(
+    problem,
+    measure,
+    n_initial=2,
+    n_iterations=5,
+    rng=np.random.default_rng(0),
+    gp=gp,
+    acquisition=hb.EI(),
+    approximation=hb.SAA(n_scenarios=25),
 )
-method = functools.partial(hb.hybrid_bo, settings=settings)
-
-# Run it from initial points, with an explicit generator
-rng = np.random.default_rng(0)
-start = hb.initial_points(system.u, 2, rng)
-run = method(problem, measure, start, 5, rng=rng)
 hb.save_run(run, "hybrid_bo.json")
 ```
 
@@ -759,8 +758,7 @@ The baselines are named `*_sampling` because `hb.sampling.uniform` and
   one surrogate per evaluated trial point (a failed evaluation drops its surrogate). A method that adds fields to its `Run` (hybrid BO's scenarios)
   adds them to the returned run and to `error.run`.
 - The artifact holds the settings without the GP, plus `gp`, the prior GP's repr; the
-  fitted GPs stay in the run. The GP is required, so `hb.standard_bo` and `hb.hybrid_bo` go into `methods` as a
-  `functools.partial` with their settings, never bare.
+  fitted GPs stay in the run. The GP is required, so `settings` is too.
 - The baselines are not sequential: they draw their whole design and `evaluate` it after
   the initial points.
 - `optimization_loop` is public, for new methods.
@@ -775,7 +773,8 @@ subclasses (`ReconstructionWarning`) so they can be filtered.
 
 ### Plots
 
-`hb.plots.iteration` draws one iteration of a run, a function of the finished run (#55)
+`hb.plots.regret` and `hb.plots.convergence` draw a list of runs per label over the
+evaluations. `hb.plots.iteration` draws one iteration of a run, a function of the finished run (#55)
 that replays its acquisition problem
 ([ADR 0005](docs/adr/0005-iteration-plots-replay-the-acquisition-problem.md)). Each run's
 GP comes from its stored fitted GPs (#119) and the rest from `run.settings`, so a saved
@@ -783,21 +782,11 @@ run plots after the experiment's methods change. matplotlib is imported on first
 is the extra `hybrid-bo[plots]`. Figures use the repo's style file, `hb.plots.STYLE`
 (`src/hybrid_bo/hybrid_bo.mplstyle`); put rcParams there, not in plotting code.
 
-### Benchmark (`experiments/`)
-
-`experiments/` is a Benchopt benchmark beside the experiments
-([ADR 0013](docs/adr/0013-studies-run-with-benchopt.md)): `objective.py`,
-`datasets/experiment.py`, `solvers/method.py`, `plots/` and `benchmark_utils/`. Only
-these use Benchopt's classes; the library never imports it. A run is one call of a
-method (`run_once`), reported as one row per evaluation, and saved in full with
-`hb.save_run`. `experiments/README.md` and the `hybrid-bo-experiments` skill have the
-details.
-
 ## Order of random draws
 
 Every draw in a run comes from that run's generator, in this order:
 
-1. initial points: `lhs` over the `u` start bounds (drawn by the caller);
+1. initial points: `lhs` over the `u` start bounds (none if the caller gives them);
 2. method setup: hybrid BO draws the scenarios (`rng.standard_normal((S, P))`); the
    baselines draw their whole design; standard BO draws nothing;
 3. each evaluation, initial points first: the measurement (oracle simulation: full-solve
@@ -837,7 +826,7 @@ to scipy's draw and its spawning.
 | Kernel and mean classes, `Parameterized`, `JoinedParameters` | hyperparameters were named specs and kernels functions; since #119 kernels are dataclasses again, but data with no state or methods ([ADR 0008](docs/adr/0008-gps-are-data.md)) | tag `pre-refactor` |
 | `PriorGP`, `Hyper`, `default_gp`, `kernels.py` (with `linear` and `constant`) | GPs are data, from a closed set ([ADR 0008](docs/adr/0008-gps-are-data.md)); the linear and constant kernels were unused | git history before #119 |
 | Per-iteration plot callbacks | plots are functions of a finished run ([ADR 0003](docs/adr/0003-runs-are-pure-data.md)) | tag `pre-refactor` |
-| `hb.cli`, `hb.studies`, `hb.views`, `hb.save`, `hb.load`, `plots.convergence`, `plots.regret` | studies run with Benchopt ([ADR 0013](docs/adr/0013-studies-run-with-benchopt.md)) | version 0.5 |
+| `hb.cli`, `hb.studies`, `hb.views`, `hb.save`, `hb.load` | a script runs the methods ([ADR 0013](docs/adr/0013-scripts-run-the-methods.md)) | version 0.5 |
 | Strategy classes (planned, never built) | methods are settings plus functions | earlier DESIGN.md in git history |
 
 ## Future directions

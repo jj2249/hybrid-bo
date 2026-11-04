@@ -1,8 +1,8 @@
 # Experiments
 
-Each file here is an experiment: a problem, how it is measured, and the methods to
-compare. This folder is also a [Benchopt](https://benchopt.github.io) benchmark, which
-runs them.
+Each file here is an experiment: a plain script with a problem, how it is measured, and
+the methods to compare. It repeats each method over seeds, saves the runs to
+`results/<name>/` and draws `regret.png`.
 
 - `illustrative_example.py`: the illustrative example of the
   [paper](https://arxiv.org/abs/2603.11199), with an oracle.
@@ -20,43 +20,8 @@ runs them.
 ## Running
 
 ```bash
-pixi run benchmark -r 3 -j 4                                     # every experiment, 3 runs each
-pixi run benchmark -r 3 -d "experiment[module=rosenbrock]"       # one experiment
-pixi run benchmark -r 3 -s "method[label=hybrid_bo]"             # one method
+pixi run -e experiments python experiments/illustrative_example.py
 ```
 
-`-r` is the number of runs (default 1) and `-j` the number of processes, and `--seed`
-sets the study's seed (default 0). Run i of every method starts from the same initial points. Add
-`--no-plot --no-html` to skip the report, which takes much longer than a small study.
-
-Results go to `outputs/benchopt_run_<time>.parquet`, one row per evaluation, and each
-run in full to `outputs/runs/<module>/<code>/<label>/seed-<seed>.json`, which
-`hb.load_run` reads. A stopped study finishes by running the same command again: Benchopt
-skips the runs it has. `code` hashes the experiments and the library, so a change to
-either runs everything again rather than returning old results.
-
-The report has `regret` (the median regret over the evaluations, with its interquartile
-range) and `summary` (each method's runs, complete runs, final regret and runs below
-the stated optimum, whose regret is wrong). A run that
-fails with an unexpected exception prints its traceback, is missing from the results
-and doesn't change the exit code, so check the runs in `summary`.
-
-## Adding an experiment
-
-A new file here is found by its name. It needs these names at its top level:
-
-- `problem` and `measure`;
-- `optimum`, the oracle optimum that regret is measured from;
-- `methods`, each method by its label;
-- `n_evaluations` and `n_initial`, every method's budget.
-
-Benchopt only imports the file, so anything it should run directly goes under
-`if __name__ == "__main__":`.
-
-## The benchmark
-
-- `objective.py`: scores a run, one row per evaluation.
-- `datasets/experiment.py`: every experiment in this folder, found by file name.
-- `solvers/method.py`: every method of the experiments, by label.
-- `plots/`: the `regret` and `summary` views.
-- `benchmark_utils/`: what they share, including the hash of the code.
+`N_RUNS`, `N_INITIAL` and `N_ITERATIONS` are at the top of each file. `hb.save_runs`
+refuses an existing folder, so move or delete `results/<name>/` to run one again.

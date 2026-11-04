@@ -58,13 +58,16 @@ def two_state_runs(n_u: int, approximations: dict[str, Any]) -> list[hb.Run]:
     problem, measure = benchmark_problem(n_u)
     runs = []
     for label, approximation in approximations.items():
-        settings = hb.HybridBOSettings(
-            gp=ex.gp, acquisition=hb.EI(), approximation=approximation
-        )
         rng = np.random.default_rng(0)
-        initial_points = hb.initial_points(problem.system.u, 2, rng)
         run = hb.hybrid_bo(
-            problem, measure, initial_points, 2, rng=rng, settings=settings
+            problem,
+            measure,
+            n_initial=2,
+            n_iterations=2,
+            rng=rng,
+            gp=ex.gp,
+            acquisition=hb.EI(),
+            approximation=approximation,
         )
         runs.append(dataclasses.replace(run, method=label))
     return runs

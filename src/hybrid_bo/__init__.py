@@ -43,5 +43,4 @@ from hybrid_bo.history import (
 from hybrid_bo.problem import Problem, System, Var
 from hybrid_bo.run import Run
 from hybrid_bo.sampling import initial_points
-from hybrid_bo.saving import load_run, save_run
-from hybrid_bo.settings import HybridBOSettings, StandardBOSettings
+from hybrid_bo.saving import load_run, load_runs, save_run, save_runs

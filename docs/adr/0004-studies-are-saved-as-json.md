@@ -1,6 +1,6 @@
 # Studies are saved as JSON
 
-> Superseded by [ADR 0013](0013-studies-run-with-benchopt.md). A run is still saved as JSON (`hb.save_run`), but a study is Benchopt's.
+> Superseded by [ADR 0013](0013-scripts-run-the-methods.md). Runs are still saved as JSON (`hb.save_run`, `hb.save_runs`), but there is no study.
 
 A study is saved as a folder of JSON files: `artifact.json` for the study's settings
 and artifact (`study.json` with a `record` key before #85; `hb.load` reads both), and

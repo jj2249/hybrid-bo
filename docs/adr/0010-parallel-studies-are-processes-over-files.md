@@ -1,6 +1,6 @@
 # Parallel studies are processes over files, in the CLI
 
-> Superseded by [ADR 0013](0013-studies-run-with-benchopt.md). Benchopt runs studies now.
+> Superseded by [ADR 0013](0013-scripts-run-the-methods.md). A script runs the methods now.
 
 **Parallelism and checkpointing live in the CLI (`hb.cli`), as one process per task
 that saves its own files, not in `hb.study`.** A study's runs are its tasks

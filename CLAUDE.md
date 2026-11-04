@@ -5,8 +5,8 @@ Bayesian optimization for partially known systems using hybrid models
 `f(x, y, u)` subject to known equations `0 = g(x, y, u)` and unknown equations
 `y = h(x, u)`, which a GP learns. The acquisition problem is solved over scenarios
 (sample-average approximation) using CasADi. Standard BO, Latin hypercube sampling
-and uniform sampling are included as baselines. Scripts call the methods directly;
-studies run with Benchopt, from `experiments/`. The vocabulary is in
+and uniform sampling are included as baselines. Scripts call the methods directly; the
+library has no study runner. The vocabulary is in
 [GLOSSARY.md](GLOSSARY.md); use its terms.
 
 Maintainers working on the library (issues, PRs) follow
@@ -15,7 +15,7 @@ Maintainers working on the library (issues, PRs) follow
 ## Commands
 
 Environments are managed with pixi: `default` is the library, `experiments` adds
-matplotlib, Benchopt and the docs, and `dev` includes everything.
+matplotlib and the docs, and `dev` includes everything.
 
 ```bash
 pixi install -e dev
@@ -26,11 +26,8 @@ pixi run -e dev coverage     # tests + per-file line coverage of src/hybrid_bo, 
 pixi run -e dev lint | format | typecheck
 pixi run -e dev docs         # sphinx API docs -> docs/_build/html
 pixi run -e dev setup        # install pre-commit hooks (ruff and ty on commit)
-pixi run benchmark -r 3 -j 4 [-d "experiment[module=rosenbrock]"]   # every experiment (or one) with Benchopt
+pixi run -e experiments python experiments/illustrative_example.py   # an experiment is a plain script
 ```
-
-`pixi run benchmark` passes every flag to `benchopt run` in `experiments/`, a Benchopt
-benchmark that runs each experiment file there; only those classes use Benchopt.
 
 The git hook hardcodes the pixi Python path. If commits fail with "`pre-commit`
 not found" after a Python upgrade, re-run `pixi run -e dev setup`.
@@ -61,9 +58,8 @@ with a GitHub issue labeled `bug`: remove the marker when fixing the bug.
 
 - Data in, data out: functions return new values and don't mutate their inputs.
   No set-then-call sequences (`set_problem` → `solve()`).
-- Frozen dataclasses for data and settings; behavior lives in plain functions.
-  Methods are settings dataclasses plus functions, and there are no strategy
-  classes. Kernels and means are frozen dataclasses from a closed set, with their
+- Frozen dataclasses for data; behavior lives in plain functions. A method is a
+  function with keyword arguments, and there are no strategy classes. Kernels and means are frozen dataclasses from a closed set, with their
   behavior in functions that match on the type (`covariance`; ADR 0008). An
   operator may only build data (`Param(...) * Matern52()` is a `Scale`). Add a
   protocol only once a second implementation exists.
@@ -78,7 +74,7 @@ with a GitHub issue labeled `bug`: remove the marker when fixing the bug.
 - Rows are points: a point is `(n,)`, a set is `(n_points, n)`, `f` is
   `(n_points,)`. Column vectors only in CasADi glue code.
 - The library never writes files on its own; saving is an explicit call
-  (`hb.save_run`).
+  (`hb.save_run`, `hb.save_runs`).
 - Errors raise specific exceptions; the caller decides whether to continue.
 - Annotate signatures and dataclass fields, not local variables. Type errors are
   fixed, not suppressed; if a suppression is unavoidable, use
@@ -99,5 +95,5 @@ with a GitHub issue labeled `bug`: remove the marker when fixing the bug.
   otherwise arguments are explicit. Experiments should be short to write.
 - A default may set how hard or how precisely we search, never what we search for
   (ADR 0009): the acquisition function, the approximation, `n_scenarios`,
-  `std_factor`, `temperature` and `noise_std` are required. Settings and choice
+  `std_factor`, `temperature` and `noise_std` are required. Methods and the choice
   dataclasses are keyword-only (`@dataclass(frozen=True, kw_only=True)`).

@@ -24,7 +24,7 @@ Run a script
 
 The illustrative example has one decision variable ``u``, the known equation
 ``x + exp(x) = y`` and the unknown equation ``y = sin(u)``, which the methods have to
-learn. A script states the problem, how it is measured and the settings, then calls a
+learn. A script states the problem, how it is measured and the prior GP, then calls a
 method:
 
 .. code-block:: python
@@ -51,27 +51,32 @@ method:
    # Measurement: an oracle plays the real system
    measure = hb.oracle_measure(system, lambda v: [cas.sin(v.u)], noise_std=0.0)
 
-   # Settings: the prior GP, and how each method chooses its next point
+   # The prior GP, which each method fits to its own data
    gp = hb.gp.GP(
        mean=hb.gp.Zero(),
        kernel=hb.gp.Param(1.0, bounds=(0.1, 10.0))
        * hb.gp.Matern52(lengthscale=hb.gp.Param(1.0, bounds=(1e-3, 1e2))),
        noise_std=0.0,
    )
-   hybrid_settings = hb.HybridBOSettings(
+   # Run both from the same seed, so from the same initial points
+   hybrid = hb.hybrid_bo(
+       problem,
+       measure,
+       n_initial=2,
+       n_iterations=5,
+       rng=np.random.default_rng(0),
        gp=gp,
        acquisition=hb.EI(),
        approximation=hb.SAA(n_scenarios=25, unknown_states_as_variables=False),
    )
-   standard_settings = hb.StandardBOSettings(gp=gp, acquisition=hb.EI())
-
-   # Run both from the same initial points, with a generator each
-   start = hb.initial_points(system.u, 2, np.random.default_rng(0))
-   hybrid = hb.hybrid_bo(
-       problem, measure, start, 5, np.random.default_rng(1), settings=hybrid_settings
-   )
    standard = hb.standard_bo(
-       problem, measure, start, 5, np.random.default_rng(1), settings=standard_settings
+       problem,
+       measure,
+       n_initial=2,
+       n_iterations=5,
+       rng=np.random.default_rng(0),
+       gp=gp,
+       acquisition=hb.EI(),
    )
 
    # Results: a run is plain data
@@ -90,15 +95,28 @@ Compare methods
 ---------------
 
 One run says little, since a method's result depends on its initial points. To compare
-methods over many runs, the experiments in ``experiments/`` run with
-`Benchopt <https://benchopt.github.io>`_:
+methods, repeat them over seeds in a loop, and keep a list of runs per label:
 
-.. code-block:: bash
+.. code-block:: python
 
-   pixi run benchmark -r 3 -j 4 -d "experiment[module=illustrative_example]"
+   import matplotlib.pyplot as plt
 
-It runs every method of the experiment three times, four at a time, and opens a report
-with the regret of each method. :doc:`reading_results` explains what it saves.
+   def hybrid(seed):
+       return hb.hybrid_bo(...)  # as above, with rng=np.random.default_rng(seed)
+
+   def standard(seed):
+       return hb.standard_bo(...)
+
+   runs = {
+       "hybrid_bo": [hybrid(seed) for seed in range(10)],
+       "standard_bo": [standard(seed) for seed in range(10)],
+   }
+   hb.save_runs(runs, "results/first-try")
+   hb.plots.regret(runs, optimum=-50.4608)
+   plt.savefig("regret.png")
+
+The scripts in ``experiments/`` do this in full. :doc:`reading_results` explains what is
+saved.
 
 Build these docs
 ----------------

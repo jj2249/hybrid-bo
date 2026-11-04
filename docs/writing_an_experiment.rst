@@ -1,18 +1,15 @@
 Writing an experiment
 =====================
 
-An experiment is one Python file: a problem, how the system is measured, and the
-methods to compare. This page builds one block by block, quoting
-``experiments/illustrative_example.py``. The quickest start is to copy that file,
+An experiment is one Python script: a problem, how the system is measured, and the
+methods to compare. It runs on its own, with nothing around it. This page builds one
+block by block, quoting ``experiments/illustrative_example.py``. The quickest start is
+to copy that file, change each block as described below, and run it:
 
 .. code-block:: bash
 
-   cp experiments/illustrative_example.py experiments/my_experiment.py
-
-change each block as described below, and run it with
-``pixi run benchmark -d "experiment[module=my_experiment]"``. The file name, without
-``.py``, is the experiment's name, so it must be a valid Python module name (letters,
-digits and underscores).
+   cp experiments/illustrative_example.py my_experiment.py
+   python my_experiment.py
 
 The problem
 -----------
@@ -118,9 +115,8 @@ true (*oracle*) values, so the methods can be scored.
 The *oracle optimum* is the true minimum of the problem, which regret is measured from.
 State it: nothing searches for it, since a search can miss it. Find it once with
 :py:func:`~hybrid_bo.evaluation.oracle_optimum` (with many starts), check it, and paste
-the value as above. If a run later evaluates a point below it, the benchmark warns with
-:py:class:`~hybrid_bo.errors.OracleOptimumWarning` and counts the run in ``summary``; in
-a script, :py:func:`~hybrid_bo.history.check_oracle_optimum` does the same check.
+the value as above. :py:func:`~hybrid_bo.history.check_oracle_optimum` warns if a run
+evaluates a point below it.
 
 Your own system
 ~~~~~~~~~~~~~~~
@@ -144,26 +140,32 @@ a call to another program):
 The docstring (else the function's name) is how the measurement is recorded with every
 run, so say what it measures. A measurement written as a dataclass is recorded by its
 repr instead, as the oracle simulation is. Without an oracle the library knows only what was measured: there is no oracle
-optimum, so no regret. The benchmark in ``experiments/`` scores regret, so it needs an
-oracle; call the methods from a script for your own system.
+optimum, so no regret. Use :py:func:`~hybrid_bo.plots.convergence` instead, which draws
+the incumbent, the lowest ``f`` a run measured.
 
 The measurement is called once per evaluation, so its cost sets the cost of a run.
 
-Methods and settings
---------------------
+Methods
+-------
 
-A *method* is how the problem is solved. ``methods`` maps a label to a method; every
-method takes the same arguments. A BO method's settings, which name its GP, are bound
-with ``functools.partial``:
+A *method* is how the problem is solved. Each is a function you call directly, and a
+script usually wraps each call in a small function of its own:
+
+.. literalinclude:: ../experiments/illustrative_example.py
+   :language: python
+   :start-at: # Every method's budget
+   :end-before: def hybrid_bo_lin
+
+The prior GP is defined once above them:
 
 .. literalinclude:: ../experiments/illustrative_example.py
    :language: python
    :start-at: # The prior GP
    :end-before: # Every method's budget
 
-- :py:func:`~hybrid_bo.bo.hybrid_bo` with
-  :py:class:`~hybrid_bo.settings.HybridBOSettings`: the prior GP (``gp``; see
-  below), the acquisition function (:py:class:`~hybrid_bo.acquisition.EI`, or
+The methods take the problem and the measurement, then keyword arguments:
+
+- :py:func:`~hybrid_bo.bo.hybrid_bo`: the prior GP (``gp``; see below), the acquisition function (:py:class:`~hybrid_bo.acquisition.EI`, or
   :py:class:`~hybrid_bo.acquisition.LCB` with a ``std_factor``), how it is
   approximated (``approximation``, e.g. :py:class:`~hybrid_bo.acquisition.SAA`), and
   the solver starts (``n_starts``). The first three are required: a default may set
@@ -184,52 +186,25 @@ with ``functools.partial``:
   ``1e-3`` times the optimum's magnitude, e.g. ``50e-3`` for an optimum near -50), and
   ``SAA``'s settings; it gives EI only. Its stored acquisition value
   is -log EI; the iteration plot draws it as -EI.
-- :py:func:`~hybrid_bo.bo.standard_bo` with
-  :py:class:`~hybrid_bo.settings.StandardBOSettings`: BO with a GP of the objective, as the
-  usual comparison. Its GP and acquisition function are required too.
+- :py:func:`~hybrid_bo.bo.standard_bo`: BO with a GP of the objective, as the usual
+  comparison. Its GP and acquisition function are required too.
 - :py:func:`~hybrid_bo.baselines.latin_hypercube_sampling` and
-  :py:func:`~hybrid_bo.baselines.uniform_sampling`, which sample without a model and
-  take no settings.
+  :py:func:`~hybrid_bo.baselines.uniform_sampling`, which sample without a model.
 
-The label names the method in the results, so one method can appear twice with
-different settings:
+Initial points and the budget
+-----------------------------
 
-.. code-block:: python
+Every method takes ``n_iterations`` (design points for the baselines) and either
+``n_initial``, how many initial points to draw from ``rng``, or ``initial_points``, an
+array with a row per point, to start from points of your own. They are evaluated with
+the measurement.
 
-   methods = {
-       "hybrid_bo_ei": functools.partial(
-           hb.hybrid_bo,
-           settings=hb.HybridBOSettings(
-               gp=gp, acquisition=hb.EI(), approximation=hb.SAA(n_scenarios=25)
-           ),
-       ),
-       "hybrid_bo_lcb": functools.partial(
-           hb.hybrid_bo,
-           settings=hb.HybridBOSettings(
-               gp=gp,
-               acquisition=hb.LCB(std_factor=2.0),
-               approximation=hb.SAA(n_scenarios=25),
-           ),
-       ),
-   }
-
-The budget
-----------
-
-Every method of an experiment has the same budget: ``n_evaluations``, the evaluations
-of a run in all, and ``n_initial``, how many of them are initial points. The rest,
-``n_evaluations - n_initial``, are iterations (design points for the baselines).
-
-.. literalinclude:: ../experiments/illustrative_example.py
-   :language: python
-   :start-at: # Every method's budget
-
-Run ``i`` of every method starts from the same initial points. A BO method doesn't
-depend on how many evaluations it has left, so with the same seed a run with a larger
-budget passes through the same first evaluations as one with a smaller budget: the
-longest run gives the regret of every smaller budget. The baselines draw their whole
-design at the start, so Latin hypercube sampling doesn't have this property, and
-uniform sampling has it only without measurement noise.
+The same seed gives every method the same initial points. A BO method doesn't depend on
+how many evaluations it has left, so with the same seed a run with a larger budget
+passes through the same first evaluations as one with a smaller budget: the longest run
+gives the regret of every smaller budget. The baselines draw their whole design at the
+start, so Latin hypercube sampling doesn't have this property, and uniform sampling has
+it only without measurement noise.
 
 The GP
 ------
@@ -282,39 +257,30 @@ from the experiment's methods.
 Running
 -------
 
-In a script or a notebook, call a method, with initial points drawn with
-:py:func:`~hybrid_bo.sampling.initial_points`. For your own system this is all you need:
+The end of the file repeats each method over seeds, then saves and plots:
+
+.. literalinclude:: ../experiments/illustrative_example.py
+   :language: python
+   :start-at: # Every method's runs from the same seeds
+
+It is plain Python, so change it as you like. To run in parallel, ``joblib`` works:
 
 .. code-block:: python
 
-   rng = np.random.default_rng(0)
-   u0 = hb.initial_points(system.u, n=2, rng=rng)
-   run = hb.hybrid_bo(problem, measure, u0, 5, rng, settings=settings)
-   hb.save_run(run, "hybrid_bo.json")
+   from joblib import Parallel, delayed
 
-The library never writes files unless asked. To compare methods over many runs, add a
-file to ``experiments/``, which runs with `Benchopt <https://benchopt.github.io>`_:
+   runs = Parallel(n_jobs=4)(delayed(hybrid_bo)(np.random.default_rng(s)) for s in range(10))
 
-.. code-block:: bash
-
-   pixi run benchmark -r 1 -d "experiment[module=my_experiment]" --no-plot --no-html  # a quick check first
-   pixi run benchmark -r 10 -j 4 -d "experiment[module=my_experiment]"
-
-A file there needs ``problem``, ``measure``, ``optimum``, ``methods``, ``n_evaluations``
-and ``n_initial`` at its top level. Benchopt only imports it, so anything it should run
-directly goes under ``if __name__ == "__main__":``. A stopped study finishes by running
-the same command again: Benchopt skips the runs it has. :doc:`reading_results` explains
-what it saves; results are git-ignored.
+To keep finished runs through a long study, save each with
+:py:func:`~hybrid_bo.saving.save_run` as it finishes, and skip the files that exist.
+:doc:`reading_results` explains what is saved.
 
 When something goes wrong
 -------------------------
 
-- **Nothing runs for my experiment**: ``module=`` must match a file in
-  ``experiments/``, without ``.py``.
 - **A run fails** with a :py:class:`~hybrid_bo.errors.HybridBOError` (for example the
   root-finding problem has no solution): it carries the run up to that point as
-  ``error.run``, and the benchmark keeps that run and counts it as incomplete. Check
-  the equations and the start bounds.
+  ``error.run``. Check the equations and the start bounds.
 - **ReconstructionWarning**: with an oracle, the measured variables don't pin the
   states down to the oracle's values (``g`` has several roots). Narrow the start
   bounds of the unmeasured states to the right branch, or measure other variables.

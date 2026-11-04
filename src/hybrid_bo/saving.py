@@ -1,17 +1,19 @@
 """Saving and loading a run as a JSON file (ADR 0003).
 
 `save_run(run, path)` writes every field of the run, and `load_run(path)` reads it
-back without the code that produced it. Arrays are nested lists; float64 values
+back without the code that produced it; `save_runs` and `load_runs` do the same for a
+list of runs per label, as a folder of files. Arrays are nested lists; float64 values
 round-trip exactly. A GP's means, kernels and hyperparameters, and the methods'
 settings and their parts, are saved with their type's name (`"type"`), so a field that
 holds one of several types (kernels, approximations) loads as the right one. The
-library never calls `save_run` itself.
+library never calls them itself.
 """
 
 import dataclasses
 import json
 import types
 import typing
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -135,3 +137,30 @@ def load_run(path: str | Path) -> Run:
     except (KeyError, TypeError) as error:
         msg = f"{path} doesn't hold a run of this version: {error!r}"
         raise RunFormatError(msg) from error
+
+
+def save_runs(runs: Mapping[str, Sequence[Run]], folder: str | Path) -> Path:
+    """Writes `runs`, a list of runs per label, to the new folder `folder`, as
+    `<label>/run-000.json`, and returns it.
+
+    Raises `FileExistsError` if `folder` exists.
+    """
+    folder = Path(folder)
+    folder.mkdir(parents=True)
+    for label, label_runs in runs.items():
+        (folder / label).mkdir()
+        for i, run in enumerate(label_runs):
+            save_run(run, folder / label / f"run-{i:03d}.json")
+    return folder
+
+
+def load_runs(folder: str | Path) -> dict[str, list[Run]]:
+    """Reads the runs saved by `save_runs` in `folder`, a list of runs per label.
+
+    Raises `RunFormatError` if a file doesn't hold a run of this version.
+    """
+    labels = sorted(path for path in Path(folder).iterdir() if path.is_dir())
+    return {
+        label.name: [load_run(path) for path in sorted(label.glob("run-*.json"))]
+        for label in labels
+    }

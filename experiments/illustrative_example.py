@@ -4,12 +4,12 @@ One decision variable u, one mechanistic state x and one unknown state y. The kn
 equation is x + exp(x) = y; the unknown equation is y = sin(u), which only the oracle
 knows.
 
-Run it with `pixi run benchmark -d "experiment[module=illustrative_example]"`.
+Run it with `pixi run -e experiments python experiments/illustrative_example.py`.
 """
 
-import functools
-
 import casadi as cas
+import matplotlib.pyplot as plt
+import numpy as np
 
 import hybrid_bo as hb
 
@@ -54,45 +54,103 @@ gp = hb.gp.GP(
     noise_std=0.0,
 )
 
-# Methods: each takes (problem, measure, initial_points, n, rng), where n is the
-# number of iterations, or of design points for the baselines. Hybrid BO substitutes
-# the GP prediction for the unknown states, as this experiment always has, with SAA-EI,
-# with Lin-EI and with SoftSAA-EI at a temperature of 50e-3, about 1e-3 times the
-# optimum's magnitude (about 50)
-methods = {
-    "hybrid_bo": functools.partial(
-        hb.hybrid_bo,
-        settings=hb.HybridBOSettings(
-            gp=gp,
-            acquisition=hb.EI(),
-            approximation=hb.SAA(n_scenarios=25, unknown_states_as_variables=False),
-        ),
-    ),
-    "hybrid_bo_lin": functools.partial(
-        hb.hybrid_bo,
-        settings=hb.HybridBOSettings(
-            gp=gp,
-            acquisition=hb.EI(),
-            approximation=hb.Linearization(unknown_states_as_variables=False),
-        ),
-    ),
-    "hybrid_bo_soft": functools.partial(
-        hb.hybrid_bo,
-        settings=hb.HybridBOSettings(
-            gp=gp,
-            acquisition=hb.EI(),
-            approximation=hb.SoftSAA(
-                temperature=50e-3, n_scenarios=25, unknown_states_as_variables=False
-            ),
-        ),
-    ),
-    "standard_bo": functools.partial(
-        hb.standard_bo, settings=hb.StandardBOSettings(gp=gp, acquisition=hb.EI())
-    ),
-    "latin_hypercube_sampling": hb.latin_hypercube_sampling,
-    "uniform_sampling": hb.uniform_sampling,
-}
+# Every method's budget: 2 initial points, then 5 iterations
+N_INITIAL = 2
+N_ITERATIONS = 5
+N_RUNS = 10
 
-# Every method's budget: 7 evaluations, the first 2 of them initial points (so 5 iterations)
-n_evaluations = 7
-n_initial = 2
+# Methods: each is one run from the generator `rng`. Hybrid BO substitutes the GP
+# prediction for the unknown states, as this experiment always has, with SAA-EI, with
+# Lin-EI and with SoftSAA-EI at a temperature of 50e-3, about 1e-3 times the optimum's
+# magnitude (about 50)
+
+
+def hybrid_bo(rng: np.random.Generator) -> hb.Run:
+    """Hybrid BO with SAA-EI."""
+    return hb.hybrid_bo(
+        problem,
+        measure,
+        n_initial=N_INITIAL,
+        n_iterations=N_ITERATIONS,
+        rng=rng,
+        gp=gp,
+        acquisition=hb.EI(),
+        approximation=hb.SAA(n_scenarios=25, unknown_states_as_variables=False),
+    )
+
+
+def hybrid_bo_lin(rng: np.random.Generator) -> hb.Run:
+    """Hybrid BO with Lin-EI."""
+    return hb.hybrid_bo(
+        problem,
+        measure,
+        n_initial=N_INITIAL,
+        n_iterations=N_ITERATIONS,
+        rng=rng,
+        gp=gp,
+        acquisition=hb.EI(),
+        approximation=hb.Linearization(unknown_states_as_variables=False),
+    )
+
+
+def hybrid_bo_soft(rng: np.random.Generator) -> hb.Run:
+    """Hybrid BO with SoftSAA-EI."""
+    return hb.hybrid_bo(
+        problem,
+        measure,
+        n_initial=N_INITIAL,
+        n_iterations=N_ITERATIONS,
+        rng=rng,
+        gp=gp,
+        acquisition=hb.EI(),
+        approximation=hb.SoftSAA(
+            temperature=50e-3, n_scenarios=25, unknown_states_as_variables=False
+        ),
+    )
+
+
+def standard_bo(rng: np.random.Generator) -> hb.Run:
+    """Standard BO with EI."""
+    return hb.standard_bo(
+        problem,
+        measure,
+        n_initial=N_INITIAL,
+        n_iterations=N_ITERATIONS,
+        rng=rng,
+        gp=gp,
+        acquisition=hb.EI(),
+    )
+
+
+def latin_hypercube_sampling(rng: np.random.Generator) -> hb.Run:
+    """Latin hypercube sampling."""
+    return hb.latin_hypercube_sampling(
+        problem, measure, n_initial=N_INITIAL, n_iterations=N_ITERATIONS, rng=rng
+    )
+
+
+def uniform_sampling(rng: np.random.Generator) -> hb.Run:
+    """Uniform sampling."""
+    return hb.uniform_sampling(
+        problem, measure, n_initial=N_INITIAL, n_iterations=N_ITERATIONS, rng=rng
+    )
+
+
+# Every method's runs from the same seeds, so run i of each starts from the same initial
+# points, then the results and their figure
+if __name__ == "__main__":
+    methods = (
+        hybrid_bo,
+        hybrid_bo_lin,
+        hybrid_bo_soft,
+        standard_bo,
+        latin_hypercube_sampling,
+        uniform_sampling,
+    )
+    runs = {
+        method.__name__: [method(np.random.default_rng(seed)) for seed in range(N_RUNS)]
+        for method in methods
+    }
+    folder = hb.save_runs(runs, "results/illustrative_example")
+    hb.plots.regret(runs, optimum)
+    plt.savefig(folder / "regret.png")

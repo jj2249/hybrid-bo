@@ -14,9 +14,7 @@ USER_FACING = {
     # Run a method
     "initial_points",
     "hybrid_bo",
-    "HybridBOSettings",
     "standard_bo",
-    "StandardBOSettings",
     "EI",
     "LCB",
     "SAA",
@@ -28,6 +26,8 @@ USER_FACING = {
     "oracle_optimum",
     "save_run",
     "load_run",
+    "save_runs",
+    "load_runs",
     # Look at the results
     "Run",
     "History",
@@ -57,8 +57,8 @@ def test_top_level_holds_only_user_facing_names():
 
 
 def test_the_study_machinery_has_left_the_library():
-    """Studies run with Benchopt (ADR 0013), so these modules stay out of `hb`, which
-    the check of the names above doesn't see, as it leaves out modules."""
+    """A script runs the methods itself (ADR 0013), so these modules stay out of `hb`,
+    which the check of the names above doesn't see, as it leaves out modules."""
     assert not {"cli", "studies", "views"} & set(vars(hb))
 
 

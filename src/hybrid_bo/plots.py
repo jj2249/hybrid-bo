@@ -1,4 +1,4 @@
-"""Static figures of one iteration of a run.
+"""Static figures: runs compared over their evaluations, and one iteration of a run.
 
 Plots read finished runs, so a saved run is plotted without running it again (ADR
 0003); an iteration's acquisition panels replay the method's acquisition problem (ADR
@@ -6,6 +6,7 @@ Plots read finished runs, so a saved run is plotted without running it again (AD
 `STYLE`; use it elsewhere with `plt.style.use(hb.plots.STYLE)`.
 """
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -17,7 +18,7 @@ from hybrid_bo.acquisition import LCB, Linearization, SoftSAA, replay
 from hybrid_bo.bo import iteration_problem
 from hybrid_bo.evaluation import Measure, evaluate
 from hybrid_bo.gp import predict
-from hybrid_bo.history import n_iterations
+from hybrid_bo.history import incumbents, n_iterations, oracle_incumbents
 from hybrid_bo.problem import Problem
 from hybrid_bo.run import Run
 from hybrid_bo.sampling import _start_bounds
@@ -37,6 +38,73 @@ _DECADES = 2  # a panel of f spanning more decades than this has a log color sca
 _ZERO_EI_COLOR = "lightgray"
 _EI_DECADES = 10  # the EI color scale stops this many decades below the largest EI
 _CONFIDENCE = 0.9  # probability inside the confidence bands
+
+
+def convergence(runs: Mapping[str, Sequence[Run]], ax: "Axes | None" = None) -> "Axes":
+    """The incumbent of each label's runs over the evaluations, on `ax` or a new
+    figure's axes: the oracle incumbent if the runs have an oracle, else the measured
+    one. Draws the median, with the interquartile range shaded.
+
+    Raises `ImportError` without matplotlib.
+    """
+    curves = {
+        label: [_incumbents(run) for run in group] for label, group in runs.items()
+    }
+    ax = _over_evaluations(curves, ax)
+    ax.set_ylabel("incumbent")
+    return ax
+
+
+def regret(
+    runs: Mapping[str, Sequence[Run]], optimum: float, ax: "Axes | None" = None
+) -> "Axes":
+    """The regret of each label's runs over the evaluations, measured from the oracle
+    optimum `optimum`, as in `convergence`, on a log y-axis (the paper's figure).
+
+    Raises `ImportError` without matplotlib.
+    """
+    curves = {
+        label: [_incumbents(run) - optimum for run in group]
+        for label, group in runs.items()
+    }
+    ax = _over_evaluations(curves, ax)
+    ax.set_ylabel("regret")
+    ax.set_yscale("log")
+    return ax
+
+
+def _incumbents(run: Run) -> np.ndarray:
+    """The run's oracle incumbents if it has an oracle, else its incumbents."""
+    if run.history.f_oracle is None:
+        return incumbents(run.history)
+    return oracle_incumbents(run.history)
+
+
+def _over_evaluations(
+    curves: Mapping[str, Sequence[np.ndarray]], ax: "Axes | None"
+) -> "Axes":
+    """The median and the interquartile range of each label's curves at each
+    evaluation, on `ax` or a new figure's axes. A shorter run counts up to its last
+    evaluation."""
+    import matplotlib.pyplot as plt
+
+    if ax is None:
+        with plt.style.context(STYLE):
+            _, ax = plt.subplots()
+
+    # Per label: runs as rows, NaN past a run's last evaluation
+    for label, group in curves.items():
+        rows = np.full((len(group), max(len(curve) for curve in group)), np.nan)
+        for row, curve in zip(rows, group, strict=True):
+            row[: len(curve)] = curve
+        lower, median, upper = np.nanpercentile(rows, [25, 50, 75], axis=0)
+        n = np.arange(1, rows.shape[1] + 1)
+        (drawn,) = ax.plot(n, median, label=label)
+        ax.fill_between(n, lower, upper, color=drawn.get_color(), alpha=0.2)
+
+    ax.set_xlabel("evaluations")
+    ax.legend()
+    return ax
 
 
 def iteration(

@@ -23,8 +23,7 @@ def run_of(method, n_iterations: int = 1, measure=ex.measure) -> hb.Run:
     """A run of `method` on the illustrative example from seed 0: 2 initial points,
     then `n_iterations` iterations."""
     rng = np.random.default_rng(0)
-    initial_points = hb.initial_points(ex.system.u, 2, rng)
-    return method(ex.problem, measure, initial_points, n_iterations, rng=rng)
+    return method(ex.problem, measure, n_initial=2, n_iterations=n_iterations, rng=rng)
 
 
 def assert_same(actual, expected, where="run"):
@@ -80,16 +79,11 @@ def round_trip(run: hb.Run, tmp_path: Path) -> hb.Run:
     [
         functools.partial(
             hb.hybrid_bo,
-            settings=hb.HybridBOSettings(
-                gp=NOISY_GP,
-                acquisition=hb.EI(),
-                approximation=hb.SAA(n_scenarios=5, unknown_states_as_variables=False),
-            ),
+            gp=NOISY_GP,
+            acquisition=hb.EI(),
+            approximation=hb.SAA(n_scenarios=5, unknown_states_as_variables=False),
         ),
-        functools.partial(
-            hb.standard_bo,
-            settings=hb.StandardBOSettings(gp=NOISY_GP, acquisition=hb.EI()),
-        ),
+        functools.partial(hb.standard_bo, gp=NOISY_GP, acquisition=hb.EI()),
     ],
     ids=["hybrid_bo", "standard_bo"],
 )
@@ -136,10 +130,20 @@ def test_a_history_without_an_oracle_has_no_optimum_to_beat():
 
 
 # `tmp_path` is a pytest fixture: a new, empty folder for this test
-@pytest.mark.parametrize("label", ex.methods)
-def test_load_run_after_save_run_gives_the_run_back(label, tmp_path):
+@pytest.mark.parametrize(
+    "method",
+    [
+        ex.hybrid_bo,
+        ex.hybrid_bo_lin,
+        ex.hybrid_bo_soft,
+        ex.standard_bo,
+        ex.latin_hypercube_sampling,
+        ex.uniform_sampling,
+    ],
+)
+def test_load_run_after_save_run_gives_the_run_back(method, tmp_path):
     """Every method's run loads back equal to the one saved, arrays bit for bit."""
-    run = run_of(ex.methods[label])
+    run = method(np.random.default_rng(0))
 
     assert_same(round_trip(run, tmp_path), run)
 
@@ -147,7 +151,7 @@ def test_load_run_after_save_run_gives_the_run_back(label, tmp_path):
 def test_a_saved_run_holds_its_artifact(tmp_path):
     """A saved run's JSON has the run's artifact under `artifact`, and loading gives
     it back."""
-    run = run_of(ex.methods["standard_bo"])
+    run = ex.standard_bo(np.random.default_rng(0))
 
     path = hb.save_run(run, tmp_path / "run.json")
 
@@ -174,10 +178,10 @@ def test_a_loaded_run_draws_its_iterations_with_its_own_gp(tmp_path):
         noise_std=0.05,
     )
     approximation = hb.SAA(n_scenarios=25, unknown_states_as_variables=False)
-    settings = hb.HybridBOSettings(
-        gp=gp, acquisition=hb.EI(), approximation=approximation
+    method = functools.partial(
+        hb.hybrid_bo, gp=gp, acquisition=hb.EI(), approximation=approximation
     )
-    original = run_of(functools.partial(hb.hybrid_bo, settings=settings), 2)
+    original = run_of(method, 2)
     run = round_trip(original, tmp_path)
 
     # Act: every iteration's figure, from the loaded run alone
@@ -247,34 +251,34 @@ SOLVER = hb.solvers.Ipopt(
 @pytest.mark.parametrize(
     "settings",
     [
-        hb.HybridBOSettings(
+        hb.settings.HybridBOSettings(
             gp=ex.gp,
             acquisition=hb.EI(),
             approximation=hb.SAA(n_scenarios=5, unknown_states_as_variables=False),
             solver=SOLVER,
         ),
-        hb.HybridBOSettings(
+        hb.settings.HybridBOSettings(
             gp=ex.gp,
             acquisition=hb.EI(),
             approximation=hb.SoftSAA(
                 temperature=0.5, n_scenarios=7, unknown_states_as_variables=False
             ),
         ),
-        hb.HybridBOSettings(
+        hb.settings.HybridBOSettings(
             gp=ex.gp,
             acquisition=hb.EI(),
             approximation=hb.Linearization(unknown_states_as_variables=False),
         ),
-        hb.HybridBOSettings(
+        hb.settings.HybridBOSettings(
             gp=ex.gp,
             acquisition=hb.LCB(std_factor=2.5),
             approximation=hb.SAA(n_scenarios=25),
             n_starts=3,
         ),
-        hb.StandardBOSettings(
+        hb.settings.StandardBOSettings(
             gp=ex.gp, acquisition=hb.LCB(std_factor=1.5), n_starts_gp=4
         ),
-        hb.StandardBOSettings(gp=ex.gp, acquisition=hb.EI(), solver=SOLVER),
+        hb.settings.StandardBOSettings(gp=ex.gp, acquisition=hb.EI(), solver=SOLVER),
     ],
 )
 def test_save_and_load_keep_every_kind_of_method_settings(settings, tmp_path):
@@ -293,7 +297,8 @@ def test_load_rejects_a_gp_part_of_the_wrong_type(tmp_path):
     """A saved kernel whose tag names no kernel (here, the mean's type) raises
     `RunFormatError`, not an error from inside the loader."""
     # Save a run, then give its kernel the mean's type
-    path = hb.save_run(run_of(ex.methods["standard_bo"]), tmp_path / "run.json")
+    run = ex.standard_bo(np.random.default_rng(0))
+    path = hb.save_run(run, tmp_path / "run.json")
     data = json.loads(path.read_text())
     data["surrogates"][0][0]["gp"]["kernel"]["type"] = "Zero"
     path.write_text(json.dumps(data))
@@ -321,6 +326,56 @@ def test_load_rejects_a_file_that_is_not_a_run_of_this_version(change, tmp_path)
 
     with pytest.raises(hb.errors.RunFormatError, match="of this version"):
         hb.load_run(path)
+
+
+def test_save_runs_and_load_runs_keep_the_runs_of_each_label(tmp_path):
+    """A list of runs per label loads back as it was saved, in order."""
+    runs = {
+        "a": [hb.Run(history_of(1), {}, "m"), hb.Run(history_of(2), {}, "m")],
+        "b": [hb.Run(history_of(3), {}, "m")],
+    }
+
+    loaded = hb.load_runs(hb.save_runs(runs, tmp_path / "study"))
+
+    assert_same(loaded, runs)
+
+
+def test_save_runs_refuses_an_existing_folder(tmp_path):
+    """`save_runs` never mixes runs into an earlier study."""
+    with pytest.raises(FileExistsError):
+        hb.save_runs({}, tmp_path)
+
+
+def test_either_a_number_of_initial_points_or_the_points_themselves():
+    """`n_initial` draws the initial points and `initial_points` gives them: the same
+    points give the same run, and giving both or neither raises `ValueError`."""
+    # Setup: the points `n_initial` would draw
+    points = hb.initial_points(ex.system.u, 2, np.random.default_rng(0))
+    drawn = run_of(hb.uniform_sampling, 1)
+
+    # Act: give those points
+    given = hb.uniform_sampling(
+        ex.problem,
+        ex.measure,
+        initial_points=points,
+        n_iterations=1,
+        rng=np.random.default_rng(0),
+    )
+
+    # Check: the initial points are the same, and exactly one of the two is needed
+    np.testing.assert_array_equal(given.history.u[:2], drawn.history.u[:2])
+    rng = np.random.default_rng(0)
+    with pytest.raises(ValueError, match="exactly one"):
+        hb.uniform_sampling(ex.problem, ex.measure, n_iterations=1, rng=rng)
+    with pytest.raises(ValueError, match="exactly one"):
+        hb.uniform_sampling(
+            ex.problem,
+            ex.measure,
+            n_iterations=1,
+            rng=rng,
+            n_initial=2,
+            initial_points=points,
+        )
 
 
 def test_save_run_refuses_an_existing_file(tmp_path):

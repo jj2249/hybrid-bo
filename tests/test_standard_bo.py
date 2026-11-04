@@ -17,7 +17,6 @@ from hybrid_bo import (
     NoSolutionError,
     RootFindingError,
     Run,
-    StandardBOSettings,
     incumbents,
     initial_points,
     oracle_measure,
@@ -31,6 +30,7 @@ from hybrid_bo.acquisition import (
 from hybrid_bo.bo import optimization_loop
 from hybrid_bo.gp import FittedGP, fit_gp, predict
 from hybrid_bo.run import run_artifact
+from hybrid_bo.settings import StandardBOSettings
 
 
 def illustrative_measure(problem):
@@ -49,7 +49,9 @@ def illustrative_run(problem, settings=None) -> Run:
     rng = np.random.default_rng(0)
     u = initial_points(problem.system.u, 2, rng)
     measure = illustrative_measure(problem)
-    return standard_bo(problem, measure, u, 2, rng, settings=settings)
+    return standard_bo(
+        problem, measure, initial_points=u, n_iterations=2, rng=rng, **vars(settings)
+    )
 
 
 def fitted_illustrative_gp():
@@ -200,26 +202,16 @@ def test_artifact_holds_the_settings_and_the_gp(illustrative_problem):
     assert "Matern52(lengthscale=Param(init=1.0" in artifact["gp"]
 
 
-def test_settings_are_required_and_keyword_only(illustrative_problem):
-    """Standard BO has no default settings, since its GP is stated by the
-    experiment, and the settings are keyword-only, so they can't be passed in
-    `rng`'s place."""
+def test_what_chooses_the_method_is_required_and_keyword_only(illustrative_problem):
+    """Standard BO has no default GP or acquisition function, and every argument after
+    the measurement is keyword-only."""
     measure = illustrative_measure(illustrative_problem)
-    u = np.array([[-0.5], [0.5]])
+    rng = np.random.default_rng(0)
 
     with pytest.raises(TypeError, match="gp"):
-        StandardBOSettings()  # ty: ignore[missing-argument]
-    with pytest.raises(TypeError, match="settings"):
-        standard_bo(illustrative_problem, measure, u, 0, np.random.default_rng(0))  # ty: ignore[missing-argument]
+        standard_bo(illustrative_problem, measure, n_iterations=0, rng=rng)  # ty: ignore[missing-argument]
     with pytest.raises(TypeError):
-        standard_bo(  # ty: ignore[missing-argument]
-            illustrative_problem,
-            measure,
-            u,
-            0,
-            np.random.default_rng(0),
-            StandardBOSettings(gp=ex.gp, acquisition=EI()),  # ty: ignore[too-many-positional-arguments]
-        )
+        standard_bo(illustrative_problem, measure, 0, rng)  # ty: ignore[missing-argument, too-many-positional-arguments]
 
 
 def test_failed_evaluation_carries_the_partial_run(illustrative_problem):
@@ -237,10 +229,11 @@ def test_failed_evaluation_carries_the_partial_run(illustrative_problem):
         standard_bo(
             illustrative_problem,
             measure,
-            np.array([[-0.5], [0.5]]),
-            2,
-            np.random.default_rng(0),
-            settings=StandardBOSettings(gp=ex.gp, acquisition=EI()),
+            initial_points=np.array([[-0.5], [0.5]]),
+            n_iterations=2,
+            rng=np.random.default_rng(0),
+            gp=ex.gp,
+            acquisition=EI(),
         )
 
     # The partial run: the initial points, and no surrogate (the surrogate behind the

@@ -25,13 +25,11 @@ from hybrid_bo import (
     LCB,
     SAA,
     History,
-    HybridBOSettings,
     Linearization,
     Problem,
     ReplayWarning,
     Run,
     SoftSAA,
-    StandardBOSettings,
     System,
     Var,
     hybrid_bo,
@@ -43,6 +41,7 @@ from hybrid_bo import (
 )
 from hybrid_bo.acquisition import _pack, hybrid_acquisition, standard_acquisition
 from hybrid_bo.gp import predict
+from hybrid_bo.settings import HybridBOSettings, StandardBOSettings
 
 # The illustrative example's hybrid BO settings: the GP's prediction substituted for
 # the unknown states
@@ -67,8 +66,19 @@ def illustrative_run(
     rng = np.random.default_rng(0)
     u = initial_points(ex.system.u, 2, rng)
     if settings is None:
-        return pickled(method(ex.problem, ex.measure, u, 2, rng))
-    return pickled(method(ex.problem, ex.measure, u, 2, rng, settings=settings))
+        settings_args = {}
+    else:
+        settings_args = vars(settings)
+    return pickled(
+        method(
+            ex.problem,
+            ex.measure,
+            initial_points=u,
+            n_iterations=2,
+            rng=rng,
+            **settings_args,
+        )
+    )
 
 
 # A fixture is a value pytest builds once and passes to every test that names it as an
@@ -155,7 +165,6 @@ def legend_labels(figure: Figure) -> list[str]:
 
 def fake_run(
     method: str,
-    index: int,
     f: list[float],
     f_oracle: list[float] | None,
     n_initial: int = 2,
@@ -459,8 +468,19 @@ def rosenbrock_run(
     rng = np.random.default_rng(0)
     u = initial_points(ROSENBROCK_SYSTEM.u, 2, rng)
     if settings is None:
-        return pickled(method(ROSENBROCK, ROSENBROCK_MEASURE, u, 2, rng))
-    return pickled(method(ROSENBROCK, ROSENBROCK_MEASURE, u, 2, rng, settings=settings))
+        settings_args = {}
+    else:
+        settings_args = vars(settings)
+    return pickled(
+        method(
+            ROSENBROCK,
+            ROSENBROCK_MEASURE,
+            initial_points=u,
+            n_iterations=2,
+            rng=rng,
+            **settings_args,
+        )
+    )
 
 
 @pytest.fixture(scope="module")
@@ -695,4 +715,31 @@ def test_2d_softsaa_note_is_finite_where_its_ei_underflows(hybrid_soft_2d_run):
     (note,) = figure.axes[0].texts
     stored = float(note.get_text().split(",")[0].split()[-1])
     np.testing.assert_allclose(stored, -1e6 / np.log(10), rtol=1e-3)
+    plt.close("all")
+
+
+def test_regret_and_convergence_draw_the_median_and_quartiles_of_each_label():
+    """`regret` and `convergence` draw a curve per label over the evaluations, the
+    median of its runs, with its interquartile range, and a shorter run counts up to
+    its last evaluation."""
+    # Setup: three runs of one label, one of them stopped after one evaluation
+    runs = {
+        "a": [
+            fake_run("a", f=[3.0, 1.0], f_oracle=[3.0, 1.0]),
+            fake_run("a", f=[5.0, 2.0], f_oracle=[5.0, 2.0]),
+            fake_run("a", f=[7.0], f_oracle=[7.0]),
+        ]
+    }
+
+    # Act
+    regret = plots.regret(runs, optimum=0.0)
+    convergence = plots.convergence(runs)
+
+    # Check: the median at each evaluation, on a log scale for regret
+    (line,) = regret.get_lines()
+    np.testing.assert_allclose(np.asarray(line.get_xdata()), [1, 2])
+    np.testing.assert_allclose(np.asarray(line.get_ydata()), [5.0, 1.5])
+    assert regret.get_yscale() == "log"
+    assert convergence.get_yscale() == "linear"
+    assert line.get_label() == "a"
     plt.close("all")

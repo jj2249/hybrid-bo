@@ -115,7 +115,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   git answers for the user's repository (#198). A measurement is recorded by its
   docstring, else its name; a dataclass measurement (`OracleSimulation`) by its repr.
 - `saving.py`: `save_run(run, path)` (new file only, `FileExistsError`) and
-  `load_run(path)`, one run as JSON. `_encode`/`_decode` convert any dataclass by its
+  `load_run(path)`, one run as JSON; `save_runs(runs, folder)` (new folder only) and
+  `load_runs(folder)`, a list of runs per label, as `<label>/run-000.json`. `_encode`/`_decode` convert any dataclass by its
   type hints; arrays are nested lists of floats (an empty one is `{"shape": ...}`). The
   GP types (`gp.TYPES`) and the settings types (`settings.TYPES`: the settings, `EI`,
   `LCB` and the approximations) are saved with `"type"`, their class name, and `_decode`
@@ -124,8 +125,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   no expected type, or data that fits no member of a union, raises `RunFormatError`. A
   new field on `Run` or its parts round-trips without changes if its type is one
   `_decode` handles.
-- `baselines.py`: `latin_hypercube_sampling` and `uniform_sampling` draw the whole
-  design over the `u` start bounds, then `evaluate` initial points plus design in
+- `baselines.py`: `latin_hypercube_sampling` and `uniform_sampling` take the same
+  keywords and draw the whole design over the `u` start bounds, then `evaluate` initial points plus design in
   one call.
 - `solvers.py`: `NLP` (`f`, bounds `(n,)`, optional `g(w) = 0`; a `g` of no rows is
   no constraint, since `cas.Opti` refuses an empty one), `Ipopt` settings and
@@ -230,8 +231,10 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   caller) unless the trial point's value and states are the stored solution's
   (`_REPLAY_RTOL` 1e-4, `_REPLAY_ATOL` 1e-6); pytest turns that warning into an
   error (`pyproject.toml`), so a test that expects it uses `pytest.warns`.
-- `settings.py`: `StandardBOSettings` and `HybridBOSettings`, apart from `bo.py`
-  because `run.py` imports them and `bo.py` imports `run.py`; `MethodSettings`, their
+- `settings.py`: `StandardBOSettings` and `HybridBOSettings`, the record a run keeps
+  (`Run.settings`), which the methods build from their keyword arguments. They validate
+  the choice and are apart from `bo.py` because `run.py` imports them and `bo.py` imports
+  `run.py`; `MethodSettings`, their
   union (`Run.settings`, the loop and the plots use it); `TYPES`, the types saving
   tags.
 - `bo.py`: `optimization_loop(problem, measure, initial_points, n_iterations,
@@ -239,8 +242,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   iteration `trial_point(problem, history, rng) -> (u, surrogate, acquisition
   solution)`, the surrogate a tuple of fitted GPs, and evaluate u; the run keeps
   `settings`; a `HybridBOError` gets the partial run as `error.run`). `standard_bo` and
-  `hybrid_bo` take `rng` last positionally and `settings` keyword-only and required:
-  both settings require `gp`, the prior GP. `StandardBOSettings` and
+  `hybrid_bo` take `problem` and `measure`, then only keywords: `n_iterations`, `rng`,
+  `gp`, `acquisition`, either `n_initial` or `initial_points`
+  (`sampling._starting_points`, drawn after the artifact) and search effort. `StandardBOSettings` and
   `standard_bo` (fit `u -> f`, `standard_acquisition`, `multistart` from `lhs` over
   the `u` start bounds), `HybridBOSettings` and `hybrid_bo` (artifact, then
   `saa_scenarios` or `nominal_scenario`, then the loop; fit one GP `h_inputs -> y_j`
@@ -251,7 +255,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   as the method built it (stored surrogate, the run's scenarios, the incumbent
   before trial point i from `incumbents`, `run.settings`; `ValueError` for a
   baseline), for the replay.
-- `plots.py`: static figures, no widgets and no `rng`. `iteration(run, problem, i, *, measure, gp,
+- `plots.py`: static figures, no widgets and no `rng`. `regret(runs, optimum, ax)` and
+  `convergence(runs, ax)` draw a list of runs per label (median and IQR over evaluations,
+  `_over_evaluations`, in numpy). `iteration(run, problem, i, *, measure, gp,
   scenarios, acquisition) -> Figure` draws the state before trial point i over the
   `u` start bounds, with one figure legend (`_figure_legend`); it dispatches on
   `n_u` (`ValueError` above 2, and for hybrid BO's GP panels with P > 1: they draw
@@ -285,7 +291,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 
 - **Defaults never choose the method** (ADR 0009): a default may set how hard or how
   precisely we search, never what we search for. Required, with no default:
-  `acquisition` on both settings, `approximation` on `HybridBOSettings` and
+  `gp` and `acquisition` on both BO methods, `approximation` on `hybrid_bo` and
   `hybrid_acquisition`, `n_scenarios` on `SAA` and `SoftSAA`, `temperature` on
   `SoftSAA`, `std_factor` on `LCB`, `noise_std` on `oracle_measure` and `GP`. Defaults
   stay for search effort, numerics and plumbing (`n_starts`, `n_starts_gp`, `tol`,
@@ -331,7 +337,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   is a logic change. `tests/test_sampling.py` pins `lhs` to scipy's draw and its
   spawning.
 - **Errors propagate** out of a method: a `HybridBOError` carries the partial run
-  (`error.run`). The benchmark's solver catches them and keeps that run.
+  (`error.run`). Nothing in the library catches them.
 - **The library never writes files on its own.** Saving is an explicit `save_run` call.
 - **Progress is logged, never configured.** `optimization_loop` logs the initial points
   and each iteration (with the incumbent) at INFO; `fit_gp` and `multistart` log their
@@ -362,8 +368,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   to end: every method, saving, plots, and hybrid BO matching standard BO when
   f = y), `test_two_unknown_states.py` (P = 2 end to
   end: runs, saving, plots),
-  `test_run.py` (the prefix property, saving and loading), `test_benchmark.py` (the
-  Benchopt benchmark, with one real run), `test_replay.py` (the replay
+  `test_run.py` (the prefix property, saving and loading), `test_replay.py` (the replay
   against values recorded from the IPOPT replay it replaced, `tests/data/replay/`)) compare against
   numpy/scipy references or closed forms. Add one when changing math.
 - A test that expects the same run on every machine needs a well-conditioned run:

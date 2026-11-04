@@ -1,8 +1,8 @@
 Reading results
 ===============
 
-A method returns a run, which is plain data. A study of many runs is Benchopt's, which
-saves a table of results beside each run in full.
+A method returns a run, which is plain data. To compare methods, keep a list of runs
+per label, which the library saves and plots.
 
 One run
 -------
@@ -47,7 +47,7 @@ Iteration figures
 :py:func:`~hybrid_bo.plots.iteration` draws the state before a trial point: the GP, the
 objective under the scenarios and the acquisition function, over one or two decision
 variables. It reads the run, so a saved run draws without running it again, but it
-needs the problem, from your experiment. Pass the measurement to draw the true curves
+needs the problem, from your script. Pass the measurement to draw the true curves
 too, which runs it over a grid, so only for an oracle:
 
 .. code-block:: python
@@ -58,41 +58,36 @@ too, which runs it over a grid, so only for an oracle:
 It needs ``hybrid-bo[plots]``, and uses the repo's matplotlib style, ``hb.plots.STYLE``.
 With more than one unknown state, hybrid BO's figures need ``gp=False``.
 
-A study
--------
+Many runs
+---------
 
-``pixi run benchmark`` writes to ``experiments/outputs/``:
-
-.. code-block:: text
-
-   benchopt_run_<time>.parquet     the results: one row per evaluation of every run
-   benchopt_run_<time>.html        the report, unless --no-html
-   runs/<module>/<code>/<label>/   each run in full, as seed-<seed>.json
-
-The report has Benchopt's plots and two of ours, ``regret`` (the median regret of each
-method over the evaluations, with its interquartile range; lower is better) and
-``summary``: each method's runs, complete runs, the quartiles of the final regret and
-the runs below the stated oracle optimum, whose regret is wrong. **Check the runs in ``summary``.**
-A run that stops with a ``HybridBOError`` counts as incomplete, and one that fails with
-any other exception prints a traceback and is missing from the results, without
-changing the exit code.
-
-Read the results with pandas, or with a Parquet viewer in your editor:
+A list of runs per label is all the library needs:
 
 .. code-block:: python
 
-   from benchopt.results import read_results
+   runs = {"hybrid_bo": [...], "standard_bo": [...]}
 
-   df = read_results("experiments/outputs/benchopt_run_<time>.parquet")
-   last = df[df["objective_complete"] == 1.0].groupby(["solver_name", "idx_rep"]).last()
-   last.groupby("solver_name")["objective_regret"].median()
+:py:func:`~hybrid_bo.saving.save_runs` writes them to a new folder, as
+``<label>/run-000.json``, and :py:func:`~hybrid_bo.saving.load_runs` reads them back:
 
-Each row names its method (``solver_name``, ``p_solver_label``), its run (``idx_rep``)
-and its experiment (``p_dataset_module``). Its scores are ``objective_evaluation``,
-``objective_incumbent`` (the lowest ``f`` measured so far), ``objective_value`` (the
-oracle incumbent: the objective without noise at that point), ``objective_regret`` (how
-far that is above the oracle optimum), ``objective_complete`` and
-``objective_below_optimum``.
+.. code-block:: python
 
-``p_dataset_code`` is a hash of the experiments and the library, which names the
-folder of the saved runs, so results say which code produced them.
+   hb.save_runs(runs, "results/first-try")
+   runs = hb.load_runs("results/first-try")
+
+:py:func:`~hybrid_bo.plots.regret` draws the median regret of each label over the
+evaluations, with its interquartile range, and
+:py:func:`~hybrid_bo.plots.convergence` the incumbent the same way. Each returns the
+matplotlib axes, so adjust the figure as you like:
+
+.. code-block:: python
+
+   import matplotlib.pyplot as plt
+
+   ax = hb.plots.regret(runs, optimum=-50.4608)
+   ax.set_title("Illustrative example")
+   plt.savefig("regret.pdf")
+
+:py:func:`~hybrid_bo.history.check_oracle_optimum` warns with
+:py:class:`~hybrid_bo.errors.OracleOptimumWarning` if a run evaluated a point below the
+stated oracle optimum, which would make its regret wrong.

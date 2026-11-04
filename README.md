@@ -20,7 +20,7 @@ everything the project needs.
 
 ## Use
 
-A script states the problem, how it is measured and the settings, then calls a method:
+A script states the problem and how it is measured, then calls a method:
 
 ```python
 import casadi as cas
@@ -42,27 +42,31 @@ system = hb.System(
 problem = hb.Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x - 4))
 measure = hb.oracle_measure(system, lambda v: [cas.sin(v.u)], noise_std=0.0)
 
-gp = hb.gp.GP(mean=hb.gp.Zero(), kernel=hb.gp.Matern52(), noise_std=0.0)
-settings = hb.HybridBOSettings(
-    gp=gp, acquisition=hb.EI(), approximation=hb.SAA(n_scenarios=25)
+run = hb.hybrid_bo(
+    problem,
+    measure,
+    n_initial=2,
+    n_iterations=5,
+    rng=np.random.default_rng(0),
+    gp=hb.gp.GP(mean=hb.gp.Zero(), kernel=hb.gp.Matern52(), noise_std=0.0),
+    acquisition=hb.EI(),
+    approximation=hb.SAA(n_scenarios=25),
 )
-
-rng = np.random.default_rng(0)
-start = hb.initial_points(system.u, 2, rng)
-run = hb.hybrid_bo(problem, measure, start, 5, rng, settings=settings)
 print(hb.incumbents(run.history)[-1])
 ```
 
-`hb.standard_bo` and the baselines are called the same way.
+`hb.standard_bo` and the baselines are called the same way. Pass `initial_points=`
+instead of `n_initial=` to start from points of your own.
 
-## Compare methods
+To compare methods, loop over seeds, then save and plot what you got:
 
-The experiments in `experiments/` run with [Benchopt](https://benchopt.github.io), with
-repetitions, parallel runs and resuming. In a clone of the repository:
-
-```bash
-pixi run benchmark -r 3 -j 4 -d "experiment[module=illustrative_example]"
+```python
+runs = {"hybrid_bo": [...], "standard_bo": [...]}  # a list of runs per label
+hb.save_runs(runs, "results/first-try")
+hb.plots.regret(runs, optimum)
 ```
+
+`experiments/` has complete scripts.
 
 ## Docs
 

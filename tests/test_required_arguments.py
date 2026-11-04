@@ -9,13 +9,12 @@ from hybrid_bo import (
     EI,
     LCB,
     SAA,
-    HybridBOSettings,
     Linearization,
     SoftSAA,
-    StandardBOSettings,
     oracle_measure,
 )
 from hybrid_bo.gp import GP, Matern52, Zero
+from hybrid_bo.settings import HybridBOSettings, StandardBOSettings
 
 # Each call leaves out one argument, so the type checker flags it as the test intends
 REQUIRED = {
