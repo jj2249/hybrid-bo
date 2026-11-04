@@ -33,8 +33,6 @@ from hybrid_bo import (
     Run,
     SoftSAA,
     StandardBOSettings,
-    Study,
-    StudySettings,
     System,
     Var,
     hybrid_bo,
@@ -176,113 +174,13 @@ def fake_run(
         f_oracle=None if f_oracle is None else np.array(f_oracle),
         n_initial=n_initial,
     )
-    return Run(history, artifact={"method": method}, method=method, index=index)
-
-
-def fake_study(runs: list[Run], artifact: dict[str, str] | None = None) -> Study:
-    """A study of these runs, two of each method."""
-    settings = StudySettings(n_runs=2, seed=0)
-    return Study(tuple(runs), settings, "fake", artifact or {})
+    return Run(history, artifact={"method": method}, method=method)
 
 
 def band(ax: Axes) -> np.ndarray:
     """The vertices (x, y) of the one shaded band on the axes."""
     (collection,) = ax.collections
     return np.asarray(collection.get_paths()[0].vertices)
-
-
-def test_convergence_draws_the_median_oracle_incumbent_with_its_iqr():
-    """Per method, the median over the runs of the oracle incumbent at each
-    evaluation is drawn with the method's label, the interquartile range is shaded,
-    and a dotted line marks the end of the initial points."""
-    # Setup: the oracle incumbents are [3, 1, 1, 1] and [2, 2, 2, 0.5] (the oracle f
-    # at each incumbent's point)
-    runs = [
-        fake_run("a", 0, [3.0, 1.0, 2.0, 1.5], [3.0, 1.0, 9.0, 9.0]),
-        fake_run("a", 1, [2.0, 4.0, 3.0, 1.0], [2.0, 9.0, 9.0, 0.5]),
-    ]
-
-    ax = plots.convergence(fake_study(runs))
-
-    # Check: the median, the band's quartiles (linear), the line, the legend
-    np.testing.assert_allclose(line(ax, "a"), [2.5, 1.5, 1.5, 0.75])
-    vertices = band(ax)
-    for x, lower, upper in [(1, 2.25, 2.75), (2, 1.25, 1.75), (4, 0.625, 0.875)]:
-        assert np.isclose(vertices, [x, lower]).all(axis=1).any()
-        assert np.isclose(vertices, [x, upper]).all(axis=1).any()
-    (dotted,) = [line for line in ax.get_lines() if line.get_linestyle() == ":"]
-    np.testing.assert_array_equal(dotted.get_xdata(), [2.5, 2.5])
-    legend = ax.get_legend()
-    assert legend is not None
-    assert [text.get_text() for text in legend.get_texts()] == ["a"]
-    assert ax.get_ylabel() == "oracle incumbent"
-    assert has_grid(ax)
-    plt.close("all")
-
-
-def test_convergence_marks_the_end_of_each_number_of_initial_points():
-    """Configurations with different numbers of initial points each get a dotted line
-    after their initial points; configurations that share one share the line."""
-    f = [3.0, 1.0, 2.0, 1.5]
-    runs = [
-        fake_run(label, 0, f, None, n_initial)
-        for label, n_initial in (("a", 2), ("b", 3), ("c", 2))
-    ]
-
-    ax = plots.convergence(fake_study(runs))
-
-    dotted = [line for line in ax.get_lines() if line.get_linestyle() == ":"]
-    assert sorted(np.asarray(line.get_xdata())[0] for line in dotted) == [2.5, 3.5]
-    plt.close("all")
-
-
-def test_convergence_without_an_oracle_draws_the_incumbent():
-    """Without oracle values the median incumbent is drawn instead, and a shorter
-    (failed) run counts only up to its last evaluation."""
-    runs = [
-        fake_run("a", 0, [3.0, 1.0, 2.0], None),
-        fake_run("a", 1, [2.0, 4.0], None),
-    ]
-
-    ax = plots.convergence(fake_study(runs))
-
-    np.testing.assert_allclose(line(ax, "a"), [2.5, 1.5, 1.0])
-    assert ax.get_ylabel() == "incumbent"
-    plt.close("all")
-
-
-def test_convergence_needs_a_run():
-    """Without runs there is nothing to draw."""
-    # `pytest.raises` passes only if the block raises this exception, with a message
-    # matching the regular expression `match`
-    with pytest.raises(ValueError, match="no incumbent"):
-        plots.convergence(fake_study([]))
-
-
-def test_regret_is_the_median_regret_on_a_log_axis():
-    """Regret is the oracle incumbent minus the recorded optimum, or the one given,
-    drawn on a log y-axis."""
-    runs = [fake_run("a", 0, [3.0, 1.0], [3.0, 1.0])]
-    study = fake_study(runs, {"oracle_optimum": "0.5"})
-
-    ax = plots.regret(study)
-    given = plots.regret(study, optimum=0.0)
-
-    np.testing.assert_allclose(line(ax, "a"), [2.5, 0.5])
-    np.testing.assert_allclose(line(given, "a"), [3.0, 1.0])
-    assert ax.get_yscale() == "log"
-    plt.close("all")
-
-
-@pytest.mark.parametrize(
-    ("f_oracle", "artifact"),
-    [(None, {"oracle_optimum": "0.5"}), ([3.0, 1.0], {})],
-)
-def test_regret_needs_an_oracle_and_an_optimum(f_oracle, artifact):
-    """Without oracle values, or without an optimum, there is no regret to draw."""
-    study = fake_study([fake_run("a", 0, [3.0, 1.0], f_oracle)], artifact)
-    with pytest.raises(ValueError, match="no regret"):
-        plots.regret(study)
 
 
 # The figure of one iteration

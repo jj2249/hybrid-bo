@@ -2,12 +2,9 @@
 
 One decision variable u, one mechanistic state x and one unknown state y. The known
 equation is x + exp(x) = y; the unknown equation is y = sin(u), which only the oracle
-knows. Run it, then plot the newest study:
+knows.
 
-    pixi run experiment illustrative_example [--n-runs 3 --plot ...]
-    pixi run plot illustrative_example
-
-`pixi run experiment illustrative_example --help` lists the flags.
+Run it with `pixi run benchmark -d "experiment[module=illustrative_example]"`.
 """
 
 import functools
@@ -96,25 +93,6 @@ methods = {
     "uniform_sampling": hb.uniform_sampling,
 }
 
-# Configurations: every method with the same budget, 7 evaluations, the first 2 of
-# them initial points (so 5 iterations)
-configurations = {
-    label: hb.Configuration(method=method, n_evaluations=7, n_initial=2)
-    for label, method in methods.items()
-}
-
-# The study, which the command line's flags override. Seed None draws a fresh seed,
-# which the saved study keeps, so it can be run again exactly
-study_settings = hb.StudySettings(n_runs=10, seed=None)
-
-# Run or plot from the command line. The oracle measurement is cheap, so the iteration
-# figures draw its true curves
-if __name__ == "__main__":
-    hb.cli.main(
-        problem,
-        measure,
-        configurations,
-        study_settings,
-        optimum=optimum,
-        true_curves=True,
-    )
+# Every method's budget: 7 evaluations, the first 2 of them initial points (so 5 iterations)
+n_evaluations = 7
+n_initial = 2

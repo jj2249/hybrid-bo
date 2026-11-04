@@ -1,10 +1,9 @@
-"""Static plots of a study: convergence and regret across runs, and one iteration of a
-run.
+"""Static figures of one iteration of a run.
 
-Plots read finished runs, so a saved study is plotted without running it again (ADR
+Plots read finished runs, so a saved run is plotted without running it again (ADR
 0003); an iteration's acquisition panels replay the method's acquisition problem (ADR
-0005). matplotlib and Polars are imported on first use. Figures are drawn in the repo's
-style, `STYLE`; use it elsewhere with `plt.style.use(hb.plots.STYLE)`.
+0005). matplotlib is imported on first use. Figures are drawn in the repo's style,
+`STYLE`; use it elsewhere with `plt.style.use(hb.plots.STYLE)`.
 """
 
 from dataclasses import dataclass
@@ -23,11 +22,8 @@ from hybrid_bo.problem import Problem
 from hybrid_bo.run import Run
 from hybrid_bo.sampling import _start_bounds
 from hybrid_bo.settings import HybridBOSettings, MethodSettings, StandardBOSettings
-from hybrid_bo.studies import Study
-from hybrid_bo.views import evaluations
 
 if TYPE_CHECKING:
-    import polars as pl
     from matplotlib.axes import Axes
     from matplotlib.figure import Figure
 
@@ -41,88 +37,6 @@ _DECADES = 2  # a panel of f spanning more decades than this has a log color sca
 _ZERO_EI_COLOR = "lightgray"
 _EI_DECADES = 10  # the EI color scale stops this many decades below the largest EI
 _CONFIDENCE = 0.9  # probability inside the confidence bands
-
-
-def convergence(study: Study, ax: "Axes | None" = None) -> "Axes":
-    """Per configuration, the median over its runs of the oracle incumbent (or, in a
-    study without an oracle, the incumbent) at each evaluation, with the
-    interquartile range shaded, a dotted line after the initial points (one for each
-    number of initial points the runs have), and a legend.
-
-    Raises `ValueError` if the study has no evaluations, and `ImportError` without
-    Polars.
-    """
-    rows = evaluations(study)
-    has_oracle = not rows.is_empty() and rows["oracle_incumbent"].null_count() == 0
-    column = "oracle_incumbent" if has_oracle else "incumbent"
-    return _over_evaluations(rows, column, _n_initials(study), ax)
-
-
-def regret(
-    study: Study, optimum: float | None = None, ax: "Axes | None" = None
-) -> "Axes":
-    """The median regret, drawn as in `convergence` on a log y-axis (the paper's
-    figure). The oracle optimum is `optimum` if given, else the study's recorded one.
-
-    Raises `ValueError` if the study has no regret (no oracle, or no optimum), and
-    `ImportError` without Polars.
-    """
-    rows = evaluations(study, optimum)
-    ax = _over_evaluations(rows, "regret", _n_initials(study), ax)
-    ax.set_yscale("log")
-    return ax
-
-
-def _n_initials(study: Study) -> list[int]:
-    """The numbers of initial points of the study's runs, each once, in increasing
-    order."""
-    return sorted({run.history.n_initial for run in study.runs})
-
-
-def _over_evaluations(
-    rows: "pl.DataFrame", column: str, n_initials: list[int], ax: "Axes | None"
-) -> "Axes":
-    """`convergence`'s figure of `column`, on `ax` or a new figure's axes, with a
-    dotted line after each of `n_initials` initial points. A shorter run counts up to
-    its last evaluation.
-
-    Raises `ValueError` if the column has no values.
-    """
-    import matplotlib.pyplot as plt
-    import polars as pl  # `evaluations` has checked it is installed
-
-    rows = rows.drop_nulls(column) if column in rows.columns else rows.clear()
-    if rows.is_empty():
-        msg = f"The study has no {column.replace('_', ' ')} to draw"
-        raise ValueError(msg)
-    if ax is None:
-        with plt.style.context(STYLE):
-            _, ax = plt.subplots()
-
-    # Per method: the median and the quartiles at each evaluation
-    values = pl.col(column)
-    for method in rows["method"].unique(maintain_order=True):
-        curve = (
-            rows.filter(pl.col("method") == method)
-            .group_by("evaluation")
-            .agg(
-                median=values.median(),
-                lower=values.quantile(0.25, "linear"),
-                upper=values.quantile(0.75, "linear"),
-            )
-            .sort("evaluation")
-        )
-        n = curve["evaluation"].to_numpy()
-        (drawn,) = ax.plot(n, curve["median"].to_numpy(), label=str(method))
-        lower, upper = curve["lower"].to_numpy(), curve["upper"].to_numpy()
-        ax.fill_between(n, lower, upper, color=drawn.get_color(), alpha=0.2)
-
-    for n_initial in n_initials:
-        ax.axvline(n_initial + 0.5, color="grey", linestyle=":")
-    ax.set_xlabel("evaluations")
-    ax.set_ylabel(column.replace("_", " "))
-    ax.legend()
-    return ax
 
 
 def iteration(

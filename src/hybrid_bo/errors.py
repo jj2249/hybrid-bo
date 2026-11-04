@@ -28,9 +28,9 @@ class NoSolutionError(HybridBOError):
     """Every start of a multistart solve failed."""
 
 
-class StudyFormatError(ValueError):
-    """A saved study is in a format this version can't load, such as one saved before
-    GPs were data. Rerun it, or load it with the version that saved it."""
+class RunFormatError(ValueError):
+    """A saved run is in a format this version can't load. Rerun it, or load it with
+    the version that saved it."""
 
 
 class ReconstructionWarning(UserWarning):
@@ -43,14 +43,6 @@ class ReconstructionWarning(UserWarning):
     other variables, or narrow the start bounds of the unmeasured ones to the right
     branch. Silence it with `warnings.filterwarnings("ignore",
     category=ReconstructionWarning)`.
-    """
-
-
-class OracleOptimumWarning(UserWarning):
-    """An evaluated point has an oracle objective below the stated oracle optimum.
-
-    The stated value can't then be the optimum, so every regret measured from it is
-    wrong. Find the optimum again, e.g. with `oracle_optimum` from more starts.
     """
 
 

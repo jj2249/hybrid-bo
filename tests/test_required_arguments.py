@@ -9,12 +9,10 @@ from hybrid_bo import (
     EI,
     LCB,
     SAA,
-    Configuration,
     HybridBOSettings,
     Linearization,
     SoftSAA,
     StandardBOSettings,
-    StudySettings,
     oracle_measure,
 )
 from hybrid_bo.gp import GP, Matern52, Zero
@@ -29,12 +27,6 @@ REQUIRED = {
     "n_scenarios of SAA": lambda: SAA(),  # ty: ignore[missing-argument]
     "n_scenarios of SoftSAA": lambda: SoftSAA(temperature=1.0),  # ty: ignore[missing-argument]
     "std_factor of LCB": lambda: LCB(),  # ty: ignore[missing-argument]
-    "n_evaluations of a configuration": lambda: Configuration(  # ty: ignore[missing-argument]
-        method=ex.methods["standard_bo"], n_initial=2
-    ),
-    "n_initial of a configuration": lambda: Configuration(  # ty: ignore[missing-argument]
-        method=ex.methods["standard_bo"], n_evaluations=7
-    ),
     "noise_std of GP": lambda: GP(mean=Zero(), kernel=Matern52()),  # ty: ignore[missing-argument]
     "noise_std of the oracle measurement": lambda: oracle_measure(  # ty: ignore[missing-argument]
         ex.problem.system, oracle=lambda v: [cas.sin(v.u)]
@@ -50,8 +42,6 @@ POSITIONAL = {
     "StandardBOSettings": lambda: StandardBOSettings(ex.gp, EI()),  # ty: ignore[missing-argument, too-many-positional-arguments]
     "HybridBOSettings": lambda: HybridBOSettings(ex.gp, EI(), SAA(n_scenarios=25)),  # ty: ignore[missing-argument, too-many-positional-arguments]
     "GP": lambda: GP(Zero(), Matern52(), 0.0),  # ty: ignore[missing-argument, too-many-positional-arguments]
-    "StudySettings": lambda: StudySettings(1, 0),  # ty: ignore[missing-argument, too-many-positional-arguments]
-    "Configuration": lambda: Configuration(ex.methods["standard_bo"], 7, 2),  # ty: ignore[missing-argument, too-many-positional-arguments]
 }
 
 

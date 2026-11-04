@@ -24,20 +24,8 @@ USER_FACING = {
     "Linearization",
     "latin_hypercube_sampling",
     "uniform_sampling",
-    # Run a study, and save and load it
-    "Configuration",
-    "StudySettings",
-    "Study",
-    "repeat",
-    "study",
+    # Save and load a run
     "oracle_optimum",
-    "save",
-    "load",
-    # Run a study's tasks elsewhere, and save and load its runs one by one
-    "Task",
-    "study_tasks",
-    "run_task",
-    "assemble",
     "save_run",
     "load_run",
     # Look at the results
@@ -45,13 +33,9 @@ USER_FACING = {
     "History",
     "incumbents",
     "oracle_incumbents",
-    "evaluations",
-    "summary",
-    "hyperparameters",
     # Errors
     "HybridBOError",
     "NoSolutionError",
-    "OracleOptimumWarning",
     "ReconstructionWarning",
     "ReplayWarning",
     "RootFindingError",
@@ -75,5 +59,4 @@ def test_internals_are_reachable_through_their_modules():
     `import hybrid_bo as hb`."""
     assert callable(hb.gp.fit_gp)
     assert callable(hb.solvers.multistart)
-    assert callable(hb.plots.convergence)
-    assert callable(hb.cli.main)
+    assert callable(hb.plots.iteration)

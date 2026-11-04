@@ -7,13 +7,9 @@ and f = (6x - 2)^2 sin(12x - 4); the unknown equation is y = sin(u1) cos(u2), wh
 only the oracle knows. f depends on u only through y, so its minimum is attained
 along a curve in the plane of u. With one unknown state and two decision variables,
 the iteration figures draw every panel: a row of y (oracle, GP mean, GP std) and a
-row of f. Run it, then plot the newest study:
+row of f.
 
-    pixi run experiment illustrative_example_2d [--n-runs 3 --plot ...]
-    pixi run plot illustrative_example_2d
-    pixi run experiment illustrative_example_2d plot --plot-runs all
-
-`pixi run experiment illustrative_example_2d --help` lists the flags.
+Run it with `pixi run benchmark -d "experiment[module=illustrative_example_2d]"`.
 """
 
 import functools
@@ -105,25 +101,6 @@ methods = {
     "latin_hypercube_sampling": hb.latin_hypercube_sampling,
 }
 
-# Configurations: every method with the same budget, 16 evaluations, the first 6 of
-# them initial points, 2(N + 1) (so 10 iterations)
-configurations = {
-    label: hb.Configuration(method=method, n_evaluations=16, n_initial=6)
-    for label, method in methods.items()
-}
-
-# The study, which the command line's flags override. Seed None draws a fresh seed,
-# which the saved study keeps, so it can be run again exactly
-study_settings = hb.StudySettings(n_runs=10, seed=None)
-
-# Run or plot from the command line. The oracle measurement is cheap, so the
-# iteration figures draw its oracle values over the grid of u
-if __name__ == "__main__":
-    hb.cli.main(
-        problem,
-        measure,
-        configurations,
-        study_settings,
-        optimum=optimum,
-        true_curves=True,
-    )
+# Every method's budget: 16 evaluations, the first 6 of them initial points, 2(N + 1) (so 10 iterations)
+n_evaluations = 16
+n_initial = 6

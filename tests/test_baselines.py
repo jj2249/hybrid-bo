@@ -110,7 +110,7 @@ def test_artifact_describes_the_problem_method_and_versions(illustrative_problem
     for package in ("casadi", "numpy", "scipy"):
         assert artifact[package] == importlib.metadata.version(package)
     assert artifact["hybrid_bo"] == importlib.metadata.version("hybrid-bo")
-    assert artifact["git"]
+    assert "git" not in artifact  # a git lookup would answer for the user's repository
 
 
 def test_artifact_holds_the_seed_and_spawn_key(illustrative_problem):

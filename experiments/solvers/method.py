@@ -11,13 +11,13 @@ import hybrid_bo as hb
 
 
 class Solver(BaseSolver):
-    """Runs the configuration `label` of an experiment and saves the run in full."""
+    """Runs the method `label` of an experiment and saves the run in full."""
 
     name = "method"
     sampling_strategy = "run_once"
     parameters = {
         "label": sorted(
-            {label for module in MODULES for label in experiment(module).configurations}
+            {label for module in MODULES for label in experiment(module).methods}
         )
     }
     label: str
@@ -25,7 +25,7 @@ class Solver(BaseSolver):
     def skip(self, **objective: Any) -> tuple[bool, str | None]:
         """Skips an experiment that doesn't compare this method."""
         chosen = objective["experiment"]
-        if self.label not in chosen.configurations:
+        if self.label not in chosen.methods:
             return True, f"{chosen.__name__} has no method {self.label}"
         return False, None
 
@@ -39,22 +39,20 @@ class Solver(BaseSolver):
     def run(self, stop_val: object) -> None:
         """Draws the initial points and runs the method. A `HybridBOError` keeps the
         partial run, which then reports as incomplete."""
-        configuration = self.experiment.configurations[self.label]
-        problem, measure = self.experiment.problem, self.experiment.measure
+        chosen = self.experiment
+        problem, measure = chosen.problem, chosen.measure
         rng = np.random.default_rng(self.seed)
-        initial_points = hb.initial_points(
-            problem.system.u, configuration.n_initial, rng
-        )
-        n = configuration.n_evaluations - configuration.n_initial
+        initial_points = hb.initial_points(problem.system.u, chosen.n_initial, rng)
+        n = chosen.n_evaluations - chosen.n_initial
         try:
-            self.result = configuration.method(
+            self.result = chosen.methods[self.label](
                 problem, measure, initial_points, n, rng=rng
             )
         except hb.HybridBOError as error:
             if error.run is None:
                 raise
             self.result = error.run
-        self.budget = configuration.n_evaluations
+        self.budget = chosen.n_evaluations
         hb.save_run(self.result, self._replaced_run_file())
 
     def _replaced_run_file(self) -> Path:

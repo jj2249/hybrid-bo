@@ -9,13 +9,11 @@ local minima. Hybrid BO models each y_j with its own GP and knows how f combines
 standard BO models f directly.
 
 It is Appendix D.1 of Astudillo & Frazier, "Bayesian optimization of composite
-functions" (arXiv 1906.01537). Run it, then plot the newest study:
+functions" (arXiv 1906.01537).
 
-    pixi run experiment langermann [--n-runs 3 --plot ...]
-    pixi run plot langermann
-    pixi run experiment langermann plot --plot-runs all
+Run it with `pixi run benchmark -d "experiment[module=langermann]"`.
 
-`pixi run experiment langermann --help` lists the flags. Hybrid BO's iteration figures
+Hybrid BO's iteration figures
 have no GP panels, since those draw one unknown state.
 """
 
@@ -109,25 +107,6 @@ methods = {
     "latin_hypercube_sampling": hb.latin_hypercube_sampling,
 }
 
-# Configurations: every method with the same budget, 26 evaluations, the first 6 of
-# them initial points, the paper's 2(N + 1) (so 20 iterations)
-configurations = {
-    label: hb.Configuration(method=method, n_evaluations=26, n_initial=6)
-    for label, method in methods.items()
-}
-
-# The study, which the command line's flags override. Seed None draws a fresh seed,
-# which the saved study keeps, so it can be run again exactly
-study_settings = hb.StudySettings(n_runs=10, seed=None)
-
-# Run or plot from the command line. The oracle measurement is cheap, so the
-# iteration figures draw its oracle values over the grid of u
-if __name__ == "__main__":
-    hb.cli.main(
-        problem,
-        measure,
-        configurations,
-        study_settings,
-        optimum=optimum,
-        true_curves=True,
-    )
+# Every method's budget: 26 evaluations, the first 6 of them initial points, the paper's 2(N + 1) (so 20 iterations)
+n_evaluations = 26
+n_initial = 6

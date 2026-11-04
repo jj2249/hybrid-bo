@@ -288,8 +288,7 @@ def test_oracle_must_give_one_value_per_unknown_state():
 @pytest.mark.parametrize("name", MODULES)
 def test_every_experiment_measurement_has_the_same_repr_in_another_process(name):
     """Each experiment's measurement is described by the same text in another
-    process, as a study's tasks rebuild it there and `resume` compares it with the
-    study's task list."""
+    process: a run's artifact holds that text, so it can't depend on the process."""
     measure = importlib.import_module(name).measure
 
     other = subprocess.run(
@@ -368,3 +367,31 @@ def test_oracle_incumbents_need_oracle_values():
     """A history from a measurement without an oracle has no benchmark metric."""
     with pytest.raises(ValueError, match="oracle"):
         oracle_incumbents(history_of([3.0, 1.0]))
+
+
+def test_oracle_optimum_solves_the_problem_with_the_oracle_in_place_of_h():
+    """With y = u known, min (x - 1)^2 + y subject to x = y over u in [-2, 2] is at
+    u = 0.5, where f = 0.75."""
+    u = hybrid_bo.Var("u", -2.0, 2.0)
+    x = hybrid_bo.Var("x", start=(-3.0, 3.0))
+    y = hybrid_bo.Var("y", start=(-3.0, 3.0))
+    system = hybrid_bo.System(
+        u=[u], x=[x], y=[y], g=lambda v: [v.x - v.y], h_inputs=[u], measured=[y]
+    )
+    problem = hybrid_bo.Problem(system, f=lambda v: (v.x - 1) ** 2 + v.y)
+
+    optimum = hybrid_bo.oracle_optimum(
+        problem, lambda v: [v.u], np.random.default_rng(0)
+    )
+
+    assert optimum == pytest.approx(0.75, abs=1e-8)
+
+
+def test_oracle_optimum_rejects_an_oracle_of_the_wrong_size(illustrative_problem):
+    """The oracle must give one value per unknown state, as for the measurement."""
+    with pytest.raises(ValueError, match="one value per unknown state"):
+        hybrid_bo.oracle_optimum(
+            illustrative_problem,
+            lambda v: [v.u, v.u],
+            np.random.default_rng(0),
+        )
