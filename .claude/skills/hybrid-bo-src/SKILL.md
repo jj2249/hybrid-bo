@@ -244,7 +244,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - `acquisition.py`: `EI`, `LCB(std_factor)` and `standard_acquisition` (analytic EI
   or LCB over `u`). Both builders return an `AcquisitionProblem` (`nlp`,
   `start_bounds`, and the variable order: `n_u`, `n_x`, `n_scenarios`,
-  `unknown_states_as_variables`; the defaults are standard BO's, `w = u`).
+  `unknown_states_as_variables`; the defaults are standard BO's, `w = u`; hybrid
+  BO's also has `scenario_values`, `w -> (f (S, 1), y (S, P), std of f (1, 1))`,
+  the std being Lin-EI's s or else the weighted std over the scenarios).
   `_pack(u, x, y)` (numpy or CasADi) and `_unpack(problem, w) -> (u, x, y | None)`
   are the only code that knows the order of `w`: never slice or reshape `w`
   elsewhere. `_check_acquisition`
@@ -259,7 +261,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `hybrid_acquisition` requires with it (`ValueError` otherwise);
   `_sensitivity(problem, fitted)` is the `cas.Function` `(x, y, u) -> a (1, P)`.
   Every hybrid builder (`hybrid_acquisition`, `_scenario_unknown_states`,
-  `_sensitivity`, `_scenario_states`) takes `fitted`, the surrogate model: a tuple of
+  `_sensitivity`) takes `fitted`, the surrogate model: a tuple of
   one fitted GP per unknown state (`ValueError` in `hybrid_acquisition` otherwise).
   `Scenarios` (`z (S, P)`,
   `w (S,)`, checked), `saa_scenarios(n, n_y, rng)` and `hybrid_acquisition(..., acquisition,
@@ -267,12 +269,31 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `u`, then `vec` of the `(S, M)` x copies, then of the `(S, P)` y copies if variables;
   bounds and start bounds from each `Var`, repeated per scenario; `g` per scenario,
   followed by its GP tie). `_scenario_unknown_states` is the one GP scenario
-  prediction (`mean_j + std_j * z_sj` per unknown state j), symbolic or numeric.
+  prediction (`mean_j + std_j * z_sj` per unknown state j), symbolic.
   `AcquisitionSolution(value, x, y)` is one iteration's solution: the minimized
   objective at the trial point and, for hybrid BO, the scenario states `(S, M)`,
-  `(S, P)`, which `_scenario_states(system, fitted, scenarios,
-  acquisition_problem, w)` reads from the solution (or predicts, when the y_s are
-  substituted).
+  `(S, P)` (x from `_unpack`, y from `scenario_values`, so predicted when the y_s
+  are substituted).
+  `replay(acquisition_problem, solution, u, at_trial) -> Replay(values, f, f_std)`
+  (ADR 0005): the problem with u fixed at each row of u, row `at_trial` the trial
+  point. Standard BO's objective is evaluated, mapped over u. Hybrid BO's optimizes
+  nothing: with u fixed, the problem's own constraints `nlp.g` are a square system in
+  the scenario states (the part of w after u; no equation links two scenarios, so
+  it is block diagonal), which `_replayed_states` solves with CasADi's Newton
+  `rootfinder`, mapped over the points of one ring at a time, rings one median
+  nearest-point spacing wide (in the start bounds of u) outwards from the trial
+  point, each point started from the nearest point solved in an earlier ring, the
+  trial point from the stored solution. A point is NaN if its residual exceeds
+  `_RESIDUAL_TOLERANCE` (1e-8; mapped calls report no per-instance success, so
+  Newton runs with `error_on_fail: False`) or a state is outside its bounds (solved
+  without bounds, then rejected: IPOPT could have found another root inside them;
+  and past a fold of the branch Newton stalls where IPOPT could jump to another
+  root, so a gap there is by design). With no states (M = 0, the GP substituted)
+  nothing is solved. Then `nlp.f` and `scenario_values`, each mapped over the solved
+  points. `_check_trial_point` warns with `ReplayWarning` (stack level: `replay`'s
+  caller) unless the trial point's value and states are the stored solution's
+  (`_REPLAY_RTOL` 1e-4, `_REPLAY_ATOL` 1e-6); pytest turns that warning into an
+  error (`pyproject.toml`), so a test that expects it uses `pytest.warns`.
 - `settings.py`: `StandardBOSettings` and `HybridBOSettings`, apart from `bo.py`
   because `run.py` imports them and `bo.py` imports `run.py`; `MethodSettings`, their
   union (`Run.settings`, the loop and the plots use it); `TYPES`, the types saving
@@ -290,6 +311,10 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   per unknown state, in the order of `system.y`, `hybrid_acquisition`; adds the
   scenarios to the run and to `error.run`). `_method_artifact` builds both methods'
   artifacts: the settings without the GP, and `gp`, the prior GP's repr.
+  `iteration_problem(run, problem, i)` rebuilds iteration i's acquisition problem
+  as the method built it (stored surrogate, the run's scenarios, the incumbent
+  before trial point i from `incumbents`, `run.settings`; `ValueError` for a
+  baseline), for the replay.
 - `plots.py`: static figures, no widgets and no `rng`. `convergence(study, ax)` and
   `regret(study, optimum, ax)` draw `evaluations` (median and IQR per method over
   evaluations, `_over_evaluations`).
@@ -308,30 +333,11 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   panel notes the stored and replayed value at the trial point. The GP is
   iteration i's stored fitted GP, for the GP panel and the replay alike; the rest of the replay comes from
   `run.settings` (its type says hybrid or standard BO; None draws the points only).
-  The artifact's settings text is never read back.
-  `_replay`: standard BO evaluates `standard_acquisition`'s NLP; hybrid BO rebuilds
-  `hybrid_acquisition` but optimizes nothing: with u fixed, each scenario's equations
-  are a square system (`_scenario_equations`: M equations in x, or M + P in (x, y)
-  with the unknown states as variables, the GP tie included; no equation links two
-  scenarios), which `_scenario_roots` solves with CasADi's Newton `rootfinder`,
-  mapped over the (point, scenario) pairs of one ring of points at a time, rings one
-  median nearest-point spacing wide outwards from the trial point, each point
-  started from the nearest point solved in an earlier ring, the trial point's ring
-  from the stored solution. A point is NaN if a pair's residual exceeds
-  `_RESIDUAL_TOLERANCE` (1e-8; mapped calls report no per-instance success, so
-  Newton runs with `error_on_fail: False`) or its root is outside a state's bounds
-  (solved without bounds, then rejected: IPOPT could have found another root inside
-  them; and past a fold of the branch Newton stalls where IPOPT could jump to
-  another root, so a gap there is by design). With M = 0 and the GP substituted
-  nothing is solved. The value is `nlp.f`
-  at the packed (u, x, y), mapped over the solved points, so it covers every
-  approximation. `_check_trial_point` warns with `ReplayWarning` unless the trial
-  point's states and value are the stored solution's (`_REPLAY_RTOL` 1e-4,
-  `_REPLAY_ATOL` 1e-6); pytest turns that warning into an error (`pyproject.toml`),
-  so a test that expects it uses `pytest.warns`. Then f per
-  scenario in one mapped call of `_scenario_objective`, and with linearization `s`
-  from `_sensitivity` (the scenarios
-  panel draws nominal f ± s, `_nominal_band`). Figures are drawn in `STYLE` (`hybrid_bo.mplstyle`).
+  The artifact's settings text is never read back. The panels replay the iteration
+  with `acquisition.replay(bo.iteration_problem(run, problem, i), ...)` and only
+  draw: plots imports no private name of `acquisition`. With linearization the
+  scenarios panel draws nominal f ± s (`_nominal_band`), else the scenarios' mean
+  and band. Figures are drawn in `STYLE` (`hybrid_bo.mplstyle`).
   matplotlib and Polars are imported inside the functions.
 - `errors.py`: `HybridBOError` (with `.history`, the points evaluated before the
   error, and `.run`, the partial run when raised in a method), `RootFindingError`,

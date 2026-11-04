@@ -7,34 +7,19 @@ Plots read finished runs, so a saved study is plotted without running it again (
 style, `STYLE`; use it elsewhere with `plt.style.use(hb.plots.STYLE)`.
 """
 
-import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import casadi as cas
 import numpy as np
 import scipy
 
-from hybrid_bo.acquisition import (
-    LCB,
-    AcquisitionProblem,
-    AcquisitionSolution,
-    Linearization,
-    Scenarios,
-    SoftSAA,
-    _pack,
-    _scenario_unknown_states,
-    _sensitivity,
-    _unpack,
-    hybrid_acquisition,
-    standard_acquisition,
-)
-from hybrid_bo.errors import ReplayWarning
+from hybrid_bo.acquisition import LCB, Linearization, SoftSAA, replay
+from hybrid_bo.bo import iteration_problem
 from hybrid_bo.evaluation import Measure, evaluate
-from hybrid_bo.gp import FittedGP, predict
+from hybrid_bo.gp import predict
 from hybrid_bo.history import n_iterations
-from hybrid_bo.problem import Problem, Symbolic, _h_inputs
+from hybrid_bo.problem import Problem
 from hybrid_bo.run import Run
 from hybrid_bo.sampling import _start_bounds
 from hybrid_bo.settings import HybridBOSettings, MethodSettings, StandardBOSettings
@@ -56,11 +41,6 @@ _DECADES = 2  # a panel of f spanning more decades than this has a log color sca
 _ZERO_EI_COLOR = "lightgray"
 _EI_DECADES = 10  # the EI color scale stops this many decades below the largest EI
 _CONFIDENCE = 0.9  # probability inside the confidence bands
-_RESIDUAL_TOLERANCE = 1e-8  # a replay's root solves each equation to this
-# The replay at the trial point is the stored solution to these, loose enough for
-# IPOPT's and Newton's tolerances, tight enough to tell another root
-_REPLAY_RTOL = 1e-4
-_REPLAY_ATOL = 1e-6
 
 
 def convergence(study: Study, ax: "Axes | None" = None) -> "Axes":
@@ -271,9 +251,13 @@ def _iteration_1d(
 
     # The replay the panels need
     panels = [panel for panel, on in shown.items() if on] or ["points"]
-    curve = f_scenarios = f_std = None
+    replayed = None
     if settings is not None and (shown["scenarios"] or shown["acquisition"]):
-        curve, f_scenarios, f_std = _replay(run, problem, i, settings, u[:, np.newaxis])
+        acquisition_problem = iteration_problem(run, problem, i)
+        at_trial = int(np.searchsorted(u, trial))
+        replayed = replay(
+            acquisition_problem, run.acquisitions[i], u[:, np.newaxis], at_trial
+        )
 
     import matplotlib.pyplot as plt
 
@@ -291,8 +275,8 @@ def _iteration_1d(
             # SoftSAA minimizes -log EI, which is steep far from the incumbent and
             # squashes the rest, so it is drawn as -EI like the other EI approximations
             if panel == "acquisition":
-                assert settings is not None and curve is not None
-                value = run.acquisitions[i].value
+                assert settings is not None and replayed is not None
+                curve, value = replayed.values, run.acquisitions[i].value
                 if _is_soft(settings):
                     curve, value = -np.exp(-curve), -np.exp(-value)
                 label = "LCB" if isinstance(settings.acquisition, LCB) else "-EI"
@@ -310,11 +294,12 @@ def _iteration_1d(
             if panel == "gp":
                 _band(ax, u, *predict(run.surrogates[i][0], u[:, None]))
             elif panel == "scenarios":
-                assert run.scenarios is not None and f_scenarios is not None
-                if f_std is None:
-                    _scenario_band(ax, u, f_scenarios, run.scenarios.w)
+                assert run.scenarios is not None and replayed is not None
+                assert replayed.f is not None and replayed.f_std is not None
+                if _is_linearized(settings):
+                    _nominal_band(ax, u, replayed.f[:, 0], replayed.f_std)
                 else:
-                    _nominal_band(ax, u, f_scenarios[:, 0], f_std)
+                    _scenario_band(ax, u, replayed.f, run.scenarios.w)
             if true is not None:
                 ax.plot(u, true, color="k", linestyle="--", label="true")
             _points(ax, history.u[:, 0], values, history.f, history.n_initial, n)
@@ -357,14 +342,10 @@ def _iteration_2d(
     y_true, f_true = _truth(problem, measure, grid)
 
     # The replay, from the trial point (the first row, split off after) over the grid
-    curve = f_scenarios = f_std = None
-    at_trial = np.nan
+    replayed = None
     if settings is not None and (shown["scenarios"] or shown["acquisition"]):
         u = np.vstack([history.u[n], grid])
-        curve, f_scenarios, f_std = _replay(run, problem, i, settings, u)
-        at_trial, curve = curve[0], curve[1:]
-        f_scenarios = None if f_scenarios is None else f_scenarios[1:]
-        f_std = None if f_std is None else f_std[1:]
+        replayed = replay(iteration_problem(run, problem, i), run.acquisitions[i], u, 0)
 
     # The row of y (hybrid BO's GP), oracle | GP mean | GP std
     rows: list[list[_Panel | None]] = []
@@ -390,20 +371,20 @@ def _iteration_2d(
         row[1] = _Panel("GP mean of f", mean, in_f_units=True)
         row[2] = _Panel("GP std of f", std, in_f_units=True)
     if shown["scenarios"]:
-        assert run.scenarios is not None and f_scenarios is not None
-        if f_std is None:
-            w = run.scenarios.w
-            mean = f_scenarios @ w
-            std = np.sqrt((f_scenarios - mean[:, np.newaxis]) ** 2 @ w)
-            row[1] = _Panel("mean f over scenarios", mean, in_f_units=True)
-            row[2] = _Panel("std f over scenarios", std, in_f_units=True)
-        else:
-            row[1] = _Panel("nominal f", f_scenarios[:, 0], in_f_units=True)
+        assert run.scenarios is not None and replayed is not None
+        assert replayed.f is not None and replayed.f_std is not None
+        f, f_std = replayed.f[1:], replayed.f_std[1:]
+        if _is_linearized(settings):
+            row[1] = _Panel("nominal f", f[:, 0], in_f_units=True)
             row[2] = _Panel("s, the std of f", f_std, in_f_units=True)
+        else:
+            mean = f @ run.scenarios.w
+            row[1] = _Panel("mean f over scenarios", mean, in_f_units=True)
+            row[2] = _Panel("std f over scenarios", f_std, in_f_units=True)
     if shown["acquisition"]:
-        assert settings is not None and curve is not None
-        stored = run.acquisitions[i].value
-        row[3] = _acquisition_panel(settings, curve, stored, at_trial)
+        assert settings is not None and replayed is not None
+        stored, at_trial = run.acquisitions[i].value, replayed.values[0]
+        row[3] = _acquisition_panel(settings, replayed.values[1:], stored, at_trial)
     rows.append(row)
 
     # Drop the empty rows and columns
@@ -566,260 +547,11 @@ def _is_soft(settings: MethodSettings) -> bool:
     )
 
 
-def _replay(
-    run: Run,
-    problem: Problem,
-    i: int,
-    settings: MethodSettings,
-    u: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray | None, np.ndarray | None]:
-    """Iteration i's acquisition function at each row of u (n_points, N), which holds
-    the trial point; for hybrid BO f under each scenario there (n_points, S), else
-    None; and with linearization the std s of f there (n_points,), else None. NaN
-    where a solve failed. See `iteration` for how hybrid BO's is solved."""
-    history, surrogate = run.history, run.surrogates[i]
-    n = history.n_initial + i
-    incumbent = float(history.f[:n].min())
-
-    # Standard BO: its analytic acquisition function
-    if isinstance(settings, StandardBOSettings):
-        nlp = standard_acquisition(
-            problem, surrogate[0], incumbent, settings.acquisition
-        ).nlp
-        values = np.array([nlp.f(_pack(point)).full().item() for point in u])
-        return values, None, None
-
-    # Hybrid BO: the scenarios' states at each u, root-found from the stored solution
-    assert run.scenarios is not None  # hybrid BO runs hold their scenarios
-    acquisition_problem = hybrid_acquisition(
-        problem,
-        surrogate,
-        run.scenarios,
-        incumbent,
-        settings.acquisition,
-        settings.approximation,
+def _is_linearized(settings: MethodSettings | None) -> bool:
+    """Whether the settings are hybrid BO's with linearization."""
+    return isinstance(settings, HybridBOSettings) and isinstance(
+        settings.approximation, Linearization
     )
-    solution = run.acquisitions[i]
-    assert solution.y is not None
-    at_trial = int(np.flatnonzero(np.all(u == history.u[n], axis=1))[0])
-    x, y, solved = _scenario_roots(
-        problem, surrogate, run.scenarios, acquisition_problem, u, at_trial, solution
-    )
-
-    # The acquisition problem's objective, and f under each scenario, in one call each
-    # over the solved points
-    values = np.full(len(u), np.nan)
-    f = np.full((len(u), len(run.scenarios.w)), np.nan)
-    f_std = np.full(len(u), np.nan)
-    sensitivity = None
-    if isinstance(settings.approximation, Linearization):
-        sensitivity = _sensitivity(problem, surrogate)
-    points = np.flatnonzero(solved)
-    y_solved = np.empty((0, *solution.y.shape))
-    if len(points) > 0:
-        w = [_pack(u[k], x[k], None if y is None else y[k]) for k in points]
-        nlp = acquisition_problem.nlp
-        values[points] = nlp.f.map(len(w))(np.column_stack(w)).full().ravel()
-        objective = _scenario_objective(
-            problem, surrogate, run.scenarios, y is not None
-        )
-        inputs = [u[points].T, np.hstack(list(x[points]))]
-        if y is not None:
-            inputs.append(np.hstack(list(y[points])))
-        f_solved, y_mapped = objective.map(len(w))(*inputs)
-        f[points] = f_solved.full().T
-        # Mapped outputs sit side by side, (S, n_points * P)
-        n_scenarios, n_y = solution.y.shape
-        y_solved = y_mapped.full().reshape(n_scenarios, len(w), n_y).transpose(1, 0, 2)
-
-    # The check: at the trial point, the stored solution's states and value
-    replayed = None
-    if solved[at_trial]:
-        y_trial = y_solved[np.searchsorted(points, at_trial)]
-        replayed = AcquisitionSolution(float(values[at_trial]), x[at_trial], y_trial)
-    _check_trial_point(replayed, solution)
-    if sensitivity is None:
-        return values, f, None
-
-    # Linearization's std of f, from the sensitivity at the nominal states
-    for j, k in enumerate(points):
-        f_std[k] = np.linalg.norm(sensitivity(x[k, 0], y_solved[j, 0], u[k]).full())
-    return values, f, f_std
-
-
-def _scenario_equations(
-    problem: Problem, fitted: tuple[FittedGP, ...], unknown_states_as_variables: bool
-) -> cas.Function:
-    """One scenario's equations with u fixed, a square system in its states v: a
-    function of columns v, u (N, 1) and the scenario's draw z (P, 1) to the residual.
-    With the unknown states substituted, v = x and the residual is
-    g(x, mean + std * z, u) (M); as variables, v = (x, y) and it is g(x, y, u) and
-    y - mean - std * z (M + P), with mean and std the GPs' at the scenario's arguments
-    of h, from `fitted`, one fitted GP per unknown state."""
-    system = problem.system
-    x = Symbolic.sym("x", system.n_x)
-    u = Symbolic.sym("u", system.n_u)
-    z = Symbolic.sym("z", system.n_y)
-    inputs = cas.horzcat(*_h_inputs(system, u.T, x.T))
-    means, stds = zip(*(predict(gp, inputs) for gp in fitted), strict=True)
-    predicted = cas.vertcat(*means) + cas.vertcat(*stds) * z
-    if not unknown_states_as_variables:
-        residual = system.g(x, predicted, u)
-        return cas.Function("scenario_equations", [x, u, z], [residual])
-    y = Symbolic.sym("y", system.n_y)
-    residual = cas.vertcat(system.g(x, y, u), y - predicted)
-    return cas.Function("scenario_equations", [cas.vertcat(x, y), u, z], [residual])
-
-
-def _scenario_roots(
-    problem: Problem,
-    fitted: tuple[FittedGP, ...],
-    scenarios: Scenarios,
-    acquisition_problem: AcquisitionProblem,
-    u: np.ndarray,
-    at_trial: int,
-    solution: AcquisitionSolution,
-) -> tuple[np.ndarray, np.ndarray | None, np.ndarray]:
-    """The scenario states at each row of u (n_points, N): x (n_points, S, M), y
-    (n_points, S, P) (None unless they are variables), and whether each point was
-    solved (n_points,). With u fixed, each scenario's equations are a square system
-    (`_scenario_equations`), solved by Newton's method, mapped over the (point,
-    scenario) pairs of a ring of points around row `at_trial`, the trial point.
-
-    The rings go outwards from the trial point, one grid spacing wide (in units of the
-    start bounds), each point started from the nearest point solved in an earlier ring,
-    the trial point's ring from the stored solution. That follows the branch the
-    optimizer chose. A pair fails, and so its point, if Newton's residual is above
-    `_RESIDUAL_TOLERANCE` or the root is outside a state's bounds (y's only when they
-    are variables, as in the acquisition problem). Where the equations have several
-    roots this can leave gaps IPOPT wouldn't: it stays within the bounds, so it could
-    find a root inside them where Newton found one outside, and past a fold, where
-    the branch ends, it could jump to another branch where Newton stalls.
-    """
-    # The unknowns of each pair, their bounds, and the stored solution as a start
-    assert solution.x is not None and solution.y is not None
-    system = problem.system
-    as_variables = acquisition_problem.unknown_states_as_variables
-    n_scenarios, n_x = len(scenarios.w), system.n_x
-    nlp = acquisition_problem.nlp
-    _, x_lower, y_lower = _unpack(acquisition_problem, nlp.lower)
-    _, x_upper, y_upper = _unpack(acquisition_problem, nlp.upper)
-    v_lower, v_upper, stored = x_lower, x_upper, solution.x
-    if as_variables:
-        assert y_lower is not None and y_upper is not None
-        v_lower, v_upper = np.hstack([x_lower, y_lower]), np.hstack([x_upper, y_upper])
-        stored = np.hstack([solution.x, solution.y])
-    roots = np.full((len(u), n_scenarios, v_lower.shape[1]), np.nan)
-    roots[at_trial] = stored
-    solved = np.zeros(len(u), dtype=bool)
-
-    # With no unknowns (no mechanistic states, the GP substituted) nothing is solved
-    if roots.shape[2] == 0:
-        return roots, None, ~solved
-
-    # The equations and Newton's method on them; a mapped call reports no success per
-    # instance, so failures are found from the residual
-    equations = _scenario_equations(problem, fitted, as_variables)
-    newton = cas.rootfinder("replay", "newton", equations, {"error_on_fail": False})
-
-    # The rings: the distance from the trial point in units of the median distance
-    # between nearest points (1 if that is 0 or there is one point)
-    lower, upper = _start_bounds(system.u)
-    scaled = (u - lower) / (upper - lower)
-    distances = np.linalg.norm(scaled[:, np.newaxis] - scaled[np.newaxis], axis=2)
-    np.fill_diagonal(distances, np.inf)
-    spacing = float(np.median(distances.min(axis=1)))
-    spacing = spacing if 0 < spacing < np.inf else 1.0
-    from_trial = np.linalg.norm(scaled - scaled[at_trial], axis=1)
-    ring = np.floor(from_trial / spacing).astype(int)
-
-    # Solve ring by ring, every pair of a ring in one call
-    has_start = np.zeros(len(u), dtype=bool)
-    has_start[at_trial] = True
-    for r in np.unique(ring):
-        points = np.flatnonzero(ring == r)
-        known = np.flatnonzero(has_start)
-        nearest = known[np.argmin(distances[np.ix_(points, known)], axis=1)]
-        nearest[points == at_trial] = at_trial
-        n_pairs = len(points) * n_scenarios
-        start = roots[nearest].reshape(n_pairs, -1).T
-        u_pairs = np.repeat(u[points], n_scenarios, axis=0).T
-        z_pairs = np.tile(scenarios.z, (len(points), 1)).T
-        v = newton.map(n_pairs)(start, u_pairs, z_pairs).full()
-        residual = equations.map(n_pairs)(v, u_pairs, z_pairs).full()
-
-        # A point is solved if every scenario converged within the bounds
-        v = v.T.reshape(len(points), n_scenarios, -1)
-        residual = np.abs(residual.T).reshape(len(points), n_scenarios, -1)
-        converged = np.all(residual <= _RESIDUAL_TOLERANCE, axis=(1, 2))
-        inside = np.all((v >= v_lower) & (v <= v_upper), axis=(1, 2))
-        ring_solved = points[converged & inside]
-        roots[ring_solved] = v[converged & inside]
-        solved[ring_solved] = has_start[ring_solved] = True
-
-    # The roots of the points not solved are no roots
-    roots[~solved] = np.nan
-    return roots[:, :, :n_x], roots[:, :, n_x:] if as_variables else None, solved
-
-
-def _check_trial_point(
-    replayed: AcquisitionSolution | None, solution: AcquisitionSolution
-) -> None:
-    """Warns with `ReplayWarning` unless the replay at the trial point (None if it
-    wasn't solved), its acquisition value and scenario states, is the stored
-    solution, to `_REPLAY_RTOL` relative and `_REPLAY_ATOL` absolute. The stack
-    level points the warning at the caller of `iteration`."""
-    if replayed is None:
-        msg = (
-            "The replay found no root at the trial point, so the acquisition panel "
-            "may not show the function the run optimized"
-        )
-        warnings.warn(msg, ReplayWarning, stacklevel=5)
-        return
-
-    # The value and the states as one vector each, compared entry by entry
-    def entries(acquisition: AcquisitionSolution) -> np.ndarray:
-        """The value, x and y of a solution in one vector."""
-        assert acquisition.x is not None and acquisition.y is not None
-        parts = (acquisition.value, acquisition.x, acquisition.y)
-        return np.concatenate([np.ravel(part) for part in parts])
-
-    replayed_entries, stored_entries = entries(replayed), entries(solution)
-    if not np.allclose(
-        replayed_entries, stored_entries, rtol=_REPLAY_RTOL, atol=_REPLAY_ATOL
-    ):
-        msg = (
-            f"The replay's acquisition value at the trial point is {replayed.value:.6g}, "
-            f"stored {solution.value:.6g}, or its states differ: the root-finder left "
-            "the branch the optimizer chose, so the acquisition panel may not show "
-            "the function the run optimized"
-        )
-        warnings.warn(msg, ReplayWarning, stacklevel=5)
-
-
-def _scenario_objective(
-    problem: Problem,
-    fitted: tuple[FittedGP, ...],
-    scenarios: Scenarios,
-    unknown_states_as_variables: bool,
-) -> cas.Function:
-    """f under each scenario of a hybrid acquisition problem, and the scenario unknown
-    states, as a function of u (N, 1), x (S, M) and, if they are variables, y (S, P)
-    to f (S, 1) and y (S, P); otherwise y is the GPs' scenario prediction, from
-    `fitted`, one fitted GP per unknown state."""
-    system = problem.system
-    u = Symbolic.sym("u", system.n_u, 1)
-    x = Symbolic.sym("x", len(scenarios.w), len(system.x))
-    inputs = [u, x]
-    if unknown_states_as_variables:
-        y = Symbolic.sym("y", len(scenarios.w), len(system.y))
-        inputs.append(y)
-    else:
-        y = _scenario_unknown_states(system, fitted, scenarios, u, x)
-    f = cas.vertcat(
-        *(problem.f(x[s, :].T, y[s, :].T, u) for s in range(len(scenarios.w)))
-    )
-    return cas.Function("scenario_objective", inputs, [f, y])
 
 
 def _figure_legend(figure: "Figure", axes: list["Axes"]) -> None:
