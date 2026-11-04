@@ -22,7 +22,7 @@ def data_of(problem: hb.Problem, measure: hb.Measure, n: int) -> hb.History:
 
 def test_a_gp_of_the_unknown_equation_gives_the_oracle_optimum():
     """With enough data the GP reproduces y = sin(u), so the nominal optimum of the
-    illustrative example is its oracle optimum, at u = -0.45."""
+    illustrative example is `hb.oracle_optimum`, at u = -0.45."""
     # A surrogate model fitted to plain arrays, as data from outside a run would be
     data = data_of(ex.problem, ex.measure, 30)
     rng = np.random.default_rng(1)
@@ -32,13 +32,12 @@ def test_a_gp_of_the_unknown_equation_gives_the_oracle_optimum():
 
     solution = hb.nominal_optimum(ex.problem, fitted, rng, n_starts=30)
 
-    np.testing.assert_allclose(solution.f, ex.optimum, rtol=1e-4)
+    optimum = hb.oracle_optimum(ex.problem, ex.oracle, rng, n_starts=30)
+    np.testing.assert_allclose(solution.f, optimum, rtol=1e-4)
     np.testing.assert_allclose(solution.u, [-0.45], atol=5e-3)
 
 
-# `parametrize` runs the test once per entry, with the entry as the argument
-@pytest.mark.parametrize("unknown_states_as_variables", [True, False])
-def test_the_solution_solves_the_hybrid_model(unknown_states_as_variables):
+def test_the_solution_solves_the_hybrid_model():
     """The solution satisfies g = 0 and its y is the GP's mean there, also with few
     data, where the mean is not the oracle."""
     # A GP of six points
@@ -48,12 +47,7 @@ def test_the_solution_solves_the_hybrid_model(unknown_states_as_variables):
         ex.system, u=data.u, x=data.x, y=data.y, gp=ex.gp, rng=rng
     )
 
-    solution = hb.nominal_optimum(
-        ex.problem,
-        fitted,
-        rng,
-        unknown_states_as_variables=unknown_states_as_variables,
-    )
+    solution = hb.nominal_optimum(ex.problem, fitted, rng)
 
     # The known equation, the tie to the mean, and f at those states
     mean, _ = predict(fitted[0], solution.u[np.newaxis])
@@ -64,7 +58,60 @@ def test_the_solution_solves_the_hybrid_model(unknown_states_as_variables):
     np.testing.assert_allclose(solution.f, objective.item(), rtol=1e-9)
 
 
-def test_it_works_with_no_known_equations():
+def test_the_solution_stays_within_the_bounds_of_the_unknown_states():
+    """With y = sin(u) bounded by 0.2, f = (y - 0.5)^2 is lowest at the bound, not at
+    y = 0.5."""
+    u_var, y_var = hb.Var("u", -2.0, 2.0), hb.Var("y", -0.2, 0.2)
+    system = hb.System(u=[u_var], y=[y_var], h_inputs=[u_var], measured=[y_var])
+    problem = hb.Problem(system, f=lambda v: (v.y - 0.5) ** 2)
+    u = np.linspace(-2.0, 2.0, 25)[:, np.newaxis]
+
+    rng = np.random.default_rng(0)
+    fitted = hb.fit_surrogate(system, u=u, y=np.sin(u), gp=ex.gp, rng=rng)
+    solution = hb.nominal_optimum(problem, fitted, rng)
+
+    np.testing.assert_allclose(solution.y, [0.2], atol=1e-6)
+
+
+def test_x_may_be_left_out_when_h_does_not_take_it():
+    """The illustrative example's h takes u alone, so its surrogate model needs no x
+    and fits as it does with x."""
+    data = data_of(ex.problem, ex.measure, 6)
+
+    without = hb.fit_surrogate(
+        ex.system, u=data.u, y=data.y, gp=ex.gp, rng=np.random.default_rng(1)
+    )
+    given = hb.fit_surrogate(
+        ex.system, u=data.u, x=data.x, y=data.y, gp=ex.gp, rng=np.random.default_rng(1)
+    )
+
+    point = np.array([[0.3]])
+    np.testing.assert_array_equal(
+        predict(without[0], point)[0], predict(given[0], point)[0]
+    )
+
+
+def test_x_is_needed_when_h_takes_it():
+    """With a mechanistic state among the arguments of h, leaving out x raises
+    `ValueError`."""
+    u, x = hb.Var("u", -2.0, 2.0), hb.Var("x", -2.0, 2.0)
+    y = hb.Var("y", -2.0, 2.0)
+    system = hb.System(
+        u=[u], x=[x], y=[y], g=lambda v: [v.x - v.y], h_inputs=[u, x], measured=[y]
+    )
+
+    # `raises` passes only if the block raises that exception
+    with pytest.raises(ValueError, match="need x"):
+        hb.fit_surrogate(
+            system,
+            u=np.zeros((4, 1)),
+            y=np.zeros((4, 1)),
+            gp=ex.gp,
+            rng=np.random.default_rng(0),
+        )
+
+
+def test_nominal_optimum_works_with_no_known_equations():
     """With M = 0 the training data have no x, and f(y, u) = (y - 0.5)^2 with
     y = sin(u) is lowest at u = pi / 6."""
     # Plain arrays, as measured outside the library
@@ -82,7 +129,7 @@ def test_it_works_with_no_known_equations():
     np.testing.assert_allclose(solution.y, [0.5], atol=1e-4)
 
 
-def test_it_works_with_two_unknown_states():
+def test_nominal_optimum_works_with_two_unknown_states():
     """With P = 2 there is one GP per unknown state, in the order of y: with
     x + exp(x) = y1 + y2 and f = x^2 + (y1 - y2)^2, f is 0 at x = 0, y1 = y2 = 0.5."""
     # The system, and training data of y1 = sin(u1), y2 = cos(u2)
@@ -118,19 +165,18 @@ def test_it_works_with_two_unknown_states():
     np.testing.assert_allclose(solution.x, [0.0], atol=5e-3)
 
 
+# `parametrize` runs the test once per entry, with the entry as the argument
 @pytest.mark.parametrize(
     "data",
     [
         {"u": np.zeros((4, 1)), "x": np.zeros((4, 1)), "y": np.zeros(4)},
         {"u": np.zeros((4, 1)), "x": np.zeros((3, 1)), "y": np.zeros((4, 1))},
         {"u": np.zeros((4, 2)), "x": np.zeros((4, 1)), "y": np.zeros((4, 1))},
-        {"u": np.zeros((4, 1)), "y": np.zeros((4, 1))},
     ],
-    ids=["y is flat", "fewer x", "too many u", "x left out with M = 1"],
+    ids=["y is flat", "fewer x", "too many u"],
 )
 def test_fit_surrogate_rejects_training_data_of_the_wrong_shape(data):
     """Training data need a row per point and a column per variable."""
-    # `raises` passes only if the block raises that exception
     with pytest.raises(ValueError, match="training data"):
         hb.fit_surrogate(ex.system, gp=ex.gp, rng=np.random.default_rng(0), **data)
 

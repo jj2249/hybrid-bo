@@ -146,7 +146,7 @@ def scenario_problem(
     scenarios: Scenarios,
     objective: ScenarioObjective,
     unknown_states_as_variables: bool,
-    name: str,
+    objective_name: str,
 ) -> ScenarioProblem:
     """The hybrid model over the scenarios, minimizing `objective`.
 
@@ -160,10 +160,10 @@ def scenario_problem(
     them.
 
     The variables are u, the x_s and, if variables, the y_s, in `_pack`'s order. Each
-    variable is boxed by its bounds and started within its start bounds. `name` names
-    the objective's function, which the solver's log and warnings give. Raises
-    `ValueError` for scenarios or fitted GPs without one column or one GP per unknown
-    state.
+    variable is boxed by its bounds and started within its start bounds; substituted
+    unknown states are no variables, so they have no bounds. `objective_name` names the
+    objective's function, which the solver's log and warnings give. Raises `ValueError`
+    for scenarios or fitted GPs without one column or one GP per unknown state.
     """
     # The checks, and the symbols for u and each scenario's mechanistic states
     system = problem.system
@@ -211,7 +211,7 @@ def scenario_problem(
 
     w = _pack(u, x, y if unknown_states_as_variables else None)
     nlp = NLP(
-        cas.Function(name, [w], [minimized]),
+        cas.Function(objective_name, [w], [minimized]),
         np.array([var.lower for var in variables]),
         np.array([var.upper for var in variables]),
         cas.Function("g", [w], [cas.vertcat(*constraints)]),
@@ -274,12 +274,20 @@ def fit_surrogate(
     `system.y`.
 
     The training data are rows of points, u (n, N), x (n, M) and y (n, P), from any
-    source; `x` may be left out if M = 0. Each GP is fitted by `fit_gp` from `n_starts`
-    starts. Raises `ValueError` if a shape is wrong.
+    source; `x` may be left out unless h takes a mechanistic state. Each GP is fitted by
+    `fit_gp` from `n_starts` starts. Raises `ValueError` if a shape is wrong or `x` is
+    needed and left out.
     """
-    # The training data, one row per point
+    # The training data, one row per point; h never reads a left-out x
     u, y = np.asarray(u, dtype=float), np.asarray(y, dtype=float)
-    x = np.empty((len(u), 0)) if x is None else np.asarray(x, dtype=float)
+    if x is None and any(var in system.x for var in system.h_inputs):
+        msg = "The training data need x: h takes a mechanistic state"
+        raise ValueError(msg)
+    x = (
+        np.full((len(u), system.n_x), np.nan)
+        if x is None
+        else np.asarray(x, dtype=float)
+    )
     columns = (("u", u, system.n_u), ("x", x, system.n_x), ("y", y, system.n_y))
     for name, values, n_columns in columns:
         if values.shape != (len(u), n_columns):
@@ -312,7 +320,6 @@ def nominal_optimum(
     *,
     n_starts: int = 10,
     solver: Ipopt = Ipopt(),  # noqa: B008  (frozen, never mutated)
-    unknown_states_as_variables: bool = True,
 ) -> NominalOptimum:
     """The nominal optimum: the lowest objective the hybrid model allows with the GPs
     replaced by their mean, min f(x, y, u) subject to g(x, y, u) = 0 and y = the GPs'
@@ -324,17 +331,17 @@ def nominal_optimum(
     their training data, and the optimum can sit where the model only extrapolates.
 
     Solved by `multistart` from `n_starts` Latin hypercube starts over the start bounds
-    of the variables, so it is the best local optimum found.
-    `unknown_states_as_variables` means what it means for `hb.SAA`. Raises `ValueError`
-    unless `fitted` has one GP per unknown state, and `NoSolutionError` if every start
-    fails.
+    of the variables, so it is the best local optimum found: raise `n_starts` if the
+    objective has several. The unknown states are variables, so their bounds hold.
+    Raises `ValueError` unless `fitted` has one GP per unknown state, and
+    `NoSolutionError` if every start fails.
     """
     nominal = scenario_problem(
         problem,
         fitted,
         nominal_scenario(problem.system.n_y),
         lambda f, _x, _y, _u: (f, Symbolic(0)),  # one scenario: f has no spread
-        unknown_states_as_variables,
+        True,
         "nominal_optimum",
     )
     solution = solve_scenario_problem(nominal, n_starts, rng, solver)

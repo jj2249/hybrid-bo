@@ -10,7 +10,7 @@
 - `hb.nominal_optimum` optimizes the hybrid model with the GPs replaced by their mean, with
   no Bayesian optimization, and `hb.fit_surrogate` fits the GPs to data of your own (#197).
 - **Breaking:** Hybrid BO is built on a new core, `hb.hybrid_model` (#197):
-  `hb.acquisition.Scenarios` and `nominal_scenario` moved there. Results don't change.
+  `hb.acquisition.nominal_scenario` moved there, with `Scenarios`. Results don't change.
 
 ## 0.6.0 (2026-11-04)
 

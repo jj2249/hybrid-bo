@@ -83,8 +83,8 @@ the hybrid model once with each GP replaced by its mean:
 ```python
 gp = hb.gp.GP(mean=hb.gp.Zero(), kernel=hb.gp.Matern52(), noise_std=0.0)
 rng = np.random.default_rng(0)
-fitted = hb.fit_surrogate(system, u=u, x=x, y=y, gp=gp, rng=rng)  # a row per point
-solution = hb.nominal_optimum(problem, fitted, rng)
+fitted = hb.fit_surrogate(system, u=u, y=y, gp=gp, rng=rng)  # a row per point
+solution = hb.nominal_optimum(problem, fitted, rng, n_starts=30)
 print(solution.u, solution.f)
 ```
 

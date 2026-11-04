@@ -20,7 +20,7 @@ code uses GLOSSARY.md's terms; use them in PRs, tests and comments too.
   variables and adds `rng.normal(0, noise_std)` (drawn also when `noise_std` is 0).
   The library then always solves the **root-finding problem**: `g` for the unmeasured
   states given `u` and the measured variables.
-- **Hybrid BO** (`bo.py`, `acquisition.py`): the unknown equations are never used in
+- **Hybrid BO** (`bo.py`, `acquisition.py`, `hybrid_model.py`): the unknown equations are never used in
   the acquisition problem. The surrogate model is one independent GP per unknown state
   (any P >= 1), each mapping the `h_inputs` columns of `(u, x)` to its column of `y`,
   all from the one prior GP in the settings and trained on the evaluated points.
@@ -180,12 +180,12 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   baselines depend on.
 - `hybrid_model.py`: the core under hybrid BO (#197; `acquisition.py` imports it, never
   the reverse). `scenario_problem(problem, fitted, scenarios, objective,
-  unknown_states_as_variables, name)` builds the hybrid model over the scenarios
+  unknown_states_as_variables, objective_name)` builds the hybrid model over the scenarios
   (variables `u`, then `vec` of the `(S, M)` x copies, then of the `(S, P)` y copies if
   variables; bounds and start bounds from each `Var`, repeated per scenario; `g` per
   scenario, followed by its GP tie). `objective` is `(f (S, 1), x, y, u) -> (objective,
-  std of f)`, in CasADi expressions; `name` names the NLP's objective function, which the
-  solver's logs give. It returns a `ScenarioProblem` (`nlp`,
+  std of f)`, in CasADi expressions; `objective_name` names the NLP's objective function,
+  which the solver's logs give. It returns a `ScenarioProblem` (`nlp`,
   `start_bounds`, and the variable order: `n_u`, `n_x`, `n_scenarios`,
   `unknown_states_as_variables`; the defaults are those of a problem over u alone,
   `w = u`; over scenarios it also has `scenario_values`,
@@ -199,11 +199,12 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `_scenario_unknown_states` is the one GP scenario prediction
   (`mean_j + std_j * z_sj` per unknown state j), symbolic.
   `fit_surrogate(system, *, u, y, gp, rng, x=None, n_starts, solver)` takes plain arrays
-  (`ValueError` on a wrong shape; `x` may be left out if M = 0) and fits one GP
-  `h_inputs -> y_j` per unknown state, in the order of `system.y`. It doesn't solve the
-  root-finding problem. `nominal_optimum(problem, fitted, rng, *, n_starts, solver,
-  unknown_states_as_variables)` is the nominal scenario minimizing `f`, solved once, a
-  `NominalOptimum(u, x, y, f)` of points `(N,)`, `(M,)`, `(P,)`; no run, no artifact.
+  (`ValueError` on a wrong shape; `x` may be left out unless `h_inputs` holds a
+  mechanistic state) and fits one GP `h_inputs -> y_j` per unknown state, in the order of
+  `system.y`. It doesn't solve the root-finding problem. `nominal_optimum(problem, fitted,
+  rng, *, n_starts, solver)` is the nominal scenario minimizing `f`, solved once, with the
+  unknown states as variables so their bounds hold, a `NominalOptimum(u, x, y, f)` of
+  points `(N,)`, `(M,)`, `(P,)`; no run, no artifact.
 - `acquisition.py`: `EI`, `LCB(std_factor)` and `standard_acquisition` (analytic EI
   or LCB over `u`). Both builders return an `AcquisitionProblem`, an alias of
   `ScenarioProblem` (standard BO's has `w = u`; in hybrid BO's `scenario_values`, the

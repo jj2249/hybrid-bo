@@ -287,13 +287,15 @@ hybrid model once with each GP replaced by its mean:
 .. code-block:: python
 
    rng = np.random.default_rng(0)
-   fitted = hb.fit_surrogate(system, u=u, x=x, y=y, gp=gp, rng=rng)
+   fitted = hb.fit_surrogate(system, u=u, y=y, gp=gp, rng=rng)
    solution = hb.nominal_optimum(problem, fitted, rng, n_starts=30)
    print(solution.u, solution.x, solution.y, solution.f)
 
-The training data have a row per point: ``u`` of shape ``(n, N)``, ``x`` ``(n, M)`` and
-``y`` ``(n, P)``. They hold every state, as nothing solves the root-finding problem here,
-and without known equations you leave out ``x``.
+The training data have a row per point: ``u`` of shape ``(n, N)`` and ``y`` ``(n, P)``.
+If the unknown equations take mechanistic states, pass ``x`` of shape ``(n, M)`` too.
+Nothing solves the root-finding problem here, so ``y`` holds every unknown state, measured
+or not. The search is local from each start, so raise ``n_starts`` if ``f`` has several
+minima.
 
 .. warning::
 

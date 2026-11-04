@@ -307,9 +307,12 @@ def hybrid_acquisition(
         version's -log, or Lin-EI at the nominal scenario (the last two EI only, as
         checked); and the std of f, the weighted std over the scenarios, or Lin-EI's s.
         """
+        # The weighted mean and std over the scenarios
         weights = Symbolic(scenarios.w)
         f_mean = weights.T @ f
         f_std = cas.sqrt(weights.T @ (f - f_mean) ** 2)
+
+        # What each approximation minimizes
         match approximation:
             case Linearization():
                 a = _sensitivity(problem, fitted)(x[0, :].T, y[0, :].T, u)

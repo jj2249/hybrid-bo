@@ -260,8 +260,8 @@ _Avoid_: smoothing, beta
 
 **Scenario**:
 One realization of the GP's prediction of the unknown states, with its own mechanistic
-states, in hybrid BO's acquisition problem: many drawn ones for the sample-average
-approximation, the nominal scenario alone for linearization.
+states, in a scenario problem: many drawn ones for the sample-average approximation, the
+nominal scenario alone for linearization and the nominal optimum.
 _Avoid_: GP sample, posterior sample, sample
 
 **Scenario draws** (`z`, one per scenario):
@@ -270,7 +270,8 @@ and the same in every iteration's acquisition problem.
 _Avoid_: xi, gaussian_standard_samples
 
 **Scenario weights** (`w`, one per scenario):
-The weight of each scenario in the acquisition function's average; `1/S` for SAA.
+The weight of each scenario in an average over the scenarios, such as the acquisition
+function's; `1/S` for SAA.
 
 **Scenario problem** (`scenario_problem`):
 The hybrid model as an optimization problem: given scenarios, each with its own states

@@ -506,20 +506,14 @@ def scenario_problem(
     scenarios,
     objective,  # (f, x, y, u) expressions -> (objective, std of f)
     unknown_states_as_variables,
-    name,
+    objective_name,
 ) -> ScenarioProblem: ...
 def solve_scenario_problem(problem, n_starts, rng, solver) -> ScenarioSolution: ...
 def fit_surrogate(
     system, *, u, y, gp, rng, x=None, n_starts=10, solver=Ipopt()
 ) -> tuple[FittedGP, ...]: ...
 def nominal_optimum(
-    problem,
-    fitted,
-    rng,
-    *,
-    n_starts=10,
-    solver=Ipopt(),
-    unknown_states_as_variables=True,
+    problem, fitted, rng, *, n_starts=10, solver=Ipopt()
 ) -> NominalOptimum: ...  # u, x, y, f
 ```
 
@@ -538,16 +532,18 @@ def nominal_optimum(
   evaluate. `acquisition.py` imports `hybrid_model.py`, never the reverse. The objective
   is a function because it is built from the problem's own symbols. It also states the
   std of `f` that `scenario_values` reports, which is 0 for the nominal optimum.
-- **`AcquisitionProblem` is `ScenarioProblem`.** An acquisition problem is a scenario
-  problem whose objective is an acquisition function; the alias keeps that name where
-  it is the one meant.
+- **`AcquisitionProblem` is an alias of `ScenarioProblem`.** Hybrid BO's acquisition
+  problem is a scenario problem whose objective is an acquisition function. Standard
+  BO's is no scenario problem, having no hybrid model, but needs the same fields with
+  no scenarios (`w` is `u`), so it shares the type.
 - **`fit_surrogate` takes arrays, not a `History`.** Data that never came from a run has
-  no `f` or `n_initial`, and the fit reads none of them. It takes `u`, `x` and `y`, and
-  `hybrid_bo` passes the history's. It doesn't solve the root-finding problem: without
-  a measurement the caller gives every state.
+  no `f` or `n_initial`, and the fit reads none of them. It takes `u`, `y` and, if h
+  takes a mechanistic state, `x`; `hybrid_bo` passes the history's. It doesn't solve the
+  root-finding problem: without a measurement the caller gives those states.
 - **`nominal_optimum` is not a method.** It measures nothing, so it has no run, no
   artifact and no settings, only a solution. It has no uncertainty in it, so it trusts
-  the GP's mean even far from the data.
+  the GP's mean even far from the data. Its unknown states are always variables, since
+  substituting them would drop their bounds.
 
 ### Acquisition (`acquisition.py`)
 
@@ -604,8 +600,8 @@ def standard_acquisition(
 Each returns an `AcquisitionProblem`: the NLP, its start bounds and the order of its
 decision vector `w`.
 
-- **The acquisition problem owns its variable order.** `_pack` and `_unpack` are the
-  only code that knows it; the trial point, the scenario states read back from a
+- **The problem owns its variable order.** `_pack` and `_unpack` (in `hybrid_model.py`)
+  are the only code that knows it; the trial point, the scenario states read back from a
   solution, the replay and the tests all go through them (or through the problem's
   own functions of w), so changing the order breaks nothing silently.
 - **The acquisition problem says what it computed.** Besides the objective and the
@@ -652,7 +648,7 @@ decision vector `w`.
   mechanistic state, as in the illustrative example, the order matches legacy, so the
   Latin hypercube starts and the baseline are the same.
 - The scenarios' unknown states, mean + std * z_s, are computed in one place
-  (`_scenario_unknown_states`), symbolically for the scenario constraint and
+  (`_scenario_unknown_states`, in `hybrid_model.py`), symbolically for the scenario constraint and
   numerically when the `y_s` are substituted and read back.
 - Hybrid BO only needs "mean and std of `y` at given inputs" from the surrogate, through
   `predict`, so other surrogates or hyperparameter samples can be paired with scenarios

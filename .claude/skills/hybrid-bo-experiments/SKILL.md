@@ -69,9 +69,10 @@ if a run evaluates a point whose oracle objective is below it.
 ## Data without a measurement
 
 For data the user already has, a script needs no `measure` and no method:
-`fitted = hb.fit_surrogate(system, u=u, x=x, y=y, gp=gp, rng=rng)`, then
-`hb.nominal_optimum(problem, fitted, rng)` gives `u`, `x`, `y`, `f`. The data hold every
-state, a row per point. It trusts the GP's mean far from the data, so check the solution.
+`fitted = hb.fit_surrogate(system, u=u, y=y, gp=gp, rng=rng)`, then
+`hb.nominal_optimum(problem, fitted, rng)` gives `u`, `x`, `y`, `f`. The data have a row
+per point, and `x` may be left out unless `h_inputs` holds a mechanistic state. It trusts
+the GP's mean far from the data, so check the solution.
 
 ## Pitfalls
 
