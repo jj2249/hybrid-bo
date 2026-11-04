@@ -70,8 +70,9 @@ A study
    runs/<module>/<code>/<label>/   each run in full, as seed-<seed>.json
 
 The report has Benchopt's plots and two of ours, ``regret`` (the median regret of each
-method over the evaluations, with its interquartile range; lower is better) and ``summary``: each method's runs,
-complete runs and the quartiles of the final regret. **Check the runs in ``summary``.**
+method over the evaluations, with its interquartile range; lower is better) and
+``summary``: each method's runs, complete runs, the quartiles of the final regret and
+the runs below the stated oracle optimum, whose regret is wrong. **Check the runs in ``summary``.**
 A run that stops with a ``HybridBOError`` counts as incomplete, and one that fails with
 any other exception prints a traceback and is missing from the results, without
 changing the exit code.
@@ -90,7 +91,8 @@ Each row names its method (``solver_name``, ``p_solver_label``), its run (``idx_
 and its experiment (``p_dataset_module``). Its scores are ``objective_evaluation``,
 ``objective_incumbent`` (the lowest ``f`` measured so far), ``objective_value`` (the
 oracle incumbent: the objective without noise at that point), ``objective_regret`` (how
-far that is above the oracle optimum) and ``objective_complete``.
+far that is above the oracle optimum), ``objective_complete`` and
+``objective_below_optimum``.
 
 ``p_dataset_code`` is a hash of the experiments and the library, which names the
 folder of the saved runs, so results say which code produced them.

@@ -8,8 +8,8 @@ import hybrid_bo as hb
 
 
 class Objective(BaseObjective):
-    """Reports each evaluation's incumbents and regret, and whether the run spent its
-    budget. A run is one call of a method, so Benchopt calls it once (`run_once`)."""
+    """Reports each evaluation's incumbents and regret, whether the run spent its budget
+    and whether it went below the stated optimum. A run is one call of a method, so Benchopt calls it once (`run_once`)."""
 
     name = "hybrid-bo"
     sampling_strategy = "run_once"
@@ -32,6 +32,8 @@ class Objective(BaseObjective):
         incumbents = hb.incumbents(history)
         complete = float(len(incumbents) == result["budget"])
         optimum = self.data["experiment"].optimum
+        # In the rows too: a cached run isn't scored again, so it can't warn again
+        below_optimum = float(hb.check_oracle_optimum(history, optimum))
         return [
             {
                 "value": float(oracle[i]),
@@ -39,6 +41,7 @@ class Objective(BaseObjective):
                 "incumbent": float(incumbents[i]),
                 "regret": float(oracle[i] - optimum),
                 "complete": complete,
+                "below_optimum": below_optimum,
             }
             for i in range(len(incumbents))
         ]

@@ -25,7 +25,9 @@ def results(rows: list[tuple[str, int, int, float, float]]) -> pd.DataFrame:
         "objective_complete",
     ]
     table = pd.DataFrame(rows, columns=columns)
-    return table.assign(dataset_name="d", objective_name="o")
+    return table.assign(
+        dataset_name="d", objective_name="o", objective_below_optimum=0.0
+    )
 
 
 def test_modules_are_the_experiments():
@@ -90,6 +92,18 @@ def test_summary_counts_complete_runs():
 
     assert row[:3] == ["a", 2, 1]
     assert row[4] == 3.0  # the median of 2 and 4
+    assert row[6] == 0  # no run went below the stated optimum
+
+
+def test_summary_counts_runs_below_the_optimum():
+    """A run below the stated optimum counts in the summary, which still shows it when
+    the run comes from Benchopt's cache and so can't warn again."""
+    df = results([("a", 0, 1, 1.0, 1.0), ("a", 1, 1, 2.0, 1.0)])
+    df.loc[df["idx_rep"] == 1, "objective_below_optimum"] = 1.0
+
+    (row,) = Summary().plot(df, "d", "o")
+
+    assert row[6] == 1
 
 
 def test_a_benchopt_run_saves_rows_and_the_full_run(tmp_path: Path):

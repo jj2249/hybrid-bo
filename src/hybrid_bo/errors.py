@@ -46,6 +46,14 @@ class ReconstructionWarning(UserWarning):
     """
 
 
+class OracleOptimumWarning(UserWarning):
+    """An evaluated point has an oracle objective below the stated oracle optimum.
+
+    The stated value can't then be the optimum, so every regret measured from it is
+    wrong. Find the optimum again, e.g. with `oracle_optimum` from more starts.
+    """
+
+
 class ReplayWarning(UserWarning):
     """An iteration figure's replay of hybrid BO's acquisition function didn't find
     the stored solution at the trial point.

@@ -1,8 +1,11 @@
 """The evaluated points of one run."""
 
+import warnings
 from dataclasses import dataclass
 
 import numpy as np
+
+from hybrid_bo.errors import OracleOptimumWarning
 
 
 @dataclass(frozen=True)
@@ -78,3 +81,20 @@ def oracle_incumbents(history: History) -> np.ndarray:
         np.where(improves, np.arange(len(history.f)), 0)
     )
     return history.f_oracle[incumbent_index]
+
+
+def check_oracle_optimum(history: History, optimum: float) -> bool:
+    """Warns with `OracleOptimumWarning` if a point of `history` has an oracle objective
+    below `optimum`, beyond the solvers' tolerance of a relative 1e-6, and returns
+    whether it did. Without an oracle there is nothing to compare, so it doesn't."""
+    if history.f_oracle is None or len(history.f_oracle) == 0:
+        return False
+    lowest = float(np.min(history.f_oracle))
+    beats_optimum = lowest < optimum - 1e-6 * max(1.0, abs(optimum))
+    if beats_optimum:
+        msg = (
+            f"An evaluated point has oracle objective {lowest!r}, below the stated "
+            f"oracle optimum {optimum!r}, so the regret is wrong"
+        )
+        warnings.warn(msg, OracleOptimumWarning, stacklevel=2)
+    return beats_optimum

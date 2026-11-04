@@ -6,6 +6,7 @@ pytest runs every function whose name starts with `test_`.
 import dataclasses
 import functools
 import json
+import warnings
 from pathlib import Path
 
 import illustrative_example as ex
@@ -109,6 +110,29 @@ def test_a_larger_budget_passes_through_the_evaluations_of_a_smaller_one(method)
     assert_same(long.surrogates[:3], short.surrogates, "surrogates")
     assert_same(long.acquisitions[:3], short.acquisitions, "acquisitions")
     assert_same(long.scenarios, short.scenarios, "scenarios")
+
+
+def test_an_optimum_beaten_by_an_evaluated_point_warns():
+    """A stated optimum above an evaluated point's oracle objective can't be the
+    optimum, so it warns; the true optimum gives no warning."""
+    # Two uniform points; the true optimum is about -50.46, and f is at most about 75
+    history = run_of(hb.uniform_sampling, 1).history
+
+    # `pytest.warns` fails unless the block warns with the category, matching `match`
+    with pytest.warns(hb.OracleOptimumWarning, match="below the stated"):
+        assert hb.check_oracle_optimum(history, 100.0)
+
+    # The warning turned into an error, so the test fails if it is raised
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", hb.OracleOptimumWarning)
+        assert not hb.check_oracle_optimum(history, ex.optimum)
+
+
+def test_a_history_without_an_oracle_has_no_optimum_to_beat():
+    """Without oracle values there is nothing to compare, so it doesn't warn."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", hb.OracleOptimumWarning)
+        assert not hb.check_oracle_optimum(history_of(2), 1e9)
 
 
 # `tmp_path` is a pytest fixture: a new, empty folder for this test

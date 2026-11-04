@@ -72,7 +72,10 @@ from it.
 State it as a module-level `optimum`; nothing computes it (a 10-start search found a
 local minimum for the illustrative example, #62). Find it once with
 `hb.oracle_optimum(problem, oracle, rng, n_starts=200)`, check it, and say how in a
-comment.
+comment. `hb.check_oracle_optimum(history, optimum)` warns with `OracleOptimumWarning`
+if a run evaluates a point whose oracle objective is below it. The benchmark's objective
+calls it and also records `below_optimum` in the rows, which the `summary` view counts,
+since a cached run isn't scored again and can't warn again.
 
 ## Pitfalls
 

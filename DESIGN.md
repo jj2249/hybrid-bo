@@ -80,7 +80,7 @@ The original code was hard to change for three reasons:
 - **A slim top level** (#52). `hb.*` holds what a typical script uses: `Var`, `System`,
   `Problem`, `Measure`, `oracle_measure`, `initial_points`, the methods and their
   settings, `EI`, `LCB`, `oracle_optimum`, `save_run`, `load_run`, `Run`, `History`,
-  `incumbents`, `oracle_incumbents`, the errors and `plots`. Everything else is reached through its module (`hb.gp.fit_gp`,
+  `incumbents`, `oracle_incumbents`, `check_oracle_optimum`, the errors and `plots`. Everything else is reached through its module (`hb.gp.fit_gp`,
   `hb.solvers.multistart`). A new name joins the top level only if the example
   or a typical analysis script would use it.
 

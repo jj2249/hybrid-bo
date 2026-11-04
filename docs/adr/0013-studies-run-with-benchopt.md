@@ -42,6 +42,9 @@ Benchopt's table of results.
   `HybridBOError` keeps the partial run, which the `summary` view counts as incomplete.
 - Benchopt's curves need a point per solver call, and a run is one call, so `regret` is
   a view of ours, the median with its quartiles.
+- `OracleOptimumWarning` stays, from `hb.check_oracle_optimum`, but a cached run isn't
+  scored again, so it can't warn again. The objective also records `below_optimum` in
+  the results, which the `summary` view counts.
 - Per-run logs and `--require-clean` are gone, and so is `git` in a run's artifact: a
   git lookup from an installed package answers for the user's repository (#198).
 - Studies saved by earlier versions don't load: read them with version 0.5, or rerun.

@@ -99,8 +99,10 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `ReconstructionWarning`. `_start_bounds` (in `sampling.py`) and `_as_text` (in
   `problem.py`, an equation as text in the variable names) are shared helpers.
 - `history.py`: `History` (`u`, `x`, `y`, `f`, oracle values or `None`, `n_initial`)
-  `incumbents` and `oracle_incumbents` (the benchmark metric); `_concatenate`
-  appends one history to another.
+  `incumbents` and `oracle_incumbents` (the benchmark metric);
+  `check_oracle_optimum(history, optimum)` warns with `OracleOptimumWarning` if a point
+  is below the stated optimum, and returns whether it did; `_concatenate` appends one
+  history to another.
 - `run.py`: `Run` (`history`, `artifact`, `method`: the method's name; `surrogates`: per
   iteration a `tuple[FittedGP, ...]`, the surrogate behind its trial point (hybrid BO:
   one GP per unknown state in the order of `system.y`; standard BO: a 1-tuple, the GP of
@@ -272,7 +274,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   matplotlib is imported inside the functions.
 - `errors.py`: `HybridBOError` (with `.history`, the points evaluated before the
   error, and `.run`, the partial run when raised in a method), `RootFindingError`,
-  `NoSolutionError`, `ReconstructionWarning`, `ReplayWarning` (an iteration figure's
+  `NoSolutionError`, `ReconstructionWarning`, `OracleOptimumWarning`, `ReplayWarning` (an iteration figure's
   replay left the optimizer's branch at the trial point), and `RunFormatError` (a
   `ValueError`: a saved run this version can't load). The library raises these, never
   bare `Exception` (ruff `TRY002`/`BLE001` apply everywhere). It imports `History` and

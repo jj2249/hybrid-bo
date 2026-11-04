@@ -28,12 +28,18 @@ from hybrid_bo.bo import hybrid_bo, standard_bo
 from hybrid_bo.errors import (
     HybridBOError,
     NoSolutionError,
+    OracleOptimumWarning,
     ReconstructionWarning,
     ReplayWarning,
     RootFindingError,
 )
 from hybrid_bo.evaluation import Measure, oracle_measure, oracle_optimum
-from hybrid_bo.history import History, incumbents, oracle_incumbents
+from hybrid_bo.history import (
+    History,
+    check_oracle_optimum,
+    incumbents,
+    oracle_incumbents,
+)
 from hybrid_bo.problem import Problem, System, Var
 from hybrid_bo.run import Run
 from hybrid_bo.sampling import initial_points

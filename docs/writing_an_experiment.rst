@@ -118,7 +118,9 @@ true (*oracle*) values, so the methods can be scored.
 The *oracle optimum* is the true minimum of the problem, which regret is measured from.
 State it: nothing searches for it, since a search can miss it. Find it once with
 :py:func:`~hybrid_bo.evaluation.oracle_optimum` (with many starts), check it, and paste
-the value as above.
+the value as above. If a run later evaluates a point below it, the benchmark warns with
+:py:class:`~hybrid_bo.errors.OracleOptimumWarning` and counts the run in ``summary``; in
+a script, :py:func:`~hybrid_bo.history.check_oracle_optimum` does the same check.
 
 Your own system
 ~~~~~~~~~~~~~~~

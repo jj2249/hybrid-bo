@@ -33,9 +33,11 @@ USER_FACING = {
     "History",
     "incumbents",
     "oracle_incumbents",
+    "check_oracle_optimum",
     # Errors
     "HybridBOError",
     "NoSolutionError",
+    "OracleOptimumWarning",
     "ReconstructionWarning",
     "ReplayWarning",
     "RootFindingError",
