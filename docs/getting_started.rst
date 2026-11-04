@@ -8,13 +8,15 @@ the results.
 Install
 -------
 
-The library isn't on PyPI yet, so install it from the repository:
+The library isn't on PyPI yet, so install a release from the repository, with Python
+3.12 or later and git:
 
 .. code-block:: bash
 
-   pip install "hybrid-bo[plots] @ git+https://github.com/jj2249/hybrid-bo.git"
+   pip install "hybrid-bo[plots] @ git+https://github.com/jj2249/hybrid-bo.git@v0.6.0"
 
-``plots`` adds matplotlib, for the iteration figures. To work on the repository, use
+``plots`` adds matplotlib, for the figures. The tag at the end fixes the version, so the
+library can't change under your work. To work on the repository, use
 `pixi <https://pixi.sh>`_, which installs Python, the library and every dependency into
 the project folder: fork and clone the repository, and the first ``pixi run`` installs
 the environment it needs.

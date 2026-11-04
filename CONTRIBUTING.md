@@ -68,6 +68,7 @@ which an agent can prepare:
 1. Sets `version` to the new version, chosen by the markers above.
 2. Renames `## Unreleased` in CHANGELOG.md to `## X.Y.Z (YYYY-MM-DD)` and adds an
    empty `## Unreleased` above it.
+3. Sets the tag in the install commands of README.md and `docs/getting_started.rst`.
 
 Merging the release PR approves the release, and closing it rejects it; nobody runs
 tag or release commands. On the merge, the release workflow
