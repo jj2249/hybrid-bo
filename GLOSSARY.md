@@ -146,11 +146,9 @@ _Avoid_: re-solve, fixed-x evaluation
 ### Bayesian optimization
 
 **Experiment**:
-A problem, how it is measured, and the configurations to compare, stated together in
-a script that passes them to `hb.cli.main`, so they can be run as studies: "the flash
-unit experiment". The script's file name is the experiment's name. Each time it is run
-it gives a new study. The shipped ones are in `experiments/`; a person's own can live
-anywhere, such as the untracked `scripts/`.
+A problem, how it is measured, and the methods to compare, stated together in a file in
+`experiments/`, so they can be run as studies: "the flash unit experiment". The file's
+name is the experiment's name.
 _Avoid_: example, case, test case, application
 
 **Benchmark experiment**:
@@ -159,13 +157,8 @@ methods, so its studies can be scored: oracle incumbents, and regret if the orac
 optimum is stated.
 _Avoid_: test case, toy problem
 
-**Configuration**:
-A method with its own evaluation budget, labeled in a study. One method can have
-several configurations, with different settings or budgets.
-_Avoid_: variant, arm
-
 **Evaluation budget** (`n_evaluations`):
-How many evaluations a run of a configuration makes in all, its initial points
+How many evaluations a run makes in all, its initial points
 (`n_initial`) included; the rest are iterations.
 _Avoid_: horizon, total iterations
 
@@ -178,72 +171,22 @@ One complete optimization from the initial points to the end of the optimization
 Runs are repeated with different seeds for statistics.
 
 **Study**:
-A collection of runs of an experiment's configurations, where run i of every
-configuration with the same number of initial points starts from the same initial
-points. The number of runs and the seed are the same for every configuration. The unit
-that is saved, loaded and analyzed.
+The runs of an experiment's methods, repeated with different seeds, where run i of every
+method starts from the same initial points. Benchopt runs studies, from the benchmark in
+`experiments/`, and saves their results; the library has no study of its own.
 _Avoid_: benchmark, experiment, results, batch
 
 **Artifact**:
-What a study or a run leaves to say what it ran and how, as text for people. One per
-study and one per run. A study's artifact holds the problem, the measurement, each
-method with its settings (a BO method's prior GP included), the seed, the oracle optimum if stated, and the versions of
-the code and packages; it lists the study's runs but doesn't hold them. A run's
-artifact holds the problem, the measurement, its method with its settings, its
-generator's seed and state, and the versions, so a run made without a study still says
-how it was made.
+What a run leaves to say what it ran and how, as text for people: the problem, the
+measurement, its method with its settings, its generator's seed and state, and the
+versions of the packages.
 _Avoid_: record, metadata, manifest, provenance
 
-**Task**:
-One run of a configuration in a study: the configuration's label, the configuration,
-the run's index and the seed spawned for it (`hb.Task`). A study is its tasks, each
-run on its own (`hb.run_task`), then assembled (`hb.assemble`); `hb.cli` runs each
-task in a process of its own.
-_Avoid_: job, work item
-
-**Task list**:
-The file `tasks.json` that `hb.cli` writes when it prepares a study: what the study
-will run (the experiment's name, the seed, the number of runs, each configuration's
-budget, the oracle optimum, the code version, the problem and the measurement) and its
-tasks in order. These are what the script passes to `hb.cli.main`, not where it is:
-resuming checks the experiment against them, so a study resumes from its script moved
-elsewhere. Unlike the artifact, it is written before anything runs.
-_Avoid_: manifest, job list
-
-**Unfinished study**:
-A study folder without an artifact: its task list, its study log, and the run files
-and per-run logs of the tasks done so far. It can't be loaded or plotted; `resume`
-runs the tasks left and assembles it. Its folder keeps its study id taken. Saving
-each run as it finishes, so a study can be resumed, is *checkpointing*; the unit is a
-run, never part of one.
-_Avoid_: partial study
-
-**Launcher**:
-What starts a study's tasks and waits for them: `hb.cli`'s `run` and `resume`, which
-keep `--n-workers` task processes running, or anything that runs `run-task` commands
-(a SLURM array, GNU parallel).
-_Avoid_: scheduler (SLURM's role), pool, worker
-
-**Study log**:
-What a study logged as it ran: each task as it started and finished, then every run's
-lines (each run and iteration with its time, and every warning raised), each starting
-with the run's tag. Saved with the study, beside its artifact. It is for reading, not
-analysis: the runs hold the results.
-_Avoid_: run log
-
-**Per-run log**:
-The lines one run logged, saved as the run's task runs, in the study's
-`logs/<label>/run-003.log`. When the study is assembled, they are added to the study
-log, each starting with the run's tag, `<label>/run-003`.
-_Avoid_: run log, worker log, task log
-
 **Reproducible**:
-A study is reproducible when its artifact records a clean code version (every file
-committed, none changed or untracked) and running its experiment again at that version,
-with the same seed, gives the same runs within a tolerance. It covers the computation
-only: a measurement of a real system can't be repeated, so such a study can be
-reproduced only up to its measurements. A study run from an unclean tree is still
-saved, but it isn't reproducible.
+A run is reproducible when running it again with the same code, settings and seed gives
+the same run within a tolerance. It covers the computation only: a measurement of a real
+system can't be repeated, so such a run can be reproduced only up to its measurements.
+The benchmark's `code` hash says which code produced a study's results.
 _Avoid_: replicable, deterministic
 
 **Iteration**:
@@ -263,8 +206,8 @@ _Avoid_: incumbents_no_noise, true incumbent
 
 **Oracle optimum** (`f*`):
 The best objective value the oracle allows: the reference that regret is measured
-against. Benchmark experiments only; always stated by the experiment, never computed by
-a study, since a search can miss it.
+against. Benchmark experiments only; always stated by the experiment, never computed,
+since a search can miss it.
 _Avoid_: true optimum, global optimum
 
 **Regret**:

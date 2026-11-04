@@ -35,8 +35,7 @@ The original code was hard to change for three reasons:
 5. **Explicit randomness.** Anything random takes an `rng: np.random.Generator`.
 6. **Errors raise** specific exceptions. Expected failures (one multistart start not
    converging) are logged without tracebacks. Progress (each run and iteration, with
-   times) is logged too; the library never configures logging, and the experiment
-   CLI saves the records as one log per run and the study log.
+   times) is logged too; the library never configures logging.
 7. **Rows are points.** A point is `(n,)`, a set is `(n_points, n)`, `f` is `(n_points,)`.
 8. **Experiments are short to write.** Defaults may be derived from other arguments when
    the derivation is obvious and recorded in the run. A default may set how hard or how
@@ -60,7 +59,7 @@ The original code was hard to change for three reasons:
   MX does not work, for three reasons:
   - `cas.chol` has no MX overload, so with `Symbolic` set to MX, GP fitting,
     prediction and the log marginal likelihood fail.
-  - A study's artifact prints the known equations and the objective as text. Under MX
+  - A run's artifact prints the known equations and the objective as text. Under MX
     that text becomes an opaque `g(x, y, u){0}`.
   - The AMPL route to a global solver (#87) accepts only SX expressions.
 
@@ -72,23 +71,16 @@ The original code was hard to change for three reasons:
   impossible and the regression baselines did not move, the new code simply does not
   reproduce it.
 - **Saving.** The library never writes files on its own; saving is an explicit call.
-  `hb.save`/`hb.load` write and read a study as JSON
-  ([ADR 0004](docs/adr/0004-studies-are-saved-as-json.md)). Examples call them; the
-  library never does.
-- **Reproducibility is recorded, not enforced** (#85). The code version in every run's
-  artifact and in the study's artifact is `-dirty` or `-untracked` when the tree isn't
-  clean, so the artifact says whether the study is reproducible. The library never
-  refuses to run on a tree that isn't clean: during development it almost never is,
-  and taking the decision from the caller would push people to commit junk or bypass
-  the check. The CLI warns instead, and `--require-clean` refuses for runs that matter.
+  `hb.save_run`/`hb.load_run` write and read a run as JSON.
+- **Studies run with Benchopt** ([ADR 0013](docs/adr/0013-studies-run-with-benchopt.md)).
+  The library is the optimization. A script calls the methods directly, and
+  `experiments/` is a Benchopt benchmark for repeating and comparing them.
 - **Iteration plots replay the acquisition problem**
   ([ADR 0005](docs/adr/0005-iteration-plots-replay-the-acquisition-problem.md)).
 - **A slim top level** (#52). `hb.*` holds what a typical script uses: `Var`, `System`,
   `Problem`, `Measure`, `oracle_measure`, `initial_points`, the methods and their
-  settings, `EI`, `LCB`, `Configuration`, `StudySettings`, `Study`, `repeat`, `study`,
-  `oracle_optimum`, `save`, `load`, `Run`, `History`, `incumbents`,
-  `oracle_incumbents`, `evaluations`, `summary`, `hyperparameters`, the errors and
-  `plots`. Everything else is reached through its module (`hb.gp.fit_gp`,
+  settings, `EI`, `LCB`, `oracle_optimum`, `save_run`, `load_run`, `Run`, `History`,
+  `incumbents`, `oracle_incumbents`, the errors and `plots`. Everything else is reached through its module (`hb.gp.fit_gp`,
   `hb.solvers.multistart`). A new name joins the top level only if the example
   or a typical analysis script would use it.
 
@@ -134,16 +126,11 @@ settings = hb.HybridBOSettings(
 )
 method = functools.partial(hb.hybrid_bo, settings=settings)
 
-# Configuration: the method with its budget, 7 evaluations, the first 2 initial points
-configurations = {
-    "hybrid_bo": hb.Configuration(method=method, n_evaluations=7, n_initial=2)
-}
-
-# Study: 10 runs, run i of every configuration with the same n_initial from the same
-# initial points; the same seed gives the same study
-study_settings = hb.StudySettings(n_runs=10, seed=0)
-study = hb.study(configurations, problem, measure, study_settings, optimum=-50.4608)
-hb.save(study, "results/illustrative")
+# Run it from initial points, with an explicit generator
+rng = np.random.default_rng(0)
+start = hb.initial_points(system.u, 2, rng)
+run = method(problem, measure, start, 5, rng=rng)
+hb.save_run(run, "hybrid_bo.json")
 ```
 
 ## API
@@ -306,8 +293,7 @@ class AcquisitionSolution:  # acquisition.py (#53)
 class Run:
     history: History
     artifact: dict[str, str]  # how the run was produced, as text (#123)
-    method: str  # its label: the key in the study's methods (#53)
-    index: int = 0  # its position among that method's runs (#53)
+    method: str  # the method's name (#53)
     surrogates: list[tuple[FittedGP, ...]]  # one per iteration; P GPs (hybrid BO) or
     # 1 (standard BO) each (#114); empty for baselines (default)
     acquisitions: list[AcquisitionSolution]  # one per iteration (#53)
@@ -325,7 +311,7 @@ The run's **artifact** is built by the library (`run_artifact`, before the metho
 anything), not the example: the variables with their bounds, `h_inputs`, `measured`,
 `g` and `f` as expression text, the measurement, the method and its settings, the
 prior GP's repr (#119), the seed, spawn key and generator state, and the
-versions of `hybrid_bo` (with `git describe`), Python, CasADi, NumPy and SciPy. The
+versions of `hybrid_bo`, Python, CasADi, NumPy and SciPy. The
 measurement is recorded by its docstring, else its name, so a custom measurement adds
 a description by writing a docstring. A measurement that is a dataclass is recorded
 by its repr instead: the oracle simulation (`OracleSimulation`) gives the oracle as
@@ -333,16 +319,11 @@ text with its noise and solver settings.
 
 The oracle simulation is a frozen, callable dataclass, not a closure (#141): it is
 data (the system, the oracle traced like `g`, a `cas.Function`, and the settings),
-and its repr is the measurement's text in the artifact, which `resume` compares with
-the study's task list. A closure would need its `__doc__` set to describe it. (It
-was made a dataclass so a process pool could pickle it; studies no longer pickle
-anything, #156.)
+and its repr is the measurement's text in the artifact, so it mustn't depend on the
+process. A closure would need its `__doc__` set to describe it.
 
-A run's artifact has the study's name for the same thing, what was run and how (#123;
-it was `record` before). In a study it mostly repeats the study's artifact, but a run
-made without a study (`hb.hybrid_bo(...)` called directly, or a partial run in
-`error.run`) has no other description of its setup. It is text for people; the
-settings beside it are data for the plots.
+A run's artifact is text for people; the settings beside it are data for the plots. A
+partial run in `error.run` carries one too, so it still says how it was made.
 
 A column is found by name with `system.column("x1")`.
 
@@ -450,9 +431,7 @@ only operator; `kernel * kernel` raises `TypeError` (the kernels share `_Scalabl
   lengthscales, as `default_gp` did. A lengthscale with `ard` (the default) has one
   entry per input, the count taken from the training data at fit time; a fixed one
   given as one number applies to every input. A fitted GP holds the numbers: a float,
-  or a tuple of one per input. `hb.hyperparameters(study)` names each by its dotted
-  path in the GP (`kernel.kernel.lengthscale`) and by the variable its GP models
-  (`output`: an unknown state, or `f` for standard BO).
+  or a tuple of one per input.
 - **Units.** Kernel hyperparameters are in scaled units, as the fit sees them
   (lengthscales relative to inputs scaled onto [0, 1], the output scale relative to standardized
   outputs). `noise_std` is in measured units, the units of the training outputs, so an
@@ -636,7 +615,7 @@ has a kink per scenario; IPOPT stalls in both (#63). Following LogEI (Ament et a
 2023), `SoftSAA` replaces the maximum with the smooth maximum
 `sp_τ(a) = τ log(1 + e^{a/τ})` at the temperature `τ` and minimizes
 `−log Σ_s w_s sp_τ(a_s)`. It is a separate approximation, not an option of `SAA`, so
-SAA-EI stays the paper's and the two can be compared as settings of one study.
+SAA-EI stays the paper's and the two can be compared as settings of one experiment.
 
 - **Computed in logs.** The objective is a logsumexp over scenarios of
   `log w_s + log τ + log log(1 + e^{a_s/τ})` (`_log_softplus`), which takes
@@ -779,10 +758,8 @@ The baselines are named `*_sampling` because `hb.sampling.uniform` and
   `error.run` for every method: the points evaluated so far (also `error.history`) and
   one surrogate per evaluated trial point (a failed evaluation drops its surrogate). A method that adds fields to its `Run` (hybrid BO's scenarios)
   adds them to the returned run and to `error.run`.
-- The artifact holds the settings without the GP, plus `gp`, the prior GP's repr. A
-  study's artifact gives the prior GP on the line after the method's settings, since
-  the study can't be run again without it; the fitted GPs stay in the runs. The
-  GP is required, so `hb.standard_bo` and `hb.hybrid_bo` go into `methods` as a
+- The artifact holds the settings without the GP, plus `gp`, the prior GP's repr; the
+  fitted GPs stay in the run. The GP is required, so `hb.standard_bo` and `hb.hybrid_bo` go into `methods` as a
   `functools.partial` with their settings, never bare.
 - The baselines are not sequential: they draw their whole design and `evaluate` it after
   the initial points.
@@ -798,209 +775,27 @@ subclasses (`ReconstructionWarning`) so they can be filtered.
 
 ### Plots
 
-`hb.plots` is described under Analysis below (#55). Figures use the repo's style file,
-`hb.plots.STYLE` (`src/hybrid_bo/hybrid_bo.mplstyle`); put rcParams there, not in
-plotting code.
+`hb.plots.iteration` draws one iteration of a run, a function of the finished run (#55)
+that replays its acquisition problem
+([ADR 0005](docs/adr/0005-iteration-plots-replay-the-acquisition-problem.md)). Each run's
+GP comes from its stored fitted GPs (#119) and the rest from `run.settings`, so a saved
+run plots after the experiment's methods change. matplotlib is imported on first use and
+is the extra `hybrid-bo[plots]`. Figures use the repo's style file, `hb.plots.STYLE`
+(`src/hybrid_bo/hybrid_bo.mplstyle`); put rcParams there, not in plotting code.
 
-### Analysis (`studies.py`, `saving.py`, `views.py`, `plots.py`)
+### Benchmark (`experiments/`)
 
-The ArviZ-like layer: a `Study` is the data object; Polars views and static plots read
-it. Polars and matplotlib are optional (imported on first use; they are in the
-`experiments` pixi environment).
-
-- **Data** (#53; `studies.py`). `Run` has `method` (its label in the study),
-  `index` and `acquisitions`, one `AcquisitionSolution` per iteration (the
-  acquisition value at the trial point and, for hybrid BO, the scenario states
-  there), and keeps its full artifact.
-  `Configuration(method, n_evaluations, n_initial)` (#144), keyword-only and with no
-  defaults, is a method with its own evaluation budget, so one study can compare
-  splits of a budget between initial points and iterations; it raises `ValueError`
-  unless 1 <= n_initial <= n_evaluations. `StudySettings(n_runs, seed=None)`,
-  keyword-only, keeps only what stays the same for every configuration, so the runs
-  stay paired; every draw of a study comes from the seed, so the same settings give
-  the same study.
-  `Study(runs: tuple[Run, ...], settings, name, artifact)` is a flat collection; its
-  settings hold the seed actually used (a fresh one for seed None) and its artifact
-  holds the problem, measurement, methods, oracle optimum (`oracle_optimum`, when
-  stated) and versions once. A configuration's method is code, so the study can't
-  save configurations: each run records its budget instead (`run.n_evaluations`,
-  set by `repeat`; `n_initial` is in its history), and there is no separate budget
-  type, since the budget's fields belong to the configuration.
-- **Running** (#53). `hb.repeat(configuration, problem, measure, settings)` runs
-  one configuration `n_runs` times, run i from `SeedSequence(seed).spawn(n_runs)[i]`,
-  logging failed runs and keeping them as far as they got. A `Method` is called as
-  `method(problem, measure, initial_points, n, rng=rng)`, n the configuration's
-  `n_evaluations - n_initial`.
-  `hb.study(configurations, problem, measure, settings, name=None, optimum=None)`
-  resolves the seed once and gives run i of every configuration the same
-  generator, so the same initial points for the same `n_initial`; each
-  configuration's later draws come from its own copy. **The prefix property** (#144):
-  a BO method uses only the history so far and draws from its generator in a fixed
-  order, never depending on how many evaluations it has left, so a run with a larger
-  budget passes through exactly the first evaluations of one with a smaller budget,
-  given the same seed and `n_initial`. A budget sweep reads every budget's regret from
-  one run per `n_initial`; `tests/test_studies.py` locks the property in for hybrid
-  and standard BO. The baselines draw their whole design first: Latin hypercube
-  sampling lacks it, since its design depends on its size, and uniform sampling has
-  it only with a measurement that draws nothing, since the noise is drawn after the
-  design. Studies take a seed, not an `rng`, so that the settings alone reproduce a
-  study and the caller's generator is never advanced as a side effect. The oracle
-  optimum is stated (`optimum`), never computed (#62): a multistart search can miss
-  it, and a wrong optimum silently corrupts every regret. `hb.oracle_optimum(problem,
-  oracle, rng, n_starts)` helps find it once. The artifact records it, and the study warns with
-  `OracleOptimumWarning` if an evaluated point's oracle objective is below it.
-- **A study is its tasks** (#143, #156; ADR 0010). A task is one run of a
-  configuration (`hb.Task`: label, configuration, index, spawned seed).
-  `hb.study` is `study_tasks` (every configuration's runs, by label, then index; it
-  needs the seed resolved, so every task comes from one seed), `run_task` on each in
-  this process, then `assemble` (labels the runs, drops the runs that failed before
-  evaluating anything, builds the artifact and checks the optimum). The library runs
-  serially, the easiest form to debug; running tasks elsewhere is the caller's job,
-  and the three functions let any launcher do it with the same results, since each
-  run depends only on its spawned seed. Parallel studies first ran on a process pool
-  inside `hb.study` (#145), which took about 200 lines of plumbing because results,
-  log records, warnings and Ctrl-C all had to come back through one parent: a pickling
-  check, a log queue with a listener thread, warnings replayed in the parent, BLAS
-  variables set while workers started, and stopping workers through the pool's
-  private `_processes`, since CasADi catches Ctrl-C inside IPOPT. It saved nothing
-  until every run finished, and couldn't spread over a cluster.
-- **The CLI runs tasks as processes over files** (#156; ADR 0010). Each
-  task is `python <script> run-task STUDY --task-index K`: a new process that
-  rebuilds the experiment from its script (so nothing is pickled, and lambdas work),
-  runs `hb.run_task`, and saves its run file and per-run log. The process boundary
-  does what the pool's plumbing did: each task logs to its own file and console,
-  warnings are logged where they happen, BLAS reads its thread variables from the
-  task's environment, and stopping a task is `terminate()`, which works inside
-  IPOPT. The launcher is plain `subprocess`: up to `--n-workers` children in task
-  order, each in its own process group (`start_new_session` on POSIX,
-  `CREATE_NEW_PROCESS_GROUP` on Windows) so a terminal Ctrl-C reaches only the
-  launcher, which then terminates them, kills any left after 5 s, and ignores further
-  Ctrl-C (pixi passes each one on, so it comes twice). It forwards `-W` options and,
-  with more than one worker, sets the four BLAS/OpenMP thread variables to 1 unless
-  the user set them. GNU parallel was rejected as the local launcher (it needs Perl
-  and a POSIX shell, so not Windows), as were joblib/loky, submitit, Ray and Dask:
-  none removes the log, warning and Ctrl-C handling, and pickled results don't give
-  resumable run files. A task costs about 0.5–1 s of startup (CasADi,
-  scipy.optimize for the root finding), negligible next to a Langermann run; `lhs`
-  avoids `scipy.stats` (see "A generator has two independent sequences").
-- **An unfinished study** is a folder: the task list `tasks.json` (name, resolved
-  seed, `n_runs`, each chosen configuration's budget, oracle optimum, code version,
-  the problem's artifact text and the tasks as (label, index)), `study.log`,
-  `runs/<label>/run-003.json` as each run finishes (written to a temporary file, then
-  `os.replace`d, so a killed task never leaves a corrupt run), a failure marker
-  `run-003.failed` for a run that failed before evaluating anything (its task is
-  done, as the serial study drops it), and `logs/<label>/run-003.log`. Assembly
-  writes `artifact.json` (`hb.saving.save_artifact`, which checks each run file holds
-  its run) and `summary.csv`; a study is finished exactly when `artifact.json`
-  exists. The files are the checkpoint: `resume` runs only the tasks with no run file
-  or marker, after refusing a finished study or an experiment or code version that
-  differs from the task list (it takes no flags that choose the study), so a resumed
-  study equals one run in one go. Assembly writes the artifact last and rebuilds the
-  study log rather than appending to it, so an interrupted assembly resumes cleanly.
-  The launcher is `cli._run_commands`, a runner of named commands that knows nothing
-  of studies (its tests run `python -c` commands); `cli._run_tasks` builds the tasks'
-  commands. Tasks run the script's path (`__main__`'s `__file__`) from the
-  launcher's folder, and the script's file name is the experiment's name. The task
-  list records what the script passes to `main`, not its path, so a study resumes
-  from a moved script. The folder is created when the id is reserved (an atomic `mkdir`), so an unfinished
-  study keeps its id. Checkpointing within a run is out of scope: a task killed
-  mid-run starts again. For SLURM: `prepare`, an array of `run-task --task-index
-  $SLURM_ARRAY_TASK_ID` (a task already done exits 0, so resubmitting is safe), then
-  `resume`.
-- **Saving** (#53; `saving.py`). `hb.save(study, path)` writes `artifact.json`
-  (settings, name, artifact, the run files in order; a study saved before #144, with
-  `n_initial` and `n_iterations` in its settings, loads with that budget as each
-  run's `n_evaluations`) and `runs/<method>/run-000.json`;
-  `hb.load(path)` reads them back exactly. `save` refuses an existing folder.
-  `hb.save_run`/`hb.load_run` write and read one run file in the same format, and
-  `hb.saving.save_artifact` writes the artifact beside run files already in place, so
-  a study saved run by run loads as one saved whole. A
-  dataclass from a closed set (a GP's parts, #119; the methods' settings and their
-  parts, #120) is saved with its type's name, so a field holding one of several types
-  loads as the right one. Studies saved before #119 or #120 raise
-  `StudyFormatError`.
-- **Views** (#54; `views.py`). `hb.evaluations(study, optimum=None)`: one row
-  per evaluation (method, run, evaluation from 1, iteration from 1 or null for initial
-  points, `u_<name>`/`x_<name>`/`y_<name>`, f, `x_oracle_<name>`/`y_oracle_<name>`/
-  `f_oracle`, incumbent, oracle incumbent, regret, acquisition). Variables are named
-  from the study's artifact. Regret is the oracle incumbent minus `optimum`, else the
-  artifact's oracle optimum, else null. `hb.summary(study)`: one row per method (runs,
-  failed runs against `n_runs`, median and IQR of the final incumbent, oracle
-  incumbent and regret). `hb.hyperparameters(study)`: one row per run, iteration,
-  fitted GP (`output`) and hyperparameter entry. Polars is imported on first use; without it a view raises an
-  `ImportError` naming the extra.
-- **Plots** (#55; `plots.py`), static, over **evaluations** (initial points are
-  not free): `plots.convergence(study)` (median oracle incumbent, else incumbent, with
-  an IQR band and a dotted line after the initial points), `plots.regret(study,
-  optimum=None)` (the same on a log scale, as in the paper) and
-  `plots.iteration(run, problem, i, *, measure=None, gp=True, scenarios=True,
-  acquisition=True)`, one iteration per call, no widgets and no `rng`.
-  The GP panel comes from the stored surrogate; the acquisition panels replay the
-  method's acquisition problem with u fixed at each grid point, warm-started outwards
-  from the stored solution (ADR 0005), so the curve passes through the stored
-  acquisition value. The GP is the run's stored fitted GP and the rest of the replay
-  (acquisition function, approximation, solver) the run's stored settings (#120), so
-  nothing is passed: until #120 the plots rebuilt the settings from the artifact's text
-  with regular expressions, and a custom solver had to be passed. With linearization, the
-  scenarios panel shows the nominal f ± s, with `s` recomputed from the stored
-  surrogate, in place of the scenario band. With two decision variables (#117) the
-  panels are filled contours over a 30 x 30 grid, in a row of y (oracle, GP mean, GP
-  std) and a row of f (oracle, scenario mean, scenario std, EI); an oracle panel shares
-  the mean's color scale so they compare directly, the 2D stand-in for 1D's overlaid
-  true curve. EI is drawn as log10 EI with its zeros in gray, since SAA-EI's flat
-  regions are what the figure is for. The replay solves the grid in order of distance
-  from the trial point, each point from the nearest one solved, which in 1D is the
-  outward sweep it always was. Since #154 it optimizes nothing: with u fixed, the
-  acquisition problem is S independent square systems, one per scenario (no slack
-  variables, no equation linking two scenarios), so each scenario's states are a
-  Newton root (CasADi's `rootfinder`) and the value is the problem's objective `nlp.f`
-  there. The (point, scenario) pairs of a ring of points around the trial point are
-  one mapped call, each ring started from the previous ones, so the replay keeps the
-  branch the optimizer chose. One IPOPT solve per grid point took about 195 s for a 2D
-  figure of Langermann with M = 2 (25 scenarios); a root-finder solves the same
-  systems without IPOPT's overhead. Roots are found without bounds and rejected
-  outside them, which matches IPOPT whenever the root is unique. The trial point
-  checks the replay: if its root isn't the stored solution, the figure warns with
-  `ReplayWarning` rather than failing, since the rest of the figure is still useful. GP prediction at the grid is mapped over the points
-  (`predict` maps a numpy input over its rows): predicting 900 points at once built
-  their whole covariance matrix and took 6 s. More than two decision variables need
-  another design.
-- **Entry point** (#51; revised in #65; moved to `experiments/` in #69, into the
-  package as `hb.cli` in #177). An experiment is a script that ends with an explicit
-  call that passes everything it defines: `hb.cli.main(problem, measure,
-  configurations, study_settings, optimum=..., true_curves=...)`; its file name is
-  its name. Its flags override the study settings (`--n-runs`, `--seed`);
-  budgets belong to configurations, so there is no `--n-iterations` (#144).
-  `hb.cli` parses the flags (run by default, or `plot [STUDY]`), overrides
-  the settings and calls `hb.study` and `hb.save`, or `hb.load` and `hb.plots`.
-  `pixi run experiment <name> [flags]` is `python -m <name> [flags]` run from
-  `experiments/` (a task with no declared args, so flags pass through), and `pixi run
-  plot <name> [study]` a templated task over `python -m <name> plot`. #51 had
-  the old `main.py` (removed in #65) discover the experiment and read its names
-  with `getattr`; #65 dropped that because the experiment then didn't say what its names were for, and a
-  typo silently changed the study. The cost is that no command lists every experiment.
-  `--results-root` defaults to `results/`, and a relative one is relative to where
-  pixi was started (`INIT_CWD`), else the working folder: results go to
-  `results/<name>/<study id>/{artifact.json, runs/, summary.csv, figures/}` there.
-  Running saves `hb.summary` as `summary.csv`, then the artifact, then prints the
-  summary with ASCII borders, which a Windows pipe (cp1252) can encode (#170); `plot` takes the study saved last by default, writes under
-  `figures/`, and saves `summary.csv` only if the study has none (older studies).
-  `plot` draws iteration figures for the runs `--plot-runs` names (default run 0 of
-  each method, `all` for every run), since a study of 10 runs and 20 iterations is
-  hundreds of figures. `plot` passes the iteration figures nothing from the experiment's methods: each
-  run's GP comes from its stored fitted GPs (#119), so a study run with another GP
-  than the experiment's current one still plots. The `hybrid-bo-experiments` skill has
-  the details. The CLI lived in `experiments/` until #177, which moved it into the
-  package so a script anywhere can use it, such as one in the git-ignored `scripts/`
-  for a person's throwaway studies. Only `main` is public. There is no console
-  script: `plot` needs the experiment's problem, so every command goes through the
-  script. Polars (to summarize) and matplotlib (to plot) are imported lazily, and
-  are the extras `hybrid-bo[analysis]` and `hybrid-bo[plots]`.
+`experiments/` is a Benchopt benchmark beside the experiments
+([ADR 0013](docs/adr/0013-studies-run-with-benchopt.md)): `objective.py`,
+`datasets/experiment.py`, `solvers/method.py`, `plots/` and `benchmark_utils/`. Only
+these use Benchopt's classes; the library never imports it. A run is one call of a
+method (`run_once`), reported as one row per evaluation, and saved in full with
+`hb.save_run`. `experiments/README.md` and the `hybrid-bo-experiments` skill have the
+details.
 
 ## Order of random draws
 
-Every draw in a run comes from that run's generator (a study spawns one per run),
-in this order:
+Every draw in a run comes from that run's generator, in this order:
 
 1. initial points: `lhs` over the `u` start bounds (drawn by the caller);
 2. method setup: hybrid BO draws the scenarios (`rng.standard_normal((S, P))`); the
@@ -1018,7 +813,7 @@ runs. Each consumer draws only what it uses, when it uses it.
 **A generator has two independent sequences.** `lhs` does not consume `rng`'s stream:
 it draws from the next spawned child of `rng`'s `SeedSequence` (`rng.spawn(1)[0]`),
 exactly as scipy's `qmc.LatinHypercube(d, rng=rng).random(n)` does. It draws that
-itself because importing `scipy.stats` took about a second per study task (#172).
+itself because importing `scipy.stats` took about a second (#172).
 So every `lhs` call (initial
 points, fsolve and root-finding starts, multistart starts, LHS designs) is ordered only
 against other `lhs` calls and `spawn`s, and the stream draws (`normal`, `uniform`,
@@ -1042,6 +837,7 @@ to scipy's draw and its spawning.
 | Kernel and mean classes, `Parameterized`, `JoinedParameters` | hyperparameters were named specs and kernels functions; since #119 kernels are dataclasses again, but data with no state or methods ([ADR 0008](docs/adr/0008-gps-are-data.md)) | tag `pre-refactor` |
 | `PriorGP`, `Hyper`, `default_gp`, `kernels.py` (with `linear` and `constant`) | GPs are data, from a closed set ([ADR 0008](docs/adr/0008-gps-are-data.md)); the linear and constant kernels were unused | git history before #119 |
 | Per-iteration plot callbacks | plots are functions of a finished run ([ADR 0003](docs/adr/0003-runs-are-pure-data.md)) | tag `pre-refactor` |
+| `hb.cli`, `hb.studies`, `hb.views`, `hb.save`, `hb.load`, `plots.convergence`, `plots.regret` | studies run with Benchopt ([ADR 0013](docs/adr/0013-studies-run-with-benchopt.md)) | version 0.5 |
 | Strategy classes (planned, never built) | methods are settings plus functions | earlier DESIGN.md in git history |
 
 ## Future directions

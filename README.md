@@ -8,25 +8,61 @@ built on [CasADi](https://web.casadi.org/).
 
 ## Install
 
-Install [pixi](https://pixi.sh), then fork this repository and clone your fork. The
-first `pixi run` installs everything the project needs.
-
-## Run
-
-Run every method on the illustrative example of the paper and plot the results:
+Not on PyPI yet, so install it from the repository:
 
 ```bash
-pixi run experiment illustrative_example --n-runs 3 --plot
+pip install "hybrid-bo[plots] @ git+https://github.com/jj2249/hybrid-bo.git"
 ```
 
-The study and its figures are saved in `results/illustrative_example/`. Add
-`--n-workers 4` to run the runs in 4 processes at once, with the same results. Each
-run is saved as it finishes, so a study stopped by Ctrl-C or a crash finishes with
-`pixi run experiment illustrative_example resume STUDY`.
+`plots` adds matplotlib, for the iteration figures. To work on the repository, install
+[pixi](https://pixi.sh), then fork and clone it: the first `pixi run` installs
+everything the project needs.
 
-Any script that ends with `hb.cli.main(...)` runs the same way, as
-`python my_study.py [--n-runs 3 --plot ...]`. Keep your own in `scripts/`, which git
-ignores; [scripts/README.md](scripts/README.md) has an example.
+## Use
+
+A script states the problem, how it is measured and the settings, then calls a method:
+
+```python
+import casadi as cas
+import numpy as np
+
+import hybrid_bo as hb
+
+u = hb.Var("u", lower=-2.0, upper=2.0)
+x = hb.Var("x", start=(-2.5, 1.0))
+y = hb.Var("y", start=(-2.0, 2.0))
+system = hb.System(
+    u=[u],
+    x=[x],
+    y=[y],
+    g=lambda v: [v.x + cas.exp(v.x) - v.y],  # the known equation, 0 = g(x, y, u)
+    h_inputs=[u],  # the unknown equation is y = h(u), which a GP learns
+    measured=[y],
+)
+problem = hb.Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x - 4))
+measure = hb.oracle_measure(system, lambda v: [cas.sin(v.u)], noise_std=0.0)
+
+gp = hb.gp.GP(mean=hb.gp.Zero(), kernel=hb.gp.Matern52(), noise_std=0.0)
+settings = hb.HybridBOSettings(
+    gp=gp, acquisition=hb.EI(), approximation=hb.SAA(n_scenarios=25)
+)
+
+rng = np.random.default_rng(0)
+start = hb.initial_points(system.u, 2, rng)
+run = hb.hybrid_bo(problem, measure, start, 5, rng, settings=settings)
+print(hb.incumbents(run.history)[-1])
+```
+
+`hb.standard_bo` and the baselines are called the same way.
+
+## Compare methods
+
+The experiments in `experiments/` run with [Benchopt](https://benchopt.github.io), with
+repetitions, parallel runs and resuming. In a clone of the repository:
+
+```bash
+pixi run benchmark -r 3 -j 4 -d "experiment[module=illustrative_example]"
+```
 
 ## Docs
 
@@ -34,9 +70,9 @@ ignores; [scripts/README.md](scripts/README.md) has an example.
 pixi run docs
 ```
 
-then open `docs/_build/html/index.html`. Getting started explains what you just ran,
-Writing an experiment how to set up your own problem, and Reading results what the
-results mean.
+then open `docs/_build/html/index.html`. Getting started runs a first example,
+Writing an experiment explains how to set up your own problem, and Reading results what
+the results mean.
 
 ## License
 

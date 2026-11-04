@@ -1,104 +1,104 @@
 Getting started
 ===============
 
-This page runs the illustrative example of the paper and looks at what it produced.
-The next pages explain how to write your own experiment and how to read the results.
+This page runs hybrid BO and standard BO on the illustrative example of the paper, in
+a plain script. The next pages explain how to state your own problem and how to read
+the results.
 
 Install
 -------
 
-The project is managed with `pixi <https://pixi.sh>`_, which installs Python, the
-library and every dependency into the project folder. Install pixi, then fork the
-repository on GitHub and clone your fork:
+The library isn't on PyPI yet, so install it from the repository:
 
 .. code-block:: bash
 
-   git clone https://github.com/<you>/hybrid-bo.git
-   cd hybrid-bo
+   pip install "hybrid-bo[plots] @ git+https://github.com/jj2249/hybrid-bo.git"
 
-There is no separate install step: the first ``pixi run`` installs the environment it
-needs.
+``plots`` adds matplotlib, for the iteration figures. To work on the repository, use
+`pixi <https://pixi.sh>`_, which installs Python, the library and every dependency into
+the project folder: fork and clone the repository, and the first ``pixi run`` installs
+the environment it needs.
 
-Run the illustrative experiment
--------------------------------
+Run a script
+------------
 
-An *experiment* is one Python file in ``experiments/``: a problem, how it is measured,
-and the methods to compare. ``experiments/illustrative_example.py`` is the
-illustrative example of the paper: one decision variable ``u``, the known equation
+The illustrative example has one decision variable ``u``, the known equation
 ``x + exp(x) = y`` and the unknown equation ``y = sin(u)``, which the methods have to
-learn. Run every method on it three times and plot the results:
+learn. A script states the problem, how it is measured and the settings, then calls a
+method:
+
+.. code-block:: python
+
+   import casadi as cas
+   import numpy as np
+
+   import hybrid_bo as hb
+
+   # Problem: what we know about the physics, and what we want
+   u = hb.Var("u", lower=-2.0, upper=2.0)
+   x = hb.Var("x", start=(-2.5, 1.0))
+   y = hb.Var("y", start=(-2.0, 2.0))
+   system = hb.System(
+       u=[u],
+       x=[x],
+       y=[y],
+       g=lambda v: [v.x + cas.exp(v.x) - v.y],  # 0 = g(x, y, u)
+       h_inputs=[u],  # y = h(u), which the GP learns
+       measured=[y],
+   )
+   problem = hb.Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x - 4))
+
+   # Measurement: an oracle plays the real system
+   measure = hb.oracle_measure(system, lambda v: [cas.sin(v.u)], noise_std=0.0)
+
+   # Settings: the prior GP, and how each method chooses its next point
+   gp = hb.gp.GP(
+       mean=hb.gp.Zero(),
+       kernel=hb.gp.Param(1.0, bounds=(0.1, 10.0))
+       * hb.gp.Matern52(lengthscale=hb.gp.Param(1.0, bounds=(1e-3, 1e2))),
+       noise_std=0.0,
+   )
+   hybrid_settings = hb.HybridBOSettings(
+       gp=gp,
+       acquisition=hb.EI(),
+       approximation=hb.SAA(n_scenarios=25, unknown_states_as_variables=False),
+   )
+   standard_settings = hb.StandardBOSettings(gp=gp, acquisition=hb.EI())
+
+   # Run both from the same initial points, with a generator each
+   start = hb.initial_points(system.u, 2, np.random.default_rng(0))
+   hybrid = hb.hybrid_bo(
+       problem, measure, start, 5, np.random.default_rng(1), settings=hybrid_settings
+   )
+   standard = hb.standard_bo(
+       problem, measure, start, 5, np.random.default_rng(1), settings=standard_settings
+   )
+
+   # Results: a run is plain data
+   for run in (hybrid, standard):
+       print(f"{run.method}: best f = {hb.incumbents(run.history)[-1]:.4f}")
+
+   # A figure of the last iteration
+   figure = hb.plots.iteration(hybrid, problem, 4, measure=measure)
+   figure.savefig("hybrid_bo_iteration.png")
+
+It takes a few seconds. Each method spends 2 initial points and 5 iterations, and the
+true minimum is about -50.46. The figure shows the state before the last trial point:
+what the GP has learned, the objective under the scenarios and the acquisition function.
+
+Compare methods
+---------------
+
+One run says little, since a method's result depends on its initial points. To compare
+methods over many runs, the experiments in ``experiments/`` run with
+`Benchopt <https://benchopt.github.io>`_:
 
 .. code-block:: bash
 
-   pixi run experiment illustrative_example --n-runs 3 --plot
+   pixi run benchmark -r 3 -j 4 -d "experiment[module=illustrative_example]"
 
-It takes about a minute. It runs a *study*: every method (hybrid BO, standard BO, Latin hypercube sampling and
-uniform sampling) ``n_runs`` times, each run 7 evaluations of which the first 2 are
-initial points, run ``i`` of every method from the same initial points. ``pixi run experiment illustrative_example --help`` lists the flags:
-
-- ``--method NAME`` runs only the configuration with that label (repeat it for
-  several; default all);
-- ``--n-runs`` and ``--seed`` override the experiment's study settings. Each
-  configuration has its own budget, set in the experiment, so no flag changes the
-  number of iterations;
-- ``--n-workers 4`` runs the runs in 4 processes at once, with the same results
-  (default 1: one after another, each still in its own process);
-- ``--name`` names the study (default the current UTC time); a name already taken
-  is refused before anything runs;
-- ``--plot`` draws the figures straight after, and ``--plot-runs 0 3`` (or ``all``)
-  chooses the runs that get a figure per iteration (default run 0 of each method);
-- ``--require-clean`` refuses to run with uncommitted or untracked files (without it,
-  they get a warning), since the study wouldn't be reproducible.
-
-Each run is saved as soon as it finishes. Ctrl-C, or a crash, stops the study but
-keeps its finished runs, and prints the command that finishes it:
-
-.. code-block:: bash
-
-   pixi run experiment illustrative_example resume STUDY [--n-workers 4] [--plot]
-
-which runs only the runs that are missing, and takes ``--plot`` and ``--plot-runs`` as
-a run does. It refuses if the experiment or the code changed since the study started,
-so a resumed study equals one run in one go.
-
-:doc:`running_large_studies` covers long studies: many runs on one machine, and
-SLURM clusters.
-
-Look at the study
------------------
-
-When it finishes, the command prints a summary with one row per method: the median and
-interquartile range (IQR), over the runs, of the final ``incumbent`` (the lowest
-objective measured), ``oracle_incumbent`` (the objective there without measurement
-noise) and ``regret`` (how far that is above the oracle optimum, the problem's
-minimum). Lower is better.
-
-The study is saved in ``results/illustrative_example/<study id>/``:
-
-.. code-block:: text
-
-   artifact.json       what the study ran and how: settings, problem, methods
-   tasks.json          the task list: what the study runs, written before it starts
-   runs/<method>/      one JSON file per run: every evaluated point, the GPs, ...
-   summary.csv         the summary table printed above
-   study.log           the study's progress: each run and iteration, times, warnings
-   logs/<method>/      the same, one log per run: run-000.log, ...
-   figures/            convergence.png, regret.png and a figure per iteration of run 0
-
-Open ``figures/regret.png``: the median regret of each method over the evaluations,
-with the interquartile range across runs shaded. Hybrid BO's median regret should fall
-by orders of magnitude within the five iterations (the axis is logarithmic), while
-the other methods stay well above it.
-To draw the figures again later, or for an older study:
-
-.. code-block:: bash
-
-   pixi run plot illustrative_example            # the newest study
-   pixi run plot illustrative_example <study id>
-   pixi run experiment illustrative_example plot <study id> --plot-runs all
-
-:doc:`reading_results` explains every file and figure, and how to load a study in
-Python.
+It runs every method of the experiment three times, four at a time, and opens a report
+with the regret of each method. :doc:`reading_results` explains what it saves.
 
 Build these docs
 ----------------

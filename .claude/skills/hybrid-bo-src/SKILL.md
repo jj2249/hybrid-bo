@@ -101,93 +101,27 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - `history.py`: `History` (`u`, `x`, `y`, `f`, oracle values or `None`, `n_initial`)
   `incumbents` and `oracle_incumbents` (the benchmark metric); `_concatenate`
   appends one history to another.
-- `run.py`: `Run` (`history`, `artifact`, `method`: its label, `artifact["method"]`
-  unless a study relabels it; `index` in its study; `surrogates`: per iteration a
-  `tuple[FittedGP, ...]`, the surrogate behind its trial point (hybrid BO: one GP per
-  unknown state in the order of `system.y`; standard BO: a 1-tuple, the GP of f), and
-  `acquisitions`: one
-  `AcquisitionSolution` per iteration, both empty for the baselines; `scenarios`,
-  hybrid BO only, else None; `settings`, the BO method's settings in full, else
-  None; `n_evaluations`, its configuration's budget, set
-  by `repeat`, else None), pure data that loads without user code (ADR 0003).
+- `run.py`: `Run` (`history`, `artifact`, `method`: the method's name; `surrogates`: per
+  iteration a `tuple[FittedGP, ...]`, the surrogate behind its trial point (hybrid BO:
+  one GP per unknown state in the order of `system.y`; standard BO: a 1-tuple, the GP of
+  f), and `acquisitions`: one `AcquisitionSolution` per iteration, both empty for the
+  baselines; `scenarios`, hybrid BO only, else None; `settings`, the BO method's
+  settings in full, else None), pure data that loads without user code (ADR 0003).
   `run_artifact(problem, measure, rng, method, settings)` builds the run's artifact,
-  text, from `problem_artifact` (public: the CLI's task list holds it),
-  `_generator_artifact` and `_versions_artifact` (a
-  study's artifact reuses them); call it before the method draws. `code_version(path)` is
-  `git describe --always --dirty` plus `-untracked` for untracked files that aren't
-  ignored, or `unknown`; `is_clean(version)` says whether it pins the code (the CLI
-  checks it before running). A measurement is recorded by
-  its docstring, else its name; a dataclass measurement (`OracleSimulation`) by its
-  repr.
-- `studies.py`: `Configuration(method, n_evaluations, n_initial)` (a method with
-  its own budget, `ValueError` unless 1 <= n_initial <= n_evaluations; it runs
-  `n_evaluations - n_initial` iterations), `StudySettings(n_runs, seed)`,
-  `Study(runs, settings, name, artifact)`, `Method` (called as `method(problem,
-  measure, initial_points, n, rng=rng)`), `repeat(configuration, ...)` (run i from
-  `default_rng(SeedSequence(seed).spawn(n_runs)[i])`, initial points then the method;
-  catches `HybridBOError`, logs it and keeps `error.run`; sets each run's `index`
-  and `n_evaluations`, the configuration's budget, since the method is code and
-  can't be saved) and `study(configurations, problem, measure, settings, name,
-  optimum)`, serial in the caller's process (no `n_workers`; #156, ADR 0010):
-  resolves a None seed to fresh entropy kept in its settings, logs each
-  configuration, then `study_tasks` -> `run_task` on each -> `assemble`. `Task(label,
-  configuration, index, child)` is one run of a configuration; `study_tasks(configurations,
-  settings)` gives them by label, then index (`ValueError` if the seed is None);
-  `run_task(task, problem, measure, settings) -> Run | None` is one run as `repeat`
-  describes (None: failed before evaluating anything; the run keeps its method's
-  name); `assemble(tasks, runs, problem, measure, settings, name, optimum)` relabels
-  runs with their task's label, drops the Nones (`ValueError` unless one per task),
-  builds the artifact (records a stated `optimum` as `oracle_optimum`, never computes
-  one, gives a BO method's prior GP, the run artifact's `gp`, on the line after its
-  settings in `methods`, `no runs` for a label without runs) and warns with
-  `OracleOptimumWarning` if an evaluated point's `f_oracle` is below the optimum.
-  Run i of configurations with the same `n_initial` shares initial points. Running
-  tasks elsewhere is `cli.py`'s job (processes over files). Each configuration spawns its own
-  `SeedSequence` children: `lhs` spawns from them, so sharing them across
-  configurations changes the later ones' initial points. Studies take a seed, not an
-  `rng`: the settings alone reproduce a study. **Prefix property**: no BO method
-  depends on its remaining budget, so with the same seed and `n_initial` a longer
-  run starts with exactly the shorter run's evaluations, fitted GPs and acquisition
-  solutions (`tests/test_studies.py` pins it for hybrid and standard BO; the
-  baselines draw their whole design first: Latin hypercube sampling lacks it, uniform
-  sampling has it only with a measurement that draws nothing). Keep it: a budget sweep
-  reads every budget from the longest run.
-- `saving.py`: `save(study, path)` / `load(path)` (ADR 0004): `artifact.json` lists the
-  run files `runs/<method>/run-<index:03d>.json`; `save_run(run, path)` (new file
-  only, `FileExistsError`) and `load_run(path)` write and read one run file in that
-  format (the caller writes atomically), and `save_artifact(study, path)` writes only
-  the artifact beside run files already in place (`ValueError` if one is missing or
-  its text isn't the run's encoding, `FileExistsError` if an artifact exists); `save`
-  is `save_run` per run then the artifact; `load` also reads the older
-  `study.json` (with `record` for `artifact`), a study saved before #144 (`n_initial`,
-  `n_iterations` in its settings) with that budget as each run's `n_evaluations`, and a run saved before #114, whose
-  surrogates are single fitted GPs, as 1-tuples (`_with_surrogate_tuples`, before
-  `_check_format`); but a run saved before #119 (fitted
-  GPs without `gp`, or a `record` with a `kernel` entry), a BO run saved before #120
-  (a `record` with `gp` but no `settings` field) or any run saved before #123 (with
-  `record`, the artifact's old name) raises `StudyFormatError`
-  (`_check_format`), as do a tag naming no expected type and data that fits no
-  member of a union. `_encode`/`_decode`
-  convert any dataclass by its type hints; arrays are nested lists of floats (an empty
-  one is `{"shape": ...}`). The GP types (`gp.TYPES`) and the settings types
-  (`settings.TYPES`: the settings, `EI`, `LCB` and the approximations) are saved with
-  `"type"`, their class name, and `_decode` picks a union's member by it (`_union_member` picks
-  untagged data by its JSON shape: a list, an empty array's `{"shape": ...}`, another
-  dict or a plain value). A new field on `Run` or its parts round-trips without
-  changes if its type is one `_decode` handles. `save` refuses an existing folder.
-- `views.py`: `evaluations(study, optimum=None)`, `summary(study)` and
-  `hyperparameters(study)`, Polars data frames (one row per evaluation, per method,
-  per hyperparameter entry of each fitted GP, named by its dotted path in the GP,
-  e.g. `kernel.kernel.lengthscale`, with `output` naming the variable the GP models:
-  the unknown state for hybrid BO, `f` for standard BO); each docstring lists its
-  columns. Variable
-  columns are named from the study's artifact (`_names` reads `Var(name='...')`).
-  Polars is imported inside the functions (`_polars`), so `import hybrid_bo` works
-  without it; a missing Polars raises `ImportError` naming `hybrid-bo[analysis]`.
-- `cli.py`: the study command line, `hb.cli.main` (ADR 0010; the
-  `hybrid-bo-experiments` skill has its commands and files). Only `main` is public.
-  It is the one module that writes files on its own, as the command line asks; it
-  imports Polars and matplotlib lazily, so tasks start without them.
+  text, from `problem_artifact`, `_generator_artifact` and `_versions_artifact`; call it
+  before the method draws. The artifact holds no git commit: from an installed package
+  git answers for the user's repository (#198). A measurement is recorded by its
+  docstring, else its name; a dataclass measurement (`OracleSimulation`) by its repr.
+- `saving.py`: `save_run(run, path)` (new file only, `FileExistsError`) and
+  `load_run(path)`, one run as JSON. `_encode`/`_decode` convert any dataclass by its
+  type hints; arrays are nested lists of floats (an empty one is `{"shape": ...}`). The
+  GP types (`gp.TYPES`) and the settings types (`settings.TYPES`: the settings, `EI`,
+  `LCB` and the approximations) are saved with `"type"`, their class name, and `_decode`
+  picks a union's member by it (`_union_member` picks untagged data by its JSON shape: a
+  list, an empty array's `{"shape": ...}`, another dict or a plain value). A tag naming
+  no expected type, or data that fits no member of a union, raises `RunFormatError`. A
+  new field on `Run` or its parts round-trips without changes if its type is one
+  `_decode` handles.
 - `baselines.py`: `latin_hypercube_sampling` and `uniform_sampling` draw the whole
   design over the `u` start bounds, then `evaluate` initial points plus design in
   one call.
@@ -315,10 +249,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   as the method built it (stored surrogate, the run's scenarios, the incumbent
   before trial point i from `incumbents`, `run.settings`; `ValueError` for a
   baseline), for the replay.
-- `plots.py`: static figures, no widgets and no `rng`. `convergence(study, ax)` and
-  `regret(study, optimum, ax)` draw `evaluations` (median and IQR per method over
-  evaluations, `_over_evaluations`).
-  `iteration(run, problem, i, *, measure, gp,
+- `plots.py`: static figures, no widgets and no `rng`. `iteration(run, problem, i, *, measure, gp,
   scenarios, acquisition) -> Figure` draws the state before trial point i over the
   `u` start bounds, with one figure legend (`_figure_legend`); it dispatches on
   `n_u` (`ValueError` above 2, and for hybrid BO's GP panels with P > 1: they draw
@@ -338,15 +269,15 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   draw: plots imports no private name of `acquisition`. With linearization the
   scenarios panel draws nominal f ± s (`_nominal_band`), else the scenarios' mean
   and band. Figures are drawn in `STYLE` (`hybrid_bo.mplstyle`).
-  matplotlib and Polars are imported inside the functions.
+  matplotlib is imported inside the functions.
 - `errors.py`: `HybridBOError` (with `.history`, the points evaluated before the
   error, and `.run`, the partial run when raised in a method), `RootFindingError`,
-  `NoSolutionError`, `ReconstructionWarning`, `OracleOptimumWarning`, `ReplayWarning`
-  (an iteration figure's replay left the optimizer's branch at the trial point), and
-  `StudyFormatError` (a `ValueError`: a saved study this version can't load). The library
-  raises these, never bare `Exception` (ruff `TRY002`/`BLE001` apply everywhere).
-  It imports `History` and `Run` only for type checking, since `run.py` imports
-  `gp.py`, which imports `errors.py`.
+  `NoSolutionError`, `ReconstructionWarning`, `ReplayWarning` (an iteration figure's
+  replay left the optimizer's branch at the trial point), and `RunFormatError` (a
+  `ValueError`: a saved run this version can't load). The library raises these, never
+  bare `Exception` (ruff `TRY002`/`BLE001` apply everywhere). It imports `History` and
+  `Run` only for type checking, since `run.py` imports `gp.py`, which imports
+  `errors.py`.
 
 ## Conventions and contracts
 
@@ -356,10 +287,10 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `hybrid_acquisition`, `n_scenarios` on `SAA` and `SoftSAA`, `temperature` on
   `SoftSAA`, `std_factor` on `LCB`, `noise_std` on `oracle_measure` and `GP`. Defaults
   stay for search effort, numerics and plumbing (`n_starts`, `n_starts_gp`, `tol`,
-  `solver`, `jitter`, kernel priors and `ard`, `Var` bounds, `seed`, plot flags, and
+  `solver`, `jitter`, kernel priors and `ard`, `Var` bounds, plot flags, and
   `unknown_states_as_variables=True`, a formulation with the same optimum). The
   settings and choice dataclasses (`EI`, `LCB`, `SAA`, `SoftSAA`, `Linearization`,
-  both settings, `GP`, `Configuration`, `StudySettings`) are `kw_only=True`;
+  both settings, `GP`) are `kw_only=True`;
   `tests/test_required_arguments.py` pins both. A new setting that chooses the method
   gets no default.
 - **Shapes.** Rows are points: a point is `(n,)`, a set `(n_points, n)`, `f`
@@ -370,15 +301,14 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   Start bounds are finite and set the ranges of initial points, multistart starts and
   `fsolve` starts.
 - **Runs are pure data.** A `Run` holds arrays, numbers and strings only, so it
-  saves as JSON (and pickles) without user code; the artifact is text. Plots are functions of a
-  finished run.
+  saves as JSON (and pickles) without user code; the artifact is text. Figures are
+  functions of a finished run.
 - **Runtime aliases** (e.g. `Symbolic`) are used at runtime. Keep them as plain
   assignments, never `type X = ...`.
 
 ## Behavior to know
 
-- **Randomness is per run.** The caller passes one generator per run (a study
-  spawns them from its seed). A run uses only its own generator, in DESIGN.md's
+- **Randomness is per run.** The caller passes one generator per run. A run uses only its own generator, in DESIGN.md's
   "Order of random draws":
   1. initial points (caller): `lhs` over the `u` start bounds;
   2. method setup: hybrid BO with SAA or SoftSAA draws the scenarios
@@ -399,16 +329,13 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   is a logic change. `tests/test_sampling.py` pins `lhs` to scipy's draw and its
   spawning.
 - **Errors propagate** out of a method: a `HybridBOError` carries the partial run
-  (`error.run`). Only `repeat` (and so `study`) catches them, per run: it logs the
-  error and keeps the partial run.
-- **The library never writes files on its own.** Saving is an explicit `save` call.
-- **Progress is logged, never configured.** `study` logs each method, `repeat` each
-  run, `optimization_loop` the initial points and each iteration (with the incumbent)
-  at INFO; `fit_gp` and `multistart` log their times at DEBUG, and warn about a
-  nearly singular training covariance and starts at the iteration limit. Times come from
-  `time.perf_counter`. The library adds no handlers to the caller's process; the
-  experiment CLI's task processes save each run's records as its per-run log, and the
-  launcher appends them, tagged `<label>/run-003`, to the study log.
+  (`error.run`). The benchmark's solver catches them and keeps that run.
+- **The library never writes files on its own.** Saving is an explicit `save_run` call.
+- **Progress is logged, never configured.** `optimization_loop` logs the initial points
+  and each iteration (with the incumbent) at INFO; `fit_gp` and `multistart` log their
+  times at DEBUG, and warn about a nearly singular training covariance and starts at the
+  iteration limit. Times come from `time.perf_counter`. The library adds no handlers to
+  the caller's process.
 - **Oracle incumbents.** `incumbents(history)` is the running minimum of the measured
   `f`. The benchmark metric `oracle_incumbents(history)` is `f_oracle` at the
   incumbent's point, not the running minimum of `f_oracle`; they agree only
@@ -416,7 +343,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 
 ## Testing rules
 
-- `pixi run -e dev test` runs in about 2 minutes (each CLI study task is a new process). Run it for every change.
+- `pixi run -e dev test` runs in about a minute. Run it for every change.
 - `tests/test_regression.py` runs each method of `experiments/illustrative_example.py`
   (seed 0, 2 iterations) and compares with `tests/data/regression/*.json`. The
   baselines were recorded by the pre-refactor code, so the test maps each `Run` to
@@ -433,7 +360,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   to end: every method, saving, plots, and hybrid BO matching standard BO when
   f = y), `test_two_unknown_states.py` (P = 2 end to
   end: runs, saving, plots),
-  `test_studies.py`, `test_views.py`, `test_run.py`, `test_replay.py` (the replay
+  `test_run.py` (the prefix property, saving and loading), `test_benchmark.py` (the
+  Benchopt benchmark, with one real run), `test_replay.py` (the replay
   against values recorded from the IPOPT replay it replaced, `tests/data/replay/`)) compare against
   numpy/scipy references or closed forms. Add one when changing math.
 - A test that expects the same run on every machine needs a well-conditioned run:

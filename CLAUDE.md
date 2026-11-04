@@ -5,7 +5,8 @@ Bayesian optimization for partially known systems using hybrid models
 `f(x, y, u)` subject to known equations `0 = g(x, y, u)` and unknown equations
 `y = h(x, u)`, which a GP learns. The acquisition problem is solved over scenarios
 (sample-average approximation) using CasADi. Standard BO, Latin hypercube sampling
-and uniform sampling are included as baselines. The vocabulary is in
+and uniform sampling are included as baselines. Scripts call the methods directly;
+studies run with Benchopt, from `experiments/`. The vocabulary is in
 [GLOSSARY.md](GLOSSARY.md); use its terms.
 
 Maintainers working on the library (issues, PRs) follow
@@ -14,7 +15,7 @@ Maintainers working on the library (issues, PRs) follow
 ## Commands
 
 Environments are managed with pixi: `default` is the library, `experiments` adds
-matplotlib, Polars and the docs, and `dev` includes everything.
+matplotlib, Benchopt and the docs, and `dev` includes everything.
 
 ```bash
 pixi install -e dev
@@ -25,27 +26,11 @@ pixi run -e dev coverage     # tests + per-file line coverage of src/hybrid_bo, 
 pixi run -e dev lint | format | typecheck
 pixi run -e dev docs         # sphinx API docs -> docs/_build/html
 pixi run -e dev setup        # install pre-commit hooks (ruff and ty on commit)
-pixi run experiment illustrative_example [--n-runs 3 --plot ...]   # every method; --help lists the flags
-pixi run plot illustrative_example [STUDY]   # figures of the newest (or named) study, iterations of run 0
-pixi run experiment illustrative_example plot [STUDY] --plot-runs all   # iteration figures of every run
-pixi run experiment illustrative_example resume STUDY [--n-workers 4] [--plot]   # finish a study that stopped
-pixi run -e experiments python scripts/my_study.py [flags]   # a study script outside experiments/
 pixi run benchmark -r 3 -j 4 [-d "experiment[module=rosenbrock]"]   # every experiment (or one) with Benchopt
 ```
 
-The pixi tasks run an experiment as a module from `experiments/` (`python -m
-illustrative_example ...`). An experiment is a script that ends with an explicit
-`hb.cli.main(...)` call passing everything it defines; its file name is its name.
-`hb.cli` (`src/hybrid_bo/cli.py`) parses the flags and runs or plots. Any script
-runs the same way as `python path/to/script.py ...`; personal ones go in the
-git-ignored `scripts/` (`scripts/README.md`). A study's runs are tasks, each run in
-its own process (`python <script> run-task`), which rebuilds the experiment from its
-script and saves its run file as it finishes; `prepare`, `run-task` and `resume` split a study up (e.g.
-for a SLURM array). The `experiment`, `plot` and `docs` tasks set a
-`default-environment`, so they need no `-e`. `experiment` passes every flag through;
-`plot` takes only the study id, so plot with other flags as
-`pixi run experiment illustrative_example plot [STUDY] [--plot-runs ...]
-[--results-root ...]`.
+`pixi run benchmark` passes every flag to `benchopt run` in `experiments/`, a Benchopt
+benchmark that runs each experiment file there; only those classes use Benchopt.
 
 The git hook hardcodes the pixi Python path. If commits fail with "`pre-commit`
 not found" after a Python upgrade, re-run `pixi run -e dev setup`.
@@ -92,8 +77,8 @@ with a GitHub issue labeled `bug`: remove the marker when fixing the bug.
 - Functions take what they use. Randomness is an explicit `rng`.
 - Rows are points: a point is `(n,)`, a set is `(n_points, n)`, `f` is
   `(n_points,)`. Column vectors only in CasADi glue code.
-- The library never writes files on its own; saving is an explicit call (`hb.save`),
-  or `hb.cli.main`, whose command line says what to write.
+- The library never writes files on its own; saving is an explicit call
+  (`hb.save_run`).
 - Errors raise specific exceptions; the caller decides whether to continue.
 - Annotate signatures and dataclass fields, not local variables. Type errors are
   fixed, not suppressed; if a suppression is unavoidable, use

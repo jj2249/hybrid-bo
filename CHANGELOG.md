@@ -2,11 +2,21 @@
 
 ## Unreleased
 
-- The experiments also run with [Benchopt](https://benchopt.github.io):
-  `pixi run benchmark -r 3 -d "experiment[module=rosenbrock]"` runs a study with
-  repetitions, parallel runs (`-j 4`) and resuming, and saves each run in full under
-  `experiments/outputs/runs/`. `experiments/` holds the Benchopt classes, beside the
-  unchanged experiments.
+- **Breaking:** Studies run with [Benchopt](https://benchopt.github.io), and the study
+  machinery has left the library (ADR 0013, #196, #199). `hb.cli`, `hb.studies`
+  (`hb.study`, `hb.Configuration`, `hb.StudySettings`, `hb.Study`, `hb.repeat`,
+  `hb.Task`, ...), `hb.views` (`hb.summary`, `hb.evaluations`, `hb.hyperparameters`),
+  `hb.save`, `hb.load`, `hb.plots.convergence` and `hb.plots.regret` are gone, with the
+  `hybrid-bo[analysis]` extra and `pixi run experiment` and `pixi run plot`. Call
+  `hb.hybrid_bo`, `hb.standard_bo` and the baselines from a script, and save a run with
+  `hb.save_run`; `pixi run benchmark` runs `experiments/`, which is a Benchopt benchmark
+  and lists its budgets as `n_evaluations` and `n_initial`. `Run` loses `index` and
+  `n_evaluations`, `hybrid-bo[plots]` needs only matplotlib, and
+  `hb.errors.StudyFormatError` is `RunFormatError`. Studies saved by earlier versions
+  don't load: read them with 0.5.
+- A run's artifact no longer records `git`, which answered for the user's repository
+  when the library was installed in it (#198).
+- `hb.plots.iteration`'s replay moved into `hb.acquisition` (`replay`, #194).
 - **Breaking:** The study command line moved into the library as `hb.cli` (#177).
   An experiment ends with `hb.cli.main(problem, measure, configurations,
   study_settings, ...)`, without `import cli` or the name, which is now the

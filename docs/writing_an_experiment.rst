@@ -1,11 +1,8 @@
 Writing an experiment
 =====================
 
-An experiment is one Python file: in ``experiments/`` if it ships with the
-repository, or anywhere else, such as the untracked ``scripts/`` for your own (see
-``scripts/README.md``). It states a problem, how the system is measured, and the
-methods to compare, then hands them to the command line, ``hb.cli``, which runs them
-as a study and plots it. This page builds one block by block, quoting
+An experiment is one Python file: a problem, how the system is measured, and the
+methods to compare. This page builds one block by block, quoting
 ``experiments/illustrative_example.py``. The quickest start is to copy that file,
 
 .. code-block:: bash
@@ -13,9 +10,9 @@ as a study and plots it. This page builds one block by block, quoting
    cp experiments/illustrative_example.py experiments/my_experiment.py
 
 change each block as described below, and run it with
-``pixi run experiment my_experiment``. The file name, without ``.py``, is the
-experiment's name, which names its results folder; for ``pixi run experiment`` it must
-be a valid Python module name (letters, digits and underscores).
+``pixi run benchmark -d "experiment[module=my_experiment]"``. The file name, without
+``.py``, is the experiment's name, so it must be a valid Python module name (letters,
+digits and underscores).
 
 The problem
 -----------
@@ -110,19 +107,18 @@ A benchmark experiment: an oracle
 To test a method you write the unknown equations in closed form, the *oracle*, and
 :py:func:`~hybrid_bo.evaluation.oracle_measure` simulates the system from ``g`` and
 the oracle together. The methods only see the measured variables, with normal noise
-of the standard deviation you state (``noise_std``, 0 for none); the study also keeps
-the true (*oracle*) values, so it can score the methods.
+of the standard deviation you state (``noise_std``, 0 for none); a run also keeps the
+true (*oracle*) values, so the methods can be scored.
 
 .. literalinclude:: ../experiments/illustrative_example.py
    :language: python
    :start-at: # Measurement:
    :end-before: # Methods:
 
-The *oracle optimum* is the true minimum of the problem, which the study measures
-regret from. State it: the study never searches for it, since a search can miss it.
-Find it once with :py:func:`~hybrid_bo.evaluation.oracle_optimum` (with many starts),
-check it, and paste the value as above. If a run later evaluates a point below it, the
-study warns with :py:class:`~hybrid_bo.errors.OracleOptimumWarning`.
+The *oracle optimum* is the true minimum of the problem, which regret is measured from.
+State it: nothing searches for it, since a search can miss it. Find it once with
+:py:func:`~hybrid_bo.evaluation.oracle_optimum` (with many starts), check it, and paste
+the value as above.
 
 Your own system
 ~~~~~~~~~~~~~~~
@@ -145,17 +141,11 @@ a call to another program):
 
 The docstring (else the function's name) is how the measurement is recorded with every
 run, so say what it measures. A measurement written as a dataclass is recorded by its
-repr instead, as the oracle simulation is. Without an oracle the library knows only what was
-measured:
+repr instead, as the oracle simulation is. Without an oracle the library knows only what was measured: there is no oracle
+optimum, so no regret. The benchmark in ``experiments/`` scores regret, so it needs an
+oracle; call the methods from a script for your own system.
 
-- there is no oracle optimum, so no regret and no ``regret.png``;
-- the convergence figure shows the incumbent, the lowest ``f`` the run measured,
-  instead of the oracle incumbent, and the summary's oracle and regret columns are
-  empty;
-- don't pass ``optimum`` or ``true_curves`` to the command line (below).
-
-The measurement is called once per evaluation, so its cost sets the cost of the
-study: ``n_runs * n_evaluations`` calls per configuration (below).
+The measurement is called once per evaluation, so its cost sets the cost of a run.
 
 Methods and settings
 --------------------
@@ -167,7 +157,7 @@ with ``functools.partial``:
 .. literalinclude:: ../experiments/illustrative_example.py
    :language: python
    :start-at: # The prior GP
-   :end-before: # Configurations
+   :end-before: # Every method's budget
 
 - :py:func:`~hybrid_bo.bo.hybrid_bo` with
   :py:class:`~hybrid_bo.settings.HybridBOSettings`: the prior GP (``gp``; see
@@ -221,43 +211,23 @@ different settings:
        ),
    }
 
-Configurations
---------------
+The budget
+----------
 
-A *configuration* is a method with its own evaluation budget:
-:py:class:`~hybrid_bo.studies.Configuration` takes the method, ``n_evaluations``,
-the evaluations of a run in all, and ``n_initial``, how many of them are initial
-points. The rest, ``n_evaluations - n_initial``, are iterations (design points for
-the baselines). Neither has a default, and ``n_initial`` must be at least 1 and at
-most ``n_evaluations``. A study runs ``configurations``, which maps a label to a
-configuration; the shipped comparisons of methods give every method the same
-budget:
+Every method of an experiment has the same budget: ``n_evaluations``, the evaluations
+of a run in all, and ``n_initial``, how many of them are initial points. The rest,
+``n_evaluations - n_initial``, are iterations (design points for the baselines).
 
 .. literalinclude:: ../experiments/illustrative_example.py
    :language: python
-   :start-at: # Configurations
-   :end-before: # The study
+   :start-at: # Every method's budget
 
-To compare splits of one budget between initial points and iterations, give one
-method several configurations, e.g. *initial fractions* ε = ``n_initial /
-n_evaluations`` of 0.2 and 0.5:
-
-.. code-block:: python
-
-   configurations = {
-       f"hybrid_bo_{n_initial}": hb.Configuration(
-           method=methods["hybrid_bo"], n_evaluations=20, n_initial=n_initial
-       )
-       for n_initial in (4, 10)
-   }
-
-Run ``i`` of every configuration with the same ``n_initial`` starts from the same
-initial points. A BO method doesn't depend on how many evaluations it has left, so
-with the same seed and ``n_initial`` a run with a larger budget passes through the
-same first evaluations as one with a smaller budget: the longest run gives the regret
-of every smaller budget. The baselines draw their whole design at the start, so Latin
-hypercube sampling doesn't have this property, and uniform sampling has it only
-without measurement noise.
+Run ``i`` of every method starts from the same initial points. A BO method doesn't
+depend on how many evaluations it has left, so with the same seed a run with a larger
+budget passes through the same first evaluations as one with a smaller budget: the
+longest run gives the regret of every smaller budget. The baselines draw their whole
+design at the start, so Latin hypercube sampling doesn't have this property, and
+uniform sampling has it only without measurement noise.
 
 The GP
 ------
@@ -304,82 +274,45 @@ measured state:
        noise_std=0.01,
    )
 
-A run saves its fitted GPs whole, so the iteration figures of a saved study need
-nothing from the experiment.
-
-The study and the command line
-------------------------------
-
-``study_settings`` (:py:class:`~hybrid_bo.studies.StudySettings`) are the study's
-defaults, which the command-line flags override: the number of runs of each
-configuration and the seed. Both are the same for every configuration, so the runs
-are paired. Every random draw comes
-from the seed, so the same seed gives the same study; ``None`` draws a fresh one, which
-the saved study keeps.
-
-.. literalinclude:: ../experiments/illustrative_example.py
-   :language: python
-   :start-at: # The study
-   :end-before: # Run or plot
-
-The file ends by passing everything it defines to ``hb.cli.main``:
-
-.. literalinclude:: ../experiments/illustrative_example.py
-   :language: python
-   :start-at: # Run or plot
-
-Each run of a study starts the file again as ``python <file> run-task``, so
-everything the study needs must be in the file or what it imports. For your own
-system, leave out ``optimum`` and ``true_curves``:
-
-.. code-block:: python
-
-   if __name__ == "__main__":
-       hb.cli.main(problem, measure, configurations, study_settings)
-
-``true_curves=True`` draws the true curves in the iteration figures by running the
-measurement on a grid, so use it only with an oracle.
+A run saves its fitted GPs whole, so the iteration figures of a saved run need nothing
+from the experiment's methods.
 
 Running
 -------
 
-.. code-block:: bash
-
-   pixi run experiment my_experiment --n-runs 1   # a quick check first
-   pixi run experiment my_experiment --plot
-   pixi run plot my_experiment
-
-The study is saved in ``results/my_experiment/<study id>/`` in the folder you ran the
-command from; :doc:`reading_results` explains what is in it. Results are git-ignored.
-A file outside ``experiments/`` runs the same way with Python itself, e.g.
-``pixi run -e experiments python scripts/my_study.py --plot``. For a long study, see
-:doc:`running_large_studies`.
-
-The command line is a convenience. In a script or notebook, run the study and save it
-yourself (the library never writes files unless asked):
-
-.. code-block:: python
-
-   study = hb.study(configurations, problem, measure, study_settings, optimum=optimum)
-   hb.save(study, "results/my_experiment/first-try")
-
-or run one method once, from initial points drawn with
-:py:func:`~hybrid_bo.sampling.initial_points`:
+In a script or a notebook, call a method, with initial points drawn with
+:py:func:`~hybrid_bo.sampling.initial_points`. For your own system this is all you need:
 
 .. code-block:: python
 
    rng = np.random.default_rng(0)
    u0 = hb.initial_points(system.u, n=2, rng=rng)
-   run = hb.hybrid_bo(problem, measure, u0, 5, rng)
+   run = hb.hybrid_bo(problem, measure, u0, 5, rng, settings=settings)
+   hb.save_run(run, "hybrid_bo.json")
+
+The library never writes files unless asked. To compare methods over many runs, add a
+file to ``experiments/``, which runs with `Benchopt <https://benchopt.github.io>`_:
+
+.. code-block:: bash
+
+   pixi run benchmark -r 1 -d "experiment[module=my_experiment]" --no-plot --no-html  # a quick check first
+   pixi run benchmark -r 10 -j 4 -d "experiment[module=my_experiment]"
+
+A file there needs ``problem``, ``measure``, ``optimum``, ``methods``, ``n_evaluations``
+and ``n_initial`` at its top level. Benchopt only imports it, so anything it should run
+directly goes under ``if __name__ == "__main__":``. A stopped study finishes by running
+the same command again: Benchopt skips the runs it has. :doc:`reading_results` explains
+what it saves; results are git-ignored.
 
 When something goes wrong
 -------------------------
 
-- **No module named my_experiment**: the name after ``experiment`` must match a file
-  in ``experiments/``, without ``.py``.
+- **Nothing runs for my experiment**: ``module=`` must match a file in
+  ``experiments/``, without ``.py``.
 - **A run fails** with a :py:class:`~hybrid_bo.errors.HybridBOError` (for example the
-  root-finding problem has no solution): the study logs it, keeps the run up to that
-  point, and goes on. Check the equations and the start bounds.
+  root-finding problem has no solution): it carries the run up to that point as
+  ``error.run``, and the benchmark keeps that run and counts it as incomplete. Check
+  the equations and the start bounds.
 - **ReconstructionWarning**: with an oracle, the measured variables don't pin the
   states down to the oracle's values (``g`` has several roots). Narrow the start
   bounds of the unmeasured states to the right branch, or measure other variables.
