@@ -352,7 +352,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 ## Testing rules
 
 - `pixi run -e dev test` runs in about a minute. Run it for every change.
-- `tests/test_regression.py` runs each method of `experiments/illustrative_example.py`
+- `tests/test_regression.py` runs each method of `tests/illustrative_example.py`
   (seed 0, 2 iterations) and compares with `tests/data/regression/*.json`. The
   baselines were recorded by the pre-refactor code, so the test maps each `Run` to
   their `ResultsBO` keys (`x` holds `[x, y]`, `*_initial`/`*_bo` halves), plus

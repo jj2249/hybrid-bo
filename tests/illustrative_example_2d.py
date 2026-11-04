@@ -1,10 +1,16 @@
-"""The illustrative example of the paper as an experiment, run with every method.
+"""The illustrative example with two decision variables, run with SAA-EI, Lin-EI,
+SoftSAA-EI, standard BO and Latin hypercube sampling.
 
-One decision variable u, one mechanistic state x and one unknown state y. The known
-equation is x + exp(x) = y; the unknown equation is y = sin(u), which only the oracle
-knows.
+Two decision variables u1 and u2, one mechanistic state x and one unknown state y.
+The known equation and the objective are the illustrative example's, x + exp(x) = y
+and f = (6x - 2)^2 sin(12x - 4); the unknown equation is y = sin(u1) cos(u2), which
+only the oracle knows. f depends on u only through y, so its minimum is attained
+along a curve in the plane of u. With one unknown state and two decision variables,
+the iteration figures draw every panel: a row of y (oracle, GP mean, GP std) and a
+row of f.
 
-Run it with `pixi run -e experiments python experiments/illustrative_example.py NAME`.
+The tests share it, and the docs quote it. Run it with
+`pixi run -e experiments python tests/illustrative_example_2d.py NAME`.
 """
 
 import sys
@@ -16,17 +22,20 @@ import numpy as np
 
 import hybrid_bo as hb
 
-# Problem: what we know about the physics, and what we want
-u = hb.Var("u", lower=-2.0, upper=2.0)
+# Problem: what we know about the physics, and what we want. y = sin(u1) cos(u2) is in
+# [-1, 1] over the box, as in the illustrative example, so the states share its start
+# bounds
+u1 = hb.Var("u1", lower=-2.0, upper=2.0)
+u2 = hb.Var("u2", lower=-2.0, upper=2.0)
 x = hb.Var("x", start=(-2.5, 1.0))
 y = hb.Var("y", start=(-2.0, 2.0))
 
 system = hb.System(
-    u=[u],
+    u=[u1, u2],
     x=[x],
     y=[y],
     g=lambda v: [v.x + cas.exp(v.x) - v.y],  # 0 = g(x, y, u)
-    h_inputs=[u],  # y = h(u)
+    h_inputs=[u1, u2],  # y = h(u1, u2)
     measured=[y],
 )
 problem = hb.Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x - 4))
@@ -34,21 +43,22 @@ problem = hb.Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x -
 
 # Measurement: an oracle plays the real system
 def oracle(v):
-    """The unknown equation y = h(u), hidden from the methods."""
-    return [cas.sin(v.u)]
+    """The unknown equation y = h(u1, u2), hidden from the methods."""
+    return [cas.sin(v.u1) * cas.cos(v.u2)]
 
 
 measure = hb.oracle_measure(system, oracle, noise_std=0.0)
 
-# The oracle optimum, at u = -0.45: the study measures regret from it, the methods
-# never see it. Found once with
+# The oracle optimum: the study measures regret from it, the methods never see it.
+# Found once with
 # hb.oracle_optimum(problem, oracle, np.random.default_rng(0), n_starts=200), and
-# checked: hybrid BO runs reach it, and none evaluates a point below it
-optimum = -50.4608044704652
+# checked: it is the illustrative example's to rounding, since y takes the same values,
+# so f is smallest along the curve sin(u1) cos(u2) = sin(-0.45)
+optimum = -50.460804470465206
 
 # The prior GP of every BO method, which each fits to its own data: a zero mean and an
-# output scale times a Matern-5/2 kernel, both fitted within these bounds (in scaled
-# units), and no noise, as the measurement has none
+# output scale times a Matern-5/2 kernel with a lengthscale per input, both fitted
+# within these bounds (in scaled units), and no noise, as the measurement has none
 outputscale = hb.gp.Param(1.0, bounds=(0.1, 10.0))
 lengthscale = hb.gp.Param(1.0, bounds=(1e-3, 1e2))
 gp = hb.gp.GP(
@@ -57,15 +67,14 @@ gp = hb.gp.GP(
     noise_std=0.0,
 )
 
-# Every method's budget: 2 initial points, then 5 iterations
-N_INITIAL = 2
-N_ITERATIONS = 5
+# Every method's budget: 6 initial points, 2(N + 1), then 10 iterations
+N_INITIAL = 6
+N_ITERATIONS = 10
 N_RUNS = 10
 
 # Methods: each is one run from the generator `rng`. Hybrid BO substitutes the GP
-# prediction for the unknown states, as this experiment always has, with SAA-EI, with
-# Lin-EI and with SoftSAA-EI at a temperature of 50e-3, about 1e-3 times the optimum's
-# magnitude (about 50)
+# prediction for the unknown state, with SAA-EI, with Lin-EI and with SoftSAA-EI at a
+# temperature of 50e-3, about 1e-3 times the optimum's magnitude (about 50)
 
 
 def hybrid_bo(rng: np.random.Generator) -> hb.Run:
@@ -132,18 +141,11 @@ def latin_hypercube_sampling(rng: np.random.Generator) -> hb.Run:
     )
 
 
-def uniform_sampling(rng: np.random.Generator) -> hb.Run:
-    """Uniform sampling."""
-    return hb.uniform_sampling(
-        problem, measure, n_initial=N_INITIAL, n_iterations=N_ITERATIONS, rng=rng
-    )
-
-
 # Every method's runs from the same seeds, so run i of each starts from the same initial
 # points, then the results and their figure
 if __name__ == "__main__":
     # The study's name, its folder made first so a name in use fails before the runs
-    folder = Path("results/illustrative_example", sys.argv[1])
+    folder = Path("results/illustrative_example_2d", sys.argv[1])
     folder.mkdir(parents=True)
 
     methods = (
@@ -152,7 +154,6 @@ if __name__ == "__main__":
         hybrid_bo_soft,
         standard_bo,
         latin_hypercube_sampling,
-        uniform_sampling,
     )
     runs = {
         method.__name__: [method(np.random.default_rng(seed)) for seed in range(N_RUNS)]

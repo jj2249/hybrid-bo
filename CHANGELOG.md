@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Breaking:** `experiments/` is gone: studies live in a repository of their own, with
+  `hybrid-bo` installed as a package. The illustrative examples moved to `tests/`, which
+  shares them, and the docs quote them there. `rosenbrock` and `langermann` are in the
+  `v0.6.0` tag.
 - The install commands name a release, so a script's library can't change under it (#204).
 
 ## 0.6.0 (2026-11-04)

@@ -119,7 +119,7 @@ methods, repeat them over seeds in a loop, and keep a list of runs per label:
    hb.plots.regret(runs, -50.4608, ax)
    figure.savefig("regret.png")
 
-The scripts in ``experiments/`` do this in full. :doc:`reading_results` explains what is
+``tests/illustrative_example.py`` does this in full. :doc:`reading_results` explains what is
 saved.
 
 Build these docs

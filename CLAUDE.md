@@ -26,7 +26,7 @@ pixi run -e dev coverage     # tests + per-file line coverage of src/hybrid_bo, 
 pixi run -e dev lint | format | typecheck
 pixi run -e dev docs         # sphinx API docs -> docs/_build/html
 pixi run -e dev setup        # install pre-commit hooks (ruff and ty on commit)
-pixi run -e experiments python experiments/illustrative_example.py NAME   # an experiment is a plain script; NAME is the study's folder
+pixi run -e experiments python tests/illustrative_example.py NAME   # an experiment is a plain script; NAME is the study's folder
 ```
 
 The git hook hardcodes the pixi Python path. If commits fail with "`pre-commit`
