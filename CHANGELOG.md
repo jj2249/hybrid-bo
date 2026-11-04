@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.6.0 (2026-11-04)
+
 - **Breaking:** The library has no study runner any more (ADR 0013, #199): a script runs
   the methods. `hb.cli`, `hb.studies` (`hb.study`, `hb.Configuration`,
   `hb.StudySettings`, `hb.Study`, `hb.repeat`, `hb.Task`, ...), `hb.views` (`hb.summary`,
