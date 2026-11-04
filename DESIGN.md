@@ -79,7 +79,7 @@ The original code was hard to change for three reasons:
   ([ADR 0005](docs/adr/0005-iteration-plots-replay-the-acquisition-problem.md)).
 - **A slim top level** (#52). `hb.*` holds what a typical script uses: `Var`, `System`,
   `Problem`, `Measure`, `oracle_measure`, `initial_points`, the methods,
-  `fit_surrogate`, `nominal_optimum`,
+  `reconstruct`, `fit_surrogate`, `optimize_hybrid_model`,
   `EI`, `LCB`, `oracle_optimum`, `save_run`, `load_run`, `save_runs`, `load_runs`, `Run`, `History`,
   `incumbents`, `oracle_incumbents`, `check_oracle_optimum`, the errors and `plots`. Everything else is reached through its module (`hb.gp.fit_gp`,
   `hb.solvers.multistart`). A new name joins the top level only if the example
@@ -257,6 +257,13 @@ def evaluate(
   reconstruction, because a real system would give nothing else. The fix is in the
   problem: measure other variables, or narrow the unmeasured start bounds to the right
   branch.
+- **Measurements from elsewhere.** `reconstruct(problem, *, u, measured, rng)` is
+  `evaluate` without the measurement: no oracle values, and every row is tried, since
+  plant data can have several bad rows. `RootFindingError` names them and keeps the
+  others as `error.history`, so the caller decides whether to carry on. A `u` or a
+  measured variable outside its bounds is still a measurement, so it is kept, with
+  `OutOfBoundsWarning`. An unmeasured root outside its bounds is a failed row, because
+  the bounds may be what picks the right root.
 - `fsolve` always uses the CasADi Jacobian (`use_jacobian` is removed). A failed start is an
   expected failure (Principle 6), so fsolve's convergence warnings are caught and
   nothing is printed; only `RootFindingError` reports that every start failed.
@@ -510,9 +517,9 @@ def scenario_problem(
 ) -> ScenarioProblem: ...
 def solve_scenario_problem(problem, n_starts, rng, solver) -> ScenarioSolution: ...
 def fit_surrogate(
-    system, *, u, y, gp, rng, x=None, n_starts=10, solver=Ipopt()
+    system, history, *, gp, rng, n_starts=10, solver=Ipopt()
 ) -> tuple[FittedGP, ...]: ...
-def nominal_optimum(
+def optimize_hybrid_model(
     problem, fitted, rng, *, n_starts=10, solver=Ipopt()
 ) -> NominalOptimum: ...  # u, x, y, f
 ```
@@ -523,7 +530,7 @@ def nominal_optimum(
 
   | | Scenarios | Objective |
   |---|---|---|
-  | `nominal_optimum` | the nominal scenario | `f` |
+  | `optimize_hybrid_model` | the nominal scenario | `f` |
   | SAA-EI, SoftSAA-EI, SAA-LCB | S scenarios | an acquisition function of the `f_s` |
   | Lin-EI | the nominal scenario | EI of `f` with its sensitivity |
 
@@ -536,11 +543,15 @@ def nominal_optimum(
   problem is a scenario problem whose objective is an acquisition function. Standard
   BO's is no scenario problem, having no hybrid model, but needs the same fields with
   no scenarios (`w` is `u`), so it shares the type.
-- **`fit_surrogate` takes arrays, not a `History`.** Data that never came from a run has
-  no `f` or `n_initial`, and the fit reads none of them. It takes `u`, `y` and, if h
-  takes a mechanistic state, `x`; `hybrid_bo` passes the history's. It doesn't solve the
-  root-finding problem: without a measurement the caller gives those states.
-- **`nominal_optimum` is not a method.** It measures nothing, so it has no run, no
+- **`fit_surrogate` takes a `History`.** A history is every state at every point, which
+  is what the fit needs and what a caller's sensors don't give. Measurements from
+  elsewhere become one through `reconstruct`, so there is one way in, and a finished
+  run's history fits as it is.
+- **`hybrid_bo` doesn't call `optimize_hybrid_model`.** It shares what is beneath it,
+  `scenario_problem` and `solve_scenario_problem`. It needs the problem unsolved for the
+  replay, and S scenarios; and an `objective` with `f` as its default would choose what
+  we search for (ADR 0009).
+- **`optimize_hybrid_model` is not a method.** It measures nothing, so it has no run, no
   artifact and no settings, only a solution. It has no uncertainty in it, so it trusts
   the GP's mean even far from the data. Its unknown states are always variables, since
   substituting them would drop their bounds.
@@ -854,7 +865,8 @@ Every draw in a run comes from that run's generator, in this order:
 
 Root-finding starts are drawn even without noise, because the reconstruction always
 runs. Each consumer draws only what it uses, when it uses it. Outside a run,
-`fit_surrogate` and `nominal_optimum` draw only their `lhs` starts, in that order.
+`reconstruct` draws one set of `lhs` starts per row, and `fit_surrogate` and
+`optimize_hybrid_model` draw only their `lhs` starts, in that order.
 
 **A generator has two independent sequences.** `lhs` does not consume `rng`'s stream:
 it draws from the next spawned child of `rng`'s `SeedSequence` (`rng.spawn(1)[0]`),

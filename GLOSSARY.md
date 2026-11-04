@@ -140,7 +140,8 @@ noise.
 
 **Root-finding problem**:
 Solving the known equations for the states that were not measured, given the decision
-variables and the measured variables. Part of every evaluation, after the measurement.
+variables and the measured variables. Part of every evaluation, after the measurement,
+and of taking in measurements made elsewhere.
 _Avoid_: re-solve, fixed-x evaluation
 
 ### Bayesian optimization
@@ -290,7 +291,7 @@ The scenario with zero scenario draws and weight 1, whose states are the nominal
 the only scenario of linearization and of the nominal optimum.
 _Avoid_: mean scenario, zero scenario
 
-**Nominal optimum** (`nominal_optimum`):
+**Nominal optimum** (`optimize_hybrid_model`):
 The lowest objective the hybrid model allows with the GP replaced by its mean: the scenario
 problem of the nominal scenario, minimizing `f`. Solved once from fitted GPs, with no
 acquisition function and no measurements, so it is no method, and it can sit where the GP

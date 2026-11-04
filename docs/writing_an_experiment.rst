@@ -280,22 +280,25 @@ Optimizing data you already have
 --------------------------------
 
 With measurements of your own, you can get an optimum with no ``measure`` and no
-optimization loop. :py:func:`~hybrid_bo.hybrid_model.fit_surrogate` fits the prior GP to
-each unknown state, and :py:func:`~hybrid_bo.hybrid_model.nominal_optimum` solves the
-hybrid model once with each GP replaced by its mean:
+optimization loop. :py:func:`~hybrid_bo.evaluation.reconstruct` solves the known equations
+for the unmeasured states, :py:func:`~hybrid_bo.hybrid_model.fit_surrogate` fits the prior
+GP to each unknown state, and :py:func:`~hybrid_bo.hybrid_model.optimize_hybrid_model`
+solves the hybrid model once with each GP replaced by its mean:
 
 .. code-block:: python
 
    rng = np.random.default_rng(0)
-   fitted = hb.fit_surrogate(system, u=u, y=y, gp=gp, rng=rng)
-   solution = hb.nominal_optimum(problem, fitted, rng, n_starts=30)
+   history = hb.reconstruct(problem, u=u, measured=measured, rng=rng)
+   fitted = hb.fit_surrogate(system, history, gp=gp, rng=rng)
+   solution = hb.optimize_hybrid_model(problem, fitted, rng, n_starts=30)
    print(solution.u, solution.x, solution.y, solution.f)
 
-The training data have a row per point: ``u`` of shape ``(n, N)`` and ``y`` ``(n, P)``.
-If the unknown equations take mechanistic states, pass ``x`` of shape ``(n, M)`` too.
-Nothing solves the root-finding problem here, so ``y`` holds every unknown state, measured
-or not. The search is local from each start, so raise ``n_starts`` if ``f`` has several
-minima.
+The measurements have a row per point: ``u`` of shape ``(n, N)`` and ``measured``
+``(n, P)``, its columns in the order of ``system.measured``. A ``u`` or a measured variable
+outside its bounds is kept, with an ``OutOfBoundsWarning``. If some rows have no root, a
+``RootFindingError`` names them all and its ``history`` holds the others, so you can carry
+on without them. The GP's ``noise_std`` applies to all the data. The search is local from
+each start, so raise ``n_starts`` if ``f`` has several minima.
 
 .. warning::
 

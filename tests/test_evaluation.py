@@ -18,6 +18,7 @@ from scipy.special import lambertw
 import hybrid_bo
 from hybrid_bo import (
     History,
+    OutOfBoundsWarning,
     Problem,
     ReconstructionWarning,
     RootFindingError,
@@ -27,7 +28,7 @@ from hybrid_bo import (
     oracle_incumbents,
     oracle_measure,
 )
-from hybrid_bo.evaluation import OracleMeasurement, evaluate
+from hybrid_bo.evaluation import OracleMeasurement, evaluate, reconstruct
 from hybrid_bo.history import n_iterations
 
 
@@ -394,3 +395,123 @@ def test_oracle_optimum_rejects_an_oracle_of_the_wrong_size(illustrative_problem
             lambda v: [v.u, v.u],
             np.random.default_rng(0),
         )
+
+
+def test_reconstruct_solves_the_unmeasured_states_of_given_measurements(
+    illustrative_problem,
+):
+    """Given u and y, `reconstruct` gives x from x + exp(x) = y, in closed form with
+    the Lambert W function, and f at those states, calling no measurement."""
+    u = np.array([[-1.0], [0.0], [1.0]])
+    measured = np.array([[-0.5], [0.3], [1.0]])
+
+    history = reconstruct(
+        illustrative_problem, u=u, measured=measured, rng=np.random.default_rng(0)
+    )
+
+    # The closed form of the unmeasured state, and f there
+    x = measured - lambertw(np.exp(measured)).real
+    f = ((6 * x - 2) ** 2 * np.sin(12 * x - 4)).ravel()
+    np.testing.assert_allclose(history.x, x, atol=1e-8)
+    np.testing.assert_array_equal(history.y, measured)
+    np.testing.assert_array_equal(history.u, u)
+    np.testing.assert_allclose(history.f, f, atol=1e-6)
+
+    # Given points have no oracle values, and all are initial points
+    assert history.f_oracle is None
+    assert history.n_initial == 3
+
+
+# `parametrize` runs the test once per entry, with the entry as the argument
+@pytest.mark.parametrize(
+    ("u", "measured", "message"),
+    [
+        (np.zeros(4), np.zeros((4, 1)), "u need shape"),
+        (np.zeros((4, 2)), np.zeros((4, 1)), "u need shape"),
+        (np.zeros((4, 1)), np.zeros(4), "measured variables need shape"),
+        (np.zeros((4, 1)), np.zeros((3, 1)), "measured variables need shape"),
+        (np.zeros((4, 1)), np.full((4, 1), np.nan), "finite"),
+        (np.full((4, 1), np.inf), np.zeros((4, 1)), "finite"),
+    ],
+    ids=["flat u", "too many u", "flat measured", "fewer measured", "nan", "inf"],
+)
+def test_reconstruct_rejects_malformed_measurements(
+    illustrative_problem, u, measured, message
+):
+    """Measurements need a row per point, a column per variable and finite values."""
+    with pytest.raises(ValueError, match=message):
+        reconstruct(
+            illustrative_problem, u=u, measured=measured, rng=np.random.default_rng(0)
+        )
+
+
+def test_reconstruct_names_every_row_without_a_root_and_keeps_the_others():
+    """With x^2 = y there is no root at y < 0: every row is tried, one error names both
+    bad rows, and `error.history` holds the rows that worked."""
+    # A system where a negative measurement has no root
+    u_var, x_var = Var("u", -1.0, 1.0), Var("x", 0.0, 3.0)
+    y_var = Var("y", start=(-2.0, 2.0))
+    system = System(
+        u=[u_var],
+        x=[x_var],
+        y=[y_var],
+        g=lambda v: [v.x**2 - v.y],
+        h_inputs=[u_var],
+        measured=[y_var],
+    )
+    problem = Problem(system, f=lambda v: v.x)
+    u = np.array([[-0.5], [0.0], [0.25], [0.5]])
+    measured = np.array([[1.0], [-1.0], [4.0], [-2.0]])
+
+    with pytest.raises(RootFindingError, match=r"rows \[1, 3\]") as caught:
+        reconstruct(problem, u=u, measured=measured, rng=np.random.default_rng(0))
+
+    # The two good rows, in order, with their roots
+    history = caught.value.history
+    assert history is not None
+    np.testing.assert_array_equal(history.u, u[[0, 2]])
+    np.testing.assert_allclose(history.x, [[1.0], [2.0]], atol=1e-8)
+    assert history.n_initial == 2
+
+
+def test_reconstruct_warns_of_values_outside_their_bounds_and_keeps_them():
+    """A u or a measured variable outside its bounds is still a measurement: one warning
+    names the rows of each, and the history holds them."""
+    # u is bounded by 1 and y by 2; x + exp(x) = y keeps a root for every y
+    u_var, y_var = Var("u", -1.0, 1.0), Var("y", -2.0, 2.0)
+    x_var = Var("x", start=(-3.0, 2.0))
+    system = System(
+        u=[u_var],
+        x=[x_var],
+        y=[y_var],
+        g=lambda v: [v.x + cas.exp(v.x) - v.y],
+        h_inputs=[u_var],
+        measured=[y_var],
+    )
+    problem = Problem(system, f=lambda v: v.x)
+    u = np.array([[0.0], [1.5], [0.5]])
+    measured = np.array([[0.5], [0.5], [3.0]])
+
+    # `warns` passes only if the block gives that warning
+    with pytest.warns(OutOfBoundsWarning) as caught:
+        history = reconstruct(
+            problem, u=u, measured=measured, rng=np.random.default_rng(0)
+        )
+
+    assert len(caught) == 1
+    message = str(caught[0].message)
+    assert "u at rows [1]" in message
+    assert "y at rows [2]" in message
+    np.testing.assert_array_equal(history.u, u)
+
+
+def test_reconstruct_gives_no_warning_within_the_bounds(illustrative_problem, recwarn):
+    """Values inside their bounds warn of nothing (`recwarn` records warnings)."""
+    reconstruct(
+        illustrative_problem,
+        u=np.array([[0.0]]),
+        measured=np.array([[0.3]]),
+        rng=np.random.default_rng(0),
+    )
+
+    assert not [w for w in recwarn if issubclass(w.category, OutOfBoundsWarning)]

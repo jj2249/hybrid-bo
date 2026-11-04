@@ -290,14 +290,7 @@ def hybrid_bo(
     ) -> tuple[np.ndarray, tuple[FittedGP, ...], AcquisitionSolution]:
         """Fits the GPs to the points so far and solves the acquisition problem."""
         fitted = fit_surrogate(
-            system,
-            u=history.u,
-            x=history.x,
-            y=history.y,
-            gp=gp,
-            rng=rng,
-            n_starts=n_starts_gp,
-            solver=solver,
+            system, history, gp=gp, rng=rng, n_starts=n_starts_gp, solver=solver
         )
         incumbent = float(incumbents(history)[-1])
         acquisition_problem = hybrid_acquisition(

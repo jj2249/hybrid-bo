@@ -98,6 +98,11 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   oracle values (no draws) checks the reconstruction is on the same root, else
   `ReconstructionWarning`. `_start_bounds` (in `sampling.py`) and `_as_text` (in
   `problem.py`, an equation as text in the variable names) are shared helpers.
+  `reconstruct(problem, *, u, measured, rng, n_starts, tol)` is `evaluate` without the
+  measurement, for data from elsewhere: no oracle values, `ValueError` on a wrong shape or
+  a non-finite value, one `OutOfBoundsWarning` for a `u` or measured variable outside its
+  bounds (kept), and every row tried, one `RootFindingError` naming those with no root
+  and the others as `error.history`.
 - `history.py`: `History` (`u`, `x`, `y`, `f`, oracle values or `None`, `n_initial`)
   `incumbents` and `oracle_incumbents` (the benchmark metric);
   `check_oracle_optimum(history, optimum)` warns with `OracleOptimumWarning` if a point
@@ -198,11 +203,10 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `Scenarios` (`z (S, P)`, `w (S,)`, checked) and `nominal_scenario(n_y)`.
   `_scenario_unknown_states` is the one GP scenario prediction
   (`mean_j + std_j * z_sj` per unknown state j), symbolic.
-  `fit_surrogate(system, *, u, y, gp, rng, x=None, n_starts, solver)` takes plain arrays
-  (`ValueError` on a wrong shape; `x` may be left out unless `h_inputs` holds a
-  mechanistic state) and fits one GP `h_inputs -> y_j` per unknown state, in the order of
-  `system.y`. It doesn't solve the root-finding problem. `nominal_optimum(problem, fitted,
-  rng, *, n_starts, solver)` is the nominal scenario minimizing `f`, solved once, with the
+  `fit_surrogate(system, history, *, gp, rng, n_starts, solver)` fits one GP
+  `h_inputs -> y_j` per unknown state, in the order of `system.y`.
+  `optimize_hybrid_model(problem, fitted, rng, *, n_starts, solver)` is the nominal
+  scenario minimizing `f`, solved once, with the
   unknown states as variables so their bounds hold, a `NominalOptimum(u, x, y, f)` of
   points `(N,)`, `(M,)`, `(P,)`; no run, no artifact.
 - `acquisition.py`: `EI`, `LCB(std_factor)` and `standard_acquisition` (analytic EI
@@ -298,7 +302,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   matplotlib is imported inside the functions.
 - `errors.py`: `HybridBOError` (with `.history`, the points evaluated before the
   error, and `.run`, the partial run when raised in a method), `RootFindingError`,
-  `NoSolutionError`, `ReconstructionWarning`, `OracleOptimumWarning`, `ReplayWarning` (an iteration figure's
+  `NoSolutionError`, `ReconstructionWarning`, `OutOfBoundsWarning`, `OracleOptimumWarning`, `ReplayWarning` (an iteration figure's
   replay left the optimizer's branch at the trial point), and `RunFormatError` (a
   `ValueError`: a saved run this version can't load). The library raises these, never
   bare `Exception` (ruff `TRY002`/`BLE001` apply everywhere). It imports `History` and

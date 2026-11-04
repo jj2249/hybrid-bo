@@ -3,8 +3,8 @@ model embedded.
 
 `scenario_problem` builds the problem for given scenarios and a given objective, and
 `solve_scenario_problem` solves it. Everything that solves the hybrid model is one use of
-them. `nominal_optimum` is the simplest: the nominal scenario, minimizing the objective
-f itself, with no Bayesian optimization. Hybrid BO's acquisition problem
+them. `optimize_hybrid_model` is the simplest: the nominal scenario, minimizing the
+objective f itself, with no Bayesian optimization. Hybrid BO's acquisition problem
 (`hybrid_acquisition`) supplies an acquisition function as the objective, and `hybrid_bo`
 is the loop around it: fit, solve, evaluate.
 """
@@ -17,6 +17,7 @@ import casadi as cas
 import numpy as np
 
 from hybrid_bo.gp import GP, FittedGP, fit_gp, predict
+from hybrid_bo.history import History
 from hybrid_bo.problem import Problem, Symbolic, System, Var, _h_inputs
 from hybrid_bo.sampling import _start_bounds, lhs
 from hybrid_bo.solvers import NLP, Ipopt, multistart
@@ -260,46 +261,22 @@ def solve_scenario_problem(
 
 def fit_surrogate(
     system: System,
+    history: History,
     *,
-    u: np.ndarray,
-    y: np.ndarray,
     gp: GP,
     rng: np.random.Generator,
-    x: np.ndarray | None = None,
     n_starts: int = 10,
     solver: Ipopt = Ipopt(),  # noqa: B008  (frozen, never mutated)
 ) -> tuple[FittedGP, ...]:
     """The surrogate model of the system: the prior GP `gp` fitted to each unknown state
-    over the arguments of h, one fitted GP per unknown state, in the order of
-    `system.y`.
+    of `history` over the arguments of h, one fitted GP per unknown state, in the order
+    of `system.y`.
 
-    The training data are rows of points, u (n, N), x (n, M) and y (n, P), from any
-    source; `x` may be left out unless h takes a mechanistic state. Each GP is fitted by
-    `fit_gp` from `n_starts` starts. Raises `ValueError` if a shape is wrong or `x` is
-    needed and left out.
+    The history is a run's, or `reconstruct`'s for measurements from elsewhere. Each GP
+    is fitted by `fit_gp` from `n_starts` starts.
     """
-    # The training data, one row per point; h never reads a left-out x
-    u, y = np.asarray(u, dtype=float), np.asarray(y, dtype=float)
-    if x is None and any(var in system.x for var in system.h_inputs):
-        msg = "The training data need x: h takes a mechanistic state"
-        raise ValueError(msg)
-    x = (
-        np.full((len(u), system.n_x), np.nan)
-        if x is None
-        else np.asarray(x, dtype=float)
-    )
-    columns = (("u", u, system.n_u), ("x", x, system.n_x), ("y", y, system.n_y))
-    for name, values, n_columns in columns:
-        if values.shape != (len(u), n_columns):
-            msg = (
-                f"The training data {name} need shape ({len(u)}, {n_columns}), a row "
-                f"per point and a column per variable, got {values.shape}"
-            )
-            raise ValueError(msg)
-
-    # One GP per unknown state, in the order of y, on the same arguments of h
-    X = np.column_stack(_h_inputs(system, u, x))
-    return tuple(fit_gp(gp, X, column, rng, n_starts, solver) for column in y.T)
+    X = np.column_stack(_h_inputs(system, history.u, history.x))
+    return tuple(fit_gp(gp, X, y, rng, n_starts, solver) for y in history.y.T)
 
 
 @dataclass(frozen=True)
@@ -313,7 +290,7 @@ class NominalOptimum:
     f: float
 
 
-def nominal_optimum(
+def optimize_hybrid_model(
     problem: Problem,
     fitted: tuple[FittedGP, ...],
     rng: np.random.Generator,
