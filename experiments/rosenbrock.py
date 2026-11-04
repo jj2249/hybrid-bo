@@ -13,10 +13,13 @@ regions.
 It adapts Appendix D.2 of Astudillo & Frazier, "Bayesian optimization of composite
 functions" (arXiv 1906.01537), to 2D.
 
-Run it with `pixi run -e experiments python experiments/rosenbrock.py`.
+Run it with `pixi run -e experiments python experiments/rosenbrock.py NAME`.
 
 Hybrid BO's iteration figures have no GP panels, since those draw one unknown state.
 """
+
+import sys
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -132,12 +135,16 @@ def latin_hypercube_sampling(rng: np.random.Generator) -> hb.Run:
 # Every method's runs from the same seeds, so run i of each starts from the same initial
 # points, then the results and their figure
 if __name__ == "__main__":
+    # The study's name, its folder made first so a name in use fails before the runs
+    folder = Path("results/rosenbrock", sys.argv[1])
+    folder.mkdir(parents=True)
+
     methods = (hybrid_bo, hybrid_bo_soft, standard_bo, latin_hypercube_sampling)
     runs = {
         method.__name__: [method(np.random.default_rng(seed)) for seed in range(N_RUNS)]
         for method in methods
     }
-    folder = hb.save_runs(runs, "results/rosenbrock")
+    hb.save_runs(runs, folder)
     figure, ax = plt.subplots()
     hb.plots.regret(runs, optimum, ax)
     figure.savefig(folder / "regret.png")

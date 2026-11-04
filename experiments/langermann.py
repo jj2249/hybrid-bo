@@ -11,10 +11,13 @@ standard BO models f directly.
 It is Appendix D.1 of Astudillo & Frazier, "Bayesian optimization of composite
 functions" (arXiv 1906.01537).
 
-Run it with `pixi run -e experiments python experiments/langermann.py`.
+Run it with `pixi run -e experiments python experiments/langermann.py NAME`.
 
 Hybrid BO's iteration figures have no GP panels, since those draw one unknown state.
 """
+
+import sys
+from pathlib import Path
 
 import casadi as cas
 import matplotlib.pyplot as plt
@@ -140,12 +143,16 @@ def latin_hypercube_sampling(rng: np.random.Generator) -> hb.Run:
 # Every method's runs from the same seeds, so run i of each starts from the same initial
 # points, then the results and their figure
 if __name__ == "__main__":
+    # The study's name, its folder made first so a name in use fails before the runs
+    folder = Path("results/langermann", sys.argv[1])
+    folder.mkdir(parents=True)
+
     methods = (hybrid_bo, hybrid_bo_soft, standard_bo, latin_hypercube_sampling)
     runs = {
         method.__name__: [method(np.random.default_rng(seed)) for seed in range(N_RUNS)]
         for method in methods
     }
-    folder = hb.save_runs(runs, "results/langermann")
+    hb.save_runs(runs, folder)
     figure, ax = plt.subplots()
     hb.plots.regret(runs, optimum, ax)
     figure.savefig(folder / "regret.png")

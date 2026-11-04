@@ -2,7 +2,7 @@
 
 Each file here is an experiment: a plain script with a problem, how it is measured, and
 the methods to compare. It repeats each method over seeds, saves the runs to
-`results/<name>/` and draws `regret.png`.
+`results/<experiment>/<name>/` and draws `regret.png`.
 
 - `illustrative_example.py`: the illustrative example of the
   [paper](https://arxiv.org/abs/2603.11199), with an oracle.
@@ -20,8 +20,9 @@ the methods to compare. It repeats each method over seeds, saves the runs to
 ## Running
 
 ```bash
-pixi run -e experiments python experiments/illustrative_example.py
+pixi run -e experiments python experiments/illustrative_example.py first-try
 ```
 
-`N_RUNS`, `N_INITIAL` and `N_ITERATIONS` are at the top of each file. `hb.save_runs`
-refuses an existing folder, so move or delete `results/<name>/` to run one again.
+The name is the study's folder, so versions of an experiment sit side by side, and a name
+in use fails before anything runs. `N_RUNS`, `N_INITIAL` and `N_ITERATIONS` are in each
+file.

@@ -86,9 +86,10 @@ if a run evaluates a point whose oracle objective is below it.
 
 ## Running
 
-    pixi run -e experiments python experiments/<name>.py
+    pixi run -e experiments python experiments/<experiment>.py <name>
 
-Saving goes to `results/<name>/` (git-ignored), and `hb.save_runs` refuses an existing
-folder. A failed run stops the script unless it catches `hb.HybridBOError`, whose `run`
+Saving goes to `results/<experiment>/<name>/` (git-ignored). The script makes that folder
+before its runs, so a name in use fails at once, and `hb.save_runs` takes an empty folder
+and refuses any other. A failed run stops the script unless it catches `hb.HybridBOError`, whose `run`
 holds the partial run. For parallel runs, `joblib` works with functions defined in a
 script, with results identical to serial runs.

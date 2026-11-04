@@ -115,7 +115,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   git answers for the user's repository (#198). A measurement is recorded by its
   docstring, else its name; a dataclass measurement (`OracleSimulation`) by its repr.
 - `saving.py`: `save_run(run, path)` (new file only, `FileExistsError`) and
-  `load_run(path)`, one run as JSON; `save_runs(runs, folder)` (new folder only) and
+  `load_run(path)`, one run as JSON; `save_runs(runs, folder)` (new or empty folder only) and
   `load_runs(folder)`, a list of runs per label, as `<label>/run-000.json`. `_encode`/`_decode` convert any dataclass by its
   type hints; arrays are nested lists of floats (an empty one is `{"shape": ...}`). The
   GP types (`gp.TYPES`) and the settings types (`settings.TYPES`: the settings, `EI`,

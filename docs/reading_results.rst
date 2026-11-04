@@ -67,7 +67,7 @@ A list of runs per label is all the library needs:
 
    runs = {"hybrid_bo": [...], "standard_bo": [...]}
 
-:py:func:`~hybrid_bo.saving.save_runs` writes them to a new folder, as
+:py:func:`~hybrid_bo.saving.save_runs` writes them to a new or empty folder, as
 ``<label>/run-000.json``, and :py:func:`~hybrid_bo.saving.load_runs` reads them back:
 
 .. code-block:: python

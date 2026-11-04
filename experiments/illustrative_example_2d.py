@@ -9,8 +9,11 @@ along a curve in the plane of u. With one unknown state and two decision variabl
 the iteration figures draw every panel: a row of y (oracle, GP mean, GP std) and a
 row of f.
 
-Run it with `pixi run -e experiments python experiments/illustrative_example_2d.py`.
+Run it with `pixi run -e experiments python experiments/illustrative_example_2d.py NAME`.
 """
+
+import sys
+from pathlib import Path
 
 import casadi as cas
 import matplotlib.pyplot as plt
@@ -140,6 +143,10 @@ def latin_hypercube_sampling(rng: np.random.Generator) -> hb.Run:
 # Every method's runs from the same seeds, so run i of each starts from the same initial
 # points, then the results and their figure
 if __name__ == "__main__":
+    # The study's name, its folder made first so a name in use fails before the runs
+    folder = Path("results/illustrative_example_2d", sys.argv[1])
+    folder.mkdir(parents=True)
+
     methods = (
         hybrid_bo,
         hybrid_bo_lin,
@@ -151,7 +158,7 @@ if __name__ == "__main__":
         method.__name__: [method(np.random.default_rng(seed)) for seed in range(N_RUNS)]
         for method in methods
     }
-    folder = hb.save_runs(runs, "results/illustrative_example_2d")
+    hb.save_runs(runs, folder)
     figure, ax = plt.subplots()
     hb.plots.regret(runs, optimum, ax)
     figure.savefig(folder / "regret.png")

@@ -140,13 +140,17 @@ def load_run(path: str | Path) -> Run:
 
 
 def save_runs(runs: Mapping[str, Sequence[Run]], folder: str | Path) -> Path:
-    """Writes `runs`, a list of runs per label, to the new folder `folder`, as
-    `<label>/run-000.json`, and returns it.
+    """Writes `runs`, a list of runs per label, to `folder`, as
+    `<label>/run-000.json`, and returns it. The folder may exist if it is empty, so a
+    script can claim it before its runs start.
 
-    Raises `FileExistsError` if `folder` exists.
+    Raises `FileExistsError` if `folder` holds anything.
     """
     folder = Path(folder)
-    folder.mkdir(parents=True)
+    folder.mkdir(parents=True, exist_ok=True)
+    if any(folder.iterdir()):
+        msg = f"{folder} isn't empty, so it may hold another study"
+        raise FileExistsError(msg)
     for label, label_runs in runs.items():
         (folder / label).mkdir()
         for i, run in enumerate(label_runs):

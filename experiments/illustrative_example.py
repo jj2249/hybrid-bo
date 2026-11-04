@@ -4,8 +4,11 @@ One decision variable u, one mechanistic state x and one unknown state y. The kn
 equation is x + exp(x) = y; the unknown equation is y = sin(u), which only the oracle
 knows.
 
-Run it with `pixi run -e experiments python experiments/illustrative_example.py`.
+Run it with `pixi run -e experiments python experiments/illustrative_example.py NAME`.
 """
+
+import sys
+from pathlib import Path
 
 import casadi as cas
 import matplotlib.pyplot as plt
@@ -139,6 +142,10 @@ def uniform_sampling(rng: np.random.Generator) -> hb.Run:
 # Every method's runs from the same seeds, so run i of each starts from the same initial
 # points, then the results and their figure
 if __name__ == "__main__":
+    # The study's name, its folder made first so a name in use fails before the runs
+    folder = Path("results/illustrative_example", sys.argv[1])
+    folder.mkdir(parents=True)
+
     methods = (
         hybrid_bo,
         hybrid_bo_lin,
@@ -151,7 +158,7 @@ if __name__ == "__main__":
         method.__name__: [method(np.random.default_rng(seed)) for seed in range(N_RUNS)]
         for method in methods
     }
-    folder = hb.save_runs(runs, "results/illustrative_example")
+    hb.save_runs(runs, folder)
     figure, ax = plt.subplots()
     hb.plots.regret(runs, optimum, ax)
     figure.savefig(folder / "regret.png")

@@ -263,7 +263,8 @@ The end of the file repeats each method over seeds, then saves and plots:
    :language: python
    :start-at: # Every method's runs from the same seeds
 
-It is plain Python, so change it as you like. To run in parallel, ``joblib`` works:
+The script takes the study's name, ``python my_experiment.py first-try``, so versions of
+an experiment sit side by side. It is plain Python, so change it as you like. To run in parallel, ``joblib`` works:
 
 .. code-block:: python
 

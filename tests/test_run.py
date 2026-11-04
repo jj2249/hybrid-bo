@@ -340,10 +340,16 @@ def test_save_runs_and_load_runs_keep_the_runs_of_each_label(tmp_path):
     assert_same(loaded, runs)
 
 
-def test_save_runs_refuses_an_existing_folder(tmp_path):
-    """`save_runs` never mixes runs into an earlier study."""
-    with pytest.raises(FileExistsError):
-        hb.save_runs({}, tmp_path)
+def test_save_runs_takes_an_empty_folder_and_refuses_any_other(tmp_path):
+    """A script can make its folder before its runs start, but `save_runs` never mixes
+    runs into an earlier study."""
+    runs = {"a": [hb.Run(history_of(1), {}, "m")]}
+
+    # The empty folder of `tmp_path` is fine, and then it holds a study
+    hb.save_runs(runs, tmp_path)
+
+    with pytest.raises(FileExistsError, match="isn't empty"):
+        hb.save_runs(runs, tmp_path)
 
 
 def test_either_a_number_of_initial_points_or_the_points_themselves():
