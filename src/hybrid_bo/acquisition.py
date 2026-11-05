@@ -21,11 +21,11 @@ import numpy as np
 from hybrid_bo.errors import ReplayWarning
 from hybrid_bo.gp import FittedGP, predict
 from hybrid_bo.hybrid_model import (
-    ScenarioProblem,
+    DeterministicEquivalent,
     Scenarios,
     _pack,
     _unpack_scenarios,
-    gp_scenario_problem,
+    gp_deterministic_equivalent,
 )
 from hybrid_bo.problem import Problem, Symbolic, _h_inputs
 from hybrid_bo.sampling import _start_bounds
@@ -180,9 +180,9 @@ def _log_softplus(t: Any) -> Any:
     return cas.if_else(t < _LOG_SOFTPLUS_LINEAR_BELOW, t, exact)
 
 
-# An acquisition problem is a scenario problem whose objective is an acquisition
+# An acquisition problem is a deterministic equivalent whose objective is an acquisition
 # function; standard BO's is over u alone, with no scenarios
-AcquisitionProblem = ScenarioProblem
+AcquisitionProblem = DeterministicEquivalent
 
 
 def standard_acquisition(
@@ -273,9 +273,9 @@ def hybrid_acquisition(
     acquisition: EI | LCB,
     approximation: SAA | SoftSAA | Linearization,
 ) -> AcquisitionProblem:
-    """The acquisition problem of hybrid BO (paper, Problems 8 and 9): the scenario
-    problem (`gp_scenario_problem`) of the scenarios, whose objective is the acquisition
-    function. `fitted` is the surrogate model, and the approximation's
+    """The acquisition problem of hybrid BO (paper, Problems 8 and 9): the deterministic
+    equivalent (`gp_deterministic_equivalent`) of the scenarios, whose objective is the
+    acquisition function. `fitted` is the surrogate model, and the approximation's
     `unknown_states_as_variables` says how the problem holds the unknown states.
 
     With f_s = f(x_s, y_s, u), the problem minimizes -SAA-EI, the weighted average of
@@ -335,7 +335,7 @@ def hybrid_acquisition(
             case _:
                 assert_never(approximation)
 
-    return gp_scenario_problem(
+    return gp_deterministic_equivalent(
         problem,
         fitted,
         scenarios,

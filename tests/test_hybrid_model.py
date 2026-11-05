@@ -12,15 +12,15 @@ import pytest
 import hybrid_bo as hb
 from hybrid_bo.evaluation import evaluate
 from hybrid_bo.gp import predict
-from hybrid_bo.hybrid_model import _pack, _unpack, scenario_problem
+from hybrid_bo.hybrid_model import _pack, _unpack, build_deterministic_equivalent
 from hybrid_bo.problem import Symbolic
 
 
 def test_the_unknown_equations_tie_each_scenario_after_its_known_equations():
-    """The residual passed to `scenario_problem` reads u, x and y of each scenario, and
-    each scenario's rows of the constraints are g, then that residual."""
+    """The residual passed to `build_deterministic_equivalent` reads u, x and y of each
+    scenario, and each scenario's rows of the constraints are g, then that residual."""
     # Two scenarios of the illustrative example, tied by y = x + u
-    built = scenario_problem(
+    built = build_deterministic_equivalent(
         ex.problem,
         2,
         lambda u, x, y: y - x - cas.repmat(u, 2, 1),

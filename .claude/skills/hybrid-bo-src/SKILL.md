@@ -88,7 +88,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   process (no addresses).
   An oracle may read `y`: the unknown equations are `0 = h(x, y, u)`, and `y = h(x, u)`
   is only the form the GP learns. `oracle_optimum(problem, oracle, rng)` solves min f
-  s.t. g = 0, y = oracle: `scenario_problem` of one scenario with the unknown equations
+  s.t. g = 0, y = oracle: `build_deterministic_equivalent` of one scenario with the unknown equations
   `oracle(x, y, u) - y` and the objective `_minimize_f`, by `solve_with_multistart` from
   `lhs` starts over the start bounds of (u, x, y). It builds no NLP of its own.
   `evaluation.py` imports `OracleMeasurement` from here, so this module never imports
@@ -196,20 +196,20 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   order: it reproduces the pre-refactor values bit for bit for [0, 1], which the
   baselines depend on.
 - `hybrid_model.py`: the core under hybrid BO (#197; `acquisition.py` imports it, never
-  the reverse; `oracle.py` imports it too). `scenario_problem(problem, n_scenarios,
+  the reverse; `oracle.py` imports it too). `build_deterministic_equivalent(problem, n_scenarios,
   unknown_equations, objective, objective_name)` builds the hybrid model over the
   scenarios (variables `u`, then `vec` of the `(S, M)` x copies, then of the `(S, P)` y
   copies; bounds and start bounds from each `Var`, repeated per scenario; `g` per
   scenario, followed by its row of the unknown equations). `unknown_equations` is the
   seam, `(u (N, 1), x (S, M), y (S, P)) -> residuals (S, P)`, a plain function with two
-  adapters: `gp_scenario_problem(problem, fitted, scenarios, objective,
+  adapters: `gp_deterministic_equivalent(problem, fitted, scenarios, objective,
   unknown_states_as_variables, objective_name)`, `y - prediction`, and `oracle_optimum`,
-  `oracle(x, y, u) - y`. With the y_s substituted, `gp_scenario_problem` goes past the
+  `oracle(x, y, u) - y`. With the y_s substituted, `gp_deterministic_equivalent` goes past the
   seam to `_assemble`, which both share, since a residual gives no explicit y.
   `objective` is `(f (S, 1), x, y, u) -> (objective,
   std of f)`, in CasADi expressions (`_minimize_f` is f itself); `objective_name` names
   the NLP's objective function, which the solver's logs give. It returns a
-  `ScenarioProblem` (`nlp`,
+  `DeterministicEquivalent` (`nlp`,
   `start_bounds`, and the variable order: `n_u`, `n_x`, `n_scenarios`,
   `unknown_states_as_variables`; the defaults are those of a problem over u alone,
   `w = u`; over scenarios it also has `scenario_values`,
@@ -232,7 +232,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   points `(N,)`, `(M,)`, `(P,)`; no run, no artifact.
 - `acquisition.py`: `EI`, `LCB(std_factor)` and `standard_acquisition` (analytic EI
   or LCB over `u`). Both builders return an `AcquisitionProblem`, an alias of
-  `ScenarioProblem` (standard BO's has `w = u`; in hybrid BO's `scenario_values`, the
+  `DeterministicEquivalent` (standard BO's has `w = u`; in hybrid BO's `scenario_values`, the
   std is Lin-EI's s or else the weighted std over the scenarios). `_check_acquisition`
   is the one check of an acquisition function; every method's settings and builder
   call it (`TypeError` unless an `EI` or `LCB` instance). `SAA(n_scenarios,
@@ -244,11 +244,11 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `SoftSAA`). The nominal scenario is linearization's one scenario, which
   `hybrid_acquisition` requires with it (`ValueError` otherwise);
   `_sensitivity(problem, fitted)` is the `cas.Function` `(x, y, u) -> a (1, P)`.
-  Every GP builder (`hybrid_acquisition`, `gp_scenario_problem`,
+  Every GP builder (`hybrid_acquisition`, `gp_deterministic_equivalent`,
   `_scenario_unknown_states`, `_sensitivity`) takes `fitted`, the surrogate model: a tuple
-  of one fitted GP per unknown state (`ValueError` in `gp_scenario_problem` otherwise).
+  of one fitted GP per unknown state (`ValueError` in `gp_deterministic_equivalent` otherwise).
   `saa_scenarios(n, n_y, rng)` draws SAA's scenarios, and `hybrid_acquisition(...,
-  acquisition, approximation)` is `gp_scenario_problem` with the acquisition function as
+  acquisition, approximation)` is `gp_deterministic_equivalent` with the acquisition function as
   the objective.
   `AcquisitionSolution(value, x, y)` is one iteration's solution: the minimized
   objective at the trial point and, for hybrid BO, the scenario states `(S, M)`,

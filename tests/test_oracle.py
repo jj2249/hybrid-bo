@@ -1,5 +1,5 @@
-"""The oracle: the oracle optimum, solved through the hybrid model with the oracle as the
-unknown equations, against values recorded from the NLP it used to build by hand and
+"""The oracle: the oracle optimum, solved through the hybrid model with the oracle as
+the unknown equations, against values recorded from the NLP it used to build by hand and
 against closed forms, including an oracle that reads the unknown states.
 
 pytest runs every function whose name starts with `test_`.

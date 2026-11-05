@@ -21,7 +21,7 @@ from typing import Any
 import casadi as cas
 import numpy as np
 
-from hybrid_bo.hybrid_model import _minimize_f, scenario_problem
+from hybrid_bo.hybrid_model import _minimize_f, build_deterministic_equivalent
 from hybrid_bo.problem import Problem, Symbolic, System, _as_text, _states, _trace
 from hybrid_bo.sampling import _start_bounds, lhs
 from hybrid_bo.solvers import Ipopt, _find_root, solve_with_multistart
@@ -138,8 +138,8 @@ def oracle_optimum(
     """The oracle optimum: the lowest objective the oracle allows, min f(x, y, u)
     subject to g(x, y, u) = 0 and y = oracle(x, y, u), within the bounds.
 
-    `oracle` is written as for `oracle_measure`. This is the scenario problem of one
-    scenario with the oracle as the unknown equations, minimizing f, as
+    `oracle` is written as for `oracle_measure`. This is the deterministic equivalent of
+    one scenario with the oracle as the unknown equations, minimizing f, as
     `optimize_hybrid_model` does with the GPs. Solved by `solve_with_multistart` from
     `n_starts` Latin hypercube starts over the start bounds of u, x and y, so it is the
     best local optimum found, which can miss the global one: use it to find a benchmark
@@ -154,7 +154,7 @@ def oracle_optimum(
         states are rows here and columns in the traced oracle."""
         return oracle_function(x.T, y.T, u).T - y
 
-    hybrid = scenario_problem(
+    hybrid = build_deterministic_equivalent(
         problem, 1, unknown_equations, _minimize_f, "oracle_optimum"
     )
     starts = lhs(*hybrid.start_bounds, n_starts, rng)
