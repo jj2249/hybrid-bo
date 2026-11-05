@@ -130,9 +130,10 @@ Running the system at given decision variables and obtaining its states and obje
 _Avoid_: simulation (except the oracle simulation), query
 
 **Dataset** (`Dataset`):
-The evaluated points: for each, its decision variables, states and objective, a row
-each, in evaluation order, so the row number is the index. A run has one, and
-measurements from elsewhere become one (`reconstruct_states`).
+The decision variables, states and objective of a set of points, one row each: what a
+surrogate model is fitted to and what the plots draw. Rows are in the order the points
+were taken, which the incumbents rely on. A run's evaluations make one, and so do
+measurements from elsewhere (`reconstruct_states`).
 _Avoid_: history
 
 **Measured variables**:

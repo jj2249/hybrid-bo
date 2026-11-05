@@ -1,4 +1,4 @@
-"""Evaluated points, as a dataset of rows in evaluation order."""
+"""The data of a set of points: what a surrogate is fitted to and the plots draw."""
 
 import warnings
 from dataclasses import dataclass
@@ -10,8 +10,11 @@ from hybrid_bo.errors import OracleOptimumWarning
 
 @dataclass(frozen=True)
 class Dataset:
-    """Evaluated points, a row each, in evaluation order: the row number is the index.
-    The first `n_initial` rows are the initial points.
+    """The decision variables, states and objective of a set of points, one row each:
+    what a surrogate is fitted to and what the plots draw.
+
+    Rows are in the order the points were taken, which `incumbents` relies on. The
+    first `n_initial` rows are the initial points.
 
     `x`, `y` and `f` are measured (the measured variables) and reconstructed (the
     rest). The oracle values are for benchmarking and are None when the measurement

@@ -280,7 +280,7 @@ def evaluate(
 
 ```python
 @dataclass(frozen=True)
-class Dataset:  # evaluated points, rows in evaluation order; the row number is the index
+class Dataset:  # one row per point, in the order the points were taken
     u: np.ndarray  # (n, N)
     x: np.ndarray  # (n, M)  measured and reconstructed
     y: np.ndarray  # (n, P)
