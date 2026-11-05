@@ -37,8 +37,10 @@ from hybrid_bo.hybrid_model import (
     _pack,
     _scenario_unknown_states,
     _unpack,
+    _unpack_scenarios,
     nominal_scenario,
 )
+from hybrid_bo.problem import _h_inputs
 from hybrid_bo.settings import HybridBOSettings
 
 # Three scenarios with unequal weights, so a plain mean would give other values
@@ -256,6 +258,45 @@ def test_bounds_and_start_bounds_come_from_each_variable(unknown_states_as_varia
     np.testing.assert_array_equal(nlp.upper, [2.0] + [3.0] * 3 + [inf] * n_y)
     np.testing.assert_array_equal(lower, [-1.0] + [-2.5] * 3 + [-2.0] * n_y)
     np.testing.assert_array_equal(upper, [1.5] + [1.0] * 3 + [2.0] * n_y)
+
+
+@pytest.mark.parametrize("unknown_states_as_variables", [True, False])
+def test_unpack_scenarios_reads_the_unknown_states_either_way(
+    illustrative_problem, unknown_states_as_variables
+):
+    """The unknown states of a decision vector are its own when they are variables, and
+    the GP's prediction when it is substituted for them: y (S, P) in both cases."""
+    # An acquisition problem, and a decision vector with distinct values
+    n_scenarios = len(SCENARIOS.w)
+    fitted = fitted_gp(1)
+    acquisition_problem = hybrid_acquisition(
+        illustrative_problem,
+        (fitted,),
+        SCENARIOS,
+        0.0,
+        EI(),
+        SAA(n_scenarios=3, unknown_states_as_variables=unknown_states_as_variables),
+    )
+    u = np.array([0.5])
+    x = np.array([[0.1], [0.2], [0.3]])
+    y = np.array([[1.0], [2.0], [3.0]]) if unknown_states_as_variables else None
+
+    u_back, x_back, y_back = _unpack_scenarios(acquisition_problem, _pack(u, x, y))
+
+    # u and x come back; y is the one given, or mean + std * z at the scenario's inputs
+    np.testing.assert_array_equal(u_back, u)
+    np.testing.assert_array_equal(x_back, x)
+    assert y_back.shape == (n_scenarios, 1)
+    if y is not None:
+        np.testing.assert_array_equal(y_back, y)
+    else:
+        inputs = np.column_stack(
+            _h_inputs(illustrative_problem.system, np.tile(u, (n_scenarios, 1)), x)
+        )
+        mean, std = predict(fitted, inputs)
+        np.testing.assert_allclose(
+            y_back.ravel(), mean + std * SCENARIOS.z.ravel(), rtol=1e-10
+        )
 
 
 @pytest.mark.parametrize("unknown_states_as_variables", [True, False])

@@ -506,6 +506,7 @@ class ScenarioProblem:
 
 def _pack(u, x=None, y=None): ...  # numpy or CasADi
 def _unpack(problem: ScenarioProblem, w) -> tuple[u, x, y | None]: ...
+def _unpack_scenarios(problem: ScenarioProblem, w) -> tuple[u, x, y]: ...
 
 
 def scenario_problem(
@@ -516,7 +517,6 @@ def scenario_problem(
     unknown_states_as_variables,
     objective_name,
 ) -> ScenarioProblem: ...
-def solve_scenario_problem(problem, n_starts, rng, solver) -> ScenarioSolution: ...
 def fit_surrogate(
     system, history, *, gp, rng, n_starts=10, solver=Ipopt()
 ) -> tuple[FittedGP, ...]: ...
@@ -538,15 +538,14 @@ def optimize_hybrid_model(
   | Lin-EI | EI of `f` with its sensitivity | the nominal scenario |
 
   So `scenario_problem` takes both, `hybrid_acquisition` supplies an objective, and
-  `hybrid_bo` is the loop around them: `fit_surrogate`, `solve_scenario_problem`,
-  evaluate. `acquisition.py` imports `hybrid_model.py`, never the reverse. The objective
+  `hybrid_bo` is the loop around them: `fit_surrogate`, `multistart`, evaluate.
+  `acquisition.py` imports `hybrid_model.py`, never the reverse. The objective
   is a function because it is built from the problem's own symbols. It also states the
   std of `f` that `scenario_values` reports, which is 0 for the nominal optimum.
 - **`AcquisitionProblem` is an alias of `ScenarioProblem`.** Hybrid BO's acquisition
   problem is a scenario problem whose objective is an acquisition function. Standard
   BO's is no scenario problem, having no hybrid model, but needs the same fields with
-  no scenarios (`w` is `u`), so it shares the type and `solve_scenario_problem`, whose
-  solution then has no scenario states (`x` and `y` are None).
+  no scenarios (`w` is `u`), so it shares the type.
 - **`fit_surrogate` takes a `History`.** A history is every state at every point, which
   is what the fit needs and what a caller's sensors don't give. Measurements from
   elsewhere become one through `reconstruct`, so there is one way in, and a finished
@@ -617,9 +616,11 @@ Each returns an `AcquisitionProblem`: the NLP, its start bounds and the order of
 decision vector `w`.
 
 - **The problem owns its variable order.** `_pack` and `_unpack` (in `hybrid_model.py`)
-  are the only code that knows it; the trial point, the scenario states read back from a
-  solution, the replay and the tests all go through them (or through the problem's
-  own functions of w), so changing the order breaks nothing silently.
+  are the only code that knows it; hybrid BO's trial point, the scenario states read
+  back from a solution, the replay and the tests all go through them (or through the
+  problem's own functions of w), so changing the order breaks nothing silently.
+  `_unpack_scenarios` is `_unpack` with `y` from `scenario_values`, what a solved
+  problem over scenarios gives. Standard BO's `w` is `u`, so its trial point is `w`.
 - **The acquisition problem says what it computed.** Besides the objective and the
   constraints, hybrid BO's problem carries `scenario_values(w)`: f under each
   scenario, the scenarios' unknown states and the std of f (linearization's s, else
@@ -821,12 +822,12 @@ The baselines are named `*_sampling` because `hb.sampling.uniform` and
 - `hybrid_bo` draws the scenarios from `rng` (SAA; linearization takes the nominal
   scenario and draws nothing), then runs `optimization_loop` with a
   trial-point function that fits the GP on `(u, x)[h_inputs] -> y`, builds
-  `hybrid_acquisition`, and solves it with `solve_scenario_problem`. The user never draws `z`.
+  `hybrid_acquisition`, and solves it with `multistart`. The user never draws `z`.
   With `SAA(n_scenarios=25, unknown_states_as_variables=False)` (the legacy
   illustrative setting) it reproduces the legacy illustrative baseline.
 - `standard_bo` fits on `u -> f` (measured), with the incumbent the best measured `f`,
-  and solves `standard_acquisition` with `solve_scenario_problem`, from `lhs` starts over
-  the `u` start bounds. With the defaults it reproduces the legacy illustrative baseline.
+  and solves `standard_acquisition` by `multistart` from `lhs` starts over the `u` start
+  bounds. With the defaults it reproduces the legacy illustrative baseline.
 - `optimization_loop` takes the artifact and returns the `Run`, so a `HybridBOError` in
   the loop (an evaluation, or the trial-point function) carries the partial run as
   `error.run` for every method: the points evaluated so far (also `error.history`) and
