@@ -90,8 +90,8 @@ def runs_1d() -> list[hb.Run]:
 
 
 # Each `parametrize` runs the test once per entry; together, once per combination. The
-# third evaluation is the first trial point and the fourth is the last, after which no
-# GP is fitted that could trip over the NaN
+# third evaluation is the first after the initial points and the fourth is the last,
+# after which no GP is fitted that could trip over the NaN
 @pytest.mark.parametrize("label", ["saa-True", "standard", "lhs"])
 @pytest.mark.parametrize("failing_call", [3, 4])
 def test_a_nan_measurement_fails_the_run_and_keeps_the_points_before(

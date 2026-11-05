@@ -5,12 +5,15 @@ a fixture in `conftest.py` (here `illustrative_problem`) is filled in by pytest 
 that fixture's value; `monkeypatch` is a fixture built into pytest.
 """
 
+import functools
 import importlib
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import casadi as cas
+import illustrative_example as ex
 import numpy as np
 import pytest
 from scipy.special import lambertw
@@ -296,10 +299,12 @@ def test_a_measurement_that_is_not_finite_raises(problem: Problem, value: float)
     """A measured value that isn't finite fails the evaluation, whether or not the
     root-finding problem would notice it, and the error keeps the points before."""
 
+    # A measurement that is finite at the first point and not at the second
     def measure(u: np.ndarray, rng: np.random.Generator) -> np.ndarray:
         """A finite value for negative u, else `value`."""
         return np.array([0.5]) if u[0] < 0 else np.array([value])
 
+    # Evaluating the points stops at the second
     with pytest.raises(RootFindingError, match="isn't finite") as info:
         evaluate(
             problem,
@@ -314,6 +319,50 @@ def test_a_measurement_that_is_not_finite_raises(problem: Problem, value: float)
     assert history is not None
     np.testing.assert_array_equal(history.u, [[-0.5]])
     np.testing.assert_array_equal(history.y, [[0.5]])
+
+
+@pytest.mark.parametrize(
+    "method",
+    [
+        functools.partial(
+            hybrid_bo.hybrid_bo,
+            gp=ex.gp,
+            acquisition=hybrid_bo.EI(),
+            approximation=hybrid_bo.SAA(n_scenarios=5),
+        ),
+        hybrid_bo.latin_hypercube_sampling,
+    ],
+    ids=["hybrid-bo", "lhs"],
+)
+def test_a_nan_measured_variable_outside_g_fails_the_run(method: Callable):
+    """The known equations have a root whatever a measured variable outside `g` is, so
+    a run used to complete with NaN at its last point. It fails, and the partial run
+    holds only finite points."""
+    # A measurement that returns NaN at the last of 4 evaluations
+    calls = []
+
+    def measure(u: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+        """y = sin(u), and NaN at the fourth call."""
+        calls.append(u)
+        return np.array([np.nan]) if len(calls) == 4 else np.sin(u)
+
+    # The run stops at that evaluation
+    with pytest.raises(RootFindingError, match="isn't finite") as info:
+        method(
+            measured_outside_g_problem(),
+            measure,
+            initial_points=np.array([[-0.5], [0.5]]),
+            n_iterations=2,
+            rng=np.random.default_rng(0),
+        )
+
+    # The partial run: the three points before it, all of them finite
+    run = info.value.run
+    assert run is not None
+    assert len(run.history.u) == 3
+    assert np.isfinite(run.history.x).all()
+    assert np.isfinite(run.history.y).all()
+    assert np.isfinite(run.history.f).all()
 
 
 def test_measure_returning_the_wrong_shape_raises():

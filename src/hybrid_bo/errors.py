@@ -22,7 +22,7 @@ class HybridBOError(Exception):
 
 class RootFindingError(HybridBOError):
     """No start of a root-finding solve gave a root within the bounds, or a measured
-    value isn't finite, so the states can't be reconstructed from it."""
+    variable or decision variable isn't finite."""
 
 
 class NoSolutionError(HybridBOError):
