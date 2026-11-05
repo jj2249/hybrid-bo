@@ -201,7 +201,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   x, y, unknown_equations, objective, objective_name)` builds the problem over the
   scenarios from CasADi expressions (variables `u`, then `vec` of the `(S, M)` x copies,
   then of the `(S, P)` y copies if variables; bounds and start bounds from each `Var`,
-  repeated per scenario; `g` per scenario, followed by its row of the unknown equations).
+  repeated per scenario; `g` per scenario, followed by its row of the unknown
+  equations).
   `unknown_equations` holds the residuals `(S, P)` that tie the unknown states, or None
   when y is already an expression of u and x, which adds no variables and no equations.
   It has two callers, each building its own symbols:
@@ -234,10 +235,11 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   points `(N,)`, `(M,)`, `(P,)`; no run, no artifact.
 - `acquisition.py`: `EI`, `LCB(std_factor)` and `standard_acquisition` (analytic EI
   or LCB over `u`). Both builders return an `AcquisitionProblem`, an alias of
-  `DeterministicEquivalent` (standard BO's has `w = u`; in hybrid BO's `scenario_values`, the
-  std is Lin-EI's s or else the weighted std over the scenarios). `_check_acquisition`
-  is the one check of an acquisition function; every method's settings and builder
-  call it (`TypeError` unless an `EI` or `LCB` instance). `SAA(n_scenarios,
+  `DeterministicEquivalent` (standard BO's has `w = u`; in hybrid BO's
+  `scenario_values`, the std is Lin-EI's s or else the weighted std over the scenarios).
+  `_check_acquisition` is the one check of an acquisition function; every method's
+  settings and builder call it (`TypeError` unless an `EI` or `LCB` instance).
+  `SAA(n_scenarios,
   unknown_states_as_variables)` is hybrid BO's approximation, checked by
   `_check_approximation(acquisition, approximation)` in `HybridBOSettings` and
   `hybrid_acquisition` (`TypeError` unless an `SAA` or a
@@ -248,10 +250,11 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `_sensitivity(problem, fitted)` is the `cas.Function` `(x, y, u) -> a (1, P)`.
   Every GP builder (`hybrid_acquisition`, `gp_deterministic_equivalent`,
   `_scenario_unknown_states`, `_sensitivity`) takes `fitted`, the surrogate model: a tuple
-  of one fitted GP per unknown state (`ValueError` in `gp_deterministic_equivalent` otherwise).
+  of one fitted GP per unknown state (`ValueError` in `gp_deterministic_equivalent`
+  otherwise).
   `saa_scenarios(n, n_y, rng)` draws SAA's scenarios, and `hybrid_acquisition(...,
-  acquisition, approximation)` is `gp_deterministic_equivalent` with the acquisition function as
-  the objective.
+  acquisition, approximation)` is `gp_deterministic_equivalent` with the acquisition
+  function as the objective.
   `AcquisitionSolution(value, x, y)` is one iteration's solution: the minimized
   objective at the trial point and, for hybrid BO, the scenario states `(S, M)`,
   `(S, P)` (x from `_unpack`, y from `scenario_values`, so predicted when the y_s

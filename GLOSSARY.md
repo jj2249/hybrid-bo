@@ -300,9 +300,9 @@ _Avoid_: mean scenario, zero scenario
 
 **Nominal optimum** (`optimize_hybrid_model`):
 The lowest objective the hybrid model allows with the GP replaced by its mean: the
-deterministic equivalent of the nominal scenario, minimizing `f`. Solved once from fitted
-GPs, with no acquisition function and no measurements, so it is no method, and it can sit
-where the GP only extrapolates.
+deterministic equivalent of the nominal scenario, minimizing `f`. Solved once from
+fitted GPs, with no acquisition function and no measurements, so it is no method, and it
+can sit where the GP only extrapolates.
 _Avoid_: model optimum, surrogate optimum, predicted optimum
 
 **Linearization**:

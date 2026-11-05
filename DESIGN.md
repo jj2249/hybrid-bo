@@ -553,11 +553,12 @@ def optimize_hybrid_model(
   | SAA-EI, SoftSAA-EI, SAA-LCB | an acquisition function of the `f_s` | S scenarios |
   | Lin-EI | EI of `f` with its sensitivity | the nominal scenario |
 
-  So `gp_deterministic_equivalent` takes both, `hybrid_acquisition` supplies an objective, and
-  `hybrid_bo` is the loop around them: `fit_surrogate`, `solve_with_multistart`,
-  evaluate. `acquisition.py` imports `hybrid_model.py`, never the reverse. The objective
-  is a function because it is built from the problem's own symbols. It also states the
-  std of `f` that `scenario_values` reports, which is 0 for the nominal optimum.
+  So `gp_deterministic_equivalent` takes both, `hybrid_acquisition` supplies an
+  objective, and `hybrid_bo` is the loop around them: `fit_surrogate`,
+  `solve_with_multistart`, evaluate. `acquisition.py` imports `hybrid_model.py`, never
+  the reverse. The objective is a function because it is built from the problem's own
+  symbols. It also states the std of `f` that `scenario_values` reports, which is 0 for
+  the nominal optimum.
 - **The unknown equations are the seam (#211).** The oracle optimum has the same
   variables, bounds and `g` as the nominal optimum, with `y` tied to the oracle instead
   of the GPs, and it is the benchmark the hybrid result is tested against, so the
@@ -575,18 +576,19 @@ def optimize_hybrid_model(
   and each caller builds its symbols once. `oracle_optimum` and `optimize_hybrid_model`
   share the objective `f` (`_minimize_f`), and the dependency runs one way: `oracle.py`
   imports `hybrid_model.py`.
-- **`AcquisitionProblem` is an alias of `DeterministicEquivalent`.** Hybrid BO's acquisition
-  problem is a deterministic equivalent whose objective is an acquisition function. Standard
-  BO's is no deterministic equivalent, having no hybrid model, but needs the same fields with
-  no scenarios (`w` is `u`), so it shares the type.
+- **`AcquisitionProblem` is an alias of `DeterministicEquivalent`.** Hybrid BO's
+  acquisition problem is a deterministic equivalent whose objective is an acquisition
+  function. Standard BO's is no deterministic equivalent, having no hybrid model, but
+  needs the same fields with no scenarios (`w` is `u`), so it shares the type.
 - **`fit_surrogate` takes a `History`.** A history is every state at every point, which
   is what the fit needs and what a caller's sensors don't give. Measurements from
   elsewhere become one through `reconstruct`, so there is one way in, and a finished
   run's history fits as it is.
 - **`hybrid_bo` doesn't call `optimize_hybrid_model`.** They solve the same problem with
-  a different objective: an acquisition function of `f`, or `f` itself. `build_deterministic_equivalent`
-  requires the objective (ADR 0009), and `optimize_hybrid_model` fixes it to `f` by name.
-  `hybrid_bo` calls it through `hybrid_acquisition` because it needs the
+  a different objective: an acquisition function of `f`, or `f` itself.
+  `gp_deterministic_equivalent` requires the objective (ADR 0009), and
+  `optimize_hybrid_model` fixes it to `f` by name. `hybrid_bo` calls
+  `gp_deterministic_equivalent` through `hybrid_acquisition` because it needs the
   problem unsolved for the replay.
 - **`optimize_hybrid_model` is not a method.** It measures nothing, so it has no run, no
   artifact and no settings, only a solution. It has no uncertainty in it, so it trusts
