@@ -80,24 +80,25 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - `sampling.py`: `lhs(lower, upper, n, rng)` and `uniform(...)` over a box, shape
   `(n, d)`; `initial_points(variables, n, rng)` is `lhs` over `Var` start bounds. Use
   them for any Latin hypercube or uniform draw.
-- `evaluation.py`: a `Measure` is `(u (N,), rng) -> measured (P,)`, or an
-  `OracleMeasurement` (measured plus oracle `x`, `y`) in benchmark experiments.
-  `oracle_measure(system, oracle, noise_std, ...)` (`noise_std` required) traces
-  the oracle like `g` (`_trace_oracle`) and returns an `OracleSimulation`, a frozen,
-  callable dataclass holding the system, the traced oracle and the settings (#141);
-  its repr is the artifact's text, so it must not depend on the process (no
-  addresses).
+- `oracle.py`: the oracle, for benchmark experiments. `OracleMeasurement` (measured
+  plus oracle `x`, `y`). `oracle_measure(system, oracle, noise_std, ...)` (`noise_std`
+  required) traces the oracle like `g` (`_trace_oracle`) and returns an
+  `OracleSimulation`, a frozen, callable dataclass holding the system, the traced oracle
+  and the settings (#141); its repr is the artifact's text, so it must not depend on the
+  process (no addresses).
   `oracle_optimum(problem, oracle, rng)` solves min f s.t. g = 0, y = oracle by
   `solve_with_multistart` from `lhs` starts over the start bounds of (u, x, y).
+  `evaluation.py` imports `OracleMeasurement` from here, so this module never imports
+  `evaluation.py`; what both need sits below them (`_find_root` in `solvers.py`,
+  `_states` in `problem.py`).
+- `evaluation.py`: a `Measure` is `(u (N,), rng) -> measured (P,)`, or an
+  `OracleMeasurement` in benchmark experiments.
   `evaluate(problem, measure, u, rng)` runs the measurement per row, rejects a measured
   variable that isn't finite with `RootFindingError` (#214; before the starts are
   drawn, since with M = 0 nothing is solved and a measured variable outside `g` leaves
   a root, so the solve wouldn't notice), then always
   solves the root-finding problem (`_reconstruct`, starts over the unmeasured
-  variables), and returns a `History` whose points are all initial points. Every
-  fsolve goes through `_find_root` (CasADi Jacobian, accepts residual `< tol` within
-  the bounds, silences fsolve's warnings; with no unmeasured states, as with M = 0,
-  it returns the empty root without solving; the starts are still drawn). With an
+  variables), and returns a `History` whose points are all initial points. With an
   oracle, one extra solve from the
   oracle values (no draws) checks the reconstruction is on the same root, else
   `ReconstructionWarning`. `_start_bounds` (in `sampling.py`) and `_as_text` (in
@@ -153,7 +154,11 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   CasADi catches a Ctrl-C inside IPOPT and fails the solve (`NonIpopt_Exception_Thrown`,
   which other callback errors give too), so `solve_with_multistart` wraps the SIGINT
   handler for each solve (`_interrupts_noticed`, main thread and a Python handler only)
-  and raises `KeyboardInterrupt` after a failed solve that saw one (#155).
+  and raises `KeyboardInterrupt` after a failed solve that saw one (#155). Every fsolve,
+  of the root-finding problem and of the oracle simulation, goes through `_find_root`
+  (CasADi Jacobian, accepts residual `< tol` within the bounds, silences fsolve's
+  warnings; with no unmeasured states, as with M = 0, it returns the empty root without
+  solving; the starts are still drawn).
 - `gp.py` (ADR 0008): GPs are data, frozen dataclasses from a closed set. `Param(init,
   bounds, log=True)` is a hyperparameter to fit (checked: init inside the bounds, positive
   bounds for log). Kernels `Matern12/32/52` and `SquaredExponential` (`lengthscale:

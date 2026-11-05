@@ -199,7 +199,7 @@ frozen dataclass, so membership checks use its equality; no CasADi `==` is invol
 `lhs(lower, upper, n, rng)` and `uniform(...)` stay the array primitives the library
 uses for starts; `initial_points` is the `Var` front end for experiments.
 
-### Evaluation (`evaluation.py`, `history.py`, `errors.py`)
+### Evaluation (`evaluation.py`, `oracle.py`, `history.py`, `errors.py`)
 
 ```python
 @dataclass(frozen=True)
@@ -230,6 +230,11 @@ def evaluate(
 
 - A **measurement** returns the measured variables for one trial point. A real
   system supplies only this, as a plain array.
+- **The oracle has a module of its own**, `oracle.py`, since only benchmark experiments
+  need it. `evaluation.py` imports `OracleMeasurement` from it, for `Measure` and to
+  tell an oracle's measurement from a real system's, so `oracle.py` never imports
+  `evaluation.py`. What both need sits below them: `_find_root` in `solvers.py` and
+  `_states` in `problem.py`.
 - The **oracle simulation** solves `g` with `y = oracle(x, u)` for every state
   (root-finding with CasADi Jacobians), reads the measured variables and adds
   `rng.normal(0, noise_std)`. Its full states are the **oracle values**, returned in an
