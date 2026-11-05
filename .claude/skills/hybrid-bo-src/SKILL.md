@@ -51,7 +51,7 @@ code uses GLOSSARY.md's terms; use them in PRs, tests and comments too.
     DESIGN.md), with `L = diag(std_1, ..., std_P)`. The partial `f_y L` is wrong: it
     gives `s ≡ 0` on the illustrative example. EI only: LCB raises
     `NotImplementedError`.
-  - Solved with `multistart`. The trial point is the `u` part of the solution.
+  - Solved with `solve_scenario_problem`. The trial point is the `u` part of the solution.
 - **Standard BO** (`bo.py`): a GP directly on `u -> f`, with analytic EI or LCB over
   `u` only.
 - **Latin hypercube / uniform sampling** (`baselines.py`): the non-adaptive baselines.
@@ -197,9 +197,12 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `w -> (f (S, 1), y (S, P), std of f (1, 1))`).
   `_pack(u, x, y)` (numpy or CasADi) and `_unpack(problem, w) -> (u, x, y | None)`
   are the only code that knows the order of `w`: never slice or reshape `w`
-  elsewhere. `solve_scenario_problem(problem, n_starts, rng, solver)` is `lhs` starts,
-  `multistart`, then a `ScenarioSolution(u, x, y, value)`, the states `(S, M)`, `(S, P)`
-  (x from `_unpack`, y from `scenario_values`, so predicted when the y_s are substituted).
+  elsewhere. `solve_scenario_problem(problem, n_starts, rng, solver)` is the one solve of
+  every scenario and acquisition problem: `lhs` starts, `multistart`, then a
+  `ScenarioSolution(u, x, y, value)`, the states `(S, M)`, `(S, P)` (x from `_unpack`, y
+  from `scenario_values`, so predicted when the y_s are substituted), or None for a
+  problem over u alone (`_unpack` would give x of shape `(0, 0)`, and standard BO's
+  stored solution keeps `x=None`).
   `Scenarios` (`z (S, P)`, `w (S,)`, checked) and `nominal_scenario(n_y)`.
   `_scenario_unknown_states` is the one GP scenario prediction
   (`mean_j + std_j * z_sj` per unknown state j), symbolic.
@@ -267,8 +270,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `hybrid_bo` take `problem` and `measure`, then only keywords: `n_iterations`, `rng`,
   `gp`, `acquisition`, either `n_initial` or `initial_points`
   (`sampling._starting_points`, drawn after the artifact) and search effort. `StandardBOSettings` and
-  `standard_bo` (fit `u -> f`, `standard_acquisition`, `multistart` from `lhs` over
-  the `u` start bounds), `HybridBOSettings` and `hybrid_bo` (artifact, then
+  `standard_bo` (fit `u -> f`, `standard_acquisition`, `solve_scenario_problem`),
+  `HybridBOSettings` and `hybrid_bo` (artifact, then
   `saa_scenarios` or `nominal_scenario`, then the loop; `fit_surrogate`,
   `hybrid_acquisition`, `solve_scenario_problem`; adds the
   scenarios to the run and to `error.run`). `_method_artifact` builds both methods'

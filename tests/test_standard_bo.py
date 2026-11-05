@@ -25,9 +25,10 @@ from hybrid_bo import (
 from hybrid_bo.acquisition import AcquisitionSolution, standard_acquisition
 from hybrid_bo.bo import optimization_loop
 from hybrid_bo.gp import FittedGP, fit_gp, predict
-from hybrid_bo.hybrid_model import _pack
+from hybrid_bo.hybrid_model import _pack, solve_scenario_problem
 from hybrid_bo.run import run_artifact
 from hybrid_bo.settings import StandardBOSettings
+from hybrid_bo.solvers import Ipopt
 
 
 def illustrative_measure(problem):
@@ -118,6 +119,31 @@ def test_acquisition_problem_is_over_u_within_its_bounds(illustrative_problem):
     np.testing.assert_array_equal(lower, [-2.0])
     np.testing.assert_array_equal(upper, [2.0])
     assert nlp.g is None
+
+
+def test_a_problem_over_u_alone_solves_to_no_scenario_states(illustrative_problem):
+    """The solve of an acquisition problem over u gives the decision variables and the
+    objective there, and no scenario states."""
+    acquisition_problem = standard_acquisition(
+        illustrative_problem, fitted_illustrative_gp(), 0.0, EI()
+    )
+
+    solution = solve_scenario_problem(
+        acquisition_problem, 5, np.random.default_rng(0), Ipopt()
+    )
+
+    assert solution.u.shape == (1,)
+    assert solution.x is None and solution.y is None
+    assert solution.value == pytest.approx(float(acquisition_problem.nlp.f(solution.u)))
+
+
+def test_a_run_stores_no_scenario_states(illustrative_problem):
+    """Standard BO's stored acquisition solutions hold the value alone, so x and y are
+    None rather than the empty states of a problem over u."""
+    run = illustrative_run(illustrative_problem)
+
+    assert all(solution.x is None for solution in run.acquisitions)
+    assert all(solution.y is None for solution in run.acquisitions)
 
 
 # `parametrize` runs the test once per value in the list, each as its own test case

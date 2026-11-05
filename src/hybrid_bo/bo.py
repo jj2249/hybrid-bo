@@ -31,16 +31,15 @@ from hybrid_bo.evaluation import Measure, evaluate
 from hybrid_bo.gp import GP, FittedGP, fit_gp
 from hybrid_bo.history import History, _concatenate, incumbents
 from hybrid_bo.hybrid_model import (
-    _unpack,
     fit_surrogate,
     nominal_scenario,
     solve_scenario_problem,
 )
 from hybrid_bo.problem import Problem
 from hybrid_bo.run import Run, run_artifact
-from hybrid_bo.sampling import _starting_points, lhs
+from hybrid_bo.sampling import _starting_points
 from hybrid_bo.settings import HybridBOSettings, MethodSettings, StandardBOSettings
-from hybrid_bo.solvers import Ipopt, multistart
+from hybrid_bo.solvers import Ipopt
 
 _logger = logging.getLogger(__name__)
 
@@ -177,8 +176,8 @@ def standard_bo(
 
     Evaluates `initial_points` (n, N), or `n_initial` points drawn from `rng`, then in
     each iteration fits the prior GP `gp` to the measured objective so far, solves the
-    acquisition problem by multistart from `n_starts` Latin hypercube starts over the
-    start bounds of `u`, and evaluates the solution. Each iteration's acquisition
+    acquisition problem (`solve_scenario_problem`) from `n_starts` Latin hypercube starts
+    over the start bounds of `u`, and evaluates the solution. Each iteration's acquisition
     solution holds the acquisition value only.
 
     Raises `ValueError` unless exactly one of `n_initial` and `initial_points` is
@@ -208,10 +207,8 @@ def standard_bo(
         acquisition_problem = standard_acquisition(
             problem, fitted, incumbent, acquisition
         )
-        starts = lhs(*acquisition_problem.start_bounds, n_starts, rng)
-        solution = multistart(acquisition_problem.nlp, starts, solver)
-        u, _, _ = _unpack(acquisition_problem, solution.w)
-        return u, (fitted,), AcquisitionSolution(solution.f)
+        solution = solve_scenario_problem(acquisition_problem, n_starts, rng, solver)
+        return solution.u, (fitted,), AcquisitionSolution(solution.value)
 
     return optimization_loop(
         problem,

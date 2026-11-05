@@ -545,7 +545,8 @@ def optimize_hybrid_model(
 - **`AcquisitionProblem` is an alias of `ScenarioProblem`.** Hybrid BO's acquisition
   problem is a scenario problem whose objective is an acquisition function. Standard
   BO's is no scenario problem, having no hybrid model, but needs the same fields with
-  no scenarios (`w` is `u`), so it shares the type.
+  no scenarios (`w` is `u`), so it shares the type and `solve_scenario_problem`, whose
+  solution then has no scenario states (`x` and `y` are None).
 - **`fit_surrogate` takes a `History`.** A history is every state at every point, which
   is what the fit needs and what a caller's sensors don't give. Measurements from
   elsewhere become one through `reconstruct`, so there is one way in, and a finished
@@ -817,12 +818,12 @@ The baselines are named `*_sampling` because `hb.sampling.uniform` and
 - `hybrid_bo` draws the scenarios from `rng` (SAA; linearization takes the nominal
   scenario and draws nothing), then runs `optimization_loop` with a
   trial-point function that fits the GP on `(u, x)[h_inputs] -> y`, builds
-  `hybrid_acquisition`, and solves it with `multistart`. The user never draws `z`.
+  `hybrid_acquisition`, and solves it with `solve_scenario_problem`. The user never draws `z`.
   With `SAA(n_scenarios=25, unknown_states_as_variables=False)` (the legacy
   illustrative setting) it reproduces the legacy illustrative baseline.
 - `standard_bo` fits on `u -> f` (measured), with the incumbent the best measured `f`,
-  and solves `standard_acquisition` by `multistart` from `lhs` starts over the `u` start
-  bounds. With the defaults it reproduces the legacy illustrative baseline.
+  and solves `standard_acquisition` with `solve_scenario_problem`, from `lhs` starts over
+  the `u` start bounds. With the defaults it reproduces the legacy illustrative baseline.
 - `optimization_loop` takes the artifact and returns the `Run`, so a `HybridBOError` in
   the loop (an evaluation, or the trial-point function) carries the partial run as
   `error.run` for every method: the points evaluated so far (also `error.history`) and
