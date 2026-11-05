@@ -12,7 +12,6 @@ points, for the iteration figures (ADR 0005).
 """
 
 import warnings
-from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, assert_never
 
@@ -21,7 +20,14 @@ import numpy as np
 
 from hybrid_bo.errors import ReplayWarning
 from hybrid_bo.gp import FittedGP, predict
-from hybrid_bo.problem import Problem, Symbolic, System, Var, _h_inputs
+from hybrid_bo.hybrid_model import (
+    ScenarioProblem,
+    Scenarios,
+    _pack,
+    _unpack,
+    scenario_problem,
+)
+from hybrid_bo.problem import Problem, Symbolic, _h_inputs
 from hybrid_bo.sampling import _start_bounds
 from hybrid_bo.solvers import NLP
 
@@ -174,63 +180,9 @@ def _log_softplus(t: Any) -> Any:
     return cas.if_else(t < _LOG_SOFTPLUS_LINEAR_BELOW, t, exact)
 
 
-@dataclass(frozen=True)
-class AcquisitionProblem:
-    """An acquisition problem: the NLP over the decision vector w, the start bounds
-    `(lower, upper)` of w for its multistart, and the order of w's variables.
-
-    w holds the N decision variables u, then, for hybrid BO, the S scenario copies of
-    the M mechanistic states x (S, M), then those of the unknown states y (S, P) if
-    they are variables. `_pack` and `_unpack` are the only code that knows this order.
-    The defaults are standard BO's, whose w is u alone.
-
-    Hybrid BO's `scenario_values` maps w to f under each scenario (S, 1), the
-    scenarios' unknown states y (S, P), read from w or predicted by the GPs, and the
-    std of f (1, 1): linearization's s, else the weighted std of f over the scenarios.
-    """
-
-    nlp: NLP
-    start_bounds: tuple[np.ndarray, np.ndarray]
-    n_u: int
-    n_x: int = 0
-    n_scenarios: int = 0
-    unknown_states_as_variables: bool = False
-    scenario_values: cas.Function | None = None
-
-
-def _pack(u: Any, x: Any = None, y: Any = None) -> Any:
-    """The decision vector w of u (N,), the scenario states x (S, M) and, if they are
-    variables, y (S, P): numpy arrays give a numpy array, CasADi matrices a column.
-
-    The states are stacked column by column, so each state has its S scenario copies
-    in a row.
-    """
-    states = [block for block in (x, y) if block is not None]
-    if isinstance(u, np.ndarray):
-        return np.concatenate([u, *(block.ravel(order="F") for block in states)])
-    return cas.vertcat(u, *(cas.vec(block) for block in states))
-
-
-def _unpack(
-    problem: AcquisitionProblem, w: np.ndarray
-) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
-    """The u (N,), x (S, M) and y (S, P) (None unless they are variables) held in a
-    numeric decision vector w of the acquisition problem; undoes `_pack`.
-
-    Raises `ValueError` if w has the wrong length for the problem.
-    """
-    # One column per state of each scenario; standard BO has no scenarios
-    w = np.asarray(w, dtype=float).ravel()
-    n_u, n_x, n_scenarios = problem.n_u, problem.n_x, problem.n_scenarios
-    n_states = (len(w) - n_u) // n_scenarios if n_scenarios else 0
-    n_y = n_states - n_x
-    fits = len(w) == n_u + n_scenarios * n_states and n_y >= 0
-    if not fits or (n_y > 0) != problem.unknown_states_as_variables:
-        msg = f"A decision vector of length {len(w)} doesn't fit this problem"
-        raise ValueError(msg)
-    states = w[n_u:].reshape((n_scenarios, n_states), order="F")
-    y = states[:, n_x:] if problem.unknown_states_as_variables else None
-    return w[:n_u], states[:, :n_x], y
+# An acquisition problem is a scenario problem whose objective is an acquisition
+# function; standard BO's is over u alone, with no scenarios
+AcquisitionProblem = ScenarioProblem
 
 
 def standard_acquisition(
@@ -267,35 +219,6 @@ def standard_acquisition(
 
 
 @dataclass(frozen=True)
-class Scenarios:
-    """The scenarios of hybrid BO's acquisition problem: the scenario draws z (S, P),
-    one row per scenario, and the scenario weights w (S,), which sum to 1.
-
-    Raises `ValueError` if the shapes don't match, or a weight is negative, or the
-    weights don't sum to 1.
-    """
-
-    z: np.ndarray
-    w: np.ndarray
-
-    def __post_init__(self) -> None:
-        z, w = np.asarray(self.z, dtype=float), np.asarray(self.w, dtype=float)
-        if z.ndim != 2 or w.shape != (len(z),):
-            msg = (
-                f"Scenarios need z of shape (S, P) and w of shape (S,), got {z.shape} "
-                f"and {w.shape}"
-            )
-            raise ValueError(msg)
-        if np.any(w < 0) or not np.isclose(w.sum(), 1.0):
-            msg = f"Scenario weights must be >= 0 and sum to 1, got {w}"
-            raise ValueError(msg)
-
-        # Frozen dataclass: set fields through object.__setattr__
-        object.__setattr__(self, "z", z)
-        object.__setattr__(self, "w", w)
-
-
-@dataclass(frozen=True)
 class AcquisitionSolution:
     """The solution of one iteration's acquisition problem: the acquisition
     function's value at the trial point, as the objective the problem minimizes
@@ -312,31 +235,6 @@ def saa_scenarios(n: int, n_y: int, rng: np.random.Generator) -> Scenarios:
     """n scenarios for the sample-average approximation: standard normal scenario
     draws z (n, n_y) and equal weights 1/n."""
     return Scenarios(rng.standard_normal((n, n_y)), np.full(n, 1 / n))
-
-
-def nominal_scenario(n_y: int) -> Scenarios:
-    """The nominal scenario, linearization's only scenario: zero scenario draws z
-    (1, n_y) and weight 1."""
-    return Scenarios(np.zeros((1, n_y)), np.ones(1))
-
-
-def _scenario_unknown_states(
-    system: System,
-    fitted: tuple[FittedGP, ...],
-    scenarios: Scenarios,
-    u: Any,
-    x: Any,
-) -> Any:
-    """The scenarios' unknown states (S, P), symbolic: unknown state j of scenario s
-    is GP j's prediction at the scenario's arguments of h, mean_j + std_j * z_sj, for
-    u (N, 1) and x (S, M). `fitted` holds one fitted GP per unknown state, in the
-    order of `system.y`.
-    """
-    # One column of mean and std per unknown state, matching the columns of z
-    n_scenarios = len(scenarios.w)
-    inputs = cas.horzcat(*_h_inputs(system, cas.repmat(u.T, n_scenarios, 1), x))
-    mean, std = zip(*(predict(gp, inputs) for gp in fitted), strict=True)
-    return cas.horzcat(*mean) + cas.horzcat(*std) * Symbolic(scenarios.z)
 
 
 def _sensitivity(problem: Problem, fitted: tuple[FittedGP, ...]) -> cas.Function:
@@ -375,16 +273,10 @@ def hybrid_acquisition(
     acquisition: EI | LCB,
     approximation: SAA | SoftSAA | Linearization,
 ) -> AcquisitionProblem:
-    """The acquisition problem of hybrid BO (paper, Problems 8 and 9).
-
-    `fitted` is the surrogate model: one fitted GP per unknown state, in the order of
-    `problem.system.y`. Each scenario s has its own copy x_s of the mechanistic
-    states, and the known equations g(x_s, y_s, u) = 0 are constraints. Its unknown
-    states y_s are the GPs' prediction at the scenario's arguments of h,
-    mean + std * z_s (`_scenario_unknown_states`). With the approximation's
-    `unknown_states_as_variables` the y_s are variables too, tied to the prediction by
-    an equality constraint (Problem 8), which helps IPOPT; otherwise the prediction is
-    substituted for them.
+    """The acquisition problem of hybrid BO (paper, Problems 8 and 9): the scenario
+    problem (`scenario_problem`) of the scenarios, whose objective is the acquisition
+    function. `fitted` is the surrogate model, and the approximation's
+    `unknown_states_as_variables` says how the problem holds the unknown states.
 
     With f_s = f(x_s, y_s, u), the problem minimizes -SAA-EI, the weighted average of
     min(f_s - incumbent, 0), or SAA-LCB, the weighted mean of the f_s minus
@@ -396,106 +288,60 @@ def hybrid_acquisition(
     the problem minimizes -Lin-EI: EI of the normal N(f, s^2), with s^2 = a a^T and
     a = df/dz there (`_sensitivity`).
 
-    The variables are u, the x_s and, if variables, the y_s, in `_pack`'s order. Each
-    variable is boxed by its bounds and started within its start bounds. Raises
-    `TypeError` unless `acquisition` is an `EI` or an `LCB` and `approximation` an
-    `SAA`, a `SoftSAA` or a `Linearization`, `NotImplementedError` for `LCB` with
+    Raises `TypeError` unless `acquisition` is an `EI` or an `LCB` and `approximation`
+    an `SAA`, a `SoftSAA` or a `Linearization`, `NotImplementedError` for `LCB` with
     `Linearization`, and `ValueError` for `LCB` with `SoftSAA`, for scenarios or
     fitted GPs without one column or one GP per unknown state, and with
     `Linearization`, for scenarios other than the nominal scenario.
     """
-    # The checks, and the symbols for u and each scenario's mechanistic states
+    # The checks
     _check_acquisition(acquisition)
     _check_approximation(acquisition, approximation)
-    unknown_states_as_variables = approximation.unknown_states_as_variables
-    system = problem.system
-    if scenarios.z.shape[1] != system.n_y:
-        msg = (
-            f"The scenarios need one column of z per unknown state ({system.n_y}), "
-            f"got {scenarios.z.shape[1]}"
-        )
-        raise ValueError(msg)
-    if len(fitted) != system.n_y:
-        msg = (
-            "The surrogate model needs one fitted GP per unknown state "
-            f"({system.n_y}), got {len(fitted)}"
-        )
-        raise ValueError(msg)
     is_nominal = len(scenarios.w) == 1 and not np.any(scenarios.z)
     if isinstance(approximation, Linearization) and not is_nominal:
         msg = "Linearization runs over the nominal scenario alone (nominal_scenario)"
         raise ValueError(msg)
-    n_scenarios = len(scenarios.w)
-    u = Symbolic.sym("u", system.n_u)
-    # Row s: the mechanistic states of scenario s
-    x = Symbolic.sym("x", n_scenarios, system.n_x)
 
-    # The scenarios of the unknown states: variables tied to the GP, or the GP itself
-    predicted = _scenario_unknown_states(system, fitted, scenarios, u, x)
-    y = predicted
-    if unknown_states_as_variables:
-        y = Symbolic.sym("y", n_scenarios, system.n_y)
+    def objective(f: Any, x: Any, y: Any, u: Any) -> tuple[Any, Any]:
+        """The acquisition function: a weighted average over the scenarios, its smooth
+        version's -log, or Lin-EI at the nominal scenario (the last two EI only, as
+        checked); and the std of f, the weighted std over the scenarios, or Lin-EI's s.
+        """
+        # The weighted mean and std over the scenarios
+        weights = Symbolic(scenarios.w)
+        f_mean = weights.T @ f
+        f_std = cas.sqrt(weights.T @ (f - f_mean) ** 2)
 
-    # Each scenario: its known equations, its tie to the GP, and its objective
-    constraints, f_parts = [], []
-    for s in range(n_scenarios):
-        x_s, y_s = x[s, :].T, y[s, :].T
-        constraints.append(system.g(x_s, y_s, u))
-        if unknown_states_as_variables:
-            constraints.append(y_s - predicted[s, :].T)
-        f_parts.append(problem.f(x_s, y_s, u))
-    f = cas.vertcat(*f_parts)
+        # What each approximation minimizes
+        match approximation:
+            case Linearization():
+                a = _sensitivity(problem, fitted)(x[0, :].T, y[0, :].T, u)
+                f_std = cas.sqrt(a @ a.T)
+                return -_expected_improvement(f[0], f_std, incumbent), f_std
+            case SoftSAA(temperature=temperature):
+                log_smooth = np.log(temperature) + _log_softplus(
+                    (incumbent - f) / temperature
+                )
+                log_weights = Symbolic(np.log(scenarios.w))
+                return -cas.logsumexp(log_weights + log_smooth), f_std
+            case SAA():
+                match acquisition:
+                    case LCB(std_factor=std_factor):
+                        return f_mean - std_factor * f_std, f_std
+                    case EI():
+                        return weights.T @ cas.fmin(f - incumbent, 0), f_std
+                    case _:
+                        assert_never(acquisition)
+            case _:
+                assert_never(approximation)
 
-    # The acquisition function: a weighted average over the scenarios, its smooth
-    # version's -log, or Lin-EI at the nominal scenario (the last two EI only, as
-    # checked); and the std of f, the weighted std over the scenarios, or Lin-EI's s
-    weights = Symbolic(scenarios.w)
-    f_mean = weights.T @ f
-    f_std = cas.sqrt(weights.T @ (f - f_mean) ** 2)
-    match approximation:
-        case Linearization():
-            a = _sensitivity(problem, fitted)(x[0, :].T, y[0, :].T, u)
-            f_std = cas.sqrt(a @ a.T)
-            objective = -_expected_improvement(f[0], f_std, incumbent)
-        case SoftSAA(temperature=temperature):
-            log_smooth = np.log(temperature) + _log_softplus(
-                (incumbent - f) / temperature
-            )
-            objective = -cas.logsumexp(Symbolic(np.log(scenarios.w)) + log_smooth)
-        case SAA():
-            match acquisition:
-                case LCB(std_factor=std_factor):
-                    objective = f_mean - std_factor * f_std
-                case EI():
-                    objective = weights.T @ cas.fmin(f - incumbent, 0)
-                case _:
-                    assert_never(acquisition)
-        case _:
-            assert_never(approximation)
-
-    # The Var of each entry of w, each state once per scenario, for the bounds
-    def per_scenario(variables: Sequence[Var]) -> np.ndarray:
-        """The variables repeated in a row per scenario, (S, len(variables))."""
-        return np.tile(np.array(variables, dtype=object), (n_scenarios, 1))
-
-    unknown = per_scenario(system.y) if unknown_states_as_variables else None
-    variables = _pack(np.array(system.u, dtype=object), per_scenario(system.x), unknown)
-
-    w = _pack(u, x, y if unknown_states_as_variables else None)
-    nlp = NLP(
-        cas.Function("acquisition", [w], [objective]),
-        np.array([var.lower for var in variables]),
-        np.array([var.upper for var in variables]),
-        cas.Function("g", [w], [cas.vertcat(*constraints)]),
-    )
-    return AcquisitionProblem(
-        nlp,
-        _start_bounds(variables),
-        system.n_u,
-        system.n_x,
-        n_scenarios,
-        unknown_states_as_variables,
-        cas.Function("scenario_values", [w], [f, y, f_std]),
+    return scenario_problem(
+        problem,
+        fitted,
+        scenarios,
+        objective,
+        approximation.unknown_states_as_variables,
+        "acquisition",
     )
 
 

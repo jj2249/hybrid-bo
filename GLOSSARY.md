@@ -140,7 +140,8 @@ noise.
 
 **Root-finding problem**:
 Solving the known equations for the states that were not measured, given the decision
-variables and the measured variables. Part of every evaluation, after the measurement.
+variables and the measured variables. Part of every evaluation, after the measurement,
+and of taking in measurements made elsewhere.
 _Avoid_: re-solve, fixed-x evaluation
 
 ### Bayesian optimization
@@ -260,8 +261,8 @@ _Avoid_: smoothing, beta
 
 **Scenario**:
 One realization of the GP's prediction of the unknown states, with its own mechanistic
-states, in hybrid BO's acquisition problem: many drawn ones for the sample-average
-approximation, the nominal scenario alone for linearization.
+states, in a scenario problem: many drawn ones for the sample-average approximation, the
+nominal scenario alone for linearization and the nominal optimum.
 _Avoid_: GP sample, posterior sample, sample
 
 **Scenario draws** (`z`, one per scenario):
@@ -270,7 +271,14 @@ and the same in every iteration's acquisition problem.
 _Avoid_: xi, gaussian_standard_samples
 
 **Scenario weights** (`w`, one per scenario):
-The weight of each scenario in the acquisition function's average; `1/S` for SAA.
+The weight of each scenario in an average over the scenarios, such as the acquisition
+function's; `1/S` for SAA.
+
+**Scenario problem** (`scenario_problem`):
+The hybrid model as an optimization problem: given scenarios, each with its own states
+under the known equations and the surrogate model, and a given objective of them. Hybrid
+BO's acquisition problem is one, with an acquisition function as the objective; the
+nominal optimum's is another, over the nominal scenario, with `f` as the objective.
 
 **Nominal states** (`x̄`, `ȳ`):
 The states the hybrid model gives when the GP is replaced by its mean: the mechanistic
@@ -280,8 +288,15 @@ _Avoid_: mean states, mean realization
 
 **Nominal scenario**:
 The scenario with zero scenario draws and weight 1, whose states are the nominal states:
-linearization's only scenario.
+the only scenario of linearization and of the nominal optimum.
 _Avoid_: mean scenario, zero scenario
+
+**Nominal optimum** (`optimize_hybrid_model`):
+The lowest objective the hybrid model allows with the GP replaced by its mean: the scenario
+problem of the nominal scenario, minimizing `f`. Solved once from fitted GPs, with no
+acquisition function and no measurements, so it is no method, and it can sit where the GP
+only extrapolates.
+_Avoid_: model optimum, surrogate optimum, predicted optimum
 
 **Linearization**:
 The approximation that expands the objective to first order in the scenario draws

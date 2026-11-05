@@ -8,7 +8,7 @@ explains the method; these pages explain how to use the library.
 
 - :doc:`getting_started`: install, and run hybrid BO and standard BO in a script.
 - :doc:`writing_an_experiment`: state your own problem and measurement, choose the
-  methods and run them.
+  methods and run them, or optimize data you already have.
 - :doc:`reading_results`: a run, its figures, and the results of many runs.
 
 Import the package as ``import hybrid_bo as hb``: the top level holds what a typical

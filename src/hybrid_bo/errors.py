@@ -46,6 +46,15 @@ class ReconstructionWarning(UserWarning):
     """
 
 
+class OutOfBoundsWarning(UserWarning):
+    """Given measurements hold a decision variable or a measured variable outside its
+    bounds.
+
+    It is still a measurement, so it is kept: it informs the GP, though the nominal
+    optimum stays within the bounds. Widen the bounds if the data are right.
+    """
+
+
 class OracleOptimumWarning(UserWarning):
     """An evaluated point has an oracle objective below the stated oracle optimum.
 

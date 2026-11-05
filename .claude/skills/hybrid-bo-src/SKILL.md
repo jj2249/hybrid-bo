@@ -20,7 +20,7 @@ code uses GLOSSARY.md's terms; use them in PRs, tests and comments too.
   variables and adds `rng.normal(0, noise_std)` (drawn also when `noise_std` is 0).
   The library then always solves the **root-finding problem**: `g` for the unmeasured
   states given `u` and the measured variables.
-- **Hybrid BO** (`bo.py`, `acquisition.py`): the unknown equations are never used in
+- **Hybrid BO** (`bo.py`, `acquisition.py`, `hybrid_model.py`): the unknown equations are never used in
   the acquisition problem. The surrogate model is one independent GP per unknown state
   (any P >= 1), each mapping the `h_inputs` columns of `(u, x)` to its column of `y`,
   all from the one prior GP in the settings and trained on the evaluated points.
@@ -98,6 +98,11 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   oracle values (no draws) checks the reconstruction is on the same root, else
   `ReconstructionWarning`. `_start_bounds` (in `sampling.py`) and `_as_text` (in
   `problem.py`, an equation as text in the variable names) are shared helpers.
+  `reconstruct(problem, *, u, measured, rng, n_starts, tol)` is `evaluate` without the
+  measurement, for data from elsewhere: no oracle values, `ValueError` on a wrong shape,
+  one `OutOfBoundsWarning` for a `u` or measured variable outside its bounds (kept), and
+  every row tried, one `RootFindingError` naming those with no root or a non-finite value
+  and the others as `error.history`.
 - `history.py`: `History` (`u`, `x`, `y`, `f`, oracle values or `None`, `n_initial`)
   `incumbents` and `oracle_incumbents` (the benchmark metric);
   `check_oracle_optimum(history, optimum)` warns with `OracleOptimumWarning` if a point
@@ -178,15 +183,36 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   Numeric data enter CasADi as `Symbolic` constants. Keep the `minmax` operation
   order: it reproduces the pre-refactor values bit for bit for [0, 1], which the
   baselines depend on.
-- `acquisition.py`: `EI`, `LCB(std_factor)` and `standard_acquisition` (analytic EI
-  or LCB over `u`). Both builders return an `AcquisitionProblem` (`nlp`,
+- `hybrid_model.py`: the core under hybrid BO (#197; `acquisition.py` imports it, never
+  the reverse). `scenario_problem(problem, fitted, scenarios, objective,
+  unknown_states_as_variables, objective_name)` builds the hybrid model over the scenarios
+  (variables `u`, then `vec` of the `(S, M)` x copies, then of the `(S, P)` y copies if
+  variables; bounds and start bounds from each `Var`, repeated per scenario; `g` per
+  scenario, followed by its GP tie). `objective` is `(f (S, 1), x, y, u) -> (objective,
+  std of f)`, in CasADi expressions; `objective_name` names the NLP's objective function,
+  which the solver's logs give. It returns a `ScenarioProblem` (`nlp`,
   `start_bounds`, and the variable order: `n_u`, `n_x`, `n_scenarios`,
-  `unknown_states_as_variables`; the defaults are standard BO's, `w = u`; hybrid
-  BO's also has `scenario_values`, `w -> (f (S, 1), y (S, P), std of f (1, 1))`,
-  the std being Lin-EI's s or else the weighted std over the scenarios).
+  `unknown_states_as_variables`; the defaults are those of a problem over u alone,
+  `w = u`; over scenarios it also has `scenario_values`,
+  `w -> (f (S, 1), y (S, P), std of f (1, 1))`).
   `_pack(u, x, y)` (numpy or CasADi) and `_unpack(problem, w) -> (u, x, y | None)`
   are the only code that knows the order of `w`: never slice or reshape `w`
-  elsewhere. `_check_acquisition`
+  elsewhere. `solve_scenario_problem(problem, n_starts, rng, solver)` is `lhs` starts,
+  `multistart`, then a `ScenarioSolution(u, x, y, value)`, the states `(S, M)`, `(S, P)`
+  (x from `_unpack`, y from `scenario_values`, so predicted when the y_s are substituted).
+  `Scenarios` (`z (S, P)`, `w (S,)`, checked) and `nominal_scenario(n_y)`.
+  `_scenario_unknown_states` is the one GP scenario prediction
+  (`mean_j + std_j * z_sj` per unknown state j), symbolic.
+  `fit_surrogate(system, history, *, gp, rng, n_starts, solver)` fits one GP
+  `h_inputs -> y_j` per unknown state, in the order of `system.y`.
+  `optimize_hybrid_model(problem, fitted, rng, *, n_starts, solver)` is the nominal
+  scenario minimizing `f`, solved once, with the
+  unknown states as variables so their bounds hold, a `NominalOptimum(u, x, y, f)` of
+  points `(N,)`, `(M,)`, `(P,)`; no run, no artifact.
+- `acquisition.py`: `EI`, `LCB(std_factor)` and `standard_acquisition` (analytic EI
+  or LCB over `u`). Both builders return an `AcquisitionProblem`, an alias of
+  `ScenarioProblem` (standard BO's has `w = u`; in hybrid BO's `scenario_values`, the
+  std is Lin-EI's s or else the weighted std over the scenarios). `_check_acquisition`
   is the one check of an acquisition function; every method's settings and builder
   call it (`TypeError` unless an `EI` or `LCB` instance). `SAA(n_scenarios,
   unknown_states_as_variables)` is hybrid BO's approximation, checked by
@@ -194,19 +220,15 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `hybrid_acquisition` (`TypeError` unless an `SAA` or a
   `Linearization(unknown_states_as_variables)` or a `SoftSAA(temperature, ...)`,
   `NotImplementedError` for `LCB` with `Linearization`, `ValueError` for `LCB` with
-  `SoftSAA`). `nominal_scenario(n_y)` is linearization's one scenario, which
+  `SoftSAA`). The nominal scenario is linearization's one scenario, which
   `hybrid_acquisition` requires with it (`ValueError` otherwise);
   `_sensitivity(problem, fitted)` is the `cas.Function` `(x, y, u) -> a (1, P)`.
-  Every hybrid builder (`hybrid_acquisition`, `_scenario_unknown_states`,
-  `_sensitivity`) takes `fitted`, the surrogate model: a tuple of
-  one fitted GP per unknown state (`ValueError` in `hybrid_acquisition` otherwise).
-  `Scenarios` (`z (S, P)`,
-  `w (S,)`, checked), `saa_scenarios(n, n_y, rng)` and `hybrid_acquisition(..., acquisition,
-  approximation)` (variables
-  `u`, then `vec` of the `(S, M)` x copies, then of the `(S, P)` y copies if variables;
-  bounds and start bounds from each `Var`, repeated per scenario; `g` per scenario,
-  followed by its GP tie). `_scenario_unknown_states` is the one GP scenario
-  prediction (`mean_j + std_j * z_sj` per unknown state j), symbolic.
+  Every hybrid builder (`hybrid_acquisition`, `scenario_problem`,
+  `_scenario_unknown_states`, `_sensitivity`) takes `fitted`, the surrogate model: a tuple
+  of one fitted GP per unknown state (`ValueError` in `scenario_problem` otherwise).
+  `saa_scenarios(n, n_y, rng)` draws SAA's scenarios, and `hybrid_acquisition(...,
+  acquisition, approximation)` is `scenario_problem` with the acquisition function as
+  the objective.
   `AcquisitionSolution(value, x, y)` is one iteration's solution: the minimized
   objective at the trial point and, for hybrid BO, the scenario states `(S, M)`,
   `(S, P)` (x from `_unpack`, y from `scenario_values`, so predicted when the y_s
@@ -247,8 +269,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   (`sampling._starting_points`, drawn after the artifact) and search effort. `StandardBOSettings` and
   `standard_bo` (fit `u -> f`, `standard_acquisition`, `multistart` from `lhs` over
   the `u` start bounds), `HybridBOSettings` and `hybrid_bo` (artifact, then
-  `saa_scenarios` or `nominal_scenario`, then the loop; fit one GP `h_inputs -> y_j`
-  per unknown state, in the order of `system.y`, `hybrid_acquisition`; adds the
+  `saa_scenarios` or `nominal_scenario`, then the loop; `fit_surrogate`,
+  `hybrid_acquisition`, `solve_scenario_problem`; adds the
   scenarios to the run and to `error.run`). `_method_artifact` builds both methods'
   artifacts: the settings without the GP, and `gp`, the prior GP's repr.
   `iteration_problem(run, problem, i)` rebuilds iteration i's acquisition problem
@@ -280,7 +302,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   matplotlib is imported inside the functions.
 - `errors.py`: `HybridBOError` (with `.history`, the points evaluated before the
   error, and `.run`, the partial run when raised in a method), `RootFindingError`,
-  `NoSolutionError`, `ReconstructionWarning`, `OracleOptimumWarning`, `ReplayWarning` (an iteration figure's
+  `NoSolutionError`, `ReconstructionWarning`, `OutOfBoundsWarning`, `OracleOptimumWarning`, `ReplayWarning` (an iteration figure's
   replay left the optimizer's branch at the trial point), and `RunFormatError` (a
   `ValueError`: a saved run this version can't load). The library raises these, never
   bare `Exception` (ruff `TRY002`/`BLE001` apply everywhere). It imports `History` and
@@ -366,7 +388,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `test_baselines.py`, `test_standard_bo.py`, `test_hybrid_bo.py` (P = 2 unit tests
   against numpy and finite differences), `test_no_known_equations.py` (M = 0 end
   to end: every method, saving, plots, and hybrid BO matching standard BO when
-  f = y), `test_two_unknown_states.py` (P = 2 end to
+  f = y), `test_hybrid_model.py` (the nominal optimum against the oracle optimum and
+  closed forms, M = 0 and P = 2), `test_two_unknown_states.py` (P = 2 end to
   end: runs, saving, plots),
   `test_run.py` (the prefix property, saving and loading), `test_replay.py` (the replay
   against values recorded from the IPOPT replay it replaced, `tests/data/replay/`)) compare against

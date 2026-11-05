@@ -44,6 +44,7 @@ class _DataOnlyUnpickler(pickle.Unpickler):
         "hybrid_bo.history",
         "hybrid_bo.gp",
         "hybrid_bo.acquisition",
+        "hybrid_bo.hybrid_model",
         "hybrid_bo.settings",
         "hybrid_bo.solvers",
         "numpy",

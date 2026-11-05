@@ -22,6 +22,10 @@ USER_FACING = {
     "Linearization",
     "latin_hypercube_sampling",
     "uniform_sampling",
+    # Optimize the hybrid model from data of your own
+    "reconstruct",
+    "fit_surrogate",
+    "optimize_hybrid_model",
     # Save and load a run
     "oracle_optimum",
     "save_run",
@@ -38,6 +42,7 @@ USER_FACING = {
     "HybridBOError",
     "NoSolutionError",
     "OracleOptimumWarning",
+    "OutOfBoundsWarning",
     "ReconstructionWarning",
     "ReplayWarning",
     "RootFindingError",

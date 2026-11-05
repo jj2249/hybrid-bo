@@ -66,6 +66,17 @@ local minimum for the illustrative example, #62). Find it once with
 comment. `hb.check_oracle_optimum(history, optimum)` warns with `OracleOptimumWarning`
 if a run evaluates a point whose oracle objective is below it.
 
+## Data without a measurement
+
+For measurements the user already has, a script needs no `measure` and no method:
+`history = hb.reconstruct(problem, u=u, measured=measured, rng=rng)`, then
+`fitted = hb.fit_surrogate(system, history, gp=gp, rng=rng)`, then
+`hb.optimize_hybrid_model(problem, fitted, rng)` gives `u`, `x`, `y`, `f`. The data have a
+row per point, with `measured` in the order of `system.measured`. Values outside their
+bounds give `OutOfBoundsWarning`; rows with no root give one `RootFindingError` naming
+them, with the others as `error.history`. It trusts the GP's mean far from the data, so
+check the solution.
+
 ## Pitfalls
 
 - `math.exp(v.x)` on a CasADi symbol silently returns `nan`; numpy functions mostly

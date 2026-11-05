@@ -30,6 +30,9 @@ oracle values (no random draws). If that solve gives a different root, or none, 
 measured variables don't determine the states uniquely: the method would learn from
 states the system didn't settle at. `evaluate` then warns with `ReconstructionWarning`
 and keeps the reconstruction, since a real system would give nothing else.
+
+**Measurements the caller already has.** `reconstruct` is `evaluate` without the
+measurement: it solves the root-finding problem for given measured variables.
 """
 
 import warnings
@@ -41,7 +44,12 @@ import casadi as cas
 import numpy as np
 import scipy
 
-from hybrid_bo.errors import HybridBOError, ReconstructionWarning, RootFindingError
+from hybrid_bo.errors import (
+    HybridBOError,
+    OutOfBoundsWarning,
+    ReconstructionWarning,
+    RootFindingError,
+)
 from hybrid_bo.history import History
 from hybrid_bo.problem import Problem, Symbolic, System, Var, _as_text, _trace
 from hybrid_bo.sampling import _start_bounds, lhs
@@ -348,7 +356,7 @@ def _history(
     # Measured and reconstructed values, then the oracle values if every point has them
     x, y, f = split(states)
     oracle_rows = [row for row in oracle_values if row is not None]
-    has_oracle = len(oracle_rows) == len(oracle_values)
+    has_oracle = 0 < len(oracle_rows) == len(oracle_values)
     x_oracle, y_oracle, f_oracle = split(oracle_rows) if has_oracle else (None,) * 3
     return History(u, x, y, f, x_oracle, y_oracle, f_oracle, n_initial=len(u))
 
@@ -386,3 +394,89 @@ def evaluate(
         states.append(point)
         oracle_values.append(oracle_point)
     return _history(problem, u, states, oracle_values)
+
+
+def _check_measurements(system: System, u: np.ndarray, measured: np.ndarray) -> None:
+    """Raises `ValueError` unless u is (n, N) and measured (n, P)."""
+    if u.ndim != 2 or u.shape[1] != system.n_u:
+        msg = f"The decision variables u need shape (n, {system.n_u}), got {u.shape}"
+        raise ValueError(msg)
+    if measured.shape != (len(u), system.n_y):
+        msg = (
+            f"The measured variables need shape ({len(u)}, {system.n_y}), a row per "
+            f"point of u and a column per variable, got {measured.shape}"
+        )
+        raise ValueError(msg)
+
+
+def _outside_bounds(variables: Sequence[Var], values: np.ndarray) -> list[str]:
+    """A description of each variable with values (n, len(variables)) outside its
+    bounds, naming the rows."""
+    outside = []
+    for var, column in zip(variables, values.T, strict=True):
+        rows = np.flatnonzero((column < var.lower) | (column > var.upper))
+        if len(rows) > 0:
+            outside.append(f"{var.name} at rows {rows.tolist()}")
+    return outside
+
+
+def reconstruct(
+    problem: Problem,
+    *,
+    u: np.ndarray,
+    measured: np.ndarray,
+    rng: np.random.Generator,
+    n_starts: int = 100,
+    tol: float = 1e-10,
+) -> History:
+    """The History of measurements the caller already has, as initial points: `evaluate`
+    without the measurement.
+
+    `u` (n, N) holds the decision variables and `measured` (n, P) the measured variables
+    at them, in the order of `system.measured`. Each row solves the root-finding problem
+    for the unmeasured states from `n_starts` Latin hypercube starts over their start
+    bounds, then computes `f`. The history has no oracle values.
+
+    A `u` or a measured variable outside its bounds is still a measurement, so it is kept,
+    with one `OutOfBoundsWarning`. An unmeasured state must lie within its bounds, which
+    may be what picks the right root.
+
+    Raises `ValueError` if a shape is wrong. Every row is tried: `RootFindingError` names
+    all that gave no root or hold a value that isn't finite, with the others as
+    `error.history`, so a caller can carry on without them.
+    """
+    # The checks
+    system = problem.system
+    u = np.asarray(u, dtype=float)
+    measured = np.asarray(measured, dtype=float)
+    _check_measurements(system, u, measured)
+    outside = _outside_bounds(system.u, u) + _outside_bounds(system.measured, measured)
+    if outside:
+        msg = f"Measurements outside their bounds: {', '.join(outside)}"
+        warnings.warn(msg, OutOfBoundsWarning, stacklevel=2)
+
+    # The root-finding problem of each row, noting the rows that fail. A value that
+    # isn't finite fails too: with no unmeasured states nothing would be solved
+    unmeasured = _unmeasured(system)
+    states: list[np.ndarray] = []
+    failed: list[int] = []
+    for row, (u_point, measured_point) in enumerate(zip(u, measured, strict=True)):
+        starts = lhs(*_start_bounds(unmeasured), n_starts, rng)
+        try:
+            if not np.isfinite(np.concatenate([u_point, measured_point])).all():
+                msg = f"Row {row} holds a value that isn't finite"
+                raise RootFindingError(msg)
+            states.append(_reconstruct(system, u_point, measured_point, starts, tol))
+        except RootFindingError:
+            failed.append(row)
+
+    # The rows that worked, as the result or on the error
+    history = _history(
+        problem, np.delete(u, failed, axis=0), states, [None] * len(states)
+    )
+    if failed:
+        msg = f"No root, or a value that isn't finite, at rows {failed}"
+        error = RootFindingError(msg)
+        error.history = history
+        raise error
+    return history

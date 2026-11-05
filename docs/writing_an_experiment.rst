@@ -276,6 +276,37 @@ To keep finished runs through a long study, save each with
 :py:func:`~hybrid_bo.saving.save_run` as it finishes, and skip the files that exist.
 :doc:`reading_results` explains what is saved.
 
+Optimizing data you already have
+--------------------------------
+
+With measurements of your own, you can get an optimum with no ``measure`` and no
+optimization loop. :py:func:`~hybrid_bo.evaluation.reconstruct` solves the known equations
+for the unmeasured states, :py:func:`~hybrid_bo.hybrid_model.fit_surrogate` fits the prior
+GP to each unknown state, and :py:func:`~hybrid_bo.hybrid_model.optimize_hybrid_model`
+solves the hybrid model once with each GP replaced by its mean:
+
+.. code-block:: python
+
+   rng = np.random.default_rng(0)
+   history = hb.reconstruct(problem, u=u, measured=measured, rng=rng)
+   fitted = hb.fit_surrogate(system, history, gp=gp, rng=rng)
+   solution = hb.optimize_hybrid_model(problem, fitted, rng, n_starts=30)
+   print(solution.u, solution.x, solution.y, solution.f)
+
+The measurements have a row per point: ``u`` of shape ``(n, N)`` and ``measured``
+``(n, P)``, its columns in the order of ``system.measured``. A ``u`` or a measured variable
+outside its bounds is kept, with an ``OutOfBoundsWarning``. If some rows have no root or
+hold a NaN, a ``RootFindingError`` names them all and its ``history`` holds the others, so
+you can carry on without them. The GP's ``noise_std`` applies to all the data. The search is local from
+each start, so raise ``n_starts`` if ``f`` has several minima.
+
+.. warning::
+
+   There is no uncertainty in this problem, so it trusts the GP's mean even far from the
+   data, and the optimum can sit where the model is only extrapolating. Check the
+   solution against your data, or measure it. To choose where to measure next, use
+   hybrid BO, whose acquisition function accounts for what the GP doesn't know.
+
 When something goes wrong
 -------------------------
 

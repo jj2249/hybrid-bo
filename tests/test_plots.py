@@ -39,8 +39,9 @@ from hybrid_bo import (
     plots,
     standard_bo,
 )
-from hybrid_bo.acquisition import _pack, hybrid_acquisition, standard_acquisition
+from hybrid_bo.acquisition import hybrid_acquisition, standard_acquisition
 from hybrid_bo.gp import predict
+from hybrid_bo.hybrid_model import _pack
 from hybrid_bo.settings import HybridBOSettings, StandardBOSettings
 
 # The illustrative example's hybrid BO settings: the GP's prediction substituted for

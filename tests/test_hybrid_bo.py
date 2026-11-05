@@ -29,18 +29,16 @@ from hybrid_bo import (
     initial_points,
     oracle_measure,
 )
-from hybrid_bo.acquisition import (
+from hybrid_bo.acquisition import _sensitivity, hybrid_acquisition, saa_scenarios
+from hybrid_bo.evaluation import evaluate
+from hybrid_bo.gp import FittedGP, Matern52, Scale, fit_gp, predict
+from hybrid_bo.hybrid_model import (
     Scenarios,
     _pack,
     _scenario_unknown_states,
-    _sensitivity,
     _unpack,
-    hybrid_acquisition,
     nominal_scenario,
-    saa_scenarios,
 )
-from hybrid_bo.evaluation import evaluate
-from hybrid_bo.gp import FittedGP, Matern52, Scale, fit_gp, predict
 from hybrid_bo.settings import HybridBOSettings
 
 # Three scenarios with unequal weights, so a plain mean would give other values

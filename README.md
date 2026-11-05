@@ -77,6 +77,22 @@ figure.savefig("regret.png")
 
 `tests/illustrative_example.py` is a complete script.
 
+With measurements you already have, you need no `measure` and no loop: solve the known
+equations for the unmeasured states, fit the GPs, then solve the hybrid model once with
+each GP replaced by its mean:
+
+```python
+gp = hb.gp.GP(mean=hb.gp.Zero(), kernel=hb.gp.Matern52(), noise_std=0.0)
+rng = np.random.default_rng(0)
+history = hb.reconstruct(problem, u=u, measured=measured, rng=rng)  # a row per point
+fitted = hb.fit_surrogate(system, history, gp=gp, rng=rng)
+solution = hb.optimize_hybrid_model(problem, fitted, rng, n_starts=30)
+print(solution.u, solution.f)
+```
+
+There is no uncertainty in this problem, so it trusts the GP's mean even far from the
+data, and the optimum can sit where the model is only extrapolating.
+
 ## Docs
 
 ```bash
