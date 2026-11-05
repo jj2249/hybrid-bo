@@ -290,6 +290,9 @@ def _evaluate_point(
     Returns the states (M + P,) and their oracle values (None without an oracle). Warns
     with `ReconstructionWarning` when the reconstruction is a different root from the
     one the oracle values lie on.
+
+    Raises `ValueError` if the measurement returns the wrong shape, and
+    `RootFindingError` if a measured variable isn't finite or no start gives a root.
     """
     # The measurement: the measured variables, and the oracle values if known
     result = measure(u, rng)
@@ -304,6 +307,13 @@ def _evaluate_point(
             f"shape ({system.n_y},), got shape {measured.shape}"
         )
         raise ValueError(msg)
+
+    # A value that isn't finite fails here: with no unmeasured states nothing is solved,
+    # and a measured variable outside g would give a root all the same
+    if not np.isfinite(measured).all():
+        names = ", ".join(var.name for var in system.measured)
+        msg = f"At u = {u}, ({names}) = {measured} holds a value that isn't finite"
+        raise RootFindingError(msg)
 
     # The root-finding problem, from starts over the unmeasured variables
     states, unmeasured = _states(system), _unmeasured(system)
@@ -378,8 +388,9 @@ def evaluate(
     from the one the oracle values lie on (see the module docs).
 
     Raises `ValueError` if the measurement returns the wrong shape, and
-    `RootFindingError` (from the oracle simulation or the root-finding problem) with
-    the points evaluated before it as `error.history`.
+    `RootFindingError` (from the oracle simulation, a measured variable that isn't
+    finite, or the root-finding problem) with the points evaluated before it as
+    `error.history`.
     """
     states: list[np.ndarray] = []
     oracle_values: list[np.ndarray | None] = []

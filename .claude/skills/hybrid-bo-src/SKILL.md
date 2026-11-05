@@ -88,7 +88,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   addresses).
   `oracle_optimum(problem, oracle, rng)` solves min f s.t. g = 0, y = oracle by
   `multistart` from `lhs` starts over the start bounds of (u, x, y).
-  `evaluate(problem, measure, u, rng)` runs the measurement per row, then always
+  `evaluate(problem, measure, u, rng)` runs the measurement per row, rejects a measured
+  variable that isn't finite with `RootFindingError` (#214; before the starts are
+  drawn, and with M = 0 nothing else would notice), then always
   solves the root-finding problem (`_reconstruct`, starts over the unmeasured
   variables), and returns a `History` whose points are all initial points. Every
   fsolve goes through `_find_root` (CasADi Jacobian, accepts residual `< tol` within

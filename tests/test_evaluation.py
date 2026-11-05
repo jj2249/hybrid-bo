@@ -265,6 +265,57 @@ def test_failed_oracle_simulation_raises():
     assert info.value.history.u.shape == (0, 1)
 
 
+def no_known_equations_problem() -> Problem:
+    """y measured and no mechanistic states, so the root-finding problem is empty."""
+    u, y = Var("u", -1.0, 1.0), Var("y", start=(-1.0, 1.0))
+    system = System(u=[u], y=[y], h_inputs=[u], measured=[y])
+    return Problem(system, f=lambda v: v.y)
+
+
+def measured_outside_g_problem() -> Problem:
+    """x = u, with y measured but in no known equation: only f sees it, so the
+    root-finding problem has a root whatever y is."""
+    u = Var("u", -1.0, 1.0)
+    x = Var("x", start=(-1.0, 1.0))
+    y = Var("y", start=(-1.0, 1.0))
+    system = System(
+        u=[u], x=[x], y=[y], g=lambda v: [v.x - v.u], h_inputs=[u], measured=[y]
+    )
+    return Problem(system, f=lambda v: v.x + v.y)
+
+
+# Two `parametrize` marks run the test once per combination of their entries; `ids`
+# names the entries in pytest's output
+@pytest.mark.parametrize("value", [np.nan, np.inf, -np.inf])
+@pytest.mark.parametrize(
+    "problem",
+    [no_known_equations_problem(), two_branch_problem(), measured_outside_g_problem()],
+    ids=["no-known-equations", "in-g", "outside-g"],
+)
+def test_a_measurement_that_is_not_finite_raises(problem: Problem, value: float):
+    """A measured value that isn't finite fails the evaluation, whether or not the
+    root-finding problem would notice it, and the error keeps the points before."""
+
+    def measure(u: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+        """A finite value for negative u, else `value`."""
+        return np.array([0.5]) if u[0] < 0 else np.array([value])
+
+    with pytest.raises(RootFindingError, match="isn't finite") as info:
+        evaluate(
+            problem,
+            measure,
+            np.array([[-0.5], [0.5], [-0.5]]),
+            np.random.default_rng(0),
+            n_starts=5,
+        )
+
+    # Only the first point, before the failing second one
+    history = info.value.history
+    assert history is not None
+    np.testing.assert_array_equal(history.u, [[-0.5]])
+    np.testing.assert_array_equal(history.y, [[0.5]])
+
+
 def test_measure_returning_the_wrong_shape_raises():
     """A measurement returning more values than there are measured variables raises."""
     with pytest.raises(ValueError, match="measured"):

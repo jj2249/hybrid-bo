@@ -311,8 +311,9 @@ When something goes wrong
 -------------------------
 
 - **A run fails** with a :py:class:`~hybrid_bo.errors.HybridBOError` (for example the
-  root-finding problem has no solution): it carries the run up to that point as
-  ``error.run``. Check the equations and the start bounds.
+  root-finding problem has no solution, or a measurement returned NaN or an infinity):
+  it carries the run up to that point as ``error.run``. Check the equations, the start
+  bounds and the measurement.
 - **ReconstructionWarning**: with an oracle, the measured variables don't pin the
   states down to the oracle's values (``g`` has several roots). Narrow the start
   bounds of the unmeasured states to the right branch, or measure other variables.

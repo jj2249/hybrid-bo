@@ -89,6 +89,44 @@ def runs_1d() -> list[hb.Run]:
     return runs_of(METHODS, problem, measure)
 
 
+# Each `parametrize` runs the test once per entry; together, once per combination. The
+# third evaluation is the first trial point and the fourth is the last, after which no
+# GP is fitted that could trip over the NaN
+@pytest.mark.parametrize("label", ["saa-True", "standard", "lhs"])
+@pytest.mark.parametrize("failing_call", [3, 4])
+def test_a_nan_measurement_fails_the_run_and_keeps_the_points_before(
+    label: str, failing_call: int
+):
+    """With no known equations nothing is solved, so no root can fail: a measurement of
+    NaN fails the run all the same, and the partial run holds no NaN."""
+    # A measurement that returns NaN at one evaluation
+    problem, _ = composite_problem(1)
+    calls = []
+
+    def measure(u: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+        """y = sin(u), and NaN at the failing call."""
+        calls.append(u)
+        return np.array([np.nan]) if len(calls) == failing_call else np.sin(u)
+
+    # `pytest.raises` fails the test unless the block raises that exception, whose
+    # message matches; `info.value` is the exception
+    with pytest.raises(hb.RootFindingError, match="isn't finite") as info:
+        METHODS[label](
+            problem, measure, n_initial=2, n_iterations=2, rng=np.random.default_rng(0)
+        )
+
+    # The partial run: the points before the failing one, all of them finite
+    run = info.value.run
+    assert run is not None
+    assert len(run.history.u) == failing_call - 1
+    assert np.isfinite(run.history.y).all()
+    assert np.isfinite(run.history.f).all()
+
+    # Only a trial point that was evaluated keeps its surrogate
+    n_surrogates = 0 if label == "lhs" else failing_call - 3
+    assert len(run.surrogates) == n_surrogates
+
+
 def test_every_method_runs_without_known_equations(runs_1d):
     """Every method finishes its 2 iterations (design points, for the baselines),
     with no mechanistic states in its history and, for hybrid BO, none in its
