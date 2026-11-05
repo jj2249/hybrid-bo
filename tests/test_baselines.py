@@ -39,7 +39,7 @@ def illustrative_run(problem, method, rng=None) -> Run:
 class _DataOnlyUnpickler(pickle.Unpickler):
     """Loads only the library's data classes, numpy and builtins: no user code."""
 
-    allowed = ("hybrid_bo.run", "hybrid_bo.history", "numpy", "builtins")
+    allowed = ("hybrid_bo.run", "hybrid_bo.dataset", "numpy", "builtins")
 
     def find_class(self, module, name):
         """The class `module.name`, if the module is allowed."""
@@ -52,7 +52,7 @@ class _DataOnlyUnpickler(pickle.Unpickler):
 # `parametrize` runs the test once per entry of the list, each as its own test case
 @pytest.mark.parametrize("method", METHODS)
 def test_initial_points_come_first(illustrative_problem, method):
-    """The history starts with the given initial points, followed by the method's
+    """The dataset starts with the given initial points, followed by the method's
     points, all inside the bounds of u."""
     rng = np.random.default_rng(0)
     u = initial_points(illustrative_problem.system.u, 2, rng)
@@ -66,25 +66,25 @@ def test_initial_points_come_first(illustrative_problem, method):
         illustrative_problem, measure, initial_points=u, n_iterations=3, rng=rng
     )
 
-    assert run.history.n_initial == 2
-    assert run.history.u.shape == (5, 1)
-    np.testing.assert_array_equal(run.history.u[:2], u)
-    assert np.all((-2.0 <= run.history.u) & (run.history.u <= 2.0))
+    assert run.dataset.n_initial == 2
+    assert run.dataset.u.shape == (5, 1)
+    np.testing.assert_array_equal(run.dataset.u[:2], u)
+    assert np.all((-2.0 <= run.dataset.u) & (run.dataset.u <= 2.0))
 
 
 @pytest.mark.parametrize("method", METHODS)
 def test_run_pickles_without_the_code_that_produced_it(illustrative_problem, method):
     """A pickled run loads with only the library's data classes, numpy and builtins,
-    and keeps its artifact and history."""
+    and keeps its artifact and dataset."""
     run = illustrative_run(illustrative_problem, method)
 
     loaded = _DataOnlyUnpickler(io.BytesIO(pickle.dumps(run))).load()
 
     assert loaded.artifact == run.artifact
     assert loaded.surrogates == []
-    np.testing.assert_array_equal(loaded.history.u, run.history.u)
-    np.testing.assert_array_equal(loaded.history.f, run.history.f)
-    assert loaded.history.n_initial == run.history.n_initial
+    np.testing.assert_array_equal(loaded.dataset.u, run.dataset.u)
+    np.testing.assert_array_equal(loaded.dataset.f, run.dataset.f)
+    assert loaded.dataset.n_initial == run.dataset.n_initial
 
 
 def test_artifact_describes_the_problem_method_and_versions(illustrative_problem):
@@ -179,6 +179,6 @@ def test_failed_evaluation_carries_the_partial_run(illustrative_problem, method)
     # The run holds the two initial points
     run = info.value.run
     assert isinstance(run, hybrid_bo.Run)
-    assert run.history.u.shape == (2, 1)
-    assert run.history.n_initial == 2
+    assert run.dataset.u.shape == (2, 1)
+    assert run.dataset.n_initial == 2
     assert run.artifact["method"] == method.__name__

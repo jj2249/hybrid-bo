@@ -41,7 +41,7 @@ class _DataOnlyUnpickler(pickle.Unpickler):
 
     allowed = (
         "hybrid_bo.run",
-        "hybrid_bo.history",
+        "hybrid_bo.dataset",
         "hybrid_bo.gp",
         "hybrid_bo.acquisition",
         "hybrid_bo.hybrid_model",

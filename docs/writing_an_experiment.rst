@@ -115,7 +115,7 @@ true (*oracle*) values, so the methods can be scored.
 The *oracle optimum* is the true minimum of the problem, which regret is measured from.
 State it: nothing searches for it, since a search can miss it. Find it once with
 :py:func:`~hybrid_bo.oracle.oracle_optimum` (with many starts), check it, and paste
-the value as above. :py:func:`~hybrid_bo.history.check_oracle_optimum` warns if a run
+the value as above. :py:func:`~hybrid_bo.dataset.check_oracle_optimum` warns if a run
 evaluates a point below it.
 
 Your own system
@@ -288,15 +288,15 @@ solves the hybrid model once with each GP replaced by its mean:
 .. code-block:: python
 
    rng = np.random.default_rng(0)
-   history = hb.reconstruct(problem, u=u, measured=measured, rng=rng)
-   fitted = hb.fit_surrogate(system, history, gp=gp, rng=rng)
+   dataset = hb.reconstruct(problem, u=u, measured=measured, rng=rng)
+   fitted = hb.fit_surrogate(system, dataset, gp=gp, rng=rng)
    solution = hb.optimize_hybrid_model(problem, fitted, rng, n_starts=30)
    print(solution.u, solution.x, solution.y, solution.f)
 
 The measurements have a row per point: ``u`` of shape ``(n, N)`` and ``measured``
 ``(n, P)``, its columns in the order of ``system.measured``. A ``u`` or a measured variable
 outside its bounds is kept, with an ``OutOfBoundsWarning``. If some rows have no root or
-hold a NaN, a ``RootFindingError`` names them all and its ``history`` holds the others, so
+hold a NaN, a ``RootFindingError`` names them all and its ``dataset`` holds the others, so
 you can carry on without them. The GP's ``noise_std`` applies to all the data. The search is local from
 each start, so raise ``n_starts`` if ``f`` has several minima.
 

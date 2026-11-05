@@ -30,16 +30,16 @@ def _run_design(
     """
     n_initial = len(initial_points)
     try:
-        history = evaluate(
+        dataset = evaluate(
             problem, measure, np.concatenate([initial_points, design]), rng
         )
     except HybridBOError as error:
-        if error.history is not None:
-            n_evaluated = len(error.history.u)
-            partial = replace(error.history, n_initial=min(n_initial, n_evaluated))
+        if error.dataset is not None:
+            n_evaluated = len(error.dataset.u)
+            partial = replace(error.dataset, n_initial=min(n_initial, n_evaluated))
             error.run = Run(partial, artifact, artifact["method"])
         raise
-    return Run(replace(history, n_initial=n_initial), artifact, artifact["method"])
+    return Run(replace(dataset, n_initial=n_initial), artifact, artifact["method"])
 
 
 def latin_hypercube_sampling(

@@ -54,9 +54,9 @@ def assert_same(actual, expected, where="run"):
         assert actual == expected, where
 
 
-def history_of(n: int) -> hb.History:
-    """A history of n zero points, two mechanistic states and no oracle values."""
-    return hb.History(
+def dataset_of(n: int) -> hb.Dataset:
+    """A dataset of n zero points, two mechanistic states and no oracle values."""
+    return hb.Dataset(
         u=np.zeros((n, 1)),
         x=np.zeros((n, 2)),
         y=np.zeros((n, 1)),
@@ -99,8 +99,8 @@ def test_a_larger_budget_passes_through_the_evaluations_of_a_smaller_one(method)
 
     # Check: the first 5 evaluations and 3 iterations of the long run are the short run
     for field in ("u", "x", "y", "f", "x_oracle", "y_oracle", "f_oracle"):
-        expected = getattr(short.history, field)
-        assert_same(getattr(long.history, field)[:5], expected, field)
+        expected = getattr(short.dataset, field)
+        assert_same(getattr(long.dataset, field)[:5], expected, field)
     assert_same(long.surrogates[:3], short.surrogates, "surrogates")
     assert_same(long.acquisitions[:3], short.acquisitions, "acquisitions")
     assert_same(long.scenarios, short.scenarios, "scenarios")
@@ -110,23 +110,23 @@ def test_an_optimum_beaten_by_an_evaluated_point_warns():
     """A stated optimum above an evaluated point's oracle objective can't be the
     optimum, so it warns; the true optimum gives no warning."""
     # Two uniform points; the true optimum is about -50.46, and f is at most about 75
-    history = run_of(hb.uniform_sampling, 1).history
+    dataset = run_of(hb.uniform_sampling, 1).dataset
 
     # `pytest.warns` fails unless the block warns with the category, matching `match`
     with pytest.warns(hb.OracleOptimumWarning, match="below the stated"):
-        assert hb.check_oracle_optimum(history, 100.0)
+        assert hb.check_oracle_optimum(dataset, 100.0)
 
     # The warning turned into an error, so the test fails if it is raised
     with warnings.catch_warnings():
         warnings.simplefilter("error", hb.OracleOptimumWarning)
-        assert not hb.check_oracle_optimum(history, ex.optimum)
+        assert not hb.check_oracle_optimum(dataset, ex.optimum)
 
 
-def test_a_history_without_an_oracle_has_no_optimum_to_beat():
+def test_a_dataset_without_an_oracle_has_no_optimum_to_beat():
     """Without oracle values there is nothing to compare, so it doesn't warn."""
     with warnings.catch_warnings():
         warnings.simplefilter("error", hb.OracleOptimumWarning)
-        assert not hb.check_oracle_optimum(history_of(2), 1e9)
+        assert not hb.check_oracle_optimum(dataset_of(2), 1e9)
 
 
 # `tmp_path` is a pytest fixture: a new, empty folder for this test
@@ -162,7 +162,7 @@ def test_a_saved_run_holds_its_artifact(tmp_path):
 def test_save_and_load_keep_partial_runs_and_empty_arrays(tmp_path):
     """A run that failed at its first point (no evaluated points) round-trips too,
     with its arrays' shapes."""
-    run = hb.Run(history_of(0), artifact={"method": "m"}, method="m")
+    run = hb.Run(dataset_of(0), artifact={"method": "m"}, method="m")
 
     assert_same(round_trip(run, tmp_path), run)
 
@@ -221,7 +221,7 @@ def test_save_and_load_keep_every_kind_of_gp_parameter(tmp_path):
         )
     ]
     run = hb.Run(
-        history_of(2),
+        dataset_of(2),
         artifact={"type": "an artifact entry"},
         method="m",
         surrogates=surrogates,
@@ -234,10 +234,10 @@ def test_an_empty_array_in_an_optional_field_loads_with_its_shape(tmp_path):
     """An empty array where None is allowed too (here the oracle states of a system
     without mechanistic states, shape (n, 0)) loads as an array of the saved shape,
     not None."""
-    history = dataclasses.replace(
-        history_of(3), x=np.zeros((3, 0)), x_oracle=np.zeros((3, 0))
+    dataset = dataclasses.replace(
+        dataset_of(3), x=np.zeros((3, 0)), x_oracle=np.zeros((3, 0))
     )
-    run = hb.Run(history, artifact={}, method="m")
+    run = hb.Run(dataset, artifact={}, method="m")
 
     assert_same(round_trip(run, tmp_path), run)
 
@@ -285,7 +285,7 @@ def test_save_and_load_keep_every_kind_of_method_settings(settings, tmp_path):
     """A run's settings round-trip whole and of the right types: each approximation
     with its own settings (SoftSAA's temperature), LCB with its factor, and a custom
     solver."""
-    run = hb.Run(history_of(0), {"method": "m"}, "m", settings=settings)
+    run = hb.Run(dataset_of(0), {"method": "m"}, "m", settings=settings)
 
     loaded = round_trip(run, tmp_path)
 
@@ -313,7 +313,7 @@ def test_load_rejects_a_gp_part_of_the_wrong_type(tmp_path):
     "change",
     [
         lambda data: data | {"index": 0},  # a field a run no longer has
-        lambda data: {key: data[key] for key in data if key != "history"},
+        lambda data: {key: data[key] for key in data if key != "dataset"},
     ],
     ids=["old_field", "missing_field"],
 )
@@ -321,7 +321,7 @@ def test_load_rejects_a_file_that_is_not_a_run_of_this_version(change, tmp_path)
     """A run saved by an older version, with a field `Run` no longer has or without
     one it needs, raises `RunFormatError`, not an error from inside the loader."""
     # Save a run, then change its fields
-    path = hb.save_run(hb.Run(history_of(0), {}, "m"), tmp_path / "run.json")
+    path = hb.save_run(hb.Run(dataset_of(0), {}, "m"), tmp_path / "run.json")
     path.write_text(json.dumps(change(json.loads(path.read_text()))))
 
     with pytest.raises(hb.errors.RunFormatError, match="of this version"):
@@ -331,8 +331,8 @@ def test_load_rejects_a_file_that_is_not_a_run_of_this_version(change, tmp_path)
 def test_save_runs_and_load_runs_keep_the_runs_of_each_label(tmp_path):
     """A list of runs per label loads back as it was saved, in order."""
     runs = {
-        "a": [hb.Run(history_of(1), {}, "m"), hb.Run(history_of(2), {}, "m")],
-        "b": [hb.Run(history_of(3), {}, "m")],
+        "a": [hb.Run(dataset_of(1), {}, "m"), hb.Run(dataset_of(2), {}, "m")],
+        "b": [hb.Run(dataset_of(3), {}, "m")],
     }
 
     loaded = hb.load_runs(hb.save_runs(runs, tmp_path / "study"))
@@ -343,7 +343,7 @@ def test_save_runs_and_load_runs_keep_the_runs_of_each_label(tmp_path):
 def test_save_runs_takes_an_empty_folder_and_refuses_any_other(tmp_path):
     """A script can make its folder before its runs start, but `save_runs` never mixes
     runs into an earlier study."""
-    runs = {"a": [hb.Run(history_of(1), {}, "m")]}
+    runs = {"a": [hb.Run(dataset_of(1), {}, "m")]}
 
     # The empty folder of `tmp_path` is fine, and then it holds a study
     hb.save_runs(runs, tmp_path)
@@ -369,7 +369,7 @@ def test_either_a_number_of_initial_points_or_the_points_themselves():
     )
 
     # Check: the initial points are the same, and exactly one of the two is needed
-    np.testing.assert_array_equal(given.history.u[:2], drawn.history.u[:2])
+    np.testing.assert_array_equal(given.dataset.u[:2], drawn.dataset.u[:2])
     rng = np.random.default_rng(0)
     with pytest.raises(ValueError, match="exactly one"):
         hb.uniform_sampling(ex.problem, ex.measure, n_iterations=1, rng=rng)
@@ -390,5 +390,5 @@ def test_save_run_refuses_an_existing_file(tmp_path):
     path.write_text("{}")
 
     with pytest.raises(FileExistsError):
-        hb.save_run(hb.Run(history_of(0), {}, "m"), path)
+        hb.save_run(hb.Run(dataset_of(0), {}, "m"), path)
     assert path.read_text() == "{}"

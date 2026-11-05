@@ -63,18 +63,18 @@ with a measurement that draws nothing. Draw nothing else from a run's generator.
 State it as a module-level `optimum`; nothing computes it (a 10-start search found a
 local minimum for the illustrative example, #62). Find it once with
 `hb.oracle_optimum(problem, oracle, rng, n_starts=200)`, check it, and say how in a
-comment. `hb.check_oracle_optimum(history, optimum)` warns with `OracleOptimumWarning`
+comment. `hb.check_oracle_optimum(dataset, optimum)` warns with `OracleOptimumWarning`
 if a run evaluates a point whose oracle objective is below it.
 
 ## Data without a measurement
 
 For measurements the user already has, a script needs no `measure` and no method:
-`history = hb.reconstruct(problem, u=u, measured=measured, rng=rng)`, then
-`fitted = hb.fit_surrogate(system, history, gp=gp, rng=rng)`, then
+`dataset = hb.reconstruct(problem, u=u, measured=measured, rng=rng)`, then
+`fitted = hb.fit_surrogate(system, dataset, gp=gp, rng=rng)`, then
 `hb.optimize_hybrid_model(problem, fitted, rng)` gives `u`, `x`, `y`, `f`. The data have a
 row per point, with `measured` in the order of `system.measured`. Values outside their
 bounds give `OutOfBoundsWarning`; rows with no root give one `RootFindingError` naming
-them, with the others as `error.history`. It trusts the GP's mean far from the data, so
+them, with the others as `error.dataset`. It trusts the GP's mean far from the data, so
 check the solution.
 
 ## Pitfalls

@@ -31,13 +31,13 @@ from collections.abc import Callable, Sequence
 import casadi as cas
 import numpy as np
 
+from hybrid_bo.dataset import Dataset
 from hybrid_bo.errors import (
     HybridBOError,
     OutOfBoundsWarning,
     ReconstructionWarning,
     RootFindingError,
 )
-from hybrid_bo.history import History
 from hybrid_bo.oracle import OracleMeasurement
 from hybrid_bo.problem import Problem, Symbolic, System, Var, _states
 from hybrid_bo.sampling import _start_bounds, lhs
@@ -148,13 +148,13 @@ def _evaluate_point(
     return reconstruction, oracle_values
 
 
-def _history(
+def _dataset(
     problem: Problem,
     u: np.ndarray,
     states: list[np.ndarray],
     oracle_values: list[np.ndarray | None],
-) -> History:
-    """The History of the points u (n, N) with their states, all initial points.
+) -> Dataset:
+    """The Dataset of the points u (n, N) with their states, all initial points.
 
     The oracle values are kept only when every point has them.
     """
@@ -172,7 +172,7 @@ def _history(
     oracle_rows = [row for row in oracle_values if row is not None]
     has_oracle = 0 < len(oracle_rows) == len(oracle_values)
     x_oracle, y_oracle, f_oracle = split(oracle_rows) if has_oracle else (None,) * 3
-    return History(u, x, y, f, x_oracle, y_oracle, f_oracle, n_initial=len(u))
+    return Dataset(u, x, y, f, x_oracle, y_oracle, f_oracle, n_initial=len(u))
 
 
 def evaluate(
@@ -182,7 +182,7 @@ def evaluate(
     rng: np.random.Generator,
     n_starts: int = 100,
     tol: float = 1e-10,
-) -> History:
+) -> Dataset:
     """Evaluates each row of u (n, N) in turn and returns them as initial points.
 
     Each evaluation runs the measurement, then solves the root-finding problem for the
@@ -194,7 +194,7 @@ def evaluate(
     Raises `ValueError` if the measurement returns the wrong shape, and
     `RootFindingError` (from the oracle simulation, a measured variable that isn't
     finite, or the root-finding problem) with the points evaluated before it as
-    `error.history`.
+    `error.dataset`.
     """
     states: list[np.ndarray] = []
     oracle_values: list[np.ndarray | None] = []
@@ -204,11 +204,11 @@ def evaluate(
                 problem.system, measure, u_point, rng, n_starts, tol
             )
         except HybridBOError as error:
-            error.history = _history(problem, u[: len(states)], states, oracle_values)
+            error.dataset = _dataset(problem, u[: len(states)], states, oracle_values)
             raise
         states.append(point)
         oracle_values.append(oracle_point)
-    return _history(problem, u, states, oracle_values)
+    return _dataset(problem, u, states, oracle_values)
 
 
 def _check_measurements(system: System, u: np.ndarray, measured: np.ndarray) -> None:
@@ -243,14 +243,14 @@ def reconstruct(
     rng: np.random.Generator,
     n_starts: int = 100,
     tol: float = 1e-10,
-) -> History:
-    """The History of measurements the caller already has, as initial points: `evaluate`
+) -> Dataset:
+    """The Dataset of measurements the caller already has, as initial points: `evaluate`
     without the measurement.
 
     `u` (n, N) holds the decision variables and `measured` (n, P) the measured variables
     at them, in the order of `system.measured`. Each row solves the root-finding problem
     for the unmeasured states from `n_starts` Latin hypercube starts over their start
-    bounds, then computes `f`. The history has no oracle values.
+    bounds, then computes `f`. The dataset has no oracle values.
 
     A `u` or a measured variable outside its bounds is still a measurement, so it is kept,
     with one `OutOfBoundsWarning`. An unmeasured state must lie within its bounds, which
@@ -258,7 +258,7 @@ def reconstruct(
 
     Raises `ValueError` if a shape is wrong. Every row is tried: `RootFindingError` names
     all that gave no root or hold a value that isn't finite, with the others as
-    `error.history`, so a caller can carry on without them.
+    `error.dataset`, so a caller can carry on without them.
     """
     # The checks
     system = problem.system
@@ -286,12 +286,12 @@ def reconstruct(
             failed.append(row)
 
     # The rows that worked, as the result or on the error
-    history = _history(
+    dataset = _dataset(
         problem, np.delete(u, failed, axis=0), states, [None] * len(states)
     )
     if failed:
         msg = f"No root, or a value that isn't finite, at rows {failed}"
         error = RootFindingError(msg)
-        error.history = history
+        error.dataset = dataset
         raise error
-    return history
+    return dataset

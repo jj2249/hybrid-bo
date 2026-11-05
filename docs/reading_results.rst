@@ -10,11 +10,11 @@ One run
 A :py:class:`~hybrid_bo.run.Run` holds:
 
 - ``run.method``: the method's name.
-- ``run.history`` (:py:class:`~hybrid_bo.history.History`): every evaluated point in
+- ``run.dataset`` (:py:class:`~hybrid_bo.dataset.Dataset`): every evaluated point in
   order, initial points first, as arrays ``u``, ``x``, ``y`` and ``f`` with one row
   per evaluation, and their oracle values (``None`` without an oracle).
-  :py:func:`~hybrid_bo.history.incumbents` and
-  :py:func:`~hybrid_bo.history.oracle_incumbents` give the incumbents after each
+  :py:func:`~hybrid_bo.dataset.incumbents` and
+  :py:func:`~hybrid_bo.dataset.oracle_incumbents` give the incumbents after each
   evaluation.
 - ``run.surrogates``: the fitted GPs (:py:class:`~hybrid_bo.gp.FittedGP`) of each
   iteration, a tuple of one per unknown state for hybrid BO and of one for standard BO;
@@ -89,6 +89,6 @@ and each draws on the axes you give it, so one panel of a larger figure works th
    ax.set_title("Illustrative example")
    figure.savefig("regret.pdf")
 
-:py:func:`~hybrid_bo.history.check_oracle_optimum` warns with
+:py:func:`~hybrid_bo.dataset.check_oracle_optimum` warns with
 :py:class:`~hybrid_bo.errors.OracleOptimumWarning` if a run evaluated a point below the
 stated oracle optimum, which would make its regret wrong.

@@ -93,11 +93,11 @@ def test_each_iteration_fits_one_gp_per_unknown_state(runs_1d):
             assert all(isinstance(fitted, FittedGP) for fitted in surrogate)
 
             # Both GPs see the points before the trial point; each its own column
-            n = run.history.n_initial + i
+            n = run.dataset.n_initial + i
             for j, fitted in enumerate(surrogate):
                 scaler = fitted.y_scaler
                 Y = (fitted.Y - scaler.intercept) / scaler.slope
-                np.testing.assert_allclose(Y, run.history.y[:n, j], atol=1e-12)
+                np.testing.assert_allclose(Y, run.dataset.y[:n, j], atol=1e-12)
             np.testing.assert_array_equal(surrogate[0].X, surrogate[1].X)
 
         # Each acquisition solution has both unknown states per scenario
@@ -140,7 +140,7 @@ def test_iteration_figures_replay_without_the_gp_panels(runs_1d):
         scenarios_ax, acquisition_ax = figure.axes
         assert scenarios_ax.get_ylabel() == "f"
         (curve,) = acquisition_ax.get_lines()
-        trial = run.history.u[run.history.n_initial + 1, 0]
+        trial = run.dataset.u[run.dataset.n_initial + 1, 0]
         (at_trial,) = np.flatnonzero(np.asarray(curve.get_xdata()) == trial)
         stored = run.acquisitions[1].value
         if run.method == "soft":

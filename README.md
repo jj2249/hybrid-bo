@@ -58,7 +58,7 @@ run = hb.hybrid_bo(
     acquisition=hb.EI(),
     approximation=hb.SAA(n_scenarios=25),
 )
-print(hb.incumbents(run.history)[-1])
+print(hb.incumbents(run.dataset)[-1])
 ```
 
 `hb.standard_bo` and the baselines are called the same way. Pass `initial_points=`
@@ -84,8 +84,8 @@ each GP replaced by its mean:
 ```python
 gp = hb.gp.GP(mean=hb.gp.Zero(), kernel=hb.gp.Matern52(), noise_std=0.0)
 rng = np.random.default_rng(0)
-history = hb.reconstruct(problem, u=u, measured=measured, rng=rng)  # a row per point
-fitted = hb.fit_surrogate(system, history, gp=gp, rng=rng)
+dataset = hb.reconstruct(problem, u=u, measured=measured, rng=rng)  # a row per point
+fitted = hb.fit_surrogate(system, dataset, gp=gp, rng=rng)
 solution = hb.optimize_hybrid_model(problem, fitted, rng, n_starts=30)
 print(solution.u, solution.f)
 ```

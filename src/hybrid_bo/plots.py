@@ -16,9 +16,9 @@ import scipy
 
 from hybrid_bo.acquisition import LCB, Linearization, SoftSAA, replay
 from hybrid_bo.bo import iteration_problem
+from hybrid_bo.dataset import incumbents, n_iterations, oracle_incumbents
 from hybrid_bo.evaluation import Measure, evaluate
 from hybrid_bo.gp import predict
-from hybrid_bo.history import incumbents, n_iterations, oracle_incumbents
 from hybrid_bo.problem import Problem
 from hybrid_bo.run import Run
 from hybrid_bo.sampling import _start_bounds
@@ -68,9 +68,9 @@ def regret(runs: Mapping[str, Sequence[Run]], optimum: float, ax: "Axes") -> "Ax
 
 def _incumbents(run: Run) -> np.ndarray:
     """The run's oracle incumbents if it has an oracle, else its incumbents."""
-    if run.history.f_oracle is None:
-        return incumbents(run.history)
-    return oracle_incumbents(run.history)
+    if run.dataset.f_oracle is None:
+        return incumbents(run.dataset)
+    return oracle_incumbents(run.dataset)
 
 
 def _over_evaluations(curves: Mapping[str, Sequence[np.ndarray]], ax: "Axes") -> "Axes":
@@ -149,7 +149,7 @@ def iteration(
     has no oracle; and `IndexError` if the run has no iteration `i`.
     """
     # The checks: one or two decision variables, one GP of y over u, the iteration
-    system, history, settings = problem.system, run.history, run.settings
+    system, dataset, settings = problem.system, run.dataset, run.settings
     if system.n_u not in (1, 2):
         msg = f"The plots need one or two decision variables, got {system.n_u}"
         raise ValueError(msg)
@@ -163,7 +163,7 @@ def iteration(
     if is_hybrid and gp and list(system.h_inputs) != list(system.u):
         msg = "The GP of y is drawn over u, so h_inputs must be the decision variables"
         raise ValueError(msg)
-    n_later = n_iterations(history)
+    n_later = n_iterations(dataset)
     if not -n_later <= i < n_later:
         msg = f"The run has {n_later} iterations, so no iteration {i}"
         raise IndexError(msg)
@@ -206,12 +206,12 @@ def _iteration_1d(
 ) -> "Figure":
     """`iteration`'s figure for one decision variable: a panel per entry of `shown`
     that is on, stacked."""
-    system, history, settings = problem.system, run.history, run.settings
+    system, dataset, settings = problem.system, run.dataset, run.settings
     is_hybrid = isinstance(settings, HybridBOSettings)
 
     # The grid, with the trial point in it so the replay starts there
-    n = history.n_initial + i
-    trial = history.u[n, 0]
+    n = dataset.n_initial + i
+    trial = dataset.u[n, 0]
     u = np.sort(np.append(np.linspace(*_start_bounds(system.u), _N_GRID), trial))
     y_true, f_true = _truth(problem, measure, u[:, None])
 
@@ -254,9 +254,9 @@ def _iteration_1d(
                 continue
 
             # A panel of values: its curves, the true curve and the points
-            values, true, label = history.f, f_true, "f"
+            values, true, label = dataset.f, f_true, "f"
             if panel == "gp" and is_hybrid:
-                values, true, label = history.y[:, 0], y_true, system.y[0].name
+                values, true, label = dataset.y[:, 0], y_true, system.y[0].name
             if panel == "gp":
                 _band(ax, u, *predict(run.surrogates[i][0], u[:, None]))
             elif panel == "scenarios":
@@ -268,7 +268,7 @@ def _iteration_1d(
                     _scenario_band(ax, u, replayed.f, run.scenarios.w)
             if true is not None:
                 ax.plot(u, true, color="k", linestyle="--", label="true")
-            _points(ax, history.u[:, 0], values, history.f, history.n_initial, n)
+            _points(ax, dataset.u[:, 0], values, dataset.f, dataset.n_initial, n)
             ax.set_ylabel(label)
         axes[-1, 0].set_xlabel(system.u[0].name)
         _figure_legend(figure, list(axes[:, 0]))
@@ -297,8 +297,8 @@ def _iteration_2d(
 ) -> "Figure":
     """`iteration`'s figure for two decision variables: filled contours in rows, a
     column each for the oracle, the mean, the std and the acquisition function."""
-    system, history, settings = problem.system, run.history, run.settings
-    n = history.n_initial + i
+    system, dataset, settings = problem.system, run.dataset, run.settings
+    n = dataset.n_initial + i
 
     # The grid over the start bounds, as a list of points in u's plane
     lower, upper = _start_bounds(system.u)
@@ -310,7 +310,7 @@ def _iteration_2d(
     # The replay, from the trial point (the first row, split off after) over the grid
     replayed = None
     if settings is not None and (shown["scenarios"] or shown["acquisition"]):
-        u = np.vstack([history.u[n], grid])
+        u = np.vstack([dataset.u[n], grid])
         replayed = replay(iteration_problem(run, problem, i), run.acquisitions[i], u, 0)
 
     # The row of y (hybrid BO's GP), oracle | GP mean | GP std
@@ -358,7 +358,7 @@ def _iteration_2d(
     columns = [c for c in range(4) if any(row[c] for row in rows)]
 
     # Every panel shows the points so far, the incumbent and the trial point
-    points = (history.u[:, 0], history.u[:, 1], history.f, history.n_initial, n)
+    points = (dataset.u[:, 0], dataset.u[:, 1], dataset.f, dataset.n_initial, n)
     import matplotlib.pyplot as plt
 
     with plt.style.context(STYLE):

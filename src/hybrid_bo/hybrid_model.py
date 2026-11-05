@@ -20,8 +20,8 @@ from typing import Any
 import casadi as cas
 import numpy as np
 
+from hybrid_bo.dataset import Dataset
 from hybrid_bo.gp import GP, FittedGP, fit_gp, predict
-from hybrid_bo.history import History
 from hybrid_bo.problem import Problem, Symbolic, System, Var, _h_inputs
 from hybrid_bo.sampling import _start_bounds, lhs
 from hybrid_bo.solvers import NLP, Ipopt, solve_with_multistart
@@ -281,7 +281,7 @@ def gp_deterministic_equivalent(
 
 def fit_surrogate(
     system: System,
-    history: History,
+    dataset: Dataset,
     *,
     gp: GP,
     rng: np.random.Generator,
@@ -289,14 +289,14 @@ def fit_surrogate(
     solver: Ipopt = Ipopt(),  # noqa: B008  (frozen, never mutated)
 ) -> tuple[FittedGP, ...]:
     """The surrogate model of the system: the prior GP `gp` fitted to each unknown state
-    of `history` over the arguments of h, one fitted GP per unknown state, in the order
+    of `dataset` over the arguments of h, one fitted GP per unknown state, in the order
     of `system.y`.
 
-    The history is a run's, or `reconstruct`'s for measurements from elsewhere. Each GP
+    The dataset is a run's, or `reconstruct`'s for measurements from elsewhere. Each GP
     is fitted by `fit_gp` from `n_starts` starts.
     """
-    X = np.column_stack(_h_inputs(system, history.u, history.x))
-    return tuple(fit_gp(gp, X, y, rng, n_starts, solver) for y in history.y.T)
+    X = np.column_stack(_h_inputs(system, dataset.u, dataset.x))
+    return tuple(fit_gp(gp, X, y, rng, n_starts, solver) for y in dataset.y.T)
 
 
 @dataclass(frozen=True)

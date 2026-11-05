@@ -102,7 +102,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   drawn, since with M = 0 nothing is solved and a measured variable outside `g` leaves
   a root, so the solve wouldn't notice), then always
   solves the root-finding problem (`_reconstruct`, starts over the unmeasured
-  variables), and returns a `History` whose points are all initial points. With an
+  variables), and returns a `Dataset` whose points are all initial points. With an
   oracle, one extra solve from the
   oracle values (no draws) checks the reconstruction is on the same root, else
   `ReconstructionWarning`. `_start_bounds` (in `sampling.py`) and `_as_text` (in
@@ -111,13 +111,13 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   measurement, for data from elsewhere: no oracle values, `ValueError` on a wrong shape,
   one `OutOfBoundsWarning` for a `u` or measured variable outside its bounds (kept), and
   every row tried, one `RootFindingError` naming those with no root or a non-finite value
-  and the others as `error.history`.
-- `history.py`: `History` (`u`, `x`, `y`, `f`, oracle values or `None`, `n_initial`)
+  and the others as `error.dataset`.
+- `dataset.py`: `Dataset` (`u`, `x`, `y`, `f`, oracle values or `None`, `n_initial`)
   `incumbents` and `oracle_incumbents` (the benchmark metric);
-  `check_oracle_optimum(history, optimum)` warns with `OracleOptimumWarning` if a point
+  `check_oracle_optimum(dataset, optimum)` warns with `OracleOptimumWarning` if a point
   is below the stated optimum, and returns whether it did; `_concatenate` appends one
-  history to another.
-- `run.py`: `Run` (`history`, `artifact`, `method`: the method's name; `surrogates`: per
+  dataset to another.
+- `run.py`: `Run` (`dataset`, `artifact`, `method`: the method's name; `surrogates`: per
   iteration a `tuple[FittedGP, ...]`, the surrogate behind its trial point (hybrid BO:
   one GP per unknown state in the order of `system.y`; standard BO: a 1-tuple, the GP of
   f), and `acquisitions`: one `AcquisitionSolution` per iteration, both empty for the
@@ -227,7 +227,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `Scenarios` (`z (S, P)`, `w (S,)`, checked) and `nominal_scenario(n_y)`.
   `_scenario_unknown_states` is the one GP scenario prediction
   (`mean_j + std_j * z_sj` per unknown state j), symbolic.
-  `fit_surrogate(system, history, *, gp, rng, n_starts, solver)` fits one GP
+  `fit_surrogate(system, dataset, *, gp, rng, n_starts, solver)` fits one GP
   `h_inputs -> y_j` per unknown state, in the order of `system.y`.
   `optimize_hybrid_model(problem, fitted, rng, *, n_starts, solver)` is the nominal
   scenario minimizing `f`, solved once, with the
@@ -287,7 +287,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   tags.
 - `bo.py`: `optimization_loop(problem, measure, initial_points, n_iterations,
   trial_point, rng, artifact, *, settings, scenarios) -> Run` (evaluate initial points, then per
-  iteration `trial_point(problem, history, rng) -> (u, surrogate, acquisition
+  iteration `trial_point(problem, dataset, rng) -> (u, surrogate, acquisition
   solution)`, the surrogate a tuple of fitted GPs, and evaluate u; the run keeps
   `settings` and `scenarios`; one local function builds the run, complete or partial,
   and a `HybridBOError` gets the partial run as `error.run`). `standard_bo` and
@@ -301,10 +301,10 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `_acquisition_problem`, `solve_with_multistart`, `_unpack_scenarios`; passes the
   scenarios to the loop). `_method_artifact` builds both methods'
   artifacts: the settings without the GP, and `gp`, the prior GP's repr.
-  `_acquisition_problem(problem, history, *, n_evaluated, surrogate, scenarios,
+  `_acquisition_problem(problem, dataset, *, n_evaluated, surrogate, scenarios,
   settings)` is the one way to an acquisition problem: it reads the incumbent after the
-  first `n_evaluated` points of `history` and matches on the settings. The methods'
-  `trial_point`s call it with every point of their history, and
+  first `n_evaluated` points of `dataset` and matches on the settings. The methods'
+  `trial_point`s call it with every point of their dataset, and
   `iteration_problem(run, problem, i)`, which rebuilds iteration i's problem for the
   replay, with the `n_initial + i` points before trial point i, from the stored
   surrogate, the run's scenarios and `run.settings` (`ValueError` for a baseline).
@@ -331,12 +331,12 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   scenarios panel draws nominal f ± s (`_nominal_band`), else the scenarios' mean
   and band. Figures are drawn in `STYLE` (`hybrid_bo.mplstyle`).
   matplotlib is imported inside the functions.
-- `errors.py`: `HybridBOError` (with `.history`, the points evaluated before the
+- `errors.py`: `HybridBOError` (with `.dataset`, the points evaluated before the
   error, and `.run`, the partial run when raised in a method), `RootFindingError`,
   `NoSolutionError`, `ReconstructionWarning`, `OutOfBoundsWarning`, `OracleOptimumWarning`, `ReplayWarning` (an iteration figure's
   replay left the optimizer's branch at the trial point), and `RunFormatError` (a
   `ValueError`: a saved run this version can't load). The library raises these, never
-  bare `Exception` (ruff `TRY002`/`BLE001` apply everywhere). It imports `History` and
+  bare `Exception` (ruff `TRY002`/`BLE001` apply everywhere). It imports `Dataset` and
   `Run` only for type checking, since `run.py` imports `gp.py`, which imports
   `errors.py`.
 
@@ -397,8 +397,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   log their times at DEBUG, and warn about a nearly singular training covariance and
   starts at the iteration limit. Times come from `time.perf_counter`. The library adds
   no handlers to the caller's process.
-- **Oracle incumbents.** `incumbents(history)` is the running minimum of the measured
-  `f`. The benchmark metric `oracle_incumbents(history)` is `f_oracle` at the
+- **Oracle incumbents.** `incumbents(dataset)` is the running minimum of the measured
+  `f`. The benchmark metric `oracle_incumbents(dataset)` is `f_oracle` at the
   incumbent's point, not the running minimum of `f_oracle`; they agree only
   without noise.
 

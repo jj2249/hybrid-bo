@@ -34,7 +34,7 @@ USER_FACING = {
     "load_runs",
     # Look at the results
     "Run",
-    "History",
+    "Dataset",
     "incumbents",
     "oracle_incumbents",
     "check_oracle_optimum",

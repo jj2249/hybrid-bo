@@ -154,9 +154,9 @@ def test_run_has_one_surrogate_per_iteration(illustrative_problem):
     run = illustrative_run(illustrative_problem)
 
     # The points: 2 initial points, then 2 trial points
-    assert run.history.n_initial == 2
-    assert run.history.u.shape == (4, 1)
-    assert np.all((-2.0 <= run.history.u) & (run.history.u <= 2.0))
+    assert run.dataset.n_initial == 2
+    assert run.dataset.u.shape == (4, 1)
+    assert np.all((-2.0 <= run.dataset.u) & (run.dataset.u <= 2.0))
 
     # The surrogates: one per iteration, fitted on the points before its trial point,
     # each a 1-tuple of the GP of f
@@ -175,7 +175,7 @@ def test_run_pickles_without_the_code_that_produced_it(
     loaded = data_only_pickle(run)
 
     assert loaded.artifact == run.artifact
-    np.testing.assert_array_equal(loaded.history.u, run.history.u)
+    np.testing.assert_array_equal(loaded.dataset.u, run.dataset.u)
     np.testing.assert_array_equal(loaded.surrogates[-1][0].X, run.surrogates[-1][0].X)
     assert loaded.settings == run.settings
 
@@ -234,14 +234,14 @@ def test_failed_evaluation_carries_the_partial_run(illustrative_problem):
         )
 
     # The partial run: the initial points, and no surrogate (the surrogate behind the
-    # failed trial point is dropped with it); the error's history is the run's
+    # failed trial point is dropped with it); the error's dataset is the run's
     run = info.value.run
     assert isinstance(run, Run)
-    assert run.history.u.shape == (2, 1)
-    assert run.history.n_initial == 2
+    assert run.dataset.u.shape == (2, 1)
+    assert run.dataset.n_initial == 2
     assert run.surrogates == []
     assert run.artifact["method"] == "standard_bo"
-    assert info.value.history is run.history
+    assert info.value.dataset is run.dataset
 
 
 def test_stored_acquisition_value_is_the_objective_at_the_trial_point(
@@ -251,15 +251,15 @@ def test_stored_acquisition_value_is_the_objective_at_the_trial_point(
     point; standard BO has no scenario states."""
     run = illustrative_run(illustrative_problem)
 
-    history = run.history
+    dataset = run.dataset
     assert len(run.acquisitions) == 2
     for i, (solution, (fitted,)) in enumerate(
         zip(run.acquisitions, run.surrogates, strict=True)
     ):
-        point = history.n_initial + i
-        incumbent = float(incumbents(history)[point - 1])
+        point = dataset.n_initial + i
+        incumbent = float(incumbents(dataset)[point - 1])
         nlp = standard_acquisition(illustrative_problem, fitted, incumbent, EI()).nlp
-        expected = acquisition_values(nlp, history.u[point : point + 1])[0]
+        expected = acquisition_values(nlp, dataset.u[point : point + 1])[0]
         assert solution.value == pytest.approx(expected, abs=1e-12)
         assert solution.x is None and solution.y is None
 
@@ -273,7 +273,7 @@ def test_each_iteration_problem_gives_the_stored_acquisition_value(
 
     for i, solution in enumerate(run.acquisitions):
         acquisition_problem = iteration_problem(run, illustrative_problem, i)
-        trial = run.history.u[run.history.n_initial + i]
+        trial = run.dataset.u[run.dataset.n_initial + i]
         assert float(acquisition_problem.nlp.f(trial)) == pytest.approx(
             solution.value, rel=1e-12
         )
@@ -292,8 +292,8 @@ def test_loop_evaluates_each_trial_point_after_the_initial_points(
     rng = np.random.default_rng(0)
     trial_points = iter([np.array([1.0]), np.array([-1.0])])
 
-    def trial_point(problem, history, rng):
-        n = len(history.u)
+    def trial_point(problem, dataset, rng):
+        n = len(dataset.u)
         return next(trial_points), f"surrogate behind point {n}", AcquisitionSolution(n)
 
     run = optimization_loop(
@@ -309,10 +309,10 @@ def test_loop_evaluates_each_trial_point_after_the_initial_points(
     )
 
     # Every point is evaluated (y = sin(u) is the oracle), in order
-    np.testing.assert_array_equal(run.history.u, [[0.5], [1.0], [-1.0]])
-    np.testing.assert_allclose(run.history.y, np.sin(run.history.u), atol=1e-8)
-    assert run.history.n_initial == 1
-    assert run.history.f_oracle is not None
+    np.testing.assert_array_equal(run.dataset.u, [[0.5], [1.0], [-1.0]])
+    np.testing.assert_allclose(run.dataset.y, np.sin(run.dataset.u), atol=1e-8)
+    assert run.dataset.n_initial == 1
+    assert run.dataset.f_oracle is not None
     assert run.surrogates == ["surrogate behind point 1", "surrogate behind point 2"]
     assert [solution.value for solution in run.acquisitions] == [1, 2]
 
@@ -323,8 +323,8 @@ def test_failed_trial_point_carries_the_partial_run(illustrative_problem):
     problem = illustrative_problem
     rng = np.random.default_rng(0)
 
-    def trial_point(problem, history, rng):
-        if len(history.u) == 3:
+    def trial_point(problem, dataset, rng):
+        if len(dataset.u) == 3:
             msg = "no acquisition solution"
             raise NoSolutionError(msg)
         return np.array([1.0]), "surrogate", AcquisitionSolution(0.0)
@@ -345,11 +345,11 @@ def test_failed_trial_point_carries_the_partial_run(illustrative_problem):
     # The partial run: 2 initial points and the one trial point before the failure
     run = info.value.run
     assert run is not None
-    assert run.history.u.shape == (3, 1)
-    assert run.history.n_initial == 2
+    assert run.dataset.u.shape == (3, 1)
+    assert run.dataset.n_initial == 2
     assert run.surrogates == ["surrogate"]
     assert len(run.acquisitions) == 1
-    assert info.value.history is run.history
+    assert info.value.dataset is run.dataset
 
 
 def test_the_loop_keeps_its_scenarios_in_a_complete_and_a_partial_run(
@@ -363,9 +363,9 @@ def test_the_loop_keeps_its_scenarios_in_a_complete_and_a_partial_run(
     rng = np.random.default_rng(0)
     scenarios = nominal_scenario(1)
 
-    def trial_point(problem, history, rng):
+    def trial_point(problem, dataset, rng):
         """A fixed trial point, or an error from the second iteration on."""
-        if len(history.u) == 2:
+        if len(dataset.u) == 2:
             msg = "no acquisition solution"
             raise NoSolutionError(msg)
         return np.array([1.0]), "surrogate", AcquisitionSolution(0.0)
@@ -406,7 +406,7 @@ def test_failed_initial_point_carries_the_points_before_it(illustrative_problem)
     def measure(u, rng):
         return np.sin(u) if u[0] < 1.0 else np.array([np.nan])
 
-    def trial_point(problem, history, rng):
+    def trial_point(problem, dataset, rng):
         return np.array([0.0]), "surrogate", AcquisitionSolution(0.0)
 
     with pytest.raises(RootFindingError) as info:
@@ -424,6 +424,6 @@ def test_failed_initial_point_carries_the_points_before_it(illustrative_problem)
 
     run = info.value.run
     assert run is not None
-    assert run.history.u.shape == (1, 1)
-    assert run.history.n_initial == 1
+    assert run.dataset.u.shape == (1, 1)
+    assert run.dataset.n_initial == 1
     assert run.surrogates == []

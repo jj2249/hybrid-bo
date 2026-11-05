@@ -1,4 +1,4 @@
-"""Evaluation: measurements, the oracle simulation, the root-finding problem, History.
+"""Evaluation: measurements, the oracle simulation, the root-finding problem, Dataset.
 
 pytest runs every function whose name starts with `test_`. A test argument named like
 a fixture in `conftest.py` (here `illustrative_problem`) is filled in by pytest with
@@ -20,7 +20,7 @@ from scipy.special import lambertw
 
 import hybrid_bo
 from hybrid_bo import (
-    History,
+    Dataset,
     OutOfBoundsWarning,
     Problem,
     ReconstructionWarning,
@@ -31,8 +31,8 @@ from hybrid_bo import (
     oracle_incumbents,
     oracle_measure,
 )
+from hybrid_bo.dataset import n_iterations
 from hybrid_bo.evaluation import evaluate, reconstruct
-from hybrid_bo.history import n_iterations
 from hybrid_bo.oracle import OracleMeasurement
 
 
@@ -83,24 +83,24 @@ def test_noise_free_evaluation_matches_the_closed_form(illustrative_problem):
     u = np.array([-2.0, -0.5, 0.0, 1.0, 2.0])
     measure = illustrative_measure(illustrative_problem, noise_std=0.0)
 
-    history = evaluate(
+    dataset = evaluate(
         illustrative_problem, measure, u[:, np.newaxis], np.random.default_rng(0)
     )
 
     # Measured, reconstructed and oracle values all match the closed form
     x, y, f = closed_form(u)
-    assert history.x_oracle is not None and history.y_oracle is not None
-    assert history.f_oracle is not None
+    assert dataset.x_oracle is not None and dataset.y_oracle is not None
+    assert dataset.f_oracle is not None
     for actual, expected in [
-        (history.x, x),
-        (history.y, y),
-        (history.x_oracle, x),
-        (history.y_oracle, y),
+        (dataset.x, x),
+        (dataset.y, y),
+        (dataset.x_oracle, x),
+        (dataset.y_oracle, y),
     ]:
         np.testing.assert_allclose(actual.ravel(), expected, rtol=1e-8, atol=1e-10)
-    np.testing.assert_allclose(history.f, f, rtol=1e-8, atol=1e-10)
-    np.testing.assert_allclose(history.f_oracle, f, rtol=1e-8, atol=1e-10)
-    assert history.n_initial == len(u)
+    np.testing.assert_allclose(dataset.f, f, rtol=1e-8, atol=1e-10)
+    np.testing.assert_allclose(dataset.f_oracle, f, rtol=1e-8, atol=1e-10)
+    assert dataset.n_initial == len(u)
 
 
 def test_noise_is_the_first_stream_draw(illustrative_problem):
@@ -109,13 +109,13 @@ def test_noise_is_the_first_stream_draw(illustrative_problem):
     # stream
     measure = illustrative_measure(illustrative_problem, noise_std=0.1)
 
-    history = evaluate(
+    dataset = evaluate(
         illustrative_problem, measure, np.array([[-0.5]]), np.random.default_rng(0)
     )
 
     noise = np.random.default_rng(0).normal(0.0, 0.1, size=1)
-    assert history.y_oracle is not None
-    np.testing.assert_allclose(history.y - history.y_oracle, [noise], rtol=1e-12)
+    assert dataset.y_oracle is not None
+    np.testing.assert_allclose(dataset.y - dataset.y_oracle, [noise], rtol=1e-12)
 
 
 def test_root_finding_starts_cover_the_unmeasured_variables(monkeypatch):
@@ -145,7 +145,7 @@ def test_root_finding_starts_cover_the_unmeasured_variables(monkeypatch):
         return hybrid_bo.sampling.lhs(lower, upper, n, rng)
 
     monkeypatch.setattr(hybrid_bo.evaluation, "lhs", spy)
-    history = evaluate(
+    dataset = evaluate(
         problem,
         lambda u, rng: np.array([0.5]),
         np.array([[0.25]]),
@@ -158,8 +158,8 @@ def test_root_finding_starts_cover_the_unmeasured_variables(monkeypatch):
     np.testing.assert_array_equal(lower, [0.0, 2.0])
     np.testing.assert_array_equal(upper, [1.0, 3.0])
     assert n == 7
-    np.testing.assert_allclose(history.x, [[0.75, 0.75**2]])
-    np.testing.assert_allclose(history.f, [0.75**2])
+    np.testing.assert_allclose(dataset.x, [[0.75, 0.75**2]])
+    np.testing.assert_allclose(dataset.f, [0.75**2])
 
 
 def test_measure_without_an_oracle_gives_no_oracle_values():
@@ -167,19 +167,19 @@ def test_measure_without_an_oracle_gives_no_oracle_values():
     values and no oracle values."""
     problem = two_branch_problem()
 
-    history = evaluate(
+    dataset = evaluate(
         problem,
         lambda u, rng: np.array([u[0] + 2.0]),
         np.array([[-1.0], [0.0]]),
         np.random.default_rng(0),
     )
 
-    np.testing.assert_allclose(history.x, [[1.0], [np.sqrt(2.0)]])
-    np.testing.assert_allclose(history.y, [[1.0], [2.0]])
-    np.testing.assert_allclose(history.f, [0.0, np.sqrt(2.0)])
-    assert history.x_oracle is None
-    assert history.y_oracle is None
-    assert history.f_oracle is None
+    np.testing.assert_allclose(dataset.x, [[1.0], [np.sqrt(2.0)]])
+    np.testing.assert_allclose(dataset.y, [[1.0], [2.0]])
+    np.testing.assert_allclose(dataset.f, [0.0, np.sqrt(2.0)])
+    assert dataset.x_oracle is None
+    assert dataset.y_oracle is None
+    assert dataset.f_oracle is None
 
 
 def test_disagreement_with_the_oracle_warns():
@@ -196,17 +196,17 @@ def test_disagreement_with_the_oracle_warns():
     # `pytest.warns` fails the test unless the block warns with a message matching
     # `match`
     with pytest.warns(ReconstructionWarning, match="oracle"):
-        history = evaluate(
+        dataset = evaluate(
             two_branch_problem(),
             measure,
             np.array([[0.0]]),
             np.random.default_rng(0),
         )
 
-    np.testing.assert_allclose(history.x, [[1.0]])
-    assert history.x_oracle is not None and history.f_oracle is not None
-    np.testing.assert_allclose(history.x_oracle, [[-1.0]])
-    np.testing.assert_allclose(history.f_oracle, [-1.0])
+    np.testing.assert_allclose(dataset.x, [[1.0]])
+    assert dataset.x_oracle is not None and dataset.f_oracle is not None
+    np.testing.assert_allclose(dataset.x_oracle, [[-1.0]])
+    np.testing.assert_allclose(dataset.f_oracle, [-1.0])
 
 
 @pytest.mark.filterwarnings("error")
@@ -220,15 +220,15 @@ def test_noisy_reconstruction_on_the_oracle_branch_does_not_warn():
             measured=np.array([1.1]), x=np.array([1.0]), y=np.array([1.0])
         )
 
-    history = evaluate(
+    dataset = evaluate(
         two_branch_problem(), measure, np.array([[0.0]]), np.random.default_rng(0)
     )
 
-    np.testing.assert_allclose(history.x, [[np.sqrt(1.1)]])
+    np.testing.assert_allclose(dataset.x, [[np.sqrt(1.1)]])
 
 
 def test_failed_root_finding_raises_with_the_points_before():
-    """When the root-finding fails, the error carries the history of the points
+    """When the root-finding fails, the error carries the dataset of the points
     evaluated before."""
 
     # x**2 = -1 has no real root
@@ -247,15 +247,15 @@ def test_failed_root_finding_raises_with_the_points_before():
         )
 
     # Only the first point, before the failing second one
-    history = info.value.history
-    assert history is not None
-    np.testing.assert_array_equal(history.u, [[-0.5]])
-    np.testing.assert_allclose(history.x, [[1.0]])
+    dataset = info.value.dataset
+    assert dataset is not None
+    np.testing.assert_array_equal(dataset.u, [[-0.5]])
+    np.testing.assert_allclose(dataset.x, [[1.0]])
 
 
 def test_failed_oracle_simulation_raises():
     """When the oracle simulation has no solution, evaluation raises with an empty
-    history."""
+    dataset."""
     # y = -1 - x**2 and y = x**2 have no common real root
     problem = two_branch_problem()
     measure = oracle_measure(
@@ -265,8 +265,8 @@ def test_failed_oracle_simulation_raises():
     with pytest.raises(RootFindingError) as info:
         evaluate(problem, measure, np.array([[0.0]]), np.random.default_rng(0))
 
-    assert info.value.history is not None
-    assert info.value.history.u.shape == (0, 1)
+    assert info.value.dataset is not None
+    assert info.value.dataset.u.shape == (0, 1)
 
 
 def no_known_equations_problem() -> Problem:
@@ -316,10 +316,10 @@ def test_a_measurement_that_is_not_finite_raises(problem: Problem, value: float)
         )
 
     # Only the first point, before the failing second one
-    history = info.value.history
-    assert history is not None
-    np.testing.assert_array_equal(history.u, [[-0.5]])
-    np.testing.assert_array_equal(history.y, [[0.5]])
+    dataset = info.value.dataset
+    assert dataset is not None
+    np.testing.assert_array_equal(dataset.u, [[-0.5]])
+    np.testing.assert_array_equal(dataset.y, [[0.5]])
 
 
 @pytest.mark.parametrize(
@@ -360,10 +360,10 @@ def test_a_nan_measured_variable_outside_g_fails_the_run(method: Callable):
     # The partial run: the three points before it, all of them finite
     run = info.value.run
     assert run is not None
-    assert len(run.history.u) == 3
-    assert np.isfinite(run.history.x).all()
-    assert np.isfinite(run.history.y).all()
-    assert np.isfinite(run.history.f).all()
+    assert len(run.dataset.u) == 3
+    assert np.isfinite(run.dataset.x).all()
+    assert np.isfinite(run.dataset.y).all()
+    assert np.isfinite(run.dataset.f).all()
 
 
 def test_measure_returning_the_wrong_shape_raises():
@@ -403,11 +403,11 @@ def test_every_experiment_measurement_has_the_same_repr_in_another_process(name)
     assert other.stdout == repr(measure) + "\n"
 
 
-def history_of(f: list[float], f_oracle: list[float] | None = None) -> History:
-    """A history with the given measured and oracle objective values, the first two
+def dataset_of(f: list[float], f_oracle: list[float] | None = None) -> Dataset:
+    """A dataset with the given measured and oracle objective values, the first two
     of them initial points; the other fields are zero."""
     n = len(f)
-    return History(
+    return Dataset(
         u=np.zeros((n, 1)),
         x=np.zeros((n, 1)),
         y=np.zeros((n, 1)),
@@ -420,15 +420,15 @@ def history_of(f: list[float], f_oracle: list[float] | None = None) -> History:
 
 
 def test_n_iterations_counts_the_points_after_the_initial_ones():
-    """A history of five points, two of them initial, has three iterations."""
-    assert n_iterations(history_of([3.0, 1.0, 2.0, 0.5, 0.2])) == 3
+    """A dataset of five points, two of them initial, has three iterations."""
+    assert n_iterations(dataset_of([3.0, 1.0, 2.0, 0.5, 0.2])) == 3
 
 
 def test_incumbents_are_the_running_minimum_of_measured_f():
     """The incumbent after each evaluation is the best measured f so far."""
-    history = history_of([3.0, 1.0, 2.0, 0.5])
+    dataset = dataset_of([3.0, 1.0, 2.0, 0.5])
 
-    np.testing.assert_array_equal(incumbents(history), [3.0, 1.0, 1.0, 0.5])
+    np.testing.assert_array_equal(incumbents(dataset), [3.0, 1.0, 1.0, 0.5])
 
 
 def test_oracle_incumbents_are_the_oracle_f_at_the_measured_incumbent():
@@ -436,16 +436,16 @@ def test_oracle_incumbents_are_the_oracle_f_at_the_measured_incumbent():
     not the best oracle f so far."""
     # The third point measures worse than the second but is better at the oracle;
     # the fourth measures best but is worse at the oracle
-    history = history_of(f=[3.0, 1.0, 2.0, 0.5], f_oracle=[3.0, 1.5, 0.5, 2.0])
+    dataset = dataset_of(f=[3.0, 1.0, 2.0, 0.5], f_oracle=[3.0, 1.5, 0.5, 2.0])
 
-    np.testing.assert_array_equal(oracle_incumbents(history), [3.0, 1.5, 1.5, 2.0])
+    np.testing.assert_array_equal(oracle_incumbents(dataset), [3.0, 1.5, 1.5, 2.0])
 
 
 def test_oracle_incumbents_keep_the_earlier_point_on_a_tie():
     """A later point that only equals the incumbent's measured f doesn't replace it."""
-    history = history_of(f=[1.0, 1.0, 1.0], f_oracle=[2.0, 0.0, 3.0])
+    dataset = dataset_of(f=[1.0, 1.0, 1.0], f_oracle=[2.0, 0.0, 3.0])
 
-    np.testing.assert_array_equal(oracle_incumbents(history), [2.0, 2.0, 2.0])
+    np.testing.assert_array_equal(oracle_incumbents(dataset), [2.0, 2.0, 2.0])
 
 
 def test_oracle_incumbents_without_noise_are_the_running_minimum_of_oracle_f(
@@ -456,18 +456,18 @@ def test_oracle_incumbents_without_noise_are_the_running_minimum_of_oracle_f(
     u = np.array([[2.0], [-0.5], [1.0], [0.0], [-2.0], [0.4]])
     measure = illustrative_measure(illustrative_problem, noise_std=0.0)
 
-    history = evaluate(illustrative_problem, measure, u, np.random.default_rng(0))
+    dataset = evaluate(illustrative_problem, measure, u, np.random.default_rng(0))
 
-    assert history.f_oracle is not None
+    assert dataset.f_oracle is not None
     np.testing.assert_allclose(
-        oracle_incumbents(history), np.minimum.accumulate(history.f_oracle)
+        oracle_incumbents(dataset), np.minimum.accumulate(dataset.f_oracle)
     )
 
 
 def test_oracle_incumbents_need_oracle_values():
-    """A history from a measurement without an oracle has no benchmark metric."""
+    """A dataset from a measurement without an oracle has no benchmark metric."""
     with pytest.raises(ValueError, match="oracle"):
-        oracle_incumbents(history_of([3.0, 1.0]))
+        oracle_incumbents(dataset_of([3.0, 1.0]))
 
 
 def test_oracle_optimum_solves_the_problem_with_the_oracle_in_place_of_h():
@@ -507,21 +507,21 @@ def test_reconstruct_solves_the_unmeasured_states_of_given_measurements(
     u = np.array([[-1.0], [0.0], [1.0]])
     measured = np.array([[-0.5], [0.3], [1.0]])
 
-    history = reconstruct(
+    dataset = reconstruct(
         illustrative_problem, u=u, measured=measured, rng=np.random.default_rng(0)
     )
 
     # The closed form of the unmeasured state, and f there
     x = measured - lambertw(np.exp(measured)).real
     f = ((6 * x - 2) ** 2 * np.sin(12 * x - 4)).ravel()
-    np.testing.assert_allclose(history.x, x, atol=1e-8)
-    np.testing.assert_array_equal(history.y, measured)
-    np.testing.assert_array_equal(history.u, u)
-    np.testing.assert_allclose(history.f, f, atol=1e-6)
+    np.testing.assert_allclose(dataset.x, x, atol=1e-8)
+    np.testing.assert_array_equal(dataset.y, measured)
+    np.testing.assert_array_equal(dataset.u, u)
+    np.testing.assert_allclose(dataset.f, f, atol=1e-6)
 
     # Given points have no oracle values, and all are initial points
-    assert history.f_oracle is None
-    assert history.n_initial == 3
+    assert dataset.f_oracle is None
+    assert dataset.n_initial == 3
 
 
 # `parametrize` runs the test once per entry, with the entry as the argument
@@ -561,7 +561,7 @@ def square_root_problem() -> Problem:
 
 
 def test_reconstruct_names_every_bad_row_and_keeps_the_others():
-    """Every row is tried, one error names the bad rows, and `error.history` holds the
+    """Every row is tried, one error names the bad rows, and `error.dataset` holds the
     rows that worked. A row is bad with no root, with a root outside the bounds of the
     unmeasured states, or with a value that isn't finite."""
     # Good, no root, good, root outside the bounds, not finite
@@ -573,15 +573,15 @@ def test_reconstruct_names_every_bad_row_and_keeps_the_others():
         reconstruct(problem, u=u, measured=measured, rng=np.random.default_rng(0))
 
     # The two good rows, in order, with their roots
-    history = caught.value.history
-    assert history is not None
-    np.testing.assert_array_equal(history.u, u[[0, 2]])
-    np.testing.assert_allclose(history.x, [[1.0], [2.0]], atol=1e-8)
-    assert history.n_initial == 2
+    dataset = caught.value.dataset
+    assert dataset is not None
+    np.testing.assert_array_equal(dataset.u, u[[0, 2]])
+    np.testing.assert_allclose(dataset.x, [[1.0], [2.0]], atol=1e-8)
+    assert dataset.n_initial == 2
 
 
-def test_a_reconstruction_with_no_good_rows_has_an_empty_history():
-    """When every row fails, `error.history` has no points and no oracle values."""
+def test_a_reconstruction_with_no_good_rows_has_an_empty_dataset():
+    """When every row fails, `error.dataset` has no points and no oracle values."""
     problem = square_root_problem()
     measured = np.array([[-1.0], [-2.0]])
 
@@ -590,10 +590,10 @@ def test_a_reconstruction_with_no_good_rows_has_an_empty_history():
             problem, u=np.zeros((2, 1)), measured=measured, rng=np.random.default_rng(0)
         )
 
-    history = caught.value.history
-    assert history is not None
-    assert len(history.u) == 0
-    assert history.f_oracle is None
+    dataset = caught.value.dataset
+    assert dataset is not None
+    assert len(dataset.u) == 0
+    assert dataset.f_oracle is None
 
 
 def test_a_row_that_is_not_finite_is_a_bad_row_with_no_known_equations():
@@ -608,14 +608,14 @@ def test_a_row_that_is_not_finite_is_a_bad_row_with_no_known_equations():
             problem, u=np.zeros((2, 1)), measured=measured, rng=np.random.default_rng(0)
         )
 
-    history = caught.value.history
-    assert history is not None
-    np.testing.assert_array_equal(history.y, [[0.5]])
+    dataset = caught.value.dataset
+    assert dataset is not None
+    np.testing.assert_array_equal(dataset.y, [[0.5]])
 
 
 def test_reconstruct_warns_of_values_outside_their_bounds_and_keeps_them():
     """A u or a measured variable outside its bounds is still a measurement: one warning
-    names the rows of each, and the history holds them."""
+    names the rows of each, and the dataset holds them."""
     # u is bounded by 1 and y by 2; x + exp(x) = y keeps a root for every y
     u_var, y_var = Var("u", -1.0, 1.0), Var("y", -2.0, 2.0)
     x_var = Var("x", start=(-3.0, 2.0))
@@ -633,7 +633,7 @@ def test_reconstruct_warns_of_values_outside_their_bounds_and_keeps_them():
 
     # `warns` passes only if the block gives that warning
     with pytest.warns(OutOfBoundsWarning) as caught:
-        history = reconstruct(
+        dataset = reconstruct(
             problem, u=u, measured=measured, rng=np.random.default_rng(0)
         )
 
@@ -642,7 +642,7 @@ def test_reconstruct_warns_of_values_outside_their_bounds_and_keeps_them():
     message = str(caught[0].message)
     assert "u at rows [1]" in message
     assert "y at rows [2]" in message
-    np.testing.assert_array_equal(history.u, u)
+    np.testing.assert_array_equal(dataset.u, u)
 
 
 def test_reconstruct_gives_no_warning_within_the_bounds(illustrative_problem, recwarn):
