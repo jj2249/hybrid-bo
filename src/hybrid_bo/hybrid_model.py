@@ -2,9 +2,9 @@
 model embedded.
 
 `scenario_problem` builds the problem for given scenarios and a given objective; the
-caller solves it by `multistart`, and `_unpack_scenarios` reads the solution. Everything
-that solves the hybrid model is one use of them. `optimize_hybrid_model` is the
-simplest: the nominal scenario, minimizing the objective f itself, with no Bayesian
+caller solves it by `solve_with_multistart`, and `_unpack_scenarios` reads the solution.
+Everything that solves the hybrid model is one use of them. `optimize_hybrid_model` is
+the simplest: the nominal scenario, minimizing the objective f itself, with no Bayesian
 optimization. Hybrid BO's acquisition problem (`hybrid_acquisition`) supplies an
 acquisition function as the objective, and `hybrid_bo` is the loop around it: fit,
 solve, evaluate.
@@ -21,7 +21,7 @@ from hybrid_bo.gp import GP, FittedGP, fit_gp, predict
 from hybrid_bo.history import History
 from hybrid_bo.problem import Problem, Symbolic, System, Var, _h_inputs
 from hybrid_bo.sampling import _start_bounds, lhs
-from hybrid_bo.solvers import NLP, Ipopt, multistart
+from hybrid_bo.solvers import NLP, Ipopt, solve_with_multistart
 
 # What a scenario problem minimizes, from CasADi expressions of f under each scenario
 # (S, 1), the scenario states x (S, M) and y (S, P), and u (N, 1): the objective
@@ -289,10 +289,10 @@ def optimize_hybrid_model(
     measurements. It has no uncertainty in it, so it trusts the GPs' mean even far from
     their training data, and the optimum can sit where the model only extrapolates.
 
-    Solved by `multistart` from `n_starts` Latin hypercube starts over the start bounds
-    of the variables, so it is the best local optimum found: raise `n_starts` if the
-    objective has several. The unknown states are variables, so their bounds hold.
-    Raises `ValueError` unless `fitted` has one GP per unknown state, and
+    Solved by `solve_with_multistart` from `n_starts` Latin hypercube starts over the
+    start bounds of the variables, so it is the best local optimum found: raise
+    `n_starts` if the objective has several. The unknown states are variables, so their
+    bounds hold. Raises `ValueError` unless `fitted` has one GP per unknown state, and
     `NoSolutionError` if every start fails.
     """
     nominal = scenario_problem(
@@ -304,6 +304,6 @@ def optimize_hybrid_model(
         objective_name="nominal_optimum",
     )
     starts = lhs(*nominal.start_bounds, n_starts, rng)
-    solution = multistart(nominal.nlp, starts, solver)
+    solution = solve_with_multistart(nominal.nlp, starts, solver)
     u, x, y = _unpack_scenarios(nominal, solution.w)
     return NominalOptimum(u, x[0], y[0], solution.f)

@@ -51,7 +51,8 @@ code uses GLOSSARY.md's terms; use them in PRs, tests and comments too.
     DESIGN.md), with `L = diag(std_1, ..., std_P)`. The partial `f_y L` is wrong: it
     gives `s ≡ 0` on the illustrative example. EI only: LCB raises
     `NotImplementedError`.
-  - Solved with `multistart`. The trial point is the `u` part of the solution.
+  - Solved with `solve_with_multistart`. The trial point is the `u` part of the
+    solution.
 - **Standard BO** (`bo.py`): a GP directly on `u -> f`, with analytic EI or LCB over
   `u` only.
 - **Latin hypercube / uniform sampling** (`baselines.py`): the non-adaptive baselines.
@@ -87,7 +88,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   its repr is the artifact's text, so it must not depend on the process (no
   addresses).
   `oracle_optimum(problem, oracle, rng)` solves min f s.t. g = 0, y = oracle by
-  `multistart` from `lhs` starts over the start bounds of (u, x, y).
+  `solve_with_multistart` from `lhs` starts over the start bounds of (u, x, y).
   `evaluate(problem, measure, u, rng)` runs the measurement per row, then always
   solves the root-finding problem (`_reconstruct`, starts over the unmeasured
   variables), and returns a `History` whose points are all initial points. Every
@@ -135,9 +136,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   one call.
 - `solvers.py`: `NLP` (`f`, bounds `(n,)`, optional `g(w) = 0`; a `g` of no rows is
   no constraint, since `cas.Opti` refuses an empty one), `Ipopt` settings and
-  `multistart(nlp, starts, solver) -> Solution` (`w`, `f`), the best start; objectives
-  within `_TIE_TOLERANCE` (1e-13, relative or absolute below 1) tie and the earlier
-  start wins, since acquisition problems can have symmetric or flat optima whose
+  `solve_with_multistart(nlp, starts, solver) -> Solution` (`w`, `f`), the best start;
+  objectives within `_TIE_TOLERANCE` (1e-13, relative or absolute below 1) tie and the
+  earlier start wins, since acquisition problems can have symmetric or flat optima whose
   values differ only by platform-dependent rounding. Loosening it moves the GP fits'
   hyperparameters and every BO baseline. It uses
   `cas.Opti` with bounds as constraints, as the pre-refactor code did, so IPOPT takes
@@ -147,9 +148,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `Maximum_Iterations_Exceeded`) get one warning per call, giving their count and
   `nlp.f`'s name, before `NoSolutionError` if all fail. The caller draws the starts with `lhs`.
   CasADi catches a Ctrl-C inside IPOPT and fails the solve (`NonIpopt_Exception_Thrown`,
-  which other callback errors give too), so `multistart` wraps the SIGINT handler
-  for each solve (`_interrupts_noticed`, main thread and a Python handler only) and
-  raises `KeyboardInterrupt` after a failed solve that saw one (#155).
+  which other callback errors give too), so `solve_with_multistart` wraps the SIGINT
+  handler for each solve (`_interrupts_noticed`, main thread and a Python handler only)
+  and raises `KeyboardInterrupt` after a failed solve that saw one (#155).
 - `gp.py` (ADR 0008): GPs are data, frozen dataclasses from a closed set. `Param(init,
   bounds, log=True)` is a hyperparameter to fit (checked: init inside the bounds, positive
   bounds for log). Kernels `Matern12/32/52` and `SquaredExponential` (`lengthscale:
@@ -168,9 +169,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   and `_with_hyperparameters` sets them by path. A fitted value is a float, or a tuple of
   one per input for an ARD lengthscale; a fixed number applies to every input.
   `fit_gp(gp, X, Y, rng, ...) -> FittedGP` fits every `Param` (log ones in log
-  space) by `multistart` from `lhs` starts over the bounds; with no `Param` it draws
-  nothing. `predict(fitted, X)` (the noise-free conditional mean and std; numpy X ->
-  arrays `(n,)`, built at one row and mapped over the rows, symbolic X -> `(n, 1)`
+  space) by `solve_with_multistart` from `lhs` starts over the bounds; with no `Param`
+  it draws nothing. `predict(fitted, X)` (the noise-free conditional mean and std; numpy
+  X -> arrays `(n,)`, built at one row and mapped over the rows, symbolic X -> `(n, 1)`
   columns) and `log_marginal_likelihood(fitted)`,
   which `fit_gp` maximizes. Kernel hyperparameters are in scaled units; `noise_std` is a
   known noise in **measured** units, scaled by the output scaler's slope:
@@ -201,7 +202,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `_unpack_scenarios(problem, w) -> (u, x, y)` reads a solved problem over scenarios: the
   states `(S, M)`, `(S, P)` (x from `_unpack`, y from `scenario_values`, so predicted
   when the y_s are substituted). Each caller draws `lhs` starts over the problem's
-  start bounds and calls `multistart` itself.
+  start bounds and calls `solve_with_multistart` itself.
   `Scenarios` (`z (S, P)`, `w (S,)`, checked) and `nominal_scenario(n_y)`.
   `_scenario_unknown_states` is the one GP scenario prediction
   (`mean_j + std_j * z_sj` per unknown state j), symbolic.
@@ -270,11 +271,11 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `hybrid_bo` take `problem` and `measure`, then only keywords: `n_iterations`, `rng`,
   `gp`, `acquisition`, either `n_initial` or `initial_points`
   (`sampling._starting_points`, drawn after the artifact) and search effort. `StandardBOSettings` and
-  `standard_bo` (fit `u -> f`, `_acquisition_problem`, `multistart` from `lhs` over the
-  `u` start bounds; stores `AcquisitionSolution(value)`, so `x=None`),
+  `standard_bo` (fit `u -> f`, `_acquisition_problem`, `solve_with_multistart` from
+  `lhs` over the `u` start bounds; stores `AcquisitionSolution(value)`, so `x=None`),
   `HybridBOSettings` and `hybrid_bo` (artifact, then
   `saa_scenarios` or `nominal_scenario`, then the loop; `fit_surrogate`,
-  `_acquisition_problem`, `multistart`, `_unpack_scenarios`; passes the
+  `_acquisition_problem`, `solve_with_multistart`, `_unpack_scenarios`; passes the
   scenarios to the loop). `_method_artifact` builds both methods'
   artifacts: the settings without the GP, and `gp`, the prior GP's repr.
   `_acquisition_problem(problem, history, *, n_evaluated, surrogate, scenarios,
@@ -369,10 +370,10 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   (`error.run`). Nothing in the library catches them.
 - **The library never writes files on its own.** Saving is an explicit `save_run` call.
 - **Progress is logged, never configured.** `optimization_loop` logs the initial points
-  and each iteration (with the incumbent) at INFO; `fit_gp` and `multistart` log their
-  times at DEBUG, and warn about a nearly singular training covariance and starts at the
-  iteration limit. Times come from `time.perf_counter`. The library adds no handlers to
-  the caller's process.
+  and each iteration (with the incumbent) at INFO; `fit_gp` and `solve_with_multistart`
+  log their times at DEBUG, and warn about a nearly singular training covariance and
+  starts at the iteration limit. Times come from `time.perf_counter`. The library adds
+  no handlers to the caller's process.
 - **Oracle incumbents.** `incumbents(history)` is the running minimum of the measured
   `f`. The benchmark metric `oracle_incumbents(history)` is `f_oracle` at the
   incumbent's point, not the running minimum of `f_oracle`; they agree only

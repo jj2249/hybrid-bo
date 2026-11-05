@@ -53,7 +53,7 @@ from hybrid_bo.errors import (
 from hybrid_bo.history import History
 from hybrid_bo.problem import Problem, Symbolic, System, Var, _as_text, _trace
 from hybrid_bo.sampling import _start_bounds, lhs
-from hybrid_bo.solvers import NLP, Ipopt, multistart
+from hybrid_bo.solvers import NLP, Ipopt, solve_with_multistart
 
 
 @dataclass(frozen=True)
@@ -223,9 +223,9 @@ def oracle_optimum(
     subject to g(x, y, u) = 0 and y = oracle(x, u), within the bounds.
 
     `oracle` is written as for `oracle_measure`. Solved like the acquisition
-    problem: by `multistart` from `n_starts` Latin hypercube starts over the start
-    bounds of u, x and y, so it is the best local optimum found, which can miss the
-    global one: use it to find a benchmark experiment's optimum once, from many
+    problem: by `solve_with_multistart` from `n_starts` Latin hypercube starts over the
+    start bounds of u, x and y, so it is the best local optimum found, which can miss
+    the global one: use it to find a benchmark experiment's optimum once, from many
     starts, and state that value in the experiment. Raises `ValueError` if the oracle
     doesn't give one value per unknown state, and `NoSolutionError` if every start
     fails.
@@ -247,7 +247,7 @@ def oracle_optimum(
     )
 
     starts = lhs(*_start_bounds(variables), n_starts, rng)
-    return multistart(nlp, starts, solver).f
+    return solve_with_multistart(nlp, starts, solver).f
 
 
 def _reconstruct(

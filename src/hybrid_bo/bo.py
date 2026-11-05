@@ -40,7 +40,7 @@ from hybrid_bo.problem import Problem
 from hybrid_bo.run import Run, run_artifact
 from hybrid_bo.sampling import _starting_points, lhs
 from hybrid_bo.settings import HybridBOSettings, MethodSettings, StandardBOSettings
-from hybrid_bo.solvers import Ipopt, multistart
+from hybrid_bo.solvers import Ipopt, solve_with_multistart
 
 _logger = logging.getLogger(__name__)
 
@@ -213,8 +213,8 @@ def standard_bo(
 
     Raises `ValueError` unless exactly one of `n_initial` and `initial_points` is
     given, `TypeError` for an `acquisition` that isn't `EI` or `LCB`, and what
-    `evaluate` and `multistart` raise; a `HybridBOError` carries the partial run as
-    `error.run`.
+    `evaluate` and `solve_with_multistart` raise; a `HybridBOError` carries the partial
+    run as `error.run`.
     """
     # The settings the run keeps, the artifact, then the initial points
     settings = StandardBOSettings(
@@ -243,7 +243,7 @@ def standard_bo(
             settings=settings,
         )
         starts = lhs(*acquisition_problem.start_bounds, n_starts, rng)
-        solution = multistart(acquisition_problem.nlp, starts, solver)
+        solution = solve_with_multistart(acquisition_problem.nlp, starts, solver)
         return solution.w, fitted, AcquisitionSolution(solution.f)
 
     return optimization_loop(
@@ -291,8 +291,8 @@ def hybrid_bo(
 
     Raises `ValueError` unless exactly one of `n_initial` and `initial_points` is
     given, what `HybridBOSettings` raises for the acquisition function and its
-    approximation, and what `evaluate` and `multistart` raise; a `HybridBOError`
-    carries the partial run, with the scenarios, as `error.run`.
+    approximation, and what `evaluate` and `solve_with_multistart` raise; a
+    `HybridBOError` carries the partial run, with the scenarios, as `error.run`.
     """
     # The settings the run keeps, the artifact, then the initial points
     system = problem.system
@@ -335,7 +335,7 @@ def hybrid_bo(
             settings=settings,
         )
         starts = lhs(*acquisition_problem.start_bounds, n_starts, rng)
-        solution = multistart(acquisition_problem.nlp, starts, solver)
+        solution = solve_with_multistart(acquisition_problem.nlp, starts, solver)
         u, x, y = _unpack_scenarios(acquisition_problem, solution.w)
         return u, fitted, AcquisitionSolution(solution.f, x, y)
 

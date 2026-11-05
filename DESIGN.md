@@ -82,8 +82,8 @@ The original code was hard to change for three reasons:
   `reconstruct`, `fit_surrogate`, `optimize_hybrid_model`,
   `EI`, `LCB`, `oracle_optimum`, `save_run`, `load_run`, `save_runs`, `load_runs`, `Run`, `History`,
   `incumbents`, `oracle_incumbents`, `check_oracle_optimum`, the errors and `plots`. Everything else is reached through its module (`hb.gp.fit_gp`,
-  `hb.solvers.multistart`). A new name joins the top level only if the example
-  or a typical analysis script would use it.
+  `hb.solvers.solve_with_multistart`). A new name joins the top level only if the
+  example or a typical analysis script would use it.
 
 ## Example
 
@@ -191,8 +191,8 @@ callables return CasADi expressions (`TypeError` otherwise); `lower <= upper`; s
 `u` and `y` non-empty; `x` and `g` both given or both omitted (#115: without them
 M = 0, and `g` is traced from no equations, so `System.g` is always a `cas.Function`
 and the code downstream has no special case; with M = 0 the root-finding problem has
-nothing to solve and `multistart` adds no empty constraint); `len(g) == M`; `f`
-scalar; `h_inputs` from `u` and `x`,
+nothing to solve and `solve_with_multistart` adds no empty constraint); `len(g) == M`;
+`f` scalar; `h_inputs` from `u` and `x`,
 `measured` from `x` and `y`, each without repeats; `len(measured) == P`. `Var` is a plain
 frozen dataclass, so membership checks use its equality; no CasADi `==` is involved.
 
@@ -358,12 +358,12 @@ class Solution:
     f: float
 
 
-def multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
+def solve_with_multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
     """Best of the starts; raises NoSolutionError if every start fails."""
 ```
 
 There is no `Solver` protocol until a second solver exists. The caller draws the starts
-with `lhs(...)`. `multistart` builds the problem with `cas.Opti`, bounds as
+with `lhs(...)`. `solve_with_multistart` builds the problem with `cas.Opti`, bounds as
 constraints, as the legacy optimizer did, so IPOPT takes the same steps. A failed start
 is logged at debug level without a traceback. Starts that stopped at IPOPT's iteration
 limit also get one warning per call, under the objective's name: they fail like any
@@ -465,9 +465,9 @@ only operator; `kernel * kernel` raises `TypeError` (the kernels share `_Scalabl
 - `fit_gp` fits the scalers (`minmax` onto [0, 1] for X, `standard` for Y), puts
   CasADi symbols in place of each `Param`, builds the negative log marginal
   likelihood, draws starts with `lhs` over the (log-transformed) bounds and calls
-  `multistart`. If every start fails it keeps the initial values and logs a warning.
-  A GP with no `Param` is only conditioned on the data, with no draws. With the same
-  data and generator its hyperparameters matched the legacy GP bit for bit, and its
+  `solve_with_multistart`. If every start fails it keeps the initial values and logs a
+  warning. A GP with no `Param` is only conditioned on the data, with no draws. With the
+  same data and generator its hyperparameters matched the legacy GP bit for bit, and its
   predictions to rounding (checked until #30; the regression baselines still pin the
   fit). Replacing `default_gp` with `GP(Zero(), Scale(Matern52()))` (#119) left every
   run bit for bit the same.
@@ -538,8 +538,8 @@ def optimize_hybrid_model(
   | Lin-EI | EI of `f` with its sensitivity | the nominal scenario |
 
   So `scenario_problem` takes both, `hybrid_acquisition` supplies an objective, and
-  `hybrid_bo` is the loop around them: `fit_surrogate`, `multistart`, evaluate.
-  `acquisition.py` imports `hybrid_model.py`, never the reverse. The objective
+  `hybrid_bo` is the loop around them: `fit_surrogate`, `solve_with_multistart`,
+  evaluate. `acquisition.py` imports `hybrid_model.py`, never the reverse. The objective
   is a function because it is built from the problem's own symbols. It also states the
   std of `f` that `scenario_values` reports, which is 0 for the nominal optimum.
 - **`AcquisitionProblem` is an alias of `ScenarioProblem`.** Hybrid BO's acquisition
@@ -822,12 +822,13 @@ The baselines are named `*_sampling` because `hb.sampling.uniform` and
 - `hybrid_bo` draws the scenarios from `rng` (SAA; linearization takes the nominal
   scenario and draws nothing), then runs `optimization_loop` with a
   trial-point function that fits the GP on `(u, x)[h_inputs] -> y`, builds
-  `hybrid_acquisition`, and solves it with `multistart`. The user never draws `z`.
-  With `SAA(n_scenarios=25, unknown_states_as_variables=False)` (the legacy
+  `hybrid_acquisition`, and solves it with `solve_with_multistart`. The user never draws
+  `z`. With `SAA(n_scenarios=25, unknown_states_as_variables=False)` (the legacy
   illustrative setting) it reproduces the legacy illustrative baseline.
 - `standard_bo` fits on `u -> f` (measured), with the incumbent the best measured `f`,
-  and solves `standard_acquisition` by `multistart` from `lhs` starts over the `u` start
-  bounds. With the defaults it reproduces the legacy illustrative baseline.
+  and solves `standard_acquisition` by `solve_with_multistart` from `lhs` starts over
+  the `u` start bounds. With the defaults it reproduces the legacy illustrative
+  baseline.
 - `optimization_loop` takes the artifact and returns the `Run`, so a `HybridBOError` in
   the loop (an evaluation, or the trial-point function) carries the partial run as
   `error.run` for every method: the points evaluated so far (also `error.history`) and
@@ -900,7 +901,7 @@ to scipy's draw and its spawning.
 | `array_operations/` numpy branches and their `@overload` stubs | one CasADi path (SX); numeric use goes through `cas.Function` | tag `pre-refactor` |
 | `SciPyLocalOptimizer` | never used; only offered as a commented-out alternative | tag `pre-refactor` |
 | `use_jacobian` (fsolve without the CasADi Jacobian) | every equation is CasADi-traceable ([ADR 0002](docs/adr/0002-equations-are-casadi-callables.md)) | tag `pre-refactor` |
-| `Problem.solve` (true optimum with `h` known) | called nowhere; would be a function on `multistart` | tag `pre-refactor` |
+| `Problem.solve` (true optimum with `h` known) | called nowhere; would be a function on `solve_with_multistart` | tag `pre-refactor` |
 | `Config` and `config.yaml` | functions take what they use; problems are Python | tag `pre-refactor` |
 | `hybrid_bo.legacy`: the `do_*` routines, `ResultsBO` pickles, the old `Problem`, GP and optimizers | replaced by the new API (#30); studies are saved as JSON (#53) | tag `pre-refactor` |
 | Kernel and mean classes, `Parameterized`, `JoinedParameters` | hyperparameters were named specs and kernels functions; since #119 kernels are dataclasses again, but data with no state or methods ([ADR 0008](docs/adr/0008-gps-are-data.md)) | tag `pre-refactor` |

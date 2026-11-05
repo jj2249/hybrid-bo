@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from hybrid_bo import NoSolutionError
-from hybrid_bo.solvers import NLP, Ipopt, multistart
+from hybrid_bo.solvers import NLP, Ipopt, solve_with_multistart
 
 w = cas.SX.sym("w")
 # Two local minima, near -1 (the global one) and near +1
@@ -20,9 +20,9 @@ DOUBLE_WELL = NLP(
 
 
 def test_best_start_wins():
-    """With one start in each well, multistart returns the global minimum and its
-    objective value."""
-    solution = multistart(DOUBLE_WELL, np.array([[1.5], [-1.5]]), Ipopt())
+    """With one start in each well, `solve_with_multistart` returns the global minimum
+    and its objective value."""
+    solution = solve_with_multistart(DOUBLE_WELL, np.array([[1.5], [-1.5]]), Ipopt())
     assert solution.w.shape == (1,)
     assert solution.w[0] < 0
     np.testing.assert_allclose(solution.f, DOUBLE_WELL.f(solution.w).full().item())
@@ -30,9 +30,9 @@ def test_best_start_wins():
 
 def test_a_tie_keeps_the_earlier_start():
     """When two starts reach minima whose objectives differ only by rounding,
-    multistart keeps the earlier start, so the result doesn't depend on the last bits
-    of the platform's arithmetic (the illustrative example's standard BO has such a
-    tie, which macOS and Windows broke differently)."""
+    `solve_with_multistart` keeps the earlier start, so the result doesn't depend on the
+    last bits of the platform's arithmetic (the illustrative example's standard BO has
+    such a tie, which macOS and Windows broke differently)."""
     # Two wells, at -1 and +1, the later one lower by 2e-14
     tied = NLP(
         cas.Function("f", [w], [(w**2 - 1) ** 2 - 1e-14 * w]),
@@ -40,14 +40,14 @@ def test_a_tie_keeps_the_earlier_start():
         upper=np.array([2.0]),
     )
 
-    solution = multistart(tied, np.array([[-1.5], [1.5]]), Ipopt())
+    solution = solve_with_multistart(tied, np.array([[-1.5], [1.5]]), Ipopt())
 
     assert solution.w[0] < 0
 
 
 def test_one_start_finds_its_local_minimum():
     """A single start in the right well stays there, at the local minimum."""
-    solution = multistart(DOUBLE_WELL, np.array([[1.5]]), Ipopt())
+    solution = solve_with_multistart(DOUBLE_WELL, np.array([[1.5]]), Ipopt())
     assert solution.w[0] > 0
 
 
@@ -62,7 +62,7 @@ def test_bounds_and_constraints():
         g=cas.Function("g", [v], [v[0] + v[1] - 1]),
     )
 
-    solution = multistart(nlp, np.array([[1.0, 1.0]]), Ipopt())
+    solution = solve_with_multistart(nlp, np.array([[1.0, 1.0]]), Ipopt())
 
     np.testing.assert_allclose(solution.w, [0.7, 0.3], atol=1e-6)
 
@@ -78,15 +78,15 @@ def test_an_empty_constraint_is_no_constraint():
         g=cas.Function("g", [w], [cas.SX(0, 1)]),
     )
 
-    solution = multistart(nlp, np.array([[-1.5]]), Ipopt())
+    solution = solve_with_multistart(nlp, np.array([[-1.5]]), Ipopt())
 
-    reference = multistart(DOUBLE_WELL, np.array([[-1.5]]), Ipopt())
+    reference = solve_with_multistart(DOUBLE_WELL, np.array([[-1.5]]), Ipopt())
     np.testing.assert_allclose(solution.w, reference.w, atol=1e-8)
 
 
 def test_every_start_failing_raises_without_tracebacks(caplog):
-    """When no start converges, multistart raises NoSolutionError and logs each
-    failure without a traceback.
+    """When no start converges, `solve_with_multistart` raises NoSolutionError and logs
+    each failure without a traceback.
 
     `caplog` is a pytest fixture that captures log records during the test.
     """
@@ -100,15 +100,15 @@ def test_every_start_failing_raises_without_tracebacks(caplog):
 
     # `pytest.raises` fails the test unless the block raises that exception
     with caplog.at_level(logging.DEBUG), pytest.raises(NoSolutionError):
-        multistart(infeasible, np.array([[0.5], [-0.5]]), Ipopt())
+        solve_with_multistart(infeasible, np.array([[0.5], [-0.5]]), Ipopt())
 
     assert caplog.records
     assert all(record.exc_info is None for record in caplog.records)
 
 
 def test_starts_at_the_iteration_limit_are_warned_about(caplog):
-    """When starts run IPOPT to its iteration limit, multistart logs one warning
-    giving how many of the starts did and the name of the NLP's objective, even
+    """When starts run IPOPT to its iteration limit, `solve_with_multistart` logs one
+    warning giving how many of the starts did and the name of the NLP's objective, even
     though another start succeeded."""
     # The Rosenbrock function, which five iterations solve only from its minimum
     v = cas.SX.sym("v", 2)
@@ -125,7 +125,7 @@ def test_starts_at_the_iteration_limit_are_warned_about(caplog):
 
     # Solve, recording every log message
     with caplog.at_level(logging.DEBUG):
-        multistart(rosenbrock, starts, five_iterations)
+        solve_with_multistart(rosenbrock, starts, five_iterations)
 
     # One warning, counting the two starts away from the minimum
     warnings = [
@@ -147,7 +147,7 @@ def test_other_failures_are_not_warned_about(caplog):
     )
 
     with caplog.at_level(logging.DEBUG), pytest.raises(NoSolutionError):
-        multistart(infeasible, np.array([[0.5], [-0.5]]), Ipopt())
+        solve_with_multistart(infeasible, np.array([[0.5], [-0.5]]), Ipopt())
 
     assert caplog.records
     assert all(record.levelno == logging.DEBUG for record in caplog.records)
@@ -177,10 +177,10 @@ class InterruptingObjective(cas.Callback):
         return [DOUBLE_WELL.f(args[0])]
 
 
-def test_ctrl_c_inside_ipopt_stops_multistart():
-    """Ctrl-C while IPOPT solves stops multistart with `KeyboardInterrupt`, although
-    CasADi catches the interrupt and reports a failed solve (#155), and the Ctrl-C
-    handler is put back afterwards."""
+def test_ctrl_c_inside_ipopt_stops_solve_with_multistart():
+    """Ctrl-C while IPOPT solves stops `solve_with_multistart` with `KeyboardInterrupt`,
+    although CasADi catches the interrupt and reports a failed solve (#155), and the
+    Ctrl-C handler is put back afterwards."""
     objective = InterruptingObjective()
     nlp = NLP(
         cas.Function("f", [w], [objective(w)]),
@@ -193,6 +193,6 @@ def test_ctrl_c_inside_ipopt_stops_multistart():
     handler = signal.getsignal(signal.SIGINT)
 
     with pytest.raises(KeyboardInterrupt):
-        multistart(nlp, np.array([[1.5], [-1.5]]), quasi_newton)
+        solve_with_multistart(nlp, np.array([[1.5], [-1.5]]), quasi_newton)
 
     assert signal.getsignal(signal.SIGINT) is handler

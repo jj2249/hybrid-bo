@@ -1,9 +1,9 @@
 """Nonlinear programs and the multistart solver.
 
-An `NLP` describes the problem, `Ipopt` the solver settings, and `multistart` builds the
-CasADi `Opti` problem once, solves it from several starts and keeps the best solution.
-The caller draws the starts (with `lhs`), so the draw order stays visible where the
-generator is used.
+An `NLP` describes the problem, `Ipopt` the solver settings, and `solve_with_multistart`
+builds the CasADi `Opti` problem once, solves it from several starts and keeps the best
+solution. The caller draws the starts (with `lhs`), so the draw order stays visible
+where the generator is used.
 """
 
 import logging
@@ -23,7 +23,8 @@ from hybrid_bo.errors import NoSolutionError
 
 _logger = logging.getLogger(__name__)
 
-# Objectives closer than this (relative, or absolute below 1) tie in `multistart`
+# Objectives closer than this (relative, or absolute below 1) tie in
+# `solve_with_multistart`
 _TIE_TOLERANCE = 1e-13
 
 
@@ -57,7 +58,7 @@ class Solution:
     f: float
 
 
-def multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
+def solve_with_multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
     """Builds `nlp` as a CasADi `Opti` problem, solves it with IPOPT from each row of
     `starts` (n_starts, n), and returns the solution with the lowest objective.
     Objectives that differ only by rounding tie, and the earlier start wins, so the

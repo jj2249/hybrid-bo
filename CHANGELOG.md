@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Breaking:** `hb.solvers.multistart` is now `hb.solvers.solve_with_multistart`
+  (#210).
 - The S2MPJ benchmarks live in a project of their own, `hybrid-bo-s2mpj`.
 - **Breaking:** `experiments/` is gone: studies live in a repository of their own, with
   `hybrid-bo` installed as a package. The illustrative examples moved to `tests/`, which

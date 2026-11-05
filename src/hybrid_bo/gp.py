@@ -28,7 +28,7 @@ import numpy as np
 from hybrid_bo.errors import NoSolutionError
 from hybrid_bo.problem import Symbolic
 from hybrid_bo.sampling import lhs
-from hybrid_bo.solvers import NLP, Ipopt, multistart
+from hybrid_bo.solvers import NLP, Ipopt, solve_with_multistart
 
 _logger = logging.getLogger(__name__)
 
@@ -425,11 +425,11 @@ def fit_gp(
 
     Scales the inputs onto [0, 1] (`minmax`) and the outputs to zero mean and unit
     variance (`standard`), then maximizes the log marginal likelihood over every
-    `Param` (log ones in log space) with `multistart`, from `n_starts` Latin hypercube
-    starts over their bounds; a lengthscale with ARD has one entry per column of X. A
-    GP without a `Param` is only conditioned on the data, with no draws. If every
-    start fails, it keeps the initial values and logs a warning. It also warns if the
-    training covariance at the kept values has a condition number above
+    `Param` (log ones in log space) with `solve_with_multistart`, from `n_starts` Latin
+    hypercube starts over their bounds; a lengthscale with ARD has one entry per column
+    of X. A GP without a `Param` is only conditioned on the data, with no draws. If
+    every start fails, it keeps the initial values and logs a warning. It also warns if
+    the training covariance at the kept values has a condition number above
     `CONDITION_THRESHOLD`. Logs the time taken at debug level.
 
     Raises `ValueError` if a fixed lengthscale per input doesn't have one entry per
@@ -513,7 +513,7 @@ def _fit(
     # Multistart from Latin hypercube starts over the bounds
     starts = lhs(nlp.lower, nlp.upper, n_starts, rng)
     try:
-        w_best = multistart(nlp, starts, solver).w
+        w_best = solve_with_multistart(nlp, starts, solver).w
     except NoSolutionError:
         _logger.warning("Every GP fit failed; keeping the initial values")
         w_best = to_search_space(init)
