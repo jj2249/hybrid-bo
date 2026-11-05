@@ -115,8 +115,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - `dataset.py`: `Dataset` (`u`, `x`, `y`, `f`, oracle values or `None`, `n_initial`)
   `incumbents` and `oracle_incumbents` (the benchmark metric);
   `check_oracle_optimum(dataset, optimum)` warns with `OracleOptimumWarning` if a point
-  is below the stated optimum, and returns whether it did; `_concatenate` appends one
-  dataset to another.
+  is below the stated optimum, and returns whether it did; `extend(dataset, new)`
+  (`hb.extend`) returns a new dataset, the rows of one followed by the other's; a point is
+  a one-row dataset, so it appends too.
 - `run.py`: `Run` (`dataset`, `artifact`, `method`: the method's name; `surrogates`: per
   iteration a `tuple[FittedGP, ...]`, the surrogate behind its trial point (hybrid BO:
   one GP per unknown state in the order of `system.y`; standard BO: a 1-tuple, the GP of

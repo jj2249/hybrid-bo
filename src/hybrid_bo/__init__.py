@@ -30,6 +30,7 @@ from hybrid_bo.bo import hybrid_bo, standard_bo
 from hybrid_bo.dataset import (
     Dataset,
     check_oracle_optimum,
+    extend,
     incumbents,
     oracle_incumbents,
 )

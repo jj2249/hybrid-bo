@@ -10,6 +10,8 @@ import importlib
 import subprocess
 import sys
 from collections.abc import Callable
+from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 
 import casadi as cas
@@ -27,6 +29,7 @@ from hybrid_bo import (
     RootFindingError,
     System,
     Var,
+    extend,
     incumbents,
     oracle_incumbents,
     oracle_measure,
@@ -417,6 +420,51 @@ def dataset_of(f: list[float], f_oracle: list[float] | None = None) -> Dataset:
         f_oracle=None if f_oracle is None else np.array(f_oracle),
         n_initial=2,
     )
+
+
+def test_extend_joins_the_rows_in_order():
+    """The rows of the first dataset come first, then those of the second, in every
+    field, and the initial points stay those of the first."""
+    first = dataset_of([3.0, 1.0], f_oracle=[3.5, 1.5])
+    new = replace(dataset_of([2.0], f_oracle=[2.5]), u=np.array([[7.0]]))
+
+    extended = extend(first, new)
+
+    np.testing.assert_array_equal(extended.f, [3.0, 1.0, 2.0])
+    np.testing.assert_array_equal(extended.u, [[0.0], [0.0], [7.0]])
+    assert extended.x.shape == extended.y.shape == (3, 1)
+    assert extended.f_oracle is not None
+    np.testing.assert_array_equal(extended.f_oracle, [3.5, 1.5, 2.5])
+    assert extended.n_initial == 2
+
+
+def test_extend_keeps_oracle_values_only_when_both_have_them():
+    """Oracle values for only some of the rows would not line up with the rows."""
+    with_oracle = dataset_of([3.0, 1.0], f_oracle=[3.0, 1.0])
+    without_oracle = dataset_of([2.0])
+
+    extended = extend(with_oracle, without_oracle)
+
+    assert extended.x_oracle is None
+    assert extended.y_oracle is None
+    assert extended.f_oracle is None
+
+
+def test_extend_leaves_its_inputs_alone():
+    """The inputs keep their values, and the result shares no array with them, so
+    writing to it can't reach them."""
+    first = dataset_of([3.0, 1.0], f_oracle=[3.0, 1.0])
+    new = dataset_of([2.0], f_oracle=[2.0])
+    first_before, new_before = deepcopy(first), deepcopy(new)
+
+    extended = extend(first, new)
+    extended.f[:] = -1.0
+
+    for after, before in ((first, first_before), (new, new_before)):
+        np.testing.assert_array_equal(after.f, before.f)
+        np.testing.assert_array_equal(after.u, before.u)
+        np.testing.assert_array_equal(after.f_oracle, before.f_oracle)
+        assert after.n_initial == before.n_initial
 
 
 def test_n_iterations_counts_the_points_after_the_initial_ones():

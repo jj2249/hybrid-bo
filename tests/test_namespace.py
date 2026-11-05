@@ -35,6 +35,7 @@ USER_FACING = {
     # Look at the results
     "Run",
     "Dataset",
+    "extend",
     "incumbents",
     "oracle_incumbents",
     "check_oracle_optimum",

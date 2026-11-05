@@ -5,8 +5,10 @@
 - **Breaking:** `hb.History` is now `hb.Dataset`, and the module `hb.history` is
   `hb.dataset`. `error.history` is `error.dataset`, `run.history` is `run.dataset`, and
   the `history` argument of `hb.incumbents`, `hb.oracle_incumbents` and
-  `hb.check_oracle_optimum` is `dataset`. Runs saved before this load with
+  `hb.check_oracle_optimum` is `dataset`. Runs saved before this fail to load with
   `RunFormatError`, since a saved run names its fields (#220).
+- `hb.extend(dataset, new)` returns a new dataset with the rows of `new` after those of
+  `dataset`; a point is a one-row dataset, so it appends too (#220).
 - **Breaking:** The oracle has a module of its own: `oracle_measure`, `oracle_optimum`,
   `OracleMeasurement` and `OracleSimulation` moved from `hb.evaluation` to `hb.oracle`.
   `hb.oracle_measure` and `hb.oracle_optimum` stay at the top level (#211).

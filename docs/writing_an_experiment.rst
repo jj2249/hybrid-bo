@@ -298,7 +298,8 @@ The measurements have a row per point: ``u`` of shape ``(n, N)`` and ``measured`
 outside its bounds is kept, with an ``OutOfBoundsWarning``. If some rows have no root or
 hold a NaN, a ``RootFindingError`` names them all and its ``dataset`` holds the others, so
 you can carry on without them. The GP's ``noise_std`` applies to all the data. The search is local from
-each start, so raise ``n_starts`` if ``f`` has several minima.
+each start, so raise ``n_starts`` if ``f`` has several minima. To add later measurements,
+:py:func:`~hybrid_bo.dataset.extend` returns a new dataset with their rows after the others.
 
 .. warning::
 

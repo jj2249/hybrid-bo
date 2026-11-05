@@ -81,7 +81,7 @@ The original code was hard to change for three reasons:
   `Problem`, `Measure`, `oracle_measure`, `initial_points`, the methods,
   `reconstruct_states`, `fit_surrogate`, `optimize_hybrid_model`,
   `EI`, `LCB`, `oracle_optimum`, `save_run`, `load_run`, `save_runs`, `load_runs`, `Run`, `Dataset`,
-  `incumbents`, `oracle_incumbents`, `check_oracle_optimum`, the errors and `plots`. Everything else is reached through its module (`hb.gp.fit_gp`,
+  `extend`, `incumbents`, `oracle_incumbents`, `check_oracle_optimum`, the errors and `plots`. Everything else is reached through its module (`hb.gp.fit_gp`,
   `hb.solvers.solve_with_multistart`). A new name joins the top level only if the
   example or a typical analysis script would use it.
 
@@ -291,6 +291,7 @@ class Dataset:  # evaluated points, rows in evaluation order; the row number is 
     n_initial: int
 
 
+def extend(dataset, new) -> Dataset: ...  # a new dataset; a point is a one-row dataset
 def incumbents(dataset) -> np.ndarray: ...  # np.minimum.accumulate(dataset.f)
 def oracle_incumbents(
     dataset,

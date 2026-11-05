@@ -28,9 +28,10 @@ class Dataset:
     n_initial: int
 
 
-def _concatenate(dataset: Dataset, later: Dataset) -> Dataset:
-    """`dataset` followed by the points of `later`, with the initial points of
-    `dataset`. The oracle values are kept only when both have them."""
+def extend(dataset: Dataset, new: Dataset) -> Dataset:
+    """A new dataset: the rows of `dataset` followed by those of `new`, with the initial
+    points of `dataset`. A point is a one-row dataset, so this appends too. The oracle
+    values are kept only when both have them."""
 
     def join(first: np.ndarray | None, second: np.ndarray | None) -> np.ndarray | None:
         """The rows of both, or None if either is None."""
@@ -39,13 +40,13 @@ def _concatenate(dataset: Dataset, later: Dataset) -> Dataset:
         return np.concatenate([first, second])
 
     return Dataset(
-        u=np.concatenate([dataset.u, later.u]),
-        x=np.concatenate([dataset.x, later.x]),
-        y=np.concatenate([dataset.y, later.y]),
-        f=np.concatenate([dataset.f, later.f]),
-        x_oracle=join(dataset.x_oracle, later.x_oracle),
-        y_oracle=join(dataset.y_oracle, later.y_oracle),
-        f_oracle=join(dataset.f_oracle, later.f_oracle),
+        u=np.concatenate([dataset.u, new.u]),
+        x=np.concatenate([dataset.x, new.x]),
+        y=np.concatenate([dataset.y, new.y]),
+        f=np.concatenate([dataset.f, new.f]),
+        x_oracle=join(dataset.x_oracle, new.x_oracle),
+        y_oracle=join(dataset.y_oracle, new.y_oracle),
+        f_oracle=join(dataset.f_oracle, new.f_oracle),
         n_initial=dataset.n_initial,
     )
 

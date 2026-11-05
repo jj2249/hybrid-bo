@@ -26,7 +26,7 @@ from hybrid_bo.acquisition import (
     saa_scenarios,
     standard_acquisition,
 )
-from hybrid_bo.dataset import Dataset, _concatenate, incumbents
+from hybrid_bo.dataset import Dataset, extend, incumbents
 from hybrid_bo.errors import HybridBOError
 from hybrid_bo.evaluation import Measure, evaluate
 from hybrid_bo.gp import GP, FittedGP, fit_gp
@@ -116,7 +116,7 @@ def optimization_loop(
             start = time.perf_counter()
             u, surrogate, acquisition = trial_point(problem, dataset, rng)
             later = evaluate(problem, measure, u[np.newaxis], rng)
-            dataset = _concatenate(dataset, later)
+            dataset = extend(dataset, later)
             surrogates.append(surrogate)
             acquisitions.append(acquisition)
             _logger.info(
