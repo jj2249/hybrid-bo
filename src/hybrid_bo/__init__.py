@@ -24,7 +24,16 @@ from hybrid_bo import (
     settings,
     solvers,
 )
-from hybrid_bo.acquisition import EI, LCB, SAA, Linearization, SoftSAA
+from hybrid_bo.acquisition import (
+    EI,
+    LCB,
+    SAA,
+    Linearization,
+    SoftSAA,
+    hybrid_trial_point,
+    saa_scenarios,
+    standard_trial_point,
+)
 from hybrid_bo.baselines import latin_hypercube_sampling, uniform_sampling
 from hybrid_bo.bo import hybrid_bo, standard_bo
 from hybrid_bo.dataset import (
@@ -44,7 +53,11 @@ from hybrid_bo.errors import (
     RootFindingError,
 )
 from hybrid_bo.evaluation import Measure, reconstruct_states
-from hybrid_bo.hybrid_model import fit_surrogate, optimize_hybrid_model
+from hybrid_bo.hybrid_model import (
+    fit_surrogate,
+    nominal_scenario,
+    optimize_hybrid_model,
+)
 from hybrid_bo.oracle import oracle_measure, oracle_optimum
 from hybrid_bo.problem import Problem, System, Var
 from hybrid_bo.run import Run

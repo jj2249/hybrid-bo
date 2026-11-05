@@ -294,7 +294,8 @@ def test_loop_evaluates_each_trial_point_after_the_initial_points(
 
     def trial_point(problem, dataset, rng):
         n = len(dataset.u)
-        return next(trial_points), f"surrogate behind point {n}", AcquisitionSolution(n)
+        u = next(trial_points)
+        return u, f"surrogate behind point {n}", AcquisitionSolution(u, n)
 
     run = optimization_loop(
         problem,
@@ -327,7 +328,7 @@ def test_failed_trial_point_carries_the_partial_run(illustrative_problem):
         if len(dataset.u) == 3:
             msg = "no acquisition solution"
             raise NoSolutionError(msg)
-        return np.array([1.0]), "surrogate", AcquisitionSolution(0.0)
+        return np.array([1.0]), "surrogate", AcquisitionSolution(np.array([1.0]), 0.0)
 
     with pytest.raises(NoSolutionError) as info:
         optimization_loop(
@@ -368,7 +369,7 @@ def test_the_loop_keeps_its_scenarios_in_a_complete_and_a_partial_run(
         if len(dataset.u) == 2:
             msg = "no acquisition solution"
             raise NoSolutionError(msg)
-        return np.array([1.0]), "surrogate", AcquisitionSolution(0.0)
+        return np.array([1.0]), "surrogate", AcquisitionSolution(np.array([1.0]), 0.0)
 
     def loop(n_iterations):
         """The loop from one initial point."""
@@ -407,7 +408,7 @@ def test_failed_initial_point_carries_the_points_before_it(illustrative_problem)
         return np.sin(u) if u[0] < 1.0 else np.array([np.nan])
 
     def trial_point(problem, dataset, rng):
-        return np.array([0.0]), "surrogate", AcquisitionSolution(0.0)
+        return np.array([0.0]), "surrogate", AcquisitionSolution(np.array([0.0]), 0.0)
 
     with pytest.raises(RootFindingError) as info:
         optimization_loop(

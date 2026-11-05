@@ -27,6 +27,11 @@ USER_FACING = {
     "extend",
     "fit_surrogate",
     "optimize_hybrid_model",
+    # Write your own loop
+    "saa_scenarios",
+    "nominal_scenario",
+    "hybrid_trial_point",
+    "standard_trial_point",
     # Save and load a run
     "oracle_optimum",
     "save_run",
