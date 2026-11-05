@@ -126,9 +126,9 @@ def _unpack(
 def _unpack_scenarios(
     problem: ScenarioProblem, w: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """The u (N,), x (S, M) and y (S, P) of a numeric decision vector w of a problem over
-    scenarios: `_unpack`, with y from `scenario_values`, so the GPs' prediction when it
-    was substituted for the unknown states."""
+    """The u (N,), x (S, M) and y (S, P) of a numeric decision vector w of a problem
+    over scenarios: `_unpack`, with y from `scenario_values`, so the GPs' prediction
+    when it was substituted for the unknown states."""
     u, x, _ = _unpack(problem, w)
     assert problem.scenario_values is not None  # a problem over scenarios has them
     _, y, _ = problem.scenario_values(w)
