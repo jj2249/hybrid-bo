@@ -137,15 +137,6 @@ def test_a_problem_over_u_alone_solves_to_no_scenario_states(illustrative_proble
     assert solution.value == pytest.approx(float(acquisition_problem.nlp.f(solution.u)))
 
 
-def test_a_run_stores_no_scenario_states(illustrative_problem):
-    """Standard BO's stored acquisition solutions hold the value alone, so x and y are
-    None rather than the empty states of a problem over u."""
-    run = illustrative_run(illustrative_problem)
-
-    assert all(solution.x is None for solution in run.acquisitions)
-    assert all(solution.y is None for solution in run.acquisitions)
-
-
 # `parametrize` runs the test once per value in the list, each as its own test case
 @pytest.mark.parametrize("std_factor", [-1.0, np.inf, np.nan])
 def test_lcb_needs_a_finite_nonnegative_std_factor(std_factor):
@@ -331,6 +322,7 @@ def test_loop_evaluates_each_trial_point_after_the_initial_points(
         rng,
         loop_artifact(problem, rng),
         settings=None,
+        scenarios=None,
     )
 
     # Every point is evaluated (y = sin(u) is the oracle), in order
@@ -364,6 +356,7 @@ def test_failed_trial_point_carries_the_partial_run(illustrative_problem):
             rng,
             loop_artifact(problem, rng),
             settings=None,
+            scenarios=None,
         )
 
     # The partial run: 2 initial points and the one trial point before the failure
@@ -388,6 +381,7 @@ def test_the_loop_keeps_its_scenarios_in_a_complete_and_a_partial_run(
     scenarios = nominal_scenario(1)
 
     def trial_point(problem, history, rng):
+        """A fixed trial point, or an error from the second iteration on."""
         if len(history.u) == 2:
             msg = "no acquisition solution"
             raise NoSolutionError(msg)
@@ -407,12 +401,16 @@ def test_the_loop_keeps_its_scenarios_in_a_complete_and_a_partial_run(
             scenarios=scenarios,
         )
 
-    assert loop(1).scenarios is scenarios
+    # One iteration completes the run, and a second fails
+    complete = loop(1)
     with pytest.raises(NoSolutionError) as info:
         loop(2)
-    run = info.value.run
-    assert run is not None
-    assert run.scenarios is scenarios
+
+    # Both runs hold the scenarios
+    partial = info.value.run
+    assert complete.scenarios is scenarios
+    assert partial is not None
+    assert partial.scenarios is scenarios
 
 
 def test_failed_initial_point_carries_the_points_before_it(illustrative_problem):
@@ -438,6 +436,7 @@ def test_failed_initial_point_carries_the_points_before_it(illustrative_problem)
             rng,
             loop_artifact(problem, rng),
             settings=None,
+            scenarios=None,
         )
 
     run = info.value.run

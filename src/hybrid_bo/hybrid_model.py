@@ -3,8 +3,8 @@ model embedded.
 
 `scenario_problem` builds the problem for given scenarios and a given objective, and
 `solve_scenario_problem` solves it, as it does every acquisition problem. Everything that
-solves the hybrid model is one use of them. `optimize_hybrid_model` is the simplest: the nominal scenario, minimizing the
-objective f itself, with no Bayesian optimization. Hybrid BO's acquisition problem
+solves the hybrid model is one use of them. `optimize_hybrid_model` is the simplest: the
+nominal scenario, minimizing the objective f itself, with no Bayesian optimization. Hybrid BO's acquisition problem
 (`hybrid_acquisition`) supplies an acquisition function as the objective, and `hybrid_bo`
 is the loop around it: fit, solve, evaluate.
 """
@@ -246,12 +246,13 @@ def solve_scenario_problem(
     rng: np.random.Generator,
     solver: Ipopt,
 ) -> ScenarioSolution:
-    """Solves a scenario problem by `multistart` from `n_starts` Latin hypercube starts
-    over its start bounds.
+    """Solves a scenario problem, or a problem over u alone such as standard BO's
+    acquisition problem, by `multistart` from `n_starts` Latin hypercube starts over its
+    start bounds.
 
     The unknown states are read from `scenario_values`, so they are the GPs' prediction
-    when it was substituted for them. A problem over u alone, such as standard BO's
-    acquisition problem, has neither. Raises `NoSolutionError` if every start fails.
+    when it was substituted for them. A problem over u alone has no scenario states, so
+    the solution's x and y are None. Raises `NoSolutionError` if every start fails.
     """
     starts = lhs(*problem.start_bounds, n_starts, rng)
     solution = multistart(problem.nlp, starts, solver)

@@ -14,8 +14,8 @@
   for the unmeasured states (#197).
 - **Breaking:** Hybrid BO is built on a new core, `hb.hybrid_model` (#197):
   `hb.acquisition.nominal_scenario` moved there, with `Scenarios`. Results don't change.
-- `hb.bo.optimization_loop` takes `scenarios`, which the run keeps, complete or partial,
-  for a new method that has them (#210).
+- **Breaking:** `hb.bo.optimization_loop` requires `scenarios`, which the run keeps,
+  complete or partial: pass None for a method without them (#210).
 
 ## 0.6.0 (2026-11-04)
 

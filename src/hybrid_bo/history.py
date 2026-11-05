@@ -50,26 +50,6 @@ def _concatenate(history: History, later: History) -> History:
     )
 
 
-def _first(history: History, n: int) -> History:
-    """The first `n` points of `history`, at least its initial points: the history as
-    it stood then."""
-
-    def rows(values: np.ndarray | None) -> np.ndarray | None:
-        """The first `n` rows, or None without oracle values."""
-        return None if values is None else values[:n]
-
-    return History(
-        u=history.u[:n],
-        x=history.x[:n],
-        y=history.y[:n],
-        f=history.f[:n],
-        x_oracle=rows(history.x_oracle),
-        y_oracle=rows(history.y_oracle),
-        f_oracle=rows(history.f_oracle),
-        n_initial=history.n_initial,
-    )
-
-
 def n_iterations(history: History) -> int:
     """The number of points evaluated after the initial points: the iterations, or
     the design points for the baselines."""

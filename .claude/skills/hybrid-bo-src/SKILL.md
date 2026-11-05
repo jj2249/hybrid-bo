@@ -104,8 +104,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   every row tried, one `RootFindingError` naming those with no root or a non-finite value
   and the others as `error.history`.
 - `history.py`: `History` (`u`, `x`, `y`, `f`, oracle values or `None`, `n_initial`)
-  `incumbents` and `oracle_incumbents` (the benchmark metric); `_first(history, n)`, the
-  history as it stood after n points;
+  `incumbents` and `oracle_incumbents` (the benchmark metric);
   `check_oracle_optimum(history, optimum)` warns with `OracleOptimumWarning` if a point
   is below the stated optimum, and returns whether it did; `_concatenate` appends one
   history to another.
@@ -264,7 +263,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   union (`Run.settings`, the loop and the plots use it); `TYPES`, the types saving
   tags.
 - `bo.py`: `optimization_loop(problem, measure, initial_points, n_iterations,
-  trial_point, rng, artifact, *, settings, scenarios=None) -> Run` (evaluate initial points, then per
+  trial_point, rng, artifact, *, settings, scenarios) -> Run` (evaluate initial points, then per
   iteration `trial_point(problem, history, rng) -> (u, surrogate, acquisition
   solution)`, the surrogate a tuple of fitted GPs, and evaluate u; the run keeps
   `settings` and `scenarios`; one local function builds the run, complete or partial,
@@ -272,19 +271,19 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `hybrid_bo` take `problem` and `measure`, then only keywords: `n_iterations`, `rng`,
   `gp`, `acquisition`, either `n_initial` or `initial_points`
   (`sampling._starting_points`, drawn after the artifact) and search effort. `StandardBOSettings` and
-  `standard_bo` (fit `u -> f`, `standard_acquisition`, `solve_scenario_problem`),
+  `standard_bo` (fit `u -> f`, `_acquisition_problem`, `solve_scenario_problem`),
   `HybridBOSettings` and `hybrid_bo` (artifact, then
   `saa_scenarios` or `nominal_scenario`, then the loop; `fit_surrogate`,
-  `hybrid_acquisition`, `solve_scenario_problem`; passes the
+  `_acquisition_problem`, `solve_scenario_problem`; passes the
   scenarios to the loop). `_method_artifact` builds both methods'
   artifacts: the settings without the GP, and `gp`, the prior GP's repr.
-  `_acquisition_problem(problem, history, surrogate, scenarios, settings)` is the one
-  way to an acquisition problem: it takes the incumbent from `history`, the points
-  before the trial point, and matches on the settings. The loop's `trial_point`s call
-  it, and so does `iteration_problem(run, problem, i)`, which rebuilds iteration i's
-  problem for the replay from the stored surrogate, the run's scenarios, `run.settings`
-  and the run's history up to trial point i (`history._first`; `ValueError` for a
-  baseline).
+  `_acquisition_problem(problem, history, *, n_evaluated, surrogate, scenarios,
+  settings)` is the one way to an acquisition problem: it reads the incumbent after the
+  first `n_evaluated` points of `history` and matches on the settings. The methods'
+  `trial_point`s call it with every point of their history, and
+  `iteration_problem(run, problem, i)`, which rebuilds iteration i's problem for the
+  replay, with the `n_initial + i` points before trial point i, from the stored
+  surrogate, the run's scenarios and `run.settings` (`ValueError` for a baseline).
 - `plots.py`: static figures, no widgets and no `rng`. `regret(runs, optimum, ax)` and
   `convergence(runs, ax)` draw a list of runs per label on the caller's required axes (median and IQR over evaluations,
   `_over_evaluations`, in numpy). `iteration(run, problem, i, *, measure, gp,

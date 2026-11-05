@@ -629,8 +629,8 @@ decision vector `w`.
   objective and `scenario_values`, so the figures can't drift from what the method
   minimized. `bo.iteration_problem(run, problem, i)` rebuilds an iteration's problem
   from a run, through the function the loop builds it with (`bo._acquisition_problem`,
-  from the history up to that iteration, whose last incumbent is the problem's), so
-  the two can't drift apart. `_pack` needs no
+  which reads the incumbent after the evaluations it is told to count), so the two
+  can't drift apart. `_pack` needs no
   layout, so the builders use it for the symbols, the bounds and the start bounds
   alike.
 
@@ -787,7 +787,7 @@ def optimization_loop(
     artifact,  # from run_artifact, before the method draws
     *,
     settings,  # the method's, kept in the run (#120); None if not replayable
-    scenarios=None,  # the method's, kept in the run
+    scenarios,  # the method's, kept in the run; None if it has none
 ) -> Run: ...
 
 
