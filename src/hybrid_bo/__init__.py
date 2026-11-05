@@ -42,7 +42,7 @@ from hybrid_bo.errors import (
     ReplayWarning,
     RootFindingError,
 )
-from hybrid_bo.evaluation import Measure, reconstruct
+from hybrid_bo.evaluation import Measure, reconstruct_states
 from hybrid_bo.hybrid_model import fit_surrogate, optimize_hybrid_model
 from hybrid_bo.oracle import oracle_measure, oracle_optimum
 from hybrid_bo.problem import Problem, System, Var

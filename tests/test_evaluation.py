@@ -32,7 +32,7 @@ from hybrid_bo import (
     oracle_measure,
 )
 from hybrid_bo.dataset import n_iterations
-from hybrid_bo.evaluation import evaluate, reconstruct
+from hybrid_bo.evaluation import evaluate, reconstruct_states
 from hybrid_bo.oracle import OracleMeasurement
 
 
@@ -498,16 +498,16 @@ def test_oracle_optimum_rejects_an_oracle_of_the_wrong_size(illustrative_problem
         )
 
 
-def test_reconstruct_solves_the_unmeasured_states_of_given_measurements(
+def test_reconstruct_states_solves_the_unmeasured_states_of_given_measurements(
     illustrative_problem,
 ):
-    """Given u and y, `reconstruct` gives x from x + exp(x) = y, in closed form with
+    """Given u and y, `reconstruct_states` gives x from x + exp(x) = y, in closed form with
     the Lambert W function, and f at those states, calling no measurement."""
     # Three measurements of y
     u = np.array([[-1.0], [0.0], [1.0]])
     measured = np.array([[-0.5], [0.3], [1.0]])
 
-    dataset = reconstruct(
+    dataset = reconstruct_states(
         illustrative_problem, u=u, measured=measured, rng=np.random.default_rng(0)
     )
 
@@ -535,12 +535,12 @@ def test_reconstruct_solves_the_unmeasured_states_of_given_measurements(
     ],
     ids=["flat u", "too many u", "flat measured", "fewer measured"],
 )
-def test_reconstruct_rejects_malformed_measurements(
+def test_reconstruct_states_rejects_malformed_measurements(
     illustrative_problem, u, measured, message
 ):
     """Measurements need a row per point and a column per variable."""
     with pytest.raises(ValueError, match=message):
-        reconstruct(
+        reconstruct_states(
             illustrative_problem, u=u, measured=measured, rng=np.random.default_rng(0)
         )
 
@@ -560,7 +560,7 @@ def square_root_problem() -> Problem:
     return Problem(system, f=lambda v: v.x)
 
 
-def test_reconstruct_names_every_bad_row_and_keeps_the_others():
+def test_reconstruct_states_names_every_bad_row_and_keeps_the_others():
     """Every row is tried, one error names the bad rows, and `error.dataset` holds the
     rows that worked. A row is bad with no root, with a root outside the bounds of the
     unmeasured states, or with a value that isn't finite."""
@@ -570,7 +570,9 @@ def test_reconstruct_names_every_bad_row_and_keeps_the_others():
     measured = np.array([[1.0], [-1.0], [4.0], [16.0], [np.nan]])
 
     with pytest.raises(RootFindingError, match=r"rows \[1, 3, 4\]") as caught:
-        reconstruct(problem, u=u, measured=measured, rng=np.random.default_rng(0))
+        reconstruct_states(
+            problem, u=u, measured=measured, rng=np.random.default_rng(0)
+        )
 
     # The two good rows, in order, with their roots
     dataset = caught.value.dataset
@@ -586,7 +588,7 @@ def test_a_reconstruction_with_no_good_rows_has_an_empty_dataset():
     measured = np.array([[-1.0], [-2.0]])
 
     with pytest.raises(RootFindingError, match=r"rows \[0, 1\]") as caught:
-        reconstruct(
+        reconstruct_states(
             problem, u=np.zeros((2, 1)), measured=measured, rng=np.random.default_rng(0)
         )
 
@@ -604,7 +606,7 @@ def test_a_row_that_is_not_finite_is_a_bad_row_with_no_known_equations():
     measured = np.array([[0.5], [np.nan]])
 
     with pytest.raises(RootFindingError, match=r"rows \[1\]") as caught:
-        reconstruct(
+        reconstruct_states(
             problem, u=np.zeros((2, 1)), measured=measured, rng=np.random.default_rng(0)
         )
 
@@ -613,7 +615,7 @@ def test_a_row_that_is_not_finite_is_a_bad_row_with_no_known_equations():
     np.testing.assert_array_equal(dataset.y, [[0.5]])
 
 
-def test_reconstruct_warns_of_values_outside_their_bounds_and_keeps_them():
+def test_reconstruct_states_warns_of_values_outside_their_bounds_and_keeps_them():
     """A u or a measured variable outside its bounds is still a measurement: one warning
     names the rows of each, and the dataset holds them."""
     # u is bounded by 1 and y by 2; x + exp(x) = y keeps a root for every y
@@ -633,7 +635,7 @@ def test_reconstruct_warns_of_values_outside_their_bounds_and_keeps_them():
 
     # `warns` passes only if the block gives that warning
     with pytest.warns(OutOfBoundsWarning) as caught:
-        dataset = reconstruct(
+        dataset = reconstruct_states(
             problem, u=u, measured=measured, rng=np.random.default_rng(0)
         )
 
@@ -645,9 +647,11 @@ def test_reconstruct_warns_of_values_outside_their_bounds_and_keeps_them():
     np.testing.assert_array_equal(dataset.u, u)
 
 
-def test_reconstruct_gives_no_warning_within_the_bounds(illustrative_problem, recwarn):
+def test_reconstruct_states_gives_no_warning_within_the_bounds(
+    illustrative_problem, recwarn
+):
     """Values inside their bounds warn of nothing (`recwarn` records warnings)."""
-    reconstruct(
+    reconstruct_states(
         illustrative_problem,
         u=np.array([[0.0]]),
         measured=np.array([[0.3]]),

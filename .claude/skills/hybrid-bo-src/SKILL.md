@@ -107,8 +107,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   oracle values (no draws) checks the reconstruction is on the same root, else
   `ReconstructionWarning`. `_start_bounds` (in `sampling.py`) and `_as_text` (in
   `problem.py`, an equation as text in the variable names) are shared helpers.
-  `reconstruct(problem, *, u, measured, rng, n_starts, tol)` is `evaluate` without the
-  measurement, for data from elsewhere: no oracle values, `ValueError` on a wrong shape,
+  `reconstruct_states(problem, *, u, measured, rng, n_starts, tol)` is `evaluate` without
+  the measurement, for data from elsewhere: no oracle values, `ValueError` on a wrong shape,
   one `OutOfBoundsWarning` for a `u` or measured variable outside its bounds (kept), and
   every row tried, one `RootFindingError` naming those with no root or a non-finite value
   and the others as `error.dataset`.

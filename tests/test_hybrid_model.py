@@ -84,7 +84,7 @@ def test_a_gp_of_the_unknown_equation_gives_the_oracle_optimum():
     # Plain arrays of u and the measured y, as data from outside a run would be
     rng = np.random.default_rng(1)
     u = np.linspace(-2.0, 2.0, 30)[:, np.newaxis]
-    dataset = hb.reconstruct(ex.problem, u=u, measured=np.sin(u), rng=rng)
+    dataset = hb.reconstruct_states(ex.problem, u=u, measured=np.sin(u), rng=rng)
 
     # The surrogate model, and the hybrid model's solution with it
     fitted = hb.fit_surrogate(ex.system, dataset, gp=ex.gp, rng=rng)
@@ -124,11 +124,11 @@ def test_the_solution_stays_within_the_bounds_of_the_unknown_states():
     problem = hb.Problem(system, f=lambda v: (v.y - 0.5) ** 2)
     u = np.linspace(-2.0, 2.0, 25)[:, np.newaxis]
 
-    # `reconstruct` warns of those data and keeps them
+    # `reconstruct_states` warns of those data and keeps them
     rng = np.random.default_rng(0)
     # `warns` passes only if the block gives that warning
     with pytest.warns(hb.OutOfBoundsWarning):
-        dataset = hb.reconstruct(problem, u=u, measured=np.sin(u), rng=rng)
+        dataset = hb.reconstruct_states(problem, u=u, measured=np.sin(u), rng=rng)
 
     # The solution stops at the bound
     fitted = hb.fit_surrogate(system, dataset, gp=ex.gp, rng=rng)
@@ -156,7 +156,7 @@ def test_a_surrogate_model_can_take_a_mechanistic_state():
 
     # The fit reads the reconstructed x
     rng = np.random.default_rng(0)
-    dataset = hb.reconstruct(problem, u=u, measured=u, rng=rng)
+    dataset = hb.reconstruct_states(problem, u=u, measured=u, rng=rng)
     fitted = hb.fit_surrogate(system, dataset, gp=ex.gp, rng=rng)
 
     # The GP's mean follows y = x
@@ -175,7 +175,7 @@ def test_optimize_hybrid_model_works_with_no_known_equations():
 
     # The pipeline
     rng = np.random.default_rng(0)
-    dataset = hb.reconstruct(problem, u=u, measured=np.sin(u), rng=rng)
+    dataset = hb.reconstruct_states(problem, u=u, measured=np.sin(u), rng=rng)
     fitted = hb.fit_surrogate(system, dataset, gp=ex.gp, rng=rng)
     solution = hb.optimize_hybrid_model(problem, fitted, rng)
 

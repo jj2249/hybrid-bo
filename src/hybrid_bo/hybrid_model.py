@@ -292,8 +292,8 @@ def fit_surrogate(
     of `dataset` over the arguments of h, one fitted GP per unknown state, in the order
     of `system.y`.
 
-    The dataset is a run's, or `reconstruct`'s for measurements from elsewhere. Each GP
-    is fitted by `fit_gp` from `n_starts` starts.
+    The dataset is a run's, or `reconstruct_states`'s for measurements from elsewhere.
+    Each GP is fitted by `fit_gp` from `n_starts` starts.
     """
     X = np.column_stack(_h_inputs(system, dataset.u, dataset.x))
     return tuple(fit_gp(gp, X, y, rng, n_starts, solver) for y in dataset.y.T)

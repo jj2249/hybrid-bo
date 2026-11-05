@@ -280,15 +280,15 @@ Optimizing data you already have
 --------------------------------
 
 With measurements of your own, you can get an optimum with no ``measure`` and no
-optimization loop. :py:func:`~hybrid_bo.evaluation.reconstruct` solves the known equations
-for the unmeasured states, :py:func:`~hybrid_bo.hybrid_model.fit_surrogate` fits the prior
+optimization loop. :py:func:`~hybrid_bo.evaluation.reconstruct_states` solves the known
+equations for the unmeasured states, :py:func:`~hybrid_bo.hybrid_model.fit_surrogate` fits the prior
 GP to each unknown state, and :py:func:`~hybrid_bo.hybrid_model.optimize_hybrid_model`
 solves the hybrid model once with each GP replaced by its mean:
 
 .. code-block:: python
 
    rng = np.random.default_rng(0)
-   dataset = hb.reconstruct(problem, u=u, measured=measured, rng=rng)
+   dataset = hb.reconstruct_states(problem, u=u, measured=measured, rng=rng)
    fitted = hb.fit_surrogate(system, dataset, gp=gp, rng=rng)
    solution = hb.optimize_hybrid_model(problem, fitted, rng, n_starts=30)
    print(solution.u, solution.x, solution.y, solution.f)

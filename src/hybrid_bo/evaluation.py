@@ -21,8 +21,8 @@ measured variables don't determine the states uniquely: the method would learn f
 states the system didn't settle at. `evaluate` then warns with `ReconstructionWarning`
 and keeps the reconstruction, since a real system would give nothing else.
 
-**Measurements the caller already has.** `reconstruct` is `evaluate` without the
-measurement: it solves the root-finding problem for given measured variables.
+**Measurements the caller already has.** `reconstruct_states` is `evaluate` without
+the measurement: it solves the root-finding problem for given measured variables.
 """
 
 import warnings
@@ -235,7 +235,7 @@ def _outside_bounds(variables: Sequence[Var], values: np.ndarray) -> list[str]:
     return outside
 
 
-def reconstruct(
+def reconstruct_states(
     problem: Problem,
     *,
     u: np.ndarray,

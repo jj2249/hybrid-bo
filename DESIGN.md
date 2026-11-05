@@ -79,7 +79,7 @@ The original code was hard to change for three reasons:
   ([ADR 0005](docs/adr/0005-iteration-plots-replay-the-acquisition-problem.md)).
 - **A slim top level** (#52). `hb.*` holds what a typical script uses: `Var`, `System`,
   `Problem`, `Measure`, `oracle_measure`, `initial_points`, the methods,
-  `reconstruct`, `fit_surrogate`, `optimize_hybrid_model`,
+  `reconstruct_states`, `fit_surrogate`, `optimize_hybrid_model`,
   `EI`, `LCB`, `oracle_optimum`, `save_run`, `load_run`, `save_runs`, `load_runs`, `Run`, `Dataset`,
   `incumbents`, `oracle_incumbents`, `check_oracle_optimum`, the errors and `plots`. Everything else is reached through its module (`hb.gp.fit_gp`,
   `hb.solvers.solve_with_multistart`). A new name joins the top level only if the
@@ -264,7 +264,7 @@ def evaluate(
   reconstruction, because a real system would give nothing else. The fix is in the
   problem: measure other variables, or narrow the unmeasured start bounds to the right
   branch.
-- **Measurements from elsewhere.** `reconstruct(problem, *, u, measured, rng)` is
+- **Measurements from elsewhere.** `reconstruct_states(problem, *, u, measured, rng)` is
   `evaluate` without the measurement: no oracle values, and every row is tried, since
   plant data can have several bad rows, a missing value among them. `RootFindingError`
   names them and keeps the others as `error.dataset`, so the caller decides whether to
@@ -582,8 +582,8 @@ def optimize_hybrid_model(
   needs the same fields with no scenarios (`w` is `u`), so it shares the type.
 - **`fit_surrogate` takes a `Dataset`.** A dataset is every state at every point, which
   is what the fit needs and what a caller's sensors don't give. Measurements from
-  elsewhere become one through `reconstruct`, so there is one way in, and a finished
-  run's dataset fits as it is.
+  elsewhere become one through `reconstruct_states`, so there is one way in, and a
+  finished run's dataset fits as it is.
 - **`hybrid_bo` doesn't call `optimize_hybrid_model`.** They solve the same problem with
   a different objective: an acquisition function of `f`, or `f` itself.
   `gp_deterministic_equivalent` requires the objective (ADR 0009), and
@@ -912,7 +912,7 @@ Every draw in a run comes from that run's generator, in this order:
 
 Root-finding starts are drawn even without noise, because the reconstruction always
 runs. Each consumer draws only what it uses, when it uses it. Outside a run,
-`reconstruct` draws one set of `lhs` starts per row, and `fit_surrogate` and
+`reconstruct_states` draws one set of `lhs` starts per row, and `fit_surrogate` and
 `optimize_hybrid_model` draw only their `lhs` starts, in that order.
 
 **A generator has two independent sequences.** `lhs` does not consume `rng`'s stream:

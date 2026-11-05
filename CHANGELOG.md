@@ -22,8 +22,8 @@
 - The install commands name a release, so a script's library can't change under it (#204).
 - `hb.optimize_hybrid_model` optimizes the hybrid model with the GPs replaced by their mean,
   with no Bayesian optimization, `hb.fit_surrogate` fits the GPs to a dataset, and
-  `hb.reconstruct` makes a dataset of measurements of your own, solving the known equations
-  for the unmeasured states (#197).
+  `hb.reconstruct_states` makes a dataset of measurements of your own, solving the known
+  equations for the unmeasured states (#197).
 - **Breaking:** Hybrid BO is built on a new core, `hb.hybrid_model` (#197):
   `hb.acquisition.nominal_scenario` moved there, with `Scenarios`. Results don't change.
 - **Changes results:** A measurement that returns NaN or an infinity fails the evaluation

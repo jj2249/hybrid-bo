@@ -69,7 +69,7 @@ if a run evaluates a point whose oracle objective is below it.
 ## Data without a measurement
 
 For measurements the user already has, a script needs no `measure` and no method:
-`dataset = hb.reconstruct(problem, u=u, measured=measured, rng=rng)`, then
+`dataset = hb.reconstruct_states(problem, u=u, measured=measured, rng=rng)`, then
 `fitted = hb.fit_surrogate(system, dataset, gp=gp, rng=rng)`, then
 `hb.optimize_hybrid_model(problem, fitted, rng)` gives `u`, `x`, `y`, `f`. The data have a
 row per point, with `measured` in the order of `system.measured`. Values outside their

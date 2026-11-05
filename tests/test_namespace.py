@@ -23,7 +23,7 @@ USER_FACING = {
     "latin_hypercube_sampling",
     "uniform_sampling",
     # Optimize the hybrid model from data of your own
-    "reconstruct",
+    "reconstruct_states",
     "fit_surrogate",
     "optimize_hybrid_model",
     # Save and load a run

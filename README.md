@@ -84,7 +84,9 @@ each GP replaced by its mean:
 ```python
 gp = hb.gp.GP(mean=hb.gp.Zero(), kernel=hb.gp.Matern52(), noise_std=0.0)
 rng = np.random.default_rng(0)
-dataset = hb.reconstruct(problem, u=u, measured=measured, rng=rng)  # a row per point
+dataset = hb.reconstruct_states(
+    problem, u=u, measured=measured, rng=rng
+)  # a row per point
 fitted = hb.fit_surrogate(system, dataset, gp=gp, rng=rng)
 solution = hb.optimize_hybrid_model(problem, fitted, rng, n_starts=30)
 print(solution.u, solution.f)
