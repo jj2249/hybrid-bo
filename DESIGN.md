@@ -628,7 +628,9 @@ decision vector `w`.
   (ADR 0005) solves the problem's own constraints with u fixed and evaluates the
   objective and `scenario_values`, so the figures can't drift from what the method
   minimized. `bo.iteration_problem(run, problem, i)` rebuilds an iteration's problem
-  from a run. `_pack` needs no
+  from a run, through the function the loop builds it with (`bo._acquisition_problem`,
+  from the history up to that iteration, whose last incumbent is the problem's), so
+  the two can't drift apart. `_pack` needs no
   layout, so the builders use it for the symbols, the bounds and the start bounds
   alike.
 

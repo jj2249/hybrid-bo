@@ -29,8 +29,9 @@ from hybrid_bo.acquisition import (
 from hybrid_bo.errors import HybridBOError
 from hybrid_bo.evaluation import Measure, evaluate
 from hybrid_bo.gp import GP, FittedGP, fit_gp
-from hybrid_bo.history import History, _concatenate, incumbents
+from hybrid_bo.history import History, _concatenate, _first, incumbents
 from hybrid_bo.hybrid_model import (
+    Scenarios,
     fit_surrogate,
     nominal_scenario,
     solve_scenario_problem,
@@ -157,6 +158,33 @@ def _method_artifact(
     return artifact | {"gp": repr(settings.gp)}
 
 
+def _acquisition_problem(
+    problem: Problem,
+    history: History,
+    surrogate: tuple[FittedGP, ...],
+    scenarios: Scenarios | None,
+    settings: MethodSettings,
+) -> AcquisitionProblem:
+    """The acquisition problem that follows `history`, the points evaluated so far: the
+    method's, as `settings` says, from its surrogate, its scenarios (None for standard
+    BO) and the incumbent of `history`.
+
+    The loop and `iteration_problem` both build it here, so the iteration figures show
+    the function the method minimized (ADR 0005).
+    """
+    incumbent = float(incumbents(history)[-1])
+    match settings:
+        case StandardBOSettings(acquisition=acquisition):
+            return standard_acquisition(problem, surrogate[0], incumbent, acquisition)
+        case HybridBOSettings(acquisition=acquisition, approximation=approximation):
+            assert scenarios is not None  # hybrid BO has its scenarios
+            return hybrid_acquisition(
+                problem, surrogate, scenarios, incumbent, acquisition, approximation
+            )
+        case _:
+            assert_never(settings)
+
+
 def standard_bo(
     problem: Problem,
     measure: Measure,
@@ -202,13 +230,16 @@ def standard_bo(
         problem: Problem, history: History, rng: np.random.Generator
     ) -> tuple[np.ndarray, tuple[FittedGP, ...], AcquisitionSolution]:
         """Fits the GP to the points so far and solves the acquisition problem."""
-        fitted = fit_gp(gp, history.u, history.f, rng, n_starts_gp, solver)
-        incumbent = float(incumbents(history)[-1])
-        acquisition_problem = standard_acquisition(
-            problem, fitted, incumbent, acquisition
+        fitted = (fit_gp(gp, history.u, history.f, rng, n_starts_gp, solver),)
+        acquisition_problem = _acquisition_problem(
+            problem, history, fitted, None, settings
         )
         solution = solve_scenario_problem(acquisition_problem, n_starts, rng, solver)
-        return solution.u, (fitted,), AcquisitionSolution(solution.value)
+        return (
+            solution.u,
+            fitted,
+            AcquisitionSolution(solution.value, solution.x, solution.y),
+        )
 
     return optimization_loop(
         problem,
@@ -289,14 +320,8 @@ def hybrid_bo(
         fitted = fit_surrogate(
             system, history, gp=gp, rng=rng, n_starts=n_starts_gp, solver=solver
         )
-        incumbent = float(incumbents(history)[-1])
-        acquisition_problem = hybrid_acquisition(
-            problem,
-            fitted,
-            scenarios,
-            incumbent,
-            acquisition,
-            approximation,
+        acquisition_problem = _acquisition_problem(
+            problem, history, fitted, scenarios, settings
         )
         solution = solve_scenario_problem(acquisition_problem, n_starts, rng, solver)
         return (
@@ -331,17 +356,10 @@ def iteration_problem(run: Run, problem: Problem, i: int) -> AcquisitionProblem:
     Raises `ValueError` for a baseline's run, which solves no acquisition problem.
     """
     surrogate = run.surrogates[i]
-    incumbent = float(incumbents(run.history)[run.history.n_initial + i - 1])
-    match run.settings:
-        case StandardBOSettings(acquisition=acquisition):
-            return standard_acquisition(problem, surrogate[0], incumbent, acquisition)
-        case HybridBOSettings(acquisition=acquisition, approximation=approximation):
-            assert run.scenarios is not None  # hybrid BO runs hold their scenarios
-            return hybrid_acquisition(
-                problem, surrogate, run.scenarios, incumbent, acquisition, approximation
-            )
-        case None:
-            msg = f"{run.method} is a baseline, which solves no acquisition problem"
-            raise ValueError(msg)
-        case _:
-            assert_never(run.settings)
+    if run.settings is None:
+        msg = f"{run.method} is a baseline, which solves no acquisition problem"
+        raise ValueError(msg)
+    history = _first(run.history, run.history.n_initial + i)
+    return _acquisition_problem(
+        problem, history, surrogate, run.scenarios, run.settings
+    )

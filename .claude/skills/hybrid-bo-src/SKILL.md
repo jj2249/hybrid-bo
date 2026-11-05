@@ -104,7 +104,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   every row tried, one `RootFindingError` naming those with no root or a non-finite value
   and the others as `error.history`.
 - `history.py`: `History` (`u`, `x`, `y`, `f`, oracle values or `None`, `n_initial`)
-  `incumbents` and `oracle_incumbents` (the benchmark metric);
+  `incumbents` and `oracle_incumbents` (the benchmark metric); `_first(history, n)`, the
+  history as it stood after n points;
   `check_oracle_optimum(history, optimum)` warns with `OracleOptimumWarning` if a point
   is below the stated optimum, and returns whether it did; `_concatenate` appends one
   history to another.
@@ -276,10 +277,13 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `hybrid_acquisition`, `solve_scenario_problem`; adds the
   scenarios to the run and to `error.run`). `_method_artifact` builds both methods'
   artifacts: the settings without the GP, and `gp`, the prior GP's repr.
-  `iteration_problem(run, problem, i)` rebuilds iteration i's acquisition problem
-  as the method built it (stored surrogate, the run's scenarios, the incumbent
-  before trial point i from `incumbents`, `run.settings`; `ValueError` for a
-  baseline), for the replay.
+  `_acquisition_problem(problem, history, surrogate, scenarios, settings)` is the one
+  way to an acquisition problem: it takes the incumbent from `history`, the points
+  before the trial point, and matches on the settings. The loop's `trial_point`s call
+  it, and so does `iteration_problem(run, problem, i)`, which rebuilds iteration i's
+  problem for the replay from the stored surrogate, the run's scenarios, `run.settings`
+  and the run's history up to trial point i (`history._first`; `ValueError` for a
+  baseline).
 - `plots.py`: static figures, no widgets and no `rng`. `regret(runs, optimum, ax)` and
   `convergence(runs, ax)` draw a list of runs per label on the caller's required axes (median and IQR over evaluations,
   `_over_evaluations`, in numpy). `iteration(run, problem, i, *, measure, gp,

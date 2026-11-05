@@ -23,7 +23,7 @@ from hybrid_bo import (
     standard_bo,
 )
 from hybrid_bo.acquisition import AcquisitionSolution, standard_acquisition
-from hybrid_bo.bo import optimization_loop
+from hybrid_bo.bo import iteration_problem, optimization_loop
 from hybrid_bo.gp import FittedGP, fit_gp, predict
 from hybrid_bo.hybrid_model import _pack, solve_scenario_problem
 from hybrid_bo.run import run_artifact
@@ -288,6 +288,21 @@ def test_stored_acquisition_value_is_the_objective_at_the_trial_point(
         expected = acquisition_values(nlp, history.u[point : point + 1])[0]
         assert solution.value == pytest.approx(expected, abs=1e-12)
         assert solution.x is None and solution.y is None
+
+
+def test_each_iteration_problem_gives_the_stored_acquisition_value(
+    illustrative_problem,
+):
+    """`iteration_problem` rebuilds each iteration's problem with the incumbent before
+    its trial point, so its objective at the trial point is the stored value."""
+    run = illustrative_run(illustrative_problem)
+
+    for i, solution in enumerate(run.acquisitions):
+        acquisition_problem = iteration_problem(run, illustrative_problem, i)
+        trial = run.history.u[run.history.n_initial + i]
+        assert float(acquisition_problem.nlp.f(trial)) == pytest.approx(
+            solution.value, rel=1e-12
+        )
 
 
 # The optimization loop, with test trial-point functions in place of a method

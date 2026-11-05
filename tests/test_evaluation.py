@@ -29,7 +29,7 @@ from hybrid_bo import (
     oracle_measure,
 )
 from hybrid_bo.evaluation import OracleMeasurement, evaluate, reconstruct
-from hybrid_bo.history import n_iterations
+from hybrid_bo.history import _first, n_iterations
 
 
 def illustrative_measure(problem: Problem, noise_std: float):
@@ -321,6 +321,30 @@ def history_of(f: list[float], f_oracle: list[float] | None = None) -> History:
 def test_n_iterations_counts_the_points_after_the_initial_ones():
     """A history of five points, two of them initial, has three iterations."""
     assert n_iterations(history_of([3.0, 1.0, 2.0, 0.5, 0.2])) == 3
+
+
+def test_first_gives_the_history_as_it_stood_then():
+    """The first points of a history keep their order, oracle values and initial
+    points, and their incumbent is the incumbent at that point of the whole history."""
+    history = history_of(f=[3.0, 1.0, 2.0, 0.5], f_oracle=[3.0, 1.5, 0.5, 2.0])
+
+    earlier = _first(history, 3)
+
+    np.testing.assert_array_equal(earlier.f, [3.0, 1.0, 2.0])
+    assert earlier.f_oracle is not None
+    np.testing.assert_array_equal(earlier.f_oracle, [3.0, 1.5, 0.5])
+    assert earlier.u.shape[0] == earlier.x.shape[0] == earlier.y.shape[0] == 3
+    assert earlier.n_initial == history.n_initial
+    assert incumbents(earlier)[-1] == incumbents(history)[2]
+
+
+def test_first_keeps_a_history_without_oracle_values_without_them():
+    """A history with no oracle has none in its first points either."""
+    earlier = _first(history_of([3.0, 1.0, 2.0]), 2)
+
+    assert earlier.x_oracle is None
+    assert earlier.y_oracle is None
+    assert earlier.f_oracle is None
 
 
 def test_incumbents_are_the_running_minimum_of_measured_f():
