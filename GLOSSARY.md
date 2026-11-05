@@ -263,6 +263,7 @@ _Avoid_: smoothing, beta
 One realization of the GP's prediction of the unknown states, with its own mechanistic
 states, in a deterministic equivalent: many drawn ones for the sample-average
 approximation, the nominal scenario alone for linearization and the nominal optimum.
+Finding the oracle optimum has one scenario too, with the oracle in place of the GP.
 _Avoid_: GP sample, posterior sample, sample
 
 **Scenario draws** (`z`, one per scenario):
@@ -275,13 +276,15 @@ The weight of each scenario in an average over the scenarios, such as the acquis
 function's; `1/S` for SAA.
 
 **Deterministic equivalent** (`build_deterministic_equivalent`):
-The hybrid model as one optimization problem over discrete scenarios: the decision
-variables are shared, each scenario has its own states under the known equations and the
-surrogate model, and a given objective reduces them to one number. Hybrid BO's
-acquisition problem is one, with an acquisition function as the objective. With drawn
-scenarios it approximates the problem under the GP's uncertainty. Over the nominal
-scenario alone it is the degenerate case, with no uncertainty left, as in the nominal
-optimum.
+The known and unknown equations as one optimization problem over discrete scenarios: the
+decision variables are shared, each scenario has its own states under the known
+equations and the unknown equations, tied to the surrogate model or to the oracle, and a
+given objective reduces them to one number. Tied to the surrogate model it is the hybrid
+model as one problem. Hybrid BO's acquisition problem is one, with an acquisition
+function as the objective. With drawn scenarios it approximates the problem under the
+GP's uncertainty. Over the nominal scenario alone it is the degenerate case, with no
+uncertainty left, as in the nominal optimum. Tied to the oracle it has one scenario and
+nothing to draw, as in finding the oracle optimum.
 _Avoid_: scenario problem, extensive form
 
 **Nominal states** (`x̄`, `ȳ`):
