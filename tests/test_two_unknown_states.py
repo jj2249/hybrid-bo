@@ -105,6 +105,21 @@ def test_each_iteration_fits_one_gp_per_unknown_state(runs_1d):
         assert all(a.y.shape == (n_scenarios, 2) for a in run.acquisitions)
 
 
+def test_the_oracle_optimum_keeps_the_value_of_its_hand_built_nlp():
+    """With P = 2, the oracle's rows line up with the unknown states: the oracle optimum
+    is the value the hand-built NLP gave from seed 0."""
+    problem, _ = benchmark_problem(1)
+
+    optimum = hb.oracle_optimum(
+        problem,
+        lambda v: [cas.sin(v.u1), cas.cos(v.u1)],
+        np.random.default_rng(0),
+    )
+
+    # `pytest.approx` compares with a tolerance, since IPOPT differs by machine
+    assert optimum == pytest.approx(0.03871480730686, abs=1e-8)
+
+
 def test_a_run_saves_and_loads_equal(runs_1d, tmp_path):
     """A run with two GPs per iteration loads back equal to the one saved."""
     loaded = hb.load_run(hb.save_run(runs_1d[0], tmp_path / "run.json"))

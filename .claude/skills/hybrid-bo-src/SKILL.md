@@ -414,8 +414,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - The unit tests (`test_kernels.py`, `test_gp.py`, `test_scalers.py`,
   `test_sampling.py`, `test_solvers.py`, `test_system.py`, `test_evaluation.py`,
   `test_baselines.py`, `test_standard_bo.py`,
-  `test_oracle.py` (the oracle optimum against values recorded from its hand-built NLP
-  and closed forms, an oracle that reads y among them),
+  `test_oracle.py` (the oracle optimum against a value recorded from its hand-built NLP
+  and closed forms, oracles that read y among them),
   `test_hybrid_bo.py` (P = 2 unit tests
   against numpy and finite differences), `test_no_known_equations.py` (M = 0 end
   to end: every method, saving, plots, and hybrid BO matching standard BO when

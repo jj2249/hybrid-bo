@@ -156,6 +156,18 @@ def test_the_oracle_optimum_works_without_known_equations():
     assert optimum == pytest.approx(f.min(), abs=1e-8)
 
 
+def test_the_oracle_optimum_keeps_the_value_of_its_hand_built_nlp():
+    """With no mechanistic states, the oracle optimum is the value the hand-built NLP
+    gave from seed 0."""
+    problem, _ = composite_problem(1)
+
+    optimum = hb.oracle_optimum(
+        problem, lambda v: [cas.sin(v.u1) + v.u1 / 2], np.random.default_rng(0)
+    )
+
+    assert optimum == pytest.approx(0.0038600001548442595, abs=1e-8)
+
+
 def test_a_run_saves_and_loads_equal(runs_1d, tmp_path):
     """A run of a system without known equations loads back equal to the one saved,
     its empty arrays (states, oracle states and scenario states of shape (., 0))
