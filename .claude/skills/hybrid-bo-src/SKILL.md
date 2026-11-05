@@ -16,7 +16,7 @@ code uses GLOSSARY.md's terms; use them in PRs, tests and comments too.
 
 - **Evaluation** (`evaluate`): the measurement returns the measured variables for each
   trial point. The oracle simulation (`oracle_measure`) solves `g` with
-  `y = oracle(x, u)` for every state by multistart `fsolve`, reads the measured
+  `y = oracle(x, y, u)` for every state by multistart `fsolve`, reads the measured
   variables and adds `rng.normal(0, noise_std)` (drawn also when `noise_std` is 0).
   The library then always solves the **root-finding problem**: `g` for the unmeasured
   states given `u` and the measured variables.
@@ -86,8 +86,11 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `OracleSimulation`, a frozen, callable dataclass holding the system, the traced oracle
   and the settings (#141); its repr is the artifact's text, so it must not depend on the
   process (no addresses).
-  `oracle_optimum(problem, oracle, rng)` solves min f s.t. g = 0, y = oracle by
-  `solve_with_multistart` from `lhs` starts over the start bounds of (u, x, y).
+  An oracle may read `y`: the unknown equations are `0 = h(x, y, u)`, and `y = h(x, u)`
+  is only the form the GP learns. `oracle_optimum(problem, oracle, rng)` solves min f
+  s.t. g = 0, y = oracle: `scenario_problem` of one scenario with the unknown equations
+  `oracle(x, y, u) - y` and the objective `_minimize_f`, by `solve_with_multistart` from
+  `lhs` starts over the start bounds of (u, x, y). It builds no NLP of its own.
   `evaluation.py` imports `OracleMeasurement` from here, so this module never imports
   `evaluation.py`; what both need sits below them (`_find_root` in `solvers.py`,
   `_states` in `problem.py`).
@@ -193,13 +196,20 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   order: it reproduces the pre-refactor values bit for bit for [0, 1], which the
   baselines depend on.
 - `hybrid_model.py`: the core under hybrid BO (#197; `acquisition.py` imports it, never
-  the reverse). `scenario_problem(problem, fitted, scenarios, objective,
-  unknown_states_as_variables, objective_name)` builds the hybrid model over the scenarios
-  (variables `u`, then `vec` of the `(S, M)` x copies, then of the `(S, P)` y copies if
-  variables; bounds and start bounds from each `Var`, repeated per scenario; `g` per
-  scenario, followed by its GP tie). `objective` is `(f (S, 1), x, y, u) -> (objective,
-  std of f)`, in CasADi expressions; `objective_name` names the NLP's objective function,
-  which the solver's logs give. It returns a `ScenarioProblem` (`nlp`,
+  the reverse; `oracle.py` imports it too). `scenario_problem(problem, n_scenarios,
+  unknown_equations, objective, objective_name)` builds the hybrid model over the
+  scenarios (variables `u`, then `vec` of the `(S, M)` x copies, then of the `(S, P)` y
+  copies; bounds and start bounds from each `Var`, repeated per scenario; `g` per
+  scenario, followed by its row of the unknown equations). `unknown_equations` is the
+  seam, `(u (N, 1), x (S, M), y (S, P)) -> residuals (S, P)`, a plain function with two
+  adapters: `gp_scenario_problem(problem, fitted, scenarios, objective,
+  unknown_states_as_variables, objective_name)`, `y - prediction`, and `oracle_optimum`,
+  `oracle(x, y, u) - y`. With the y_s substituted, `gp_scenario_problem` goes past the
+  seam to `_assemble`, which both share, since a residual gives no explicit y.
+  `objective` is `(f (S, 1), x, y, u) -> (objective,
+  std of f)`, in CasADi expressions (`_minimize_f` is f itself); `objective_name` names
+  the NLP's objective function, which the solver's logs give. It returns a
+  `ScenarioProblem` (`nlp`,
   `start_bounds`, and the variable order: `n_u`, `n_x`, `n_scenarios`,
   `unknown_states_as_variables`; the defaults are those of a problem over u alone,
   `w = u`; over scenarios it also has `scenario_values`,
@@ -234,11 +244,11 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `SoftSAA`). The nominal scenario is linearization's one scenario, which
   `hybrid_acquisition` requires with it (`ValueError` otherwise);
   `_sensitivity(problem, fitted)` is the `cas.Function` `(x, y, u) -> a (1, P)`.
-  Every hybrid builder (`hybrid_acquisition`, `scenario_problem`,
+  Every GP builder (`hybrid_acquisition`, `gp_scenario_problem`,
   `_scenario_unknown_states`, `_sensitivity`) takes `fitted`, the surrogate model: a tuple
-  of one fitted GP per unknown state (`ValueError` in `scenario_problem` otherwise).
+  of one fitted GP per unknown state (`ValueError` in `gp_scenario_problem` otherwise).
   `saa_scenarios(n, n_y, rng)` draws SAA's scenarios, and `hybrid_acquisition(...,
-  acquisition, approximation)` is `scenario_problem` with the acquisition function as
+  acquisition, approximation)` is `gp_scenario_problem` with the acquisition function as
   the objective.
   `AcquisitionSolution(value, x, y)` is one iteration's solution: the minimized
   objective at the trial point and, for hybrid BO, the scenario states `(S, M)`,
@@ -401,7 +411,10 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   their keys to the stored files and leaves the other values as they are.
 - The unit tests (`test_kernels.py`, `test_gp.py`, `test_scalers.py`,
   `test_sampling.py`, `test_solvers.py`, `test_system.py`, `test_evaluation.py`,
-  `test_baselines.py`, `test_standard_bo.py`, `test_hybrid_bo.py` (P = 2 unit tests
+  `test_baselines.py`, `test_standard_bo.py`,
+  `test_oracle.py` (the oracle optimum against values recorded from its hand-built NLP
+  and closed forms, an oracle that reads y among them),
+  `test_hybrid_bo.py` (P = 2 unit tests
   against numpy and finite differences), `test_no_known_equations.py` (M = 0 end
   to end: every method, saving, plots, and hybrid BO matching standard BO when
   f = y), `test_hybrid_model.py` (the nominal optimum against the oracle optimum and

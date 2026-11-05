@@ -12,6 +12,34 @@ import pytest
 import hybrid_bo as hb
 from hybrid_bo.evaluation import evaluate
 from hybrid_bo.gp import predict
+from hybrid_bo.hybrid_model import _pack, _unpack, scenario_problem
+from hybrid_bo.problem import Symbolic
+
+
+def test_the_unknown_equations_tie_each_scenario_after_its_known_equations():
+    """The residual passed to `scenario_problem` reads u, x and y of each scenario, and
+    each scenario's rows of the constraints are g, then that residual."""
+    # Two scenarios of the illustrative example, tied by y = x + u
+    built = scenario_problem(
+        ex.problem,
+        2,
+        lambda u, x, y: y - x - cas.repmat(u, 2, 1),
+        lambda f, _x, _y, _u: (cas.sum1(f), Symbolic(0)),
+        "test",
+    )
+
+    # The constraints at a point
+    u, x, y = np.array([0.3]), np.array([[0.1], [0.2]]), np.array([[0.7], [1.5]])
+    w = _pack(u, x, y)
+    assert built.nlp.g is not None  # a problem over scenarios has constraints
+    constraints = built.nlp.g(w).full().ravel()
+
+    # Check: g and the residual, scenario by scenario, and the variables' order
+    g = (x + np.exp(x) - y).ravel()
+    residual = (y - x - u).ravel()
+    np.testing.assert_allclose(constraints, [g[0], residual[0], g[1], residual[1]])
+    for unpacked, packed in zip(_unpack(built, w), (u, x, y), strict=True):
+        np.testing.assert_array_equal(unpacked, packed)
 
 
 def data_of(problem: hb.Problem, measure: hb.Measure, n: int) -> hb.History:

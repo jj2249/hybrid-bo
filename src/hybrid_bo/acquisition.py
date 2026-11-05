@@ -25,7 +25,7 @@ from hybrid_bo.hybrid_model import (
     Scenarios,
     _pack,
     _unpack_scenarios,
-    scenario_problem,
+    gp_scenario_problem,
 )
 from hybrid_bo.problem import Problem, Symbolic, _h_inputs
 from hybrid_bo.sampling import _start_bounds
@@ -274,7 +274,7 @@ def hybrid_acquisition(
     approximation: SAA | SoftSAA | Linearization,
 ) -> AcquisitionProblem:
     """The acquisition problem of hybrid BO (paper, Problems 8 and 9): the scenario
-    problem (`scenario_problem`) of the scenarios, whose objective is the acquisition
+    problem (`gp_scenario_problem`) of the scenarios, whose objective is the acquisition
     function. `fitted` is the surrogate model, and the approximation's
     `unknown_states_as_variables` says how the problem holds the unknown states.
 
@@ -335,7 +335,7 @@ def hybrid_acquisition(
             case _:
                 assert_never(approximation)
 
-    return scenario_problem(
+    return gp_scenario_problem(
         problem,
         fitted,
         scenarios,

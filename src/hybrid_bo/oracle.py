@@ -21,9 +21,10 @@ from typing import Any
 import casadi as cas
 import numpy as np
 
+from hybrid_bo.hybrid_model import _minimize_f, scenario_problem
 from hybrid_bo.problem import Problem, Symbolic, System, _as_text, _states, _trace
 from hybrid_bo.sampling import _start_bounds, lhs
-from hybrid_bo.solvers import NLP, Ipopt, _find_root, solve_with_multistart
+from hybrid_bo.solvers import Ipopt, _find_root, solve_with_multistart
 
 
 @dataclass(frozen=True)
@@ -95,8 +96,9 @@ def oracle_measure(
     """The oracle simulation as a measurement, for benchmark experiments.
 
     `oracle` is the unknown equations in closed form, a callable over the variables
-    like `g` (`lambda v: [cas.sin(v.u)]`), giving y = oracle(x, u). The method never
-    sees it; only the measurement uses it. For a real system, including an in silico
+    like `g` (`lambda v: [cas.sin(v.u)]`), giving y = oracle(x, y, u); it may read y,
+    since only the GP needs the explicit form. The method never sees it; only the
+    measurement uses it. For a real system, including an in silico
     simulation of a plant, write your own measurement instead (see the module docs).
     The measurement solves `g` and the oracle together for every state, from
     `n_starts` Latin hypercube starts over the start bounds, reads the measured
@@ -134,31 +136,26 @@ def oracle_optimum(
     solver: Ipopt = Ipopt(),  # noqa: B008  (frozen, never mutated)
 ) -> float:
     """The oracle optimum: the lowest objective the oracle allows, min f(x, y, u)
-    subject to g(x, y, u) = 0 and y = oracle(x, u), within the bounds.
+    subject to g(x, y, u) = 0 and y = oracle(x, y, u), within the bounds.
 
-    `oracle` is written as for `oracle_measure`. Solved like the acquisition
-    problem: by `solve_with_multistart` from `n_starts` Latin hypercube starts over the
-    start bounds of u, x and y, so it is the best local optimum found, which can miss
-    the global one: use it to find a benchmark experiment's optimum once, from many
-    starts, and state that value in the experiment. Raises `ValueError` if the oracle
-    doesn't give one value per unknown state, and `NoSolutionError` if every start
-    fails.
+    `oracle` is written as for `oracle_measure`. This is the scenario problem of one
+    scenario with the oracle as the unknown equations, minimizing f, as
+    `optimize_hybrid_model` does with the GPs. Solved by `solve_with_multistart` from
+    `n_starts` Latin hypercube starts over the start bounds of u, x and y, so it is the
+    best local optimum found, which can miss the global one: use it to find a benchmark
+    experiment's optimum once, from many starts, and state that value in the experiment.
+    Raises `ValueError` if the oracle doesn't give one value per unknown state, and
+    `NoSolutionError` if every start fails.
     """
-    # The variables w = (u, x, y), with g and the oracle as constraints
-    system = problem.system
-    oracle_function = _trace_oracle(system, oracle)
-    variables = (*system.u, *system.x, *system.y)
-    w = Symbolic.sym("w", len(variables))
-    u = w[: system.n_u]
-    x = w[system.n_u : system.n_u + system.n_x]
-    y = w[system.n_u + system.n_x :]
-    constraints = cas.vertcat(system.g(x, y, u), oracle_function(x, y, u) - y)
-    nlp = NLP(
-        cas.Function("f", [w], [problem.f(x, y, u)]),
-        np.array([var.lower for var in variables]),
-        np.array([var.upper for var in variables]),
-        cas.Function("g", [w], [constraints]),
-    )
+    oracle_function = _trace_oracle(problem.system, oracle)
 
-    starts = lhs(*_start_bounds(variables), n_starts, rng)
-    return solve_with_multistart(nlp, starts, solver).f
+    def unknown_equations(u: Any, x: Any, y: Any) -> Any:
+        """The oracle's distance from the unknown states of the one scenario, whose
+        states are rows here and columns in the traced oracle."""
+        return oracle_function(x.T, y.T, u).T - y
+
+    hybrid = scenario_problem(
+        problem, 1, unknown_equations, _minimize_f, "oracle_optimum"
+    )
+    starts = lhs(*hybrid.start_bounds, n_starts, rng)
+    return solve_with_multistart(hybrid.nlp, starts, solver).f

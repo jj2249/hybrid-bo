@@ -216,7 +216,7 @@ Measure = Callable[
 
 def oracle_measure(
     system,
-    oracle: Callable,  # like g: lambda v: [cas.sin(v.u)], y = oracle(x, u)
+    oracle: Callable,  # like g: lambda v: [cas.sin(v.u)], y = oracle(x, y, u)
     noise_std: float = 0.0,
     n_starts: int = 100,
     tol: float = 1e-10,
@@ -235,7 +235,7 @@ def evaluate(
   tell an oracle's measurement from a real system's, so `oracle.py` never imports
   `evaluation.py`. What both need sits below them: `_find_root` in `solvers.py` and
   `_states` in `problem.py`.
-- The **oracle simulation** solves `g` with `y = oracle(x, u)` for every state
+- The **oracle simulation** solves `g` with `y = oracle(x, y, u)` for every state
   (root-finding with CasADi Jacobians), reads the measured variables and adds
   `rng.normal(0, noise_std)`. Its full states are the **oracle values**, returned in an
   `OracleMeasurement`.
@@ -518,9 +518,16 @@ def _unpack_scenarios(problem: ScenarioProblem, w) -> tuple[u, x, y]: ...
 
 def scenario_problem(
     problem,
+    n_scenarios,
+    unknown_equations,  # (u, x, y) expressions -> residuals (S, P)
+    objective,  # (f, x, y, u) expressions -> (objective, std of f)
+    objective_name,
+) -> ScenarioProblem: ...
+def gp_scenario_problem(
+    problem,
     fitted,
     scenarios,
-    objective,  # (f, x, y, u) expressions -> (objective, std of f)
+    objective,
     unknown_states_as_variables,
     objective_name,
 ) -> ScenarioProblem: ...
@@ -544,11 +551,26 @@ def optimize_hybrid_model(
   | SAA-EI, SoftSAA-EI, SAA-LCB | an acquisition function of the `f_s` | S scenarios |
   | Lin-EI | EI of `f` with its sensitivity | the nominal scenario |
 
-  So `scenario_problem` takes both, `hybrid_acquisition` supplies an objective, and
+  So `gp_scenario_problem` takes both, `hybrid_acquisition` supplies an objective, and
   `hybrid_bo` is the loop around them: `fit_surrogate`, `solve_with_multistart`,
   evaluate. `acquisition.py` imports `hybrid_model.py`, never the reverse. The objective
   is a function because it is built from the problem's own symbols. It also states the
   std of `f` that `scenario_values` reports, which is 0 for the nominal optimum.
+- **The unknown equations are the seam (#211).** The oracle optimum has the same
+  variables, bounds and `g` as the nominal optimum, with `y` tied to the oracle instead
+  of the GPs, and it is the benchmark the hybrid result is tested against, so the
+  formulation exists once. `scenario_problem` takes the residual that ties the unknown
+  states, a plain function over `(u, x, y)`, with two adapters: the GPs' scenarios,
+  `y - prediction(x, u)` (`gp_scenario_problem`), and the oracle, `oracle(x, y, u) - y`
+  (`oracle_optimum`). The residual reads `y` because the unknown equations are
+  `0 = h(x, y, u)`: `y = h(x, u)` is only the form the GP learns, and an oracle may be
+  implicit.
+
+  Substituting the prediction for `y` (`unknown_states_as_variables=False`) needs an
+  explicit `y`, which a residual doesn't give, so it isn't part of the seam: only
+  `gp_scenario_problem` does it, going past `scenario_problem` to `_assemble`, which
+  both share. `oracle_optimum` and `optimize_hybrid_model` share the objective `f`
+  (`_minimize_f`), and the dependency runs one way: `oracle.py` imports `hybrid_model.py`.
 - **`AcquisitionProblem` is an alias of `ScenarioProblem`.** Hybrid BO's acquisition
   problem is a scenario problem whose objective is an acquisition function. Standard
   BO's is no scenario problem, having no hybrid model, but needs the same fields with
@@ -560,7 +582,7 @@ def optimize_hybrid_model(
 - **`hybrid_bo` doesn't call `optimize_hybrid_model`.** They solve the same problem with
   a different objective: an acquisition function of `f`, or `f` itself. `scenario_problem`
   requires the objective (ADR 0009), and `optimize_hybrid_model` fixes it to `f` by name.
-  `hybrid_bo` calls `scenario_problem` through `hybrid_acquisition` because it needs the
+  `hybrid_bo` calls it through `hybrid_acquisition` because it needs the
   problem unsolved for the replay.
 - **`optimize_hybrid_model` is not a method.** It measures nothing, so it has no run, no
   artifact and no settings, only a solution. It has no uncertainty in it, so it trusts

@@ -1,13 +1,16 @@
 """The hybrid model as an optimization problem: the known equations with the surrogate
 model embedded.
 
-`scenario_problem` builds the problem for given scenarios and a given objective; the
-caller solves it by `solve_with_multistart`, and `_unpack_scenarios` reads the solution.
-Everything that solves the hybrid model is one use of them. `optimize_hybrid_model` is
-the simplest: the nominal scenario, minimizing the objective f itself, with no Bayesian
-optimization. Hybrid BO's acquisition problem (`hybrid_acquisition`) supplies an
-acquisition function as the objective, and `hybrid_bo` is the loop around it: fit,
-solve, evaluate.
+`scenario_problem` builds the problem for given unknown equations and a given objective;
+the caller solves it by `solve_with_multistart`, and `_unpack_scenarios` reads the
+solution. The unknown equations are the seam, with two adapters: the GPs' scenarios
+(`gp_scenario_problem`) and the oracle (`oracle_optimum`).
+
+Everything that solves the hybrid model is one use of the GPs' adapter.
+`optimize_hybrid_model` is the simplest: the nominal scenario, minimizing the objective f
+itself, with no Bayesian optimization. Hybrid BO's acquisition problem
+(`hybrid_acquisition`) supplies an acquisition function as the objective, and `hybrid_bo`
+is the loop around it: fit, solve, evaluate.
 """
 
 from collections.abc import Callable, Sequence
@@ -27,6 +30,11 @@ from hybrid_bo.solvers import NLP, Ipopt, solve_with_multistart
 # (S, 1), the scenario states x (S, M) and y (S, P), and u (N, 1): the objective
 # (1, 1), and the std of f (1, 1) that `scenario_values` reports
 ScenarioObjective = Callable[[Any, Any, Any, Any], tuple[Any, Any]]
+
+# What ties the unknown states of a scenario problem, from CasADi expressions of u
+# (N, 1) and the scenario states x (S, M) and y (S, P): the residuals of the unknown
+# equations (S, P), zero where they hold
+UnknownEquations = Callable[[Any, Any, Any], Any]
 
 
 @dataclass(frozen=True)
@@ -154,63 +162,37 @@ def _scenario_unknown_states(
     return cas.horzcat(*mean) + cas.horzcat(*std) * Symbolic(scenarios.z)
 
 
-def scenario_problem(
+def _minimize_f(f: Any, _x: Any, _y: Any, _u: Any) -> tuple[Any, Any]:
+    """The objective f itself, of one scenario, so f has no spread."""
+    return f, Symbolic(0)
+
+
+def _assemble(
     problem: Problem,
-    fitted: tuple[FittedGP, ...],
-    scenarios: Scenarios,
+    u: Any,
+    x: Any,
+    y: Any,
+    residuals: Any | None,
     objective: ScenarioObjective,
-    unknown_states_as_variables: bool,
     objective_name: str,
 ) -> ScenarioProblem:
-    """The hybrid model over the scenarios, minimizing `objective`.
+    """The scenario problem over the symbols u (N, 1) and x (S, M), and the unknown
+    states y (S, P).
 
-    `fitted` is the surrogate model: one fitted GP per unknown state, in the order of
-    `problem.system.y`. Each scenario s has its own copy x_s of the mechanistic
-    states, and the known equations g(x_s, y_s, u) = 0 are constraints. Its unknown
-    states y_s are the GPs' prediction at the scenario's arguments of h,
-    mean + std * z_s (`_scenario_unknown_states`). With `unknown_states_as_variables`
-    the y_s are variables too, tied to the prediction by an equality constraint
-    (paper, Problem 8), which helps IPOPT; otherwise the prediction is substituted for
-    them.
-
-    The variables are u, the x_s and, if variables, the y_s, in `_pack`'s order. Each
-    variable is boxed by its bounds and started within its start bounds; substituted
-    unknown states are no variables, so they have no bounds. `objective_name` names the
-    objective's function, which the solver's log and warnings give. Raises `ValueError`
-    for scenarios or fitted GPs without one column or one GP per unknown state.
+    `residuals` holds the unknown equations (S, P), and then y are symbols, variables of
+    the problem. With None, y is an expression of u and x, so no variables and no
+    equations. The variables are in `_pack`'s order; `scenario_problem` says the rest.
     """
-    # The checks, and the symbols for u and each scenario's mechanistic states
+    # Each scenario: its known equations, its unknown equations, and its f
     system = problem.system
-    if scenarios.z.shape[1] != system.n_y:
-        msg = (
-            f"The scenarios need one column of z per unknown state ({system.n_y}), "
-            f"got {scenarios.z.shape[1]}"
-        )
-        raise ValueError(msg)
-    if len(fitted) != system.n_y:
-        msg = (
-            "The surrogate model needs one fitted GP per unknown state "
-            f"({system.n_y}), got {len(fitted)}"
-        )
-        raise ValueError(msg)
-    n_scenarios = len(scenarios.w)
-    u = Symbolic.sym("u", system.n_u)
-    # Row s: the mechanistic states of scenario s
-    x = Symbolic.sym("x", n_scenarios, system.n_x)
-
-    # The scenarios of the unknown states: variables tied to the GP, or the GP itself
-    predicted = _scenario_unknown_states(system, fitted, scenarios, u, x)
-    y = predicted
-    if unknown_states_as_variables:
-        y = Symbolic.sym("y", n_scenarios, system.n_y)
-
-    # Each scenario: its known equations, its tie to the GP, and its f
+    n_scenarios = x.size1()
+    unknown_states_as_variables = residuals is not None
     constraints, f_parts = [], []
     for s in range(n_scenarios):
         x_s, y_s = x[s, :].T, y[s, :].T
         constraints.append(system.g(x_s, y_s, u))
         if unknown_states_as_variables:
-            constraints.append(y_s - predicted[s, :].T)
+            constraints.append(residuals[s, :].T)
         f_parts.append(problem.f(x_s, y_s, u))
     f = cas.vertcat(*f_parts)
     minimized, f_std = objective(f, x, y, u)
@@ -239,6 +221,88 @@ def scenario_problem(
         unknown_states_as_variables,
         cas.Function("scenario_values", [w], [f, y, f_std]),
     )
+
+
+def scenario_problem(
+    problem: Problem,
+    n_scenarios: int,
+    unknown_equations: UnknownEquations,
+    objective: ScenarioObjective,
+    objective_name: str,
+) -> ScenarioProblem:
+    """The hybrid model over `n_scenarios` scenarios, minimizing `objective`.
+
+    Each scenario s has its own copies x_s and y_s of the states, and the known equations
+    g(x_s, y_s, u) = 0 are constraints, followed by its row of `unknown_equations`, which
+    ties the unknown states and may read them.
+
+    The variables are u, the x_s and the y_s, in `_pack`'s order. Each variable is boxed
+    by its bounds and started within its start bounds. `objective_name` names the
+    objective's function, which the solver's log and warnings give.
+    """
+    system = problem.system
+    u = Symbolic.sym("u", system.n_u)
+    # Row s: the states of scenario s
+    x = Symbolic.sym("x", n_scenarios, system.n_x)
+    y = Symbolic.sym("y", n_scenarios, system.n_y)
+    residuals = unknown_equations(u, x, y)
+    return _assemble(problem, u, x, y, residuals, objective, objective_name)
+
+
+def gp_scenario_problem(
+    problem: Problem,
+    fitted: tuple[FittedGP, ...],
+    scenarios: Scenarios,
+    objective: ScenarioObjective,
+    unknown_states_as_variables: bool,
+    objective_name: str,
+) -> ScenarioProblem:
+    """The hybrid model over the scenarios of the surrogate model, minimizing `objective`.
+
+    `fitted` is the surrogate model: one fitted GP per unknown state, in the order of
+    `problem.system.y`. The unknown states y_s of scenario s are the GPs' prediction at
+    the scenario's arguments of h, mean + std * z_s (`_scenario_unknown_states`). With
+    `unknown_states_as_variables` the y_s are variables too, and the unknown equations of
+    `scenario_problem` are y_s - prediction (paper, Problem 8), which helps IPOPT.
+
+    Otherwise the prediction is substituted for them, which only an explicit y allows, so
+    this stays here. Substituted unknown states are no variables, so they have no bounds.
+
+    Raises `ValueError` for scenarios or fitted GPs without one column or one GP per
+    unknown state.
+    """
+    # The checks
+    system = problem.system
+    if scenarios.z.shape[1] != system.n_y:
+        msg = (
+            f"The scenarios need one column of z per unknown state ({system.n_y}), "
+            f"got {scenarios.z.shape[1]}"
+        )
+        raise ValueError(msg)
+    if len(fitted) != system.n_y:
+        msg = (
+            "The surrogate model needs one fitted GP per unknown state "
+            f"({system.n_y}), got {len(fitted)}"
+        )
+        raise ValueError(msg)
+    n_scenarios = len(scenarios.w)
+
+    # The unknown states as variables, tied to the prediction
+    if unknown_states_as_variables:
+
+        def unknown_equations(u: Any, x: Any, y: Any) -> Any:
+            """The unknown states' distance from the GPs' prediction."""
+            return y - _scenario_unknown_states(system, fitted, scenarios, u, x)
+
+        return scenario_problem(
+            problem, n_scenarios, unknown_equations, objective, objective_name
+        )
+
+    # The prediction in their place
+    u = Symbolic.sym("u", system.n_u)
+    x = Symbolic.sym("x", n_scenarios, system.n_x)
+    y = _scenario_unknown_states(system, fitted, scenarios, u, x)
+    return _assemble(problem, u, x, y, None, objective, objective_name)
 
 
 def fit_surrogate(
@@ -295,11 +359,11 @@ def optimize_hybrid_model(
     bounds hold. Raises `ValueError` unless `fitted` has one GP per unknown state, and
     `NoSolutionError` if every start fails.
     """
-    nominal = scenario_problem(
+    nominal = gp_scenario_problem(
         problem,
         fitted,
         nominal_scenario(problem.system.n_y),
-        lambda f, _x, _y, _u: (f, Symbolic(0)),  # one scenario: f has no spread
+        _minimize_f,
         unknown_states_as_variables=True,
         objective_name="nominal_optimum",
     )
