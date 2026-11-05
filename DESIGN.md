@@ -527,13 +527,15 @@ def optimize_hybrid_model(
 
 - **Hybrid BO is built on the hybrid model, not the other way round (#197).** Everything
   that solves the hybrid model has the same variables, bounds and `g`, with `y` tied to
-  the GP. What differs is the scenarios and the objective:
+  the GP. What differs is the objective, and the scenarios follow from it: an
+  acquisition function needs a distribution of `f`, which the scenarios approximate,
+  and `f` itself needs none.
 
-  | | Scenarios | Objective |
+  | | Objective | Scenarios it needs |
   |---|---|---|
-  | `optimize_hybrid_model` | the nominal scenario | `f` |
-  | SAA-EI, SoftSAA-EI, SAA-LCB | S scenarios | an acquisition function of the `f_s` |
-  | Lin-EI | the nominal scenario | EI of `f` with its sensitivity |
+  | `optimize_hybrid_model` | `f` | the nominal scenario |
+  | SAA-EI, SoftSAA-EI, SAA-LCB | an acquisition function of the `f_s` | S scenarios |
+  | Lin-EI | EI of `f` with its sensitivity | the nominal scenario |
 
   So `scenario_problem` takes both, `hybrid_acquisition` supplies an objective, and
   `hybrid_bo` is the loop around them: `fit_surrogate`, `solve_scenario_problem`,
@@ -548,10 +550,11 @@ def optimize_hybrid_model(
   is what the fit needs and what a caller's sensors don't give. Measurements from
   elsewhere become one through `reconstruct`, so there is one way in, and a finished
   run's history fits as it is.
-- **`hybrid_bo` doesn't call `optimize_hybrid_model`.** It shares what is beneath it,
-  `scenario_problem` and `solve_scenario_problem`. It needs the problem unsolved for the
-  replay, and S scenarios; and an `objective` with `f` as its default would choose what
-  we search for (ADR 0009).
+- **`hybrid_bo` doesn't call `optimize_hybrid_model`.** They solve the same problem with
+  a different objective: an acquisition function of `f`, or `f` itself. `scenario_problem`
+  requires the objective (ADR 0009), and `optimize_hybrid_model` fixes it to `f` by name.
+  `hybrid_bo` calls `scenario_problem` through `hybrid_acquisition` because it needs the
+  problem unsolved for the replay.
 - **`optimize_hybrid_model` is not a method.** It measures nothing, so it has no run, no
   artifact and no settings, only a solution. It has no uncertainty in it, so it trusts
   the GP's mean even far from the data. Its unknown states are always variables, since
