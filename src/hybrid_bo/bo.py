@@ -9,7 +9,7 @@ iteration asks the trial-point function for the next trial point and evaluates i
 import logging
 import time
 from collections.abc import Callable
-from dataclasses import fields, replace
+from dataclasses import fields
 from typing import assert_never
 
 import numpy as np
@@ -64,16 +64,17 @@ def optimization_loop(
     artifact: dict[str, str],
     *,
     settings: MethodSettings | None,
+    scenarios: Scenarios | None = None,
 ) -> Run:
     """Evaluates the initial points (n, N), then runs `n_iterations` iterations: each
     calls `trial_point` and evaluates the trial point it returns.
 
-    Returns the run with `artifact` and `settings`, labeled with the method the artifact
-    names, and per iteration the surrogate and the acquisition problem's solution
-    behind that iteration's trial point. For writing new methods: `artifact` comes
-    from `run_artifact`, built before the method draws anything, and `settings` are
+    Returns the run with `artifact`, `settings` and `scenarios`, labeled with the method
+    the artifact names, and per iteration the surrogate and the acquisition problem's
+    solution behind that iteration's trial point. For writing new methods: `artifact`
+    comes from `run_artifact`, built before the method draws anything, `settings` are
     the method's, which the iteration plots replay (None for a method they can't
-    replay).
+    replay), and `scenarios` are the ones its trial points use, if it has any.
 
     Raises what `evaluate` and `trial_point` raise; a `HybridBOError` carries the
     partial run as `error.run`, and its history (every point evaluated before the
@@ -88,6 +89,19 @@ def optimization_loop(
     surrogates: list[tuple[FittedGP, ...]] = []
     acquisitions: list[AcquisitionSolution] = []
     method = artifact["method"]
+
+    def run_of(evaluated: History) -> Run:
+        """The run of the points evaluated so far, complete or partial."""
+        return Run(
+            evaluated,
+            artifact,
+            method,
+            surrogates=surrogates,
+            acquisitions=acquisitions,
+            scenarios=scenarios,
+            settings=settings,
+        )
+
     try:
         start = time.perf_counter()
         history = evaluate(problem, measure, initial_points, rng)
@@ -117,23 +131,9 @@ def optimization_loop(
         partial = error.history if history is None else history
         if partial is not None:
             error.history = partial
-            error.run = Run(
-                partial,
-                artifact,
-                artifact["method"],
-                surrogates=surrogates,
-                acquisitions=acquisitions,
-                settings=settings,
-            )
+            error.run = run_of(partial)
         raise
-    return Run(
-        history,
-        artifact,
-        artifact["method"],
-        surrogates=surrogates,
-        acquisitions=acquisitions,
-        settings=settings,
-    )
+    return run_of(history)
 
 
 def _method_artifact(
@@ -330,22 +330,17 @@ def hybrid_bo(
             AcquisitionSolution(solution.value, solution.x, solution.y),
         )
 
-    try:
-        run = optimization_loop(
-            problem,
-            measure,
-            start,
-            n_iterations,
-            trial_point,
-            rng,
-            artifact,
-            settings=settings,
-        )
-    except HybridBOError as error:
-        if error.run is not None:
-            error.run = replace(error.run, scenarios=scenarios)
-        raise
-    return replace(run, scenarios=scenarios)
+    return optimization_loop(
+        problem,
+        measure,
+        start,
+        n_iterations,
+        trial_point,
+        rng,
+        artifact,
+        settings=settings,
+        scenarios=scenarios,
+    )
 
 
 def iteration_problem(run: Run, problem: Problem, i: int) -> AcquisitionProblem:

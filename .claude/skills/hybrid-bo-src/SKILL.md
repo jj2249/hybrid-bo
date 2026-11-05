@@ -264,18 +264,19 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   union (`Run.settings`, the loop and the plots use it); `TYPES`, the types saving
   tags.
 - `bo.py`: `optimization_loop(problem, measure, initial_points, n_iterations,
-  trial_point, rng, artifact, *, settings) -> Run` (evaluate initial points, then per
+  trial_point, rng, artifact, *, settings, scenarios=None) -> Run` (evaluate initial points, then per
   iteration `trial_point(problem, history, rng) -> (u, surrogate, acquisition
   solution)`, the surrogate a tuple of fitted GPs, and evaluate u; the run keeps
-  `settings`; a `HybridBOError` gets the partial run as `error.run`). `standard_bo` and
+  `settings` and `scenarios`; one local function builds the run, complete or partial,
+  and a `HybridBOError` gets the partial run as `error.run`). `standard_bo` and
   `hybrid_bo` take `problem` and `measure`, then only keywords: `n_iterations`, `rng`,
   `gp`, `acquisition`, either `n_initial` or `initial_points`
   (`sampling._starting_points`, drawn after the artifact) and search effort. `StandardBOSettings` and
   `standard_bo` (fit `u -> f`, `standard_acquisition`, `solve_scenario_problem`),
   `HybridBOSettings` and `hybrid_bo` (artifact, then
   `saa_scenarios` or `nominal_scenario`, then the loop; `fit_surrogate`,
-  `hybrid_acquisition`, `solve_scenario_problem`; adds the
-  scenarios to the run and to `error.run`). `_method_artifact` builds both methods'
+  `hybrid_acquisition`, `solve_scenario_problem`; passes the
+  scenarios to the loop). `_method_artifact` builds both methods'
   artifacts: the settings without the GP, and `gp`, the prior GP's repr.
   `_acquisition_problem(problem, history, surrogate, scenarios, settings)` is the one
   way to an acquisition problem: it takes the incumbent from `history`, the points

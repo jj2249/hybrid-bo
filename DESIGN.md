@@ -787,6 +787,7 @@ def optimization_loop(
     artifact,  # from run_artifact, before the method draws
     *,
     settings,  # the method's, kept in the run (#120); None if not replayable
+    scenarios=None,  # the method's, kept in the run
 ) -> Run: ...
 
 
@@ -829,8 +830,10 @@ The baselines are named `*_sampling` because `hb.sampling.uniform` and
 - `optimization_loop` takes the artifact and returns the `Run`, so a `HybridBOError` in
   the loop (an evaluation, or the trial-point function) carries the partial run as
   `error.run` for every method: the points evaluated so far (also `error.history`) and
-  one surrogate per evaluated trial point (a failed evaluation drops its surrogate). A method that adds fields to its `Run` (hybrid BO's scenarios)
-  adds them to the returned run and to `error.run`.
+  one surrogate per evaluated trial point (a failed evaluation drops its surrogate). It
+  holds hybrid BO's scenarios too and builds the `Run` in one place, so a complete and
+  a partial run have the same fields. The baselines don't use the loop: they have no
+  surrogates, and build their own `Run`.
 - The artifact holds the settings without the GP, plus `gp`, the prior GP's repr; the
   fitted GPs stay in the run. The GP is required, so `settings` is too.
 - The baselines are not sequential: they draw their whole design and `evaluate` it after

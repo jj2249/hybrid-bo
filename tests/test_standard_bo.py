@@ -25,7 +25,7 @@ from hybrid_bo import (
 from hybrid_bo.acquisition import AcquisitionSolution, standard_acquisition
 from hybrid_bo.bo import iteration_problem, optimization_loop
 from hybrid_bo.gp import FittedGP, fit_gp, predict
-from hybrid_bo.hybrid_model import _pack, solve_scenario_problem
+from hybrid_bo.hybrid_model import _pack, nominal_scenario, solve_scenario_problem
 from hybrid_bo.run import run_artifact
 from hybrid_bo.settings import StandardBOSettings
 from hybrid_bo.solvers import Ipopt
@@ -374,6 +374,45 @@ def test_failed_trial_point_carries_the_partial_run(illustrative_problem):
     assert run.surrogates == ["surrogate"]
     assert len(run.acquisitions) == 1
     assert info.value.history is run.history
+
+
+def test_the_loop_keeps_its_scenarios_in_a_complete_and_a_partial_run(
+    illustrative_problem,
+):
+    """The scenarios given to the loop are in the run it returns, and in the partial
+    run of an error."""
+    # A trial-point function that fails once 2 points have been evaluated, so 1
+    # iteration completes and a second fails
+    problem = illustrative_problem
+    rng = np.random.default_rng(0)
+    scenarios = nominal_scenario(1)
+
+    def trial_point(problem, history, rng):
+        if len(history.u) == 2:
+            msg = "no acquisition solution"
+            raise NoSolutionError(msg)
+        return np.array([1.0]), "surrogate", AcquisitionSolution(0.0)
+
+    def loop(n_iterations):
+        """The loop from one initial point."""
+        return optimization_loop(
+            problem,
+            illustrative_measure(problem),
+            np.array([[0.5]]),
+            n_iterations,
+            trial_point,
+            rng,
+            loop_artifact(problem, rng),
+            settings=None,
+            scenarios=scenarios,
+        )
+
+    assert loop(1).scenarios is scenarios
+    with pytest.raises(NoSolutionError) as info:
+        loop(2)
+    run = info.value.run
+    assert run is not None
+    assert run.scenarios is scenarios
 
 
 def test_failed_initial_point_carries_the_points_before_it(illustrative_problem):
