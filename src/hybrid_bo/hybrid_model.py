@@ -1,12 +1,13 @@
 """The hybrid model as an optimization problem: the known equations with the surrogate
 model embedded.
 
-`scenario_problem` builds the problem for given scenarios and a given objective, and
-`solve_scenario_problem` solves it. Everything that solves the hybrid model is one use of
-them. `optimize_hybrid_model` is the simplest: the nominal scenario, minimizing the
-objective f itself, with no Bayesian optimization. Hybrid BO's acquisition problem
-(`hybrid_acquisition`) supplies an acquisition function as the objective, and `hybrid_bo`
-is the loop around it: fit, solve, evaluate.
+`scenario_problem` builds the problem for given scenarios and a given objective; the
+caller solves it by `solve_with_multistart`, and `_unpack_scenarios` reads the solution.
+Everything that solves the hybrid model is one use of them. `optimize_hybrid_model` is
+the simplest: the nominal scenario, minimizing the objective f itself, with no Bayesian
+optimization. Hybrid BO's acquisition problem (`hybrid_acquisition`) supplies an
+acquisition function as the objective, and `hybrid_bo` is the loop around it: fit,
+solve, evaluate.
 """
 
 from collections.abc import Callable, Sequence
@@ -20,7 +21,7 @@ from hybrid_bo.gp import GP, FittedGP, fit_gp, predict
 from hybrid_bo.history import History
 from hybrid_bo.problem import Problem, Symbolic, System, Var, _h_inputs
 from hybrid_bo.sampling import _start_bounds, lhs
-from hybrid_bo.solvers import NLP, Ipopt, multistart
+from hybrid_bo.solvers import NLP, Ipopt, solve_with_multistart
 
 # What a scenario problem minimizes, from CasADi expressions of f under each scenario
 # (S, 1), the scenario states x (S, M) and y (S, P), and u (N, 1): the objective
@@ -120,6 +121,18 @@ def _unpack(
     states = w[n_u:].reshape((n_scenarios, n_states), order="F")
     y = states[:, n_x:] if problem.unknown_states_as_variables else None
     return w[:n_u], states[:, :n_x], y
+
+
+def _unpack_scenarios(
+    problem: ScenarioProblem, w: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """The u (N,), x (S, M) and y (S, P) of a numeric decision vector w of a problem
+    over scenarios: `_unpack`, with y from `scenario_values`, so the GPs' prediction
+    when it was substituted for the unknown states."""
+    u, x, _ = _unpack(problem, w)
+    assert problem.scenario_values is not None  # a problem over scenarios has them
+    _, y, _ = problem.scenario_values(w)
+    return u, x, y.full()
 
 
 def _scenario_unknown_states(
@@ -228,37 +241,6 @@ def scenario_problem(
     )
 
 
-@dataclass(frozen=True)
-class ScenarioSolution:
-    """The solution of a scenario problem: the decision variables u (N,), the scenario
-    states x (S, M) and y (S, P), one row per scenario, and the minimized objective."""
-
-    u: np.ndarray
-    x: np.ndarray
-    y: np.ndarray
-    value: float
-
-
-def solve_scenario_problem(
-    problem: ScenarioProblem,
-    n_starts: int,
-    rng: np.random.Generator,
-    solver: Ipopt,
-) -> ScenarioSolution:
-    """Solves a scenario problem by `multistart` from `n_starts` Latin hypercube starts
-    over its start bounds.
-
-    The unknown states are read from `scenario_values`, so they are the GPs' prediction
-    when it was substituted for them. Raises `NoSolutionError` if every start fails.
-    """
-    starts = lhs(*problem.start_bounds, n_starts, rng)
-    solution = multistart(problem.nlp, starts, solver)
-    u, x, _ = _unpack(problem, solution.w)
-    assert problem.scenario_values is not None  # a problem over scenarios has them
-    _, y, _ = problem.scenario_values(solution.w)
-    return ScenarioSolution(u, x, y.full(), solution.f)
-
-
 def fit_surrogate(
     system: System,
     history: History,
@@ -307,10 +289,10 @@ def optimize_hybrid_model(
     measurements. It has no uncertainty in it, so it trusts the GPs' mean even far from
     their training data, and the optimum can sit where the model only extrapolates.
 
-    Solved by `multistart` from `n_starts` Latin hypercube starts over the start bounds
-    of the variables, so it is the best local optimum found: raise `n_starts` if the
-    objective has several. The unknown states are variables, so their bounds hold.
-    Raises `ValueError` unless `fitted` has one GP per unknown state, and
+    Solved by `solve_with_multistart` from `n_starts` Latin hypercube starts over the
+    start bounds of the variables, so it is the best local optimum found: raise
+    `n_starts` if the objective has several. The unknown states are variables, so their
+    bounds hold. Raises `ValueError` unless `fitted` has one GP per unknown state, and
     `NoSolutionError` if every start fails.
     """
     nominal = scenario_problem(
@@ -321,5 +303,7 @@ def optimize_hybrid_model(
         unknown_states_as_variables=True,
         objective_name="nominal_optimum",
     )
-    solution = solve_scenario_problem(nominal, n_starts, rng, solver)
-    return NominalOptimum(solution.u, solution.x[0], solution.y[0], solution.value)
+    starts = lhs(*nominal.start_bounds, n_starts, rng)
+    solution = solve_with_multistart(nominal.nlp, starts, solver)
+    u, x, y = _unpack_scenarios(nominal, solution.w)
+    return NominalOptimum(u, x[0], y[0], solution.f)

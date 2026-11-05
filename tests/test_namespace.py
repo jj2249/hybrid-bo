@@ -71,5 +71,5 @@ def test_internals_are_reachable_through_their_modules():
     """Submodules are attributes of `hb`, so `hb.gp.fit_gp` works after
     `import hybrid_bo as hb`."""
     assert callable(hb.gp.fit_gp)
-    assert callable(hb.solvers.multistart)
+    assert callable(hb.solvers.solve_with_multistart)
     assert callable(hb.plots.iteration)

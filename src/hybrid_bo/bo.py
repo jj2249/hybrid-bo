@@ -9,7 +9,7 @@ iteration asks the trial-point function for the next trial point and evaluates i
 import logging
 import time
 from collections.abc import Callable
-from dataclasses import fields, replace
+from dataclasses import fields
 from typing import assert_never
 
 import numpy as np
@@ -31,16 +31,16 @@ from hybrid_bo.evaluation import Measure, evaluate
 from hybrid_bo.gp import GP, FittedGP, fit_gp
 from hybrid_bo.history import History, _concatenate, incumbents
 from hybrid_bo.hybrid_model import (
-    _unpack,
+    Scenarios,
+    _unpack_scenarios,
     fit_surrogate,
     nominal_scenario,
-    solve_scenario_problem,
 )
 from hybrid_bo.problem import Problem
 from hybrid_bo.run import Run, run_artifact
 from hybrid_bo.sampling import _starting_points, lhs
 from hybrid_bo.settings import HybridBOSettings, MethodSettings, StandardBOSettings
-from hybrid_bo.solvers import Ipopt, multistart
+from hybrid_bo.solvers import Ipopt, solve_with_multistart
 
 _logger = logging.getLogger(__name__)
 
@@ -64,16 +64,18 @@ def optimization_loop(
     artifact: dict[str, str],
     *,
     settings: MethodSettings | None,
+    scenarios: Scenarios | None,
 ) -> Run:
     """Evaluates the initial points (n, N), then runs `n_iterations` iterations: each
     calls `trial_point` and evaluates the trial point it returns.
 
-    Returns the run with `artifact` and `settings`, labeled with the method the artifact
-    names, and per iteration the surrogate and the acquisition problem's solution
-    behind that iteration's trial point. For writing new methods: `artifact` comes
-    from `run_artifact`, built before the method draws anything, and `settings` are
+    Returns the run with `artifact`, `settings` and `scenarios`, labeled with the method
+    the artifact names, and per iteration the surrogate and the acquisition problem's
+    solution behind that iteration's trial point. For writing new methods: `artifact`
+    comes from `run_artifact`, built before the method draws anything, `settings` are
     the method's, which the iteration plots replay (None for a method they can't
-    replay).
+    replay), and `scenarios` are the ones its trial points use (None for a method
+    without them).
 
     Raises what `evaluate` and `trial_point` raise; a `HybridBOError` carries the
     partial run as `error.run`, and its history (every point evaluated before the
@@ -88,6 +90,19 @@ def optimization_loop(
     surrogates: list[tuple[FittedGP, ...]] = []
     acquisitions: list[AcquisitionSolution] = []
     method = artifact["method"]
+
+    def run_of(evaluated: History) -> Run:
+        """The run of the points evaluated so far, complete or partial."""
+        return Run(
+            evaluated,
+            artifact,
+            method,
+            surrogates=surrogates,
+            acquisitions=acquisitions,
+            scenarios=scenarios,
+            settings=settings,
+        )
+
     try:
         start = time.perf_counter()
         history = evaluate(problem, measure, initial_points, rng)
@@ -117,23 +132,9 @@ def optimization_loop(
         partial = error.history if history is None else history
         if partial is not None:
             error.history = partial
-            error.run = Run(
-                partial,
-                artifact,
-                artifact["method"],
-                surrogates=surrogates,
-                acquisitions=acquisitions,
-                settings=settings,
-            )
+            error.run = run_of(partial)
         raise
-    return Run(
-        history,
-        artifact,
-        artifact["method"],
-        surrogates=surrogates,
-        acquisitions=acquisitions,
-        settings=settings,
-    )
+    return run_of(history)
 
 
 def _method_artifact(
@@ -156,6 +157,35 @@ def _method_artifact(
     )
     artifact = run_artifact(problem, measure, rng, method, settings_text)
     return artifact | {"gp": repr(settings.gp)}
+
+
+def _acquisition_problem(
+    problem: Problem,
+    history: History,
+    *,
+    n_evaluated: int,
+    surrogate: tuple[FittedGP, ...],
+    scenarios: Scenarios | None,
+    settings: MethodSettings,
+) -> AcquisitionProblem:
+    """The acquisition problem that follows the first `n_evaluated` points of `history`:
+    the method's, as `settings` says, from its surrogate, its scenarios (None for
+    standard BO) and the incumbent after those points.
+
+    The loop and `iteration_problem` both build it here, so the iteration figures show
+    the function the method minimized (ADR 0005).
+    """
+    incumbent = float(incumbents(history)[n_evaluated - 1])
+    match settings:
+        case StandardBOSettings(acquisition=acquisition):
+            return standard_acquisition(problem, surrogate[0], incumbent, acquisition)
+        case HybridBOSettings(acquisition=acquisition, approximation=approximation):
+            assert scenarios is not None  # hybrid BO has its scenarios
+            return hybrid_acquisition(
+                problem, surrogate, scenarios, incumbent, acquisition, approximation
+            )
+        case _:
+            assert_never(settings)
 
 
 def standard_bo(
@@ -183,8 +213,8 @@ def standard_bo(
 
     Raises `ValueError` unless exactly one of `n_initial` and `initial_points` is
     given, `TypeError` for an `acquisition` that isn't `EI` or `LCB`, and what
-    `evaluate` and `multistart` raise; a `HybridBOError` carries the partial run as
-    `error.run`.
+    `evaluate` and `solve_with_multistart` raise; a `HybridBOError` carries the partial
+    run as `error.run`.
     """
     # The settings the run keeps, the artifact, then the initial points
     settings = StandardBOSettings(
@@ -203,15 +233,18 @@ def standard_bo(
         problem: Problem, history: History, rng: np.random.Generator
     ) -> tuple[np.ndarray, tuple[FittedGP, ...], AcquisitionSolution]:
         """Fits the GP to the points so far and solves the acquisition problem."""
-        fitted = fit_gp(gp, history.u, history.f, rng, n_starts_gp, solver)
-        incumbent = float(incumbents(history)[-1])
-        acquisition_problem = standard_acquisition(
-            problem, fitted, incumbent, acquisition
+        fitted = (fit_gp(gp, history.u, history.f, rng, n_starts_gp, solver),)
+        acquisition_problem = _acquisition_problem(
+            problem,
+            history,
+            n_evaluated=len(history.u),
+            surrogate=fitted,
+            scenarios=None,
+            settings=settings,
         )
         starts = lhs(*acquisition_problem.start_bounds, n_starts, rng)
-        solution = multistart(acquisition_problem.nlp, starts, solver)
-        u, _, _ = _unpack(acquisition_problem, solution.w)
-        return u, (fitted,), AcquisitionSolution(solution.f)
+        solution = solve_with_multistart(acquisition_problem.nlp, starts, solver)
+        return solution.w, fitted, AcquisitionSolution(solution.f)
 
     return optimization_loop(
         problem,
@@ -222,6 +255,7 @@ def standard_bo(
         rng,
         artifact,
         settings=settings,
+        scenarios=None,
     )
 
 
@@ -257,8 +291,8 @@ def hybrid_bo(
 
     Raises `ValueError` unless exactly one of `n_initial` and `initial_points` is
     given, what `HybridBOSettings` raises for the acquisition function and its
-    approximation, and what `evaluate` and `multistart` raise; a `HybridBOError`
-    carries the partial run, with the scenarios, as `error.run`.
+    approximation, and what `evaluate` and `solve_with_multistart` raise; a
+    `HybridBOError` carries the partial run, with the scenarios, as `error.run`.
     """
     # The settings the run keeps, the artifact, then the initial points
     system = problem.system
@@ -292,38 +326,30 @@ def hybrid_bo(
         fitted = fit_surrogate(
             system, history, gp=gp, rng=rng, n_starts=n_starts_gp, solver=solver
         )
-        incumbent = float(incumbents(history)[-1])
-        acquisition_problem = hybrid_acquisition(
+        acquisition_problem = _acquisition_problem(
             problem,
-            fitted,
-            scenarios,
-            incumbent,
-            acquisition,
-            approximation,
-        )
-        solution = solve_scenario_problem(acquisition_problem, n_starts, rng, solver)
-        return (
-            solution.u,
-            fitted,
-            AcquisitionSolution(solution.value, solution.x, solution.y),
-        )
-
-    try:
-        run = optimization_loop(
-            problem,
-            measure,
-            start,
-            n_iterations,
-            trial_point,
-            rng,
-            artifact,
+            history,
+            n_evaluated=len(history.u),
+            surrogate=fitted,
+            scenarios=scenarios,
             settings=settings,
         )
-    except HybridBOError as error:
-        if error.run is not None:
-            error.run = replace(error.run, scenarios=scenarios)
-        raise
-    return replace(run, scenarios=scenarios)
+        starts = lhs(*acquisition_problem.start_bounds, n_starts, rng)
+        solution = solve_with_multistart(acquisition_problem.nlp, starts, solver)
+        u, x, y = _unpack_scenarios(acquisition_problem, solution.w)
+        return u, fitted, AcquisitionSolution(solution.f, x, y)
+
+    return optimization_loop(
+        problem,
+        measure,
+        start,
+        n_iterations,
+        trial_point,
+        rng,
+        artifact,
+        settings=settings,
+        scenarios=scenarios,
+    )
 
 
 def iteration_problem(run: Run, problem: Problem, i: int) -> AcquisitionProblem:
@@ -334,17 +360,14 @@ def iteration_problem(run: Run, problem: Problem, i: int) -> AcquisitionProblem:
     Raises `ValueError` for a baseline's run, which solves no acquisition problem.
     """
     surrogate = run.surrogates[i]
-    incumbent = float(incumbents(run.history)[run.history.n_initial + i - 1])
-    match run.settings:
-        case StandardBOSettings(acquisition=acquisition):
-            return standard_acquisition(problem, surrogate[0], incumbent, acquisition)
-        case HybridBOSettings(acquisition=acquisition, approximation=approximation):
-            assert run.scenarios is not None  # hybrid BO runs hold their scenarios
-            return hybrid_acquisition(
-                problem, surrogate, run.scenarios, incumbent, acquisition, approximation
-            )
-        case None:
-            msg = f"{run.method} is a baseline, which solves no acquisition problem"
-            raise ValueError(msg)
-        case _:
-            assert_never(run.settings)
+    if run.settings is None:
+        msg = f"{run.method} is a baseline, which solves no acquisition problem"
+        raise ValueError(msg)
+    return _acquisition_problem(
+        problem,
+        run.history,
+        n_evaluated=run.history.n_initial + i,
+        surrogate=surrogate,
+        scenarios=run.scenarios,
+        settings=run.settings,
+    )

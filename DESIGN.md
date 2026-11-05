@@ -82,8 +82,8 @@ The original code was hard to change for three reasons:
   `reconstruct`, `fit_surrogate`, `optimize_hybrid_model`,
   `EI`, `LCB`, `oracle_optimum`, `save_run`, `load_run`, `save_runs`, `load_runs`, `Run`, `History`,
   `incumbents`, `oracle_incumbents`, `check_oracle_optimum`, the errors and `plots`. Everything else is reached through its module (`hb.gp.fit_gp`,
-  `hb.solvers.multistart`). A new name joins the top level only if the example
-  or a typical analysis script would use it.
+  `hb.solvers.solve_with_multistart`). A new name joins the top level only if the
+  example or a typical analysis script would use it.
 
 ## Example
 
@@ -191,8 +191,8 @@ callables return CasADi expressions (`TypeError` otherwise); `lower <= upper`; s
 `u` and `y` non-empty; `x` and `g` both given or both omitted (#115: without them
 M = 0, and `g` is traced from no equations, so `System.g` is always a `cas.Function`
 and the code downstream has no special case; with M = 0 the root-finding problem has
-nothing to solve and `multistart` adds no empty constraint); `len(g) == M`; `f`
-scalar; `h_inputs` from `u` and `x`,
+nothing to solve and `solve_with_multistart` adds no empty constraint); `len(g) == M`;
+`f` scalar; `h_inputs` from `u` and `x`,
 `measured` from `x` and `y`, each without repeats; `len(measured) == P`. `Var` is a plain
 frozen dataclass, so membership checks use its equality; no CasADi `==` is involved.
 
@@ -358,12 +358,12 @@ class Solution:
     f: float
 
 
-def multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
+def solve_with_multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
     """Best of the starts; raises NoSolutionError if every start fails."""
 ```
 
 There is no `Solver` protocol until a second solver exists. The caller draws the starts
-with `lhs(...)`. `multistart` builds the problem with `cas.Opti`, bounds as
+with `lhs(...)`. `solve_with_multistart` builds the problem with `cas.Opti`, bounds as
 constraints, as the legacy optimizer did, so IPOPT takes the same steps. A failed start
 is logged at debug level without a traceback. Starts that stopped at IPOPT's iteration
 limit also get one warning per call, under the objective's name: they fail like any
@@ -465,9 +465,9 @@ only operator; `kernel * kernel` raises `TypeError` (the kernels share `_Scalabl
 - `fit_gp` fits the scalers (`minmax` onto [0, 1] for X, `standard` for Y), puts
   CasADi symbols in place of each `Param`, builds the negative log marginal
   likelihood, draws starts with `lhs` over the (log-transformed) bounds and calls
-  `multistart`. If every start fails it keeps the initial values and logs a warning.
-  A GP with no `Param` is only conditioned on the data, with no draws. With the same
-  data and generator its hyperparameters matched the legacy GP bit for bit, and its
+  `solve_with_multistart`. If every start fails it keeps the initial values and logs a
+  warning. A GP with no `Param` is only conditioned on the data, with no draws. With the
+  same data and generator its hyperparameters matched the legacy GP bit for bit, and its
   predictions to rounding (checked until #30; the regression baselines still pin the
   fit). Replacing `default_gp` with `GP(Zero(), Scale(Matern52()))` (#119) left every
   run bit for bit the same.
@@ -506,6 +506,7 @@ class ScenarioProblem:
 
 def _pack(u, x=None, y=None): ...  # numpy or CasADi
 def _unpack(problem: ScenarioProblem, w) -> tuple[u, x, y | None]: ...
+def _unpack_scenarios(problem: ScenarioProblem, w) -> tuple[u, x, y]: ...
 
 
 def scenario_problem(
@@ -516,7 +517,6 @@ def scenario_problem(
     unknown_states_as_variables,
     objective_name,
 ) -> ScenarioProblem: ...
-def solve_scenario_problem(problem, n_starts, rng, solver) -> ScenarioSolution: ...
 def fit_surrogate(
     system, history, *, gp, rng, n_starts=10, solver=Ipopt()
 ) -> tuple[FittedGP, ...]: ...
@@ -527,16 +527,18 @@ def optimize_hybrid_model(
 
 - **Hybrid BO is built on the hybrid model, not the other way round (#197).** Everything
   that solves the hybrid model has the same variables, bounds and `g`, with `y` tied to
-  the GP. What differs is the scenarios and the objective:
+  the GP. What differs is the objective, and the scenarios follow from it: an
+  acquisition function needs a distribution of `f`, which the scenarios approximate,
+  and `f` itself needs none.
 
-  | | Scenarios | Objective |
+  | | Objective | Scenarios it needs |
   |---|---|---|
-  | `optimize_hybrid_model` | the nominal scenario | `f` |
-  | SAA-EI, SoftSAA-EI, SAA-LCB | S scenarios | an acquisition function of the `f_s` |
-  | Lin-EI | the nominal scenario | EI of `f` with its sensitivity |
+  | `optimize_hybrid_model` | `f` | the nominal scenario |
+  | SAA-EI, SoftSAA-EI, SAA-LCB | an acquisition function of the `f_s` | S scenarios |
+  | Lin-EI | EI of `f` with its sensitivity | the nominal scenario |
 
   So `scenario_problem` takes both, `hybrid_acquisition` supplies an objective, and
-  `hybrid_bo` is the loop around them: `fit_surrogate`, `solve_scenario_problem`,
+  `hybrid_bo` is the loop around them: `fit_surrogate`, `solve_with_multistart`,
   evaluate. `acquisition.py` imports `hybrid_model.py`, never the reverse. The objective
   is a function because it is built from the problem's own symbols. It also states the
   std of `f` that `scenario_values` reports, which is 0 for the nominal optimum.
@@ -548,10 +550,11 @@ def optimize_hybrid_model(
   is what the fit needs and what a caller's sensors don't give. Measurements from
   elsewhere become one through `reconstruct`, so there is one way in, and a finished
   run's history fits as it is.
-- **`hybrid_bo` doesn't call `optimize_hybrid_model`.** It shares what is beneath it,
-  `scenario_problem` and `solve_scenario_problem`. It needs the problem unsolved for the
-  replay, and S scenarios; and an `objective` with `f` as its default would choose what
-  we search for (ADR 0009).
+- **`hybrid_bo` doesn't call `optimize_hybrid_model`.** They solve the same problem with
+  a different objective: an acquisition function of `f`, or `f` itself. `scenario_problem`
+  requires the objective (ADR 0009), and `optimize_hybrid_model` fixes it to `f` by name.
+  `hybrid_bo` calls `scenario_problem` through `hybrid_acquisition` because it needs the
+  problem unsolved for the replay.
 - **`optimize_hybrid_model` is not a method.** It measures nothing, so it has no run, no
   artifact and no settings, only a solution. It has no uncertainty in it, so it trusts
   the GP's mean even far from the data. Its unknown states are always variables, since
@@ -613,9 +616,11 @@ Each returns an `AcquisitionProblem`: the NLP, its start bounds and the order of
 decision vector `w`.
 
 - **The problem owns its variable order.** `_pack` and `_unpack` (in `hybrid_model.py`)
-  are the only code that knows it; the trial point, the scenario states read back from a
-  solution, the replay and the tests all go through them (or through the problem's
-  own functions of w), so changing the order breaks nothing silently.
+  are the only code that knows it; hybrid BO's trial point, the scenario states read
+  back from a solution, the replay and the tests all go through them (or through the
+  problem's own functions of w), so changing the order breaks nothing silently.
+  `_unpack_scenarios` is `_unpack` with `y` from `scenario_values`, what a solved
+  problem over scenarios gives. Standard BO's `w` is `u`, so its trial point is `w`.
 - **The acquisition problem says what it computed.** Besides the objective and the
   constraints, hybrid BO's problem carries `scenario_values(w)`: f under each
   scenario, the scenarios' unknown states and the std of f (linearization's s, else
@@ -624,7 +629,9 @@ decision vector `w`.
   (ADR 0005) solves the problem's own constraints with u fixed and evaluates the
   objective and `scenario_values`, so the figures can't drift from what the method
   minimized. `bo.iteration_problem(run, problem, i)` rebuilds an iteration's problem
-  from a run. `_pack` needs no
+  from a run, through the function the loop builds it with (`bo._acquisition_problem`,
+  which reads the incumbent after the evaluations it is told to count), so the two
+  can't drift apart. `_pack` needs no
   layout, so the builders use it for the symbols, the bounds and the start bounds
   alike.
 
@@ -781,6 +788,7 @@ def optimization_loop(
     artifact,  # from run_artifact, before the method draws
     *,
     settings,  # the method's, kept in the run (#120); None if not replayable
+    scenarios,  # the method's, kept in the run; None if it has none
 ) -> Run: ...
 
 
@@ -814,17 +822,20 @@ The baselines are named `*_sampling` because `hb.sampling.uniform` and
 - `hybrid_bo` draws the scenarios from `rng` (SAA; linearization takes the nominal
   scenario and draws nothing), then runs `optimization_loop` with a
   trial-point function that fits the GP on `(u, x)[h_inputs] -> y`, builds
-  `hybrid_acquisition`, and solves it with `multistart`. The user never draws `z`.
-  With `SAA(n_scenarios=25, unknown_states_as_variables=False)` (the legacy
+  `hybrid_acquisition`, and solves it with `solve_with_multistart`. The user never draws
+  `z`. With `SAA(n_scenarios=25, unknown_states_as_variables=False)` (the legacy
   illustrative setting) it reproduces the legacy illustrative baseline.
 - `standard_bo` fits on `u -> f` (measured), with the incumbent the best measured `f`,
-  and solves `standard_acquisition` by `multistart` from `lhs` starts over the `u` start
-  bounds. With the defaults it reproduces the legacy illustrative baseline.
+  and solves `standard_acquisition` by `solve_with_multistart` from `lhs` starts over
+  the `u` start bounds. With the defaults it reproduces the legacy illustrative
+  baseline.
 - `optimization_loop` takes the artifact and returns the `Run`, so a `HybridBOError` in
   the loop (an evaluation, or the trial-point function) carries the partial run as
   `error.run` for every method: the points evaluated so far (also `error.history`) and
-  one surrogate per evaluated trial point (a failed evaluation drops its surrogate). A method that adds fields to its `Run` (hybrid BO's scenarios)
-  adds them to the returned run and to `error.run`.
+  one surrogate per evaluated trial point (a failed evaluation drops its surrogate). It
+  holds hybrid BO's scenarios too and builds the `Run` in one place, so a complete and
+  a partial run have the same fields. The baselines don't use the loop: they have no
+  surrogates, and build their own `Run`.
 - The artifact holds the settings without the GP, plus `gp`, the prior GP's repr; the
   fitted GPs stay in the run. The GP is required, so `settings` is too.
 - The baselines are not sequential: they draw their whole design and `evaluate` it after
@@ -890,7 +901,7 @@ to scipy's draw and its spawning.
 | `array_operations/` numpy branches and their `@overload` stubs | one CasADi path (SX); numeric use goes through `cas.Function` | tag `pre-refactor` |
 | `SciPyLocalOptimizer` | never used; only offered as a commented-out alternative | tag `pre-refactor` |
 | `use_jacobian` (fsolve without the CasADi Jacobian) | every equation is CasADi-traceable ([ADR 0002](docs/adr/0002-equations-are-casadi-callables.md)) | tag `pre-refactor` |
-| `Problem.solve` (true optimum with `h` known) | called nowhere; would be a function on `multistart` | tag `pre-refactor` |
+| `Problem.solve` (true optimum with `h` known) | called nowhere; would be a function on `solve_with_multistart` | tag `pre-refactor` |
 | `Config` and `config.yaml` | functions take what they use; problems are Python | tag `pre-refactor` |
 | `hybrid_bo.legacy`: the `do_*` routines, `ResultsBO` pickles, the old `Problem`, GP and optimizers | replaced by the new API (#30); studies are saved as JSON (#53) | tag `pre-refactor` |
 | Kernel and mean classes, `Parameterized`, `JoinedParameters` | hyperparameters were named specs and kernels functions; since #119 kernels are dataclasses again, but data with no state or methods ([ADR 0008](docs/adr/0008-gps-are-data.md)) | tag `pre-refactor` |

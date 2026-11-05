@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Breaking:** `hb.solvers.multistart` is now `hb.solvers.solve_with_multistart`
+  (#210).
 - The S2MPJ benchmarks live in a project of their own, `hybrid-bo-s2mpj`.
 - **Breaking:** `experiments/` is gone: studies live in a repository of their own, with
   `hybrid-bo` installed as a package. The illustrative examples moved to `tests/`, which
@@ -14,6 +16,8 @@
   for the unmeasured states (#197).
 - **Breaking:** Hybrid BO is built on a new core, `hb.hybrid_model` (#197):
   `hb.acquisition.nominal_scenario` moved there, with `Scenarios`. Results don't change.
+- **Breaking:** `hb.bo.optimization_loop` requires `scenarios`, which the run keeps,
+  complete or partial: pass None for a method without them (#210).
 
 ## 0.6.0 (2026-11-04)
 

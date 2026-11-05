@@ -1,8 +1,9 @@
 """Nonlinear programs and the multistart solver.
 
-An `NLP` describes the problem, `Ipopt` the solver settings, and `multistart` solves the
-problem from several starts and keeps the best solution. The caller draws the starts
-(with `lhs`), so the draw order stays visible where the generator is used.
+An `NLP` describes the problem, `Ipopt` the solver settings, and `solve_with_multistart`
+builds the CasADi `Opti` problem once, solves it from several starts and keeps the best
+solution. The caller draws the starts (with `lhs`), so the draw order stays visible
+where the generator is used.
 """
 
 import logging
@@ -22,7 +23,8 @@ from hybrid_bo.errors import NoSolutionError
 
 _logger = logging.getLogger(__name__)
 
-# Objectives closer than this (relative, or absolute below 1) tie in `multistart`
+# Objectives closer than this (relative, or absolute below 1) tie in
+# `solve_with_multistart`
 _TIE_TOLERANCE = 1e-13
 
 
@@ -56,10 +58,11 @@ class Solution:
     f: float
 
 
-def multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
-    """Solves `nlp` from each row of `starts` (n_starts, n) and returns the solution
-    with the lowest objective. Objectives that differ only by rounding tie, and the
-    earlier start wins, so the result doesn't depend on the platform's arithmetic.
+def solve_with_multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
+    """Builds `nlp` as a CasADi `Opti` problem, solves it with IPOPT from each row of
+    `starts` (n_starts, n), and returns the solution with the lowest objective.
+    Objectives that differ only by rounding tie, and the earlier start wins, so the
+    result doesn't depend on the platform's arithmetic.
 
     A start that fails is expected, so it is logged (at debug level, without a
     traceback) and skipped; so are the number that failed and the time taken, under
@@ -67,8 +70,8 @@ def multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
     counted in one warning. Raises `NoSolutionError` if every start fails, and
     `KeyboardInterrupt` on Ctrl-C, even while IPOPT runs.
     """
-    # The problem, with the bounds as constraints (as the pre-refactor optimizer had
-    # them, so IPOPT takes the steps the regression baselines record)
+    # Build the problem once, with the bounds as constraints (as the pre-refactor
+    # optimizer had them, so IPOPT takes the steps the regression baselines record)
     opti = cas.Opti()
     w = opti.variable(len(nlp.lower))
     opti.minimize(nlp.f(w))
@@ -79,7 +82,7 @@ def multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
     opti.subject_to(w >= nlp.lower[:, np.newaxis])
     opti.subject_to(w <= nlp.upper[:, np.newaxis])
 
-    # Solve from each start; a NaN objective never wins, nor does a tie with the best
+    # Solve it from each start; a NaN objective never wins, nor does a tie with the best
     started = time.perf_counter()
     best, f_best, n_failed, n_at_limit = None, np.inf, 0, 0
     for i, start in enumerate(starts):
