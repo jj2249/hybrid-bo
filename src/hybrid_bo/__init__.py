@@ -2,7 +2,7 @@
 
 The top level holds what a typical script uses: define a problem, run a method, look
 at the results. Everything else is reachable through its module (`hb.gp.fit_gp`,
-`hb.solvers.multistart`).
+`hb.solvers.solve_with_multistart`).
 """
 
 # Every submodule, so type checkers see `hb.gp.fit_gp` after `import hybrid_bo as hb`

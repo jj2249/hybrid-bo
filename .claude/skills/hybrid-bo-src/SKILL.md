@@ -51,7 +51,8 @@ code uses GLOSSARY.md's terms; use them in PRs, tests and comments too.
     DESIGN.md), with `L = diag(std_1, ..., std_P)`. The partial `f_y L` is wrong: it
     gives `s ≡ 0` on the illustrative example. EI only: LCB raises
     `NotImplementedError`.
-  - Solved with `multistart`. The trial point is the `u` part of the solution.
+  - Solved with `solve_with_multistart`. The trial point is the `u` part of the
+    solution.
 - **Standard BO** (`bo.py`): a GP directly on `u -> f`, with analytic EI or LCB over
   `u` only.
 - **Latin hypercube / uniform sampling** (`baselines.py`): the non-adaptive baselines.
@@ -87,7 +88,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   its repr is the artifact's text, so it must not depend on the process (no
   addresses).
   `oracle_optimum(problem, oracle, rng)` solves min f s.t. g = 0, y = oracle by
-  `multistart` from `lhs` starts over the start bounds of (u, x, y).
+  `solve_with_multistart` from `lhs` starts over the start bounds of (u, x, y).
   `evaluate(problem, measure, u, rng)` runs the measurement per row, rejects a measured
   variable that isn't finite with `RootFindingError` (#214; before the starts are
   drawn, since with M = 0 nothing is solved and a measured variable outside `g` leaves
@@ -138,9 +139,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   one call.
 - `solvers.py`: `NLP` (`f`, bounds `(n,)`, optional `g(w) = 0`; a `g` of no rows is
   no constraint, since `cas.Opti` refuses an empty one), `Ipopt` settings and
-  `multistart(nlp, starts, solver) -> Solution` (`w`, `f`), the best start; objectives
-  within `_TIE_TOLERANCE` (1e-13, relative or absolute below 1) tie and the earlier
-  start wins, since acquisition problems can have symmetric or flat optima whose
+  `solve_with_multistart(nlp, starts, solver) -> Solution` (`w`, `f`), the best start;
+  objectives within `_TIE_TOLERANCE` (1e-13, relative or absolute below 1) tie and the
+  earlier start wins, since acquisition problems can have symmetric or flat optima whose
   values differ only by platform-dependent rounding. Loosening it moves the GP fits'
   hyperparameters and every BO baseline. It uses
   `cas.Opti` with bounds as constraints, as the pre-refactor code did, so IPOPT takes
@@ -150,9 +151,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `Maximum_Iterations_Exceeded`) get one warning per call, giving their count and
   `nlp.f`'s name, before `NoSolutionError` if all fail. The caller draws the starts with `lhs`.
   CasADi catches a Ctrl-C inside IPOPT and fails the solve (`NonIpopt_Exception_Thrown`,
-  which other callback errors give too), so `multistart` wraps the SIGINT handler
-  for each solve (`_interrupts_noticed`, main thread and a Python handler only) and
-  raises `KeyboardInterrupt` after a failed solve that saw one (#155).
+  which other callback errors give too), so `solve_with_multistart` wraps the SIGINT
+  handler for each solve (`_interrupts_noticed`, main thread and a Python handler only)
+  and raises `KeyboardInterrupt` after a failed solve that saw one (#155).
 - `gp.py` (ADR 0008): GPs are data, frozen dataclasses from a closed set. `Param(init,
   bounds, log=True)` is a hyperparameter to fit (checked: init inside the bounds, positive
   bounds for log). Kernels `Matern12/32/52` and `SquaredExponential` (`lengthscale:
@@ -171,9 +172,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   and `_with_hyperparameters` sets them by path. A fitted value is a float, or a tuple of
   one per input for an ARD lengthscale; a fixed number applies to every input.
   `fit_gp(gp, X, Y, rng, ...) -> FittedGP` fits every `Param` (log ones in log
-  space) by `multistart` from `lhs` starts over the bounds; with no `Param` it draws
-  nothing. `predict(fitted, X)` (the noise-free conditional mean and std; numpy X ->
-  arrays `(n,)`, built at one row and mapped over the rows, symbolic X -> `(n, 1)`
+  space) by `solve_with_multistart` from `lhs` starts over the bounds; with no `Param`
+  it draws nothing. `predict(fitted, X)` (the noise-free conditional mean and std; numpy
+  X -> arrays `(n,)`, built at one row and mapped over the rows, symbolic X -> `(n, 1)`
   columns) and `log_marginal_likelihood(fitted)`,
   which `fit_gp` maximizes. Kernel hyperparameters are in scaled units; `noise_std` is a
   known noise in **measured** units, scaled by the output scaler's slope:
@@ -200,9 +201,11 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `w -> (f (S, 1), y (S, P), std of f (1, 1))`).
   `_pack(u, x, y)` (numpy or CasADi) and `_unpack(problem, w) -> (u, x, y | None)`
   are the only code that knows the order of `w`: never slice or reshape `w`
-  elsewhere. `solve_scenario_problem(problem, n_starts, rng, solver)` is `lhs` starts,
-  `multistart`, then a `ScenarioSolution(u, x, y, value)`, the states `(S, M)`, `(S, P)`
-  (x from `_unpack`, y from `scenario_values`, so predicted when the y_s are substituted).
+  elsewhere (standard BO's `w` is `u`, so its trial point is `solution.w`).
+  `_unpack_scenarios(problem, w) -> (u, x, y)` reads a solved problem over scenarios: the
+  states `(S, M)`, `(S, P)` (x from `_unpack`, y from `scenario_values`, so predicted
+  when the y_s are substituted). Each caller draws `lhs` starts over the problem's
+  start bounds and calls `solve_with_multistart` itself.
   `Scenarios` (`z (S, P)`, `w (S,)`, checked) and `nominal_scenario(n_y)`.
   `_scenario_unknown_states` is the one GP scenario prediction
   (`mean_j + std_j * z_sj` per unknown state j), symbolic.
@@ -263,23 +266,28 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   union (`Run.settings`, the loop and the plots use it); `TYPES`, the types saving
   tags.
 - `bo.py`: `optimization_loop(problem, measure, initial_points, n_iterations,
-  trial_point, rng, artifact, *, settings) -> Run` (evaluate initial points, then per
+  trial_point, rng, artifact, *, settings, scenarios) -> Run` (evaluate initial points, then per
   iteration `trial_point(problem, history, rng) -> (u, surrogate, acquisition
   solution)`, the surrogate a tuple of fitted GPs, and evaluate u; the run keeps
-  `settings`; a `HybridBOError` gets the partial run as `error.run`). `standard_bo` and
+  `settings` and `scenarios`; one local function builds the run, complete or partial,
+  and a `HybridBOError` gets the partial run as `error.run`). `standard_bo` and
   `hybrid_bo` take `problem` and `measure`, then only keywords: `n_iterations`, `rng`,
   `gp`, `acquisition`, either `n_initial` or `initial_points`
   (`sampling._starting_points`, drawn after the artifact) and search effort. `StandardBOSettings` and
-  `standard_bo` (fit `u -> f`, `standard_acquisition`, `multistart` from `lhs` over
-  the `u` start bounds), `HybridBOSettings` and `hybrid_bo` (artifact, then
+  `standard_bo` (fit `u -> f`, `_acquisition_problem`, `solve_with_multistart` from
+  `lhs` over the `u` start bounds; stores `AcquisitionSolution(value)`, so `x=None`),
+  `HybridBOSettings` and `hybrid_bo` (artifact, then
   `saa_scenarios` or `nominal_scenario`, then the loop; `fit_surrogate`,
-  `hybrid_acquisition`, `solve_scenario_problem`; adds the
-  scenarios to the run and to `error.run`). `_method_artifact` builds both methods'
+  `_acquisition_problem`, `solve_with_multistart`, `_unpack_scenarios`; passes the
+  scenarios to the loop). `_method_artifact` builds both methods'
   artifacts: the settings without the GP, and `gp`, the prior GP's repr.
-  `iteration_problem(run, problem, i)` rebuilds iteration i's acquisition problem
-  as the method built it (stored surrogate, the run's scenarios, the incumbent
-  before trial point i from `incumbents`, `run.settings`; `ValueError` for a
-  baseline), for the replay.
+  `_acquisition_problem(problem, history, *, n_evaluated, surrogate, scenarios,
+  settings)` is the one way to an acquisition problem: it reads the incumbent after the
+  first `n_evaluated` points of `history` and matches on the settings. The methods'
+  `trial_point`s call it with every point of their history, and
+  `iteration_problem(run, problem, i)`, which rebuilds iteration i's problem for the
+  replay, with the `n_initial + i` points before trial point i, from the stored
+  surrogate, the run's scenarios and `run.settings` (`ValueError` for a baseline).
 - `plots.py`: static figures, no widgets and no `rng`. `regret(runs, optimum, ax)` and
   `convergence(runs, ax)` draw a list of runs per label on the caller's required axes (median and IQR over evaluations,
   `_over_evaluations`, in numpy). `iteration(run, problem, i, *, measure, gp,
@@ -365,10 +373,10 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   (`error.run`). Nothing in the library catches them.
 - **The library never writes files on its own.** Saving is an explicit `save_run` call.
 - **Progress is logged, never configured.** `optimization_loop` logs the initial points
-  and each iteration (with the incumbent) at INFO; `fit_gp` and `multistart` log their
-  times at DEBUG, and warn about a nearly singular training covariance and starts at the
-  iteration limit. Times come from `time.perf_counter`. The library adds no handlers to
-  the caller's process.
+  and each iteration (with the incumbent) at INFO; `fit_gp` and `solve_with_multistart`
+  log their times at DEBUG, and warn about a nearly singular training covariance and
+  starts at the iteration limit. Times come from `time.perf_counter`. The library adds
+  no handlers to the caller's process.
 - **Oracle incumbents.** `incumbents(history)` is the running minimum of the measured
   `f`. The benchmark metric `oracle_incumbents(history)` is `f_oracle` at the
   incumbent's point, not the running minimum of `f_oracle`; they agree only

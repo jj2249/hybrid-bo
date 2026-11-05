@@ -23,9 +23,9 @@ from hybrid_bo import (
     standard_bo,
 )
 from hybrid_bo.acquisition import AcquisitionSolution, standard_acquisition
-from hybrid_bo.bo import optimization_loop
+from hybrid_bo.bo import iteration_problem, optimization_loop
 from hybrid_bo.gp import FittedGP, fit_gp, predict
-from hybrid_bo.hybrid_model import _pack
+from hybrid_bo.hybrid_model import _pack, nominal_scenario
 from hybrid_bo.run import run_artifact
 from hybrid_bo.settings import StandardBOSettings
 
@@ -264,6 +264,21 @@ def test_stored_acquisition_value_is_the_objective_at_the_trial_point(
         assert solution.x is None and solution.y is None
 
 
+def test_each_iteration_problem_gives_the_stored_acquisition_value(
+    illustrative_problem,
+):
+    """`iteration_problem` rebuilds each iteration's problem with the incumbent before
+    its trial point, so its objective at the trial point is the stored value."""
+    run = illustrative_run(illustrative_problem)
+
+    for i, solution in enumerate(run.acquisitions):
+        acquisition_problem = iteration_problem(run, illustrative_problem, i)
+        trial = run.history.u[run.history.n_initial + i]
+        assert float(acquisition_problem.nlp.f(trial)) == pytest.approx(
+            solution.value, rel=1e-12
+        )
+
+
 # The optimization loop, with test trial-point functions in place of a method
 
 
@@ -290,6 +305,7 @@ def test_loop_evaluates_each_trial_point_after_the_initial_points(
         rng,
         loop_artifact(problem, rng),
         settings=None,
+        scenarios=None,
     )
 
     # Every point is evaluated (y = sin(u) is the oracle), in order
@@ -323,6 +339,7 @@ def test_failed_trial_point_carries_the_partial_run(illustrative_problem):
             rng,
             loop_artifact(problem, rng),
             settings=None,
+            scenarios=None,
         )
 
     # The partial run: 2 initial points and the one trial point before the failure
@@ -333,6 +350,50 @@ def test_failed_trial_point_carries_the_partial_run(illustrative_problem):
     assert run.surrogates == ["surrogate"]
     assert len(run.acquisitions) == 1
     assert info.value.history is run.history
+
+
+def test_the_loop_keeps_its_scenarios_in_a_complete_and_a_partial_run(
+    illustrative_problem,
+):
+    """The scenarios given to the loop are in the run it returns, and in the partial
+    run of an error."""
+    # A trial-point function that fails once 2 points have been evaluated, so 1
+    # iteration completes and a second fails
+    problem = illustrative_problem
+    rng = np.random.default_rng(0)
+    scenarios = nominal_scenario(1)
+
+    def trial_point(problem, history, rng):
+        """A fixed trial point, or an error from the second iteration on."""
+        if len(history.u) == 2:
+            msg = "no acquisition solution"
+            raise NoSolutionError(msg)
+        return np.array([1.0]), "surrogate", AcquisitionSolution(0.0)
+
+    def loop(n_iterations):
+        """The loop from one initial point."""
+        return optimization_loop(
+            problem,
+            illustrative_measure(problem),
+            np.array([[0.5]]),
+            n_iterations,
+            trial_point,
+            rng,
+            loop_artifact(problem, rng),
+            settings=None,
+            scenarios=scenarios,
+        )
+
+    # One iteration completes the run, and a second fails
+    complete = loop(1)
+    with pytest.raises(NoSolutionError) as info:
+        loop(2)
+
+    # Both runs hold the scenarios
+    partial = info.value.run
+    assert complete.scenarios is scenarios
+    assert partial is not None
+    assert partial.scenarios is scenarios
 
 
 def test_failed_initial_point_carries_the_points_before_it(illustrative_problem):
@@ -358,6 +419,7 @@ def test_failed_initial_point_carries_the_points_before_it(illustrative_problem)
             rng,
             loop_artifact(problem, rng),
             settings=None,
+            scenarios=None,
         )
 
     run = info.value.run

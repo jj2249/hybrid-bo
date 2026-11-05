@@ -24,7 +24,7 @@ from hybrid_bo.hybrid_model import (
     ScenarioProblem,
     Scenarios,
     _pack,
-    _unpack,
+    _unpack_scenarios,
     scenario_problem,
 )
 from hybrid_bo.problem import Problem, Symbolic, _h_inputs
@@ -396,9 +396,8 @@ def replay(
     replayed = None
     if solved[at_trial]:
         w_trial = np.concatenate([u[at_trial], states[at_trial]])
-        _, x, _ = _unpack(problem, w_trial)
-        _, y, _ = problem.scenario_values(w_trial)
-        replayed = AcquisitionSolution(float(values[at_trial]), x, y.full())
+        _, x, y = _unpack_scenarios(problem, w_trial)
+        replayed = AcquisitionSolution(float(values[at_trial]), x, y)
     _check_trial_point(replayed, solution)
     return Replay(values, f, f_std)
 
