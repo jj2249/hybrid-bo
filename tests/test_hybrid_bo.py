@@ -1026,6 +1026,38 @@ def test_run_pickles_without_the_code_that_produced_it(
     assert loaded.settings == run.settings
 
 
+def test_failed_initial_point_carries_the_partial_run_with_its_scenarios(
+    illustrative_problem,
+):
+    """When an initial point fails, before any iteration, the error carries the initial
+    points before it, with the scenarios."""
+
+    # A `measure` that returns NaN for u >= 0, the second initial point, so the
+    # root-finding problem has no root
+    def measure(u, rng):
+        """y = sin(u) below u = 0, else NaN."""
+        return np.sin(u) if u[0] < 0.0 else np.array([np.nan])
+
+    with pytest.raises(RootFindingError) as info:
+        hybrid_bo(
+            illustrative_problem,
+            measure,
+            initial_points=np.array([[-0.5], [0.5]]),
+            n_iterations=2,
+            rng=np.random.default_rng(0),
+            gp=ex.gp,
+            acquisition=EI(),
+            approximation=SAA(n_scenarios=5),
+        )
+
+    # The partial run: the first initial point, no iteration, and the scenarios
+    run = info.value.run
+    assert run is not None
+    assert run.history.u.shape == (1, 1)
+    assert run.surrogates == []
+    assert run.scenarios is not None and run.scenarios.z.shape == (5, 1)
+
+
 def test_failed_evaluation_carries_the_partial_run_with_its_scenarios(
     illustrative_problem,
 ):
