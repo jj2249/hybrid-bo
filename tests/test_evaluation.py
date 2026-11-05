@@ -425,11 +425,13 @@ def dataset_of(f: list[float], f_oracle: list[float] | None = None) -> Dataset:
 def test_extend_joins_the_rows_in_order():
     """The rows of the first dataset come first, then those of the second, in every
     field, and the initial points stay those of the first."""
+    # Two rows, then one row whose u tells it apart
     first = dataset_of([3.0, 1.0], f_oracle=[3.5, 1.5])
     new = replace(dataset_of([2.0], f_oracle=[2.5]), u=np.array([[7.0]]))
 
     extended = extend(first, new)
 
+    # The first dataset's rows, then the second's
     np.testing.assert_array_equal(extended.f, [3.0, 1.0, 2.0])
     np.testing.assert_array_equal(extended.u, [[0.0], [0.0], [7.0]])
     assert extended.x.shape == extended.y.shape == (3, 1)
@@ -439,31 +441,37 @@ def test_extend_joins_the_rows_in_order():
 
 
 def test_extend_keeps_oracle_values_only_when_both_have_them():
-    """Oracle values for only some of the rows would not line up with the rows."""
+    """If either side lacks oracle values, left or right, the result has none, since
+    values for only some of the rows would not line up with the rows."""
     with_oracle = dataset_of([3.0, 1.0], f_oracle=[3.0, 1.0])
     without_oracle = dataset_of([2.0])
 
-    extended = extend(with_oracle, without_oracle)
+    for first, new in ((with_oracle, without_oracle), (without_oracle, with_oracle)):
+        extended = extend(first, new)
 
-    assert extended.x_oracle is None
-    assert extended.y_oracle is None
-    assert extended.f_oracle is None
+        assert extended.x_oracle is None
+        assert extended.y_oracle is None
+        assert extended.f_oracle is None
 
 
 def test_extend_leaves_its_inputs_alone():
     """The inputs keep their values, and the result shares no array with them, so
     writing to it can't reach them."""
+    # Two datasets with every field, and copies to compare them with afterwards
     first = dataset_of([3.0, 1.0], f_oracle=[3.0, 1.0])
     new = dataset_of([2.0], f_oracle=[2.0])
     first_before, new_before = deepcopy(first), deepcopy(new)
+    fields = ("u", "x", "y", "f", "x_oracle", "y_oracle", "f_oracle")
 
+    # Extend, then write to the result
     extended = extend(first, new)
     extended.f[:] = -1.0
 
+    # Every input keeps its values and shares no memory with the result
     for after, before in ((first, first_before), (new, new_before)):
-        np.testing.assert_array_equal(after.f, before.f)
-        np.testing.assert_array_equal(after.u, before.u)
-        np.testing.assert_array_equal(after.f_oracle, before.f_oracle)
+        for field in fields:
+            np.testing.assert_array_equal(getattr(after, field), getattr(before, field))
+            assert not np.shares_memory(getattr(extended, field), getattr(after, field))
         assert after.n_initial == before.n_initial
 
 

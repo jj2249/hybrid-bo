@@ -24,6 +24,7 @@ USER_FACING = {
     "uniform_sampling",
     # Optimize the hybrid model from data of your own
     "reconstruct_states",
+    "extend",
     "fit_surrogate",
     "optimize_hybrid_model",
     # Save and load a run
@@ -35,7 +36,6 @@ USER_FACING = {
     # Look at the results
     "Run",
     "Dataset",
-    "extend",
     "incumbents",
     "oracle_incumbents",
     "check_oracle_optimum",

@@ -34,7 +34,10 @@ class Dataset:
 def extend(dataset: Dataset, new: Dataset) -> Dataset:
     """A new dataset: the rows of `dataset` followed by those of `new`, with the initial
     points of `dataset`. A point is a one-row dataset, so this appends too. The oracle
-    values are kept only when both have them."""
+    values are kept only when both have them.
+
+    Raises numpy's `ValueError` if a field's columns don't match between the two.
+    """
 
     def join(first: np.ndarray | None, second: np.ndarray | None) -> np.ndarray | None:
         """The rows of both, or None if either is None."""
