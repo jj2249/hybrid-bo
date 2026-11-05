@@ -207,9 +207,9 @@ def standard_bo(
 
     Evaluates `initial_points` (n, N), or `n_initial` points drawn from `rng`, then in
     each iteration fits the prior GP `gp` to the measured objective so far, solves the
-    acquisition problem (`solve_scenario_problem`) from `n_starts` Latin hypercube starts
-    over the start bounds of `u`, and evaluates the solution. Each iteration's acquisition
-    solution holds the acquisition value only.
+    acquisition problem (`solve_scenario_problem`) from `n_starts` Latin hypercube
+    starts over the start bounds of `u`, and evaluates the solution. Each iteration's
+    acquisition solution holds the acquisition value only.
 
     Raises `ValueError` unless exactly one of `n_initial` and `initial_points` is
     given, `TypeError` for an `acquisition` that isn't `EI` or `LCB`, and what

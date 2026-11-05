@@ -2,11 +2,12 @@
 model embedded.
 
 `scenario_problem` builds the problem for given scenarios and a given objective, and
-`solve_scenario_problem` solves it, as it does every acquisition problem. Everything that
-solves the hybrid model is one use of them. `optimize_hybrid_model` is the simplest: the
-nominal scenario, minimizing the objective f itself, with no Bayesian optimization. Hybrid BO's acquisition problem
-(`hybrid_acquisition`) supplies an acquisition function as the objective, and `hybrid_bo`
-is the loop around it: fit, solve, evaluate.
+`solve_scenario_problem` solves it, as it does every acquisition problem. Everything
+that solves the hybrid model is one use of them. `optimize_hybrid_model` is the
+simplest: the nominal scenario, minimizing the objective f itself, with no Bayesian
+optimization. Hybrid BO's acquisition problem (`hybrid_acquisition`) supplies an
+acquisition function as the objective, and `hybrid_bo` is the loop around it: fit,
+solve, evaluate.
 """
 
 from collections.abc import Callable, Sequence
