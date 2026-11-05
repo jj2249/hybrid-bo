@@ -157,8 +157,8 @@ def test_custom_measure_is_recorded_by_docstring_or_name(illustrative_problem):
 @pytest.mark.parametrize("method", METHODS)
 def test_failed_evaluation_carries_the_partial_run(illustrative_problem, method):
     """When an evaluation fails, the error carries the run up to the point before."""
-    # The third evaluation (the first design point) measures NaN, so the
-    # root-finding problem has no root
+    # The third evaluation (the first design point) measures NaN, which is rejected
+    # before the root-finding problem
     calls = []
 
     def measure(u, rng):
@@ -167,7 +167,7 @@ def test_failed_evaluation_carries_the_partial_run(illustrative_problem, method)
 
     # `pytest.raises` fails the test unless the block raises that exception; `info`
     # holds the exception
-    with pytest.raises(RootFindingError) as info:
+    with pytest.raises(RootFindingError, match="isn't finite") as info:
         method(
             illustrative_problem,
             measure,

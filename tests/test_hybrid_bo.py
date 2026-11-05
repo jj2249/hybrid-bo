@@ -1104,8 +1104,8 @@ def test_failed_evaluation_carries_the_partial_run_with_its_scenarios(
 ):
     """When evaluating a trial point fails, the error carries the run so far, with
     the scenarios."""
-    # A `measure` that returns NaN at its third evaluation (the first trial point), so
-    # the root-finding problem has no root
+    # A `measure` that returns NaN at its third evaluation (the first trial point),
+    # which is rejected before the root-finding problem
     calls = []
 
     def measure(u, rng):
@@ -1114,7 +1114,7 @@ def test_failed_evaluation_carries_the_partial_run_with_its_scenarios(
         return np.sin(u) if len(calls) < 3 else np.array([np.nan])
 
     # `as info` keeps the raised exception, as `info.value`, for the checks below
-    with pytest.raises(RootFindingError) as info:
+    with pytest.raises(RootFindingError, match="isn't finite") as info:
         hybrid_bo(
             illustrative_problem,
             measure,

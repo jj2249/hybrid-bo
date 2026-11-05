@@ -16,6 +16,11 @@
   for the unmeasured states (#197).
 - **Breaking:** Hybrid BO is built on a new core, `hb.hybrid_model` (#197):
   `hb.acquisition.nominal_scenario` moved there, with `Scenarios`. Results don't change.
+- **Changes results:** A measurement that returns NaN or an infinity fails the evaluation
+  with `RootFindingError`, and `error.run` keeps the points before it (#214). With no
+  known equations or a measured variable outside `g`, the baselines and BO at its last
+  trial point used to complete with it in their history, and earlier BO failures raised
+  `NoSolutionError` with it in `error.run`. Runs with finite measurements don't change.
 - **Breaking:** `hb.bo.optimization_loop` requires `scenarios`, which the run keeps,
   complete or partial: pass None for a method without them (#210).
 

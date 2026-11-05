@@ -246,7 +246,9 @@ def evaluate(
   states given `u` and the measured variables, from Latin hypercube starts over the
   unmeasured variables' start bounds, then computes `f` (and `f` at the oracle values).
 - A root is accepted when its residual norm is below `tol` and it lies within the
-  bounds; if no start gives one, `RootFindingError`.
+  bounds; if no start gives one, `RootFindingError`. A measured variable that isn't
+  finite raises it too, before the solve: with no unmeasured states nothing is solved,
+  and a measured variable outside `g` leaves a root, so the solve wouldn't notice.
 - **Disagreement with the oracle.** Comparing the reconstruction directly with the
   oracle values would warn at every noisy point. Instead `evaluate` solves the same
   root-finding problem (same noisy measured variables) once more, started at the

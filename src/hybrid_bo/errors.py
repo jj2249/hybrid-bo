@@ -21,7 +21,8 @@ class HybridBOError(Exception):
 
 
 class RootFindingError(HybridBOError):
-    """No start of a root-finding solve gave a root within the bounds."""
+    """No start of a root-finding solve gave a root within the bounds, or a measured
+    variable or decision variable isn't finite."""
 
 
 class NoSolutionError(HybridBOError):
