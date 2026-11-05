@@ -75,8 +75,8 @@ For measurements the user already has, a script needs no `measure` and no method
 row per point, with `measured` in the order of `system.measured`. Values outside their
 bounds give `OutOfBoundsWarning`; rows with no root give one `RootFindingError` naming
 them, with the others as `error.dataset`. It trusts the GP's mean far from the data, so
-check the solution. `hb.extend(dataset, new)` returns a new dataset with the rows of `new`
-after those of `dataset`.
+check the solution. `hb.extend(dataset, new)` returns a new dataset with the rows of
+`new` after those of `dataset`.
 
 ## Pitfalls
 

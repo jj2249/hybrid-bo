@@ -84,13 +84,14 @@ each GP replaced by its mean:
 ```python
 gp = hb.gp.GP(mean=hb.gp.Zero(), kernel=hb.gp.Matern52(), noise_std=0.0)
 rng = np.random.default_rng(0)
-dataset = hb.reconstruct_states(
-    problem, u=u, measured=measured, rng=rng
-)  # a row per point
+# A row per point
+dataset = hb.reconstruct_states(problem, u=u, measured=measured, rng=rng)
 fitted = hb.fit_surrogate(system, dataset, gp=gp, rng=rng)
 solution = hb.optimize_hybrid_model(problem, fitted, rng, n_starts=30)
 print(solution.u, solution.f)
 ```
+
+`hb.extend(dataset, new)` returns a new dataset with later measurements added.
 
 There is no uncertainty in this problem, so it trusts the GP's mean even far from the
 data, and the optimum can sit where the model is only extrapolating.

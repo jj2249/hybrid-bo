@@ -107,17 +107,17 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   oracle values (no draws) checks the reconstruction is on the same root, else
   `ReconstructionWarning`. `_start_bounds` (in `sampling.py`) and `_as_text` (in
   `problem.py`, an equation as text in the variable names) are shared helpers.
-  `reconstruct_states(problem, *, u, measured, rng, n_starts, tol)` is `evaluate` without
-  the measurement, for data from elsewhere: no oracle values, `ValueError` on a wrong shape,
-  one `OutOfBoundsWarning` for a `u` or measured variable outside its bounds (kept), and
-  every row tried, one `RootFindingError` naming those with no root or a non-finite value
-  and the others as `error.dataset`.
+  `reconstruct_states(problem, *, u, measured, rng, n_starts, tol)` is `evaluate`
+  without the measurement, for data from elsewhere: no oracle values, `ValueError` on a
+  wrong shape, one `OutOfBoundsWarning` for a `u` or measured variable outside its
+  bounds (kept), and every row tried, one `RootFindingError` naming those with no root
+  or a non-finite value and the others as `error.dataset`.
 - `dataset.py`: `Dataset` (`u`, `x`, `y`, `f`, oracle values or `None`, `n_initial`)
   `incumbents` and `oracle_incumbents` (the benchmark metric);
   `check_oracle_optimum(dataset, optimum)` warns with `OracleOptimumWarning` if a point
   is below the stated optimum, and returns whether it did; `extend(dataset, new)`
-  (`hb.extend`) returns a new dataset, the rows of one followed by the other's; a point is
-  a one-row dataset, so it appends too.
+  (`hb.extend`) returns a new dataset, the rows of one followed by the other's; a point
+  is a one-row dataset, so it appends too.
 - `run.py`: `Run` (`dataset`, `artifact`, `method`: the method's name; `surrogates`: per
   iteration a `tuple[FittedGP, ...]`, the surrogate behind its trial point (hybrid BO:
   one GP per unknown state in the order of `system.y`; standard BO: a 1-tuple, the GP of

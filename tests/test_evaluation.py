@@ -557,8 +557,8 @@ def test_oracle_optimum_rejects_an_oracle_of_the_wrong_size(illustrative_problem
 def test_reconstruct_states_solves_the_unmeasured_states_of_given_measurements(
     illustrative_problem,
 ):
-    """Given u and y, `reconstruct_states` gives x from x + exp(x) = y, in closed form with
-    the Lambert W function, and f at those states, calling no measurement."""
+    """Given u and y, `reconstruct_states` gives x from x + exp(x) = y, in closed form
+    with the Lambert W function, and f at those states, calling no measurement."""
     # Three measurements of y
     u = np.array([[-1.0], [0.0], [1.0]])
     measured = np.array([[-0.5], [0.3], [1.0]])

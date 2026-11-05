@@ -281,9 +281,10 @@ Optimizing data you already have
 
 With measurements of your own, you can get an optimum with no ``measure`` and no
 optimization loop. :py:func:`~hybrid_bo.evaluation.reconstruct_states` solves the known
-equations for the unmeasured states, :py:func:`~hybrid_bo.hybrid_model.fit_surrogate` fits the prior
-GP to each unknown state, and :py:func:`~hybrid_bo.hybrid_model.optimize_hybrid_model`
-solves the hybrid model once with each GP replaced by its mean:
+equations for the unmeasured states, :py:func:`~hybrid_bo.hybrid_model.fit_surrogate`
+fits the prior GP to each unknown state, and
+:py:func:`~hybrid_bo.hybrid_model.optimize_hybrid_model` solves the hybrid model once
+with each GP replaced by its mean:
 
 .. code-block:: python
 
@@ -294,12 +295,13 @@ solves the hybrid model once with each GP replaced by its mean:
    print(solution.u, solution.x, solution.y, solution.f)
 
 The measurements have a row per point: ``u`` of shape ``(n, N)`` and ``measured``
-``(n, P)``, its columns in the order of ``system.measured``. A ``u`` or a measured variable
-outside its bounds is kept, with an ``OutOfBoundsWarning``. If some rows have no root or
-hold a NaN, a ``RootFindingError`` names them all and its ``dataset`` holds the others, so
-you can carry on without them. The GP's ``noise_std`` applies to all the data. The search is local from
-each start, so raise ``n_starts`` if ``f`` has several minima. To add later measurements,
-:py:func:`~hybrid_bo.dataset.extend` returns a new dataset with their rows after the others.
+``(n, P)``, its columns in the order of ``system.measured``. A ``u`` or a measured
+variable outside its bounds is kept, with an ``OutOfBoundsWarning``. If some rows have no
+root or hold a NaN, a ``RootFindingError`` names them all and its ``dataset`` holds the
+others, so you can carry on without them. The GP's ``noise_std`` applies to all the data.
+The search is local from each start, so raise ``n_starts`` if ``f`` has several minima.
+To add later measurements, :py:func:`~hybrid_bo.dataset.extend` returns a new dataset with
+their rows after the others.
 
 .. warning::
 
