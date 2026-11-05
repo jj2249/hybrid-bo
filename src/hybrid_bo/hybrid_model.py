@@ -3,11 +3,10 @@ model embedded.
 
 `build_deterministic_equivalent` builds the problem for given unknown equations and a
 given objective; the caller solves it by `solve_with_multistart`, and
-`_unpack_scenarios` reads the solution. The unknown equations are the seam, with two
-adapters: the GPs' scenarios (`gp_deterministic_equivalent`) and the oracle
-(`oracle_optimum`).
+`_unpack_scenarios` reads the solution. `gp_deterministic_equivalent` ties the unknown
+equations to the surrogate model, and `oracle_optimum` ties them to the oracle.
 
-Everything that solves the hybrid model is one use of the GPs' adapter.
+Everything that solves the hybrid model is one use of `gp_deterministic_equivalent`.
 `optimize_hybrid_model` is the simplest: the nominal scenario, minimizing the objective
 f itself, with no Bayesian optimization. Hybrid BO's acquisition problem
 (`hybrid_acquisition`) supplies an acquisition function as the objective, and
@@ -31,11 +30,6 @@ from hybrid_bo.solvers import NLP, Ipopt, solve_with_multistart
 # scenario (S, 1), the scenario states x (S, M) and y (S, P), and u (N, 1): the
 # objective (1, 1), and the std of f (1, 1) that `scenario_values` reports
 ScenarioObjective = Callable[[Any, Any, Any, Any], tuple[Any, Any]]
-
-# What ties the unknown states of a deterministic equivalent, from CasADi expressions
-# of u (N, 1) and the scenario states x (S, M) and y (S, P): the residuals of the
-# unknown equations (S, P), zero where they hold
-UnknownEquations = Callable[[Any, Any, Any], Any]
 
 
 @dataclass(frozen=True)
@@ -168,33 +162,40 @@ def _minimize_f(f: Any, _x: Any, _y: Any, _u: Any) -> tuple[Any, Any]:
     return f, Symbolic(0)
 
 
-def _assemble(
+def build_deterministic_equivalent(
     problem: Problem,
     u: Any,
     x: Any,
     y: Any,
-    residuals: Any | None,
+    unknown_equations: Any | None,
     objective: ScenarioObjective,
     objective_name: str,
 ) -> DeterministicEquivalent:
-    """The deterministic equivalent over the symbols u (N, 1) and x (S, M), and the
-    unknown states y (S, P).
+    """The known and unknown equations over scenarios, minimizing `objective`, from
+    CasADi expressions: the symbols u (N, 1) and x (S, M), with one row per scenario, and
+    the unknown states y (S, P).
 
-    `residuals` holds the unknown equations (S, P), and then y are symbols, variables of
-    the problem. With None, y is an expression of u and x, so no variables and no
-    equations. The variables are in `_pack`'s order; `build_deterministic_equivalent`
-    says the rest.
+    Each scenario s has its own copies x_s and y_s of the states, and the known
+    equations g(x_s, y_s, u) = 0 are constraints. `unknown_equations` holds the residuals
+    (S, P) that tie the unknown states, which may read y: y is then symbols, and each
+    scenario's row of residuals follows its known equations. With None, y is already an
+    expression of u and x, so it adds no variables and no equations.
+
+    The variables are u, the x_s and, if variables, the y_s, in `_pack`'s order. Each
+    variable is boxed by its bounds and started within its start bounds; substituted
+    unknown states are no variables, so they have no bounds. `objective_name` names the
+    objective's function, which the solver's log and warnings give.
     """
     # Each scenario: its known equations, its unknown equations, and its f
     system = problem.system
     n_scenarios = x.size1()
-    unknown_states_as_variables = residuals is not None
+    unknown_states_as_variables = unknown_equations is not None
     constraints, f_parts = [], []
     for s in range(n_scenarios):
         x_s, y_s = x[s, :].T, y[s, :].T
         constraints.append(system.g(x_s, y_s, u))
         if unknown_states_as_variables:
-            constraints.append(residuals[s, :].T)
+            constraints.append(unknown_equations[s, :].T)
         f_parts.append(problem.f(x_s, y_s, u))
     f = cas.vertcat(*f_parts)
     minimized, f_std = objective(f, x, y, u)
@@ -225,32 +226,6 @@ def _assemble(
     )
 
 
-def build_deterministic_equivalent(
-    problem: Problem,
-    n_scenarios: int,
-    unknown_equations: UnknownEquations,
-    objective: ScenarioObjective,
-    objective_name: str,
-) -> DeterministicEquivalent:
-    """The hybrid model over `n_scenarios` scenarios, minimizing `objective`.
-
-    Each scenario s has its own copies x_s and y_s of the states, and the known
-    equations g(x_s, y_s, u) = 0 are constraints, followed by its row of
-    `unknown_equations`, which ties the unknown states and may read them.
-
-    The variables are u, the x_s and the y_s, in `_pack`'s order. Each variable is boxed
-    by its bounds and started within its start bounds. `objective_name` names the
-    objective's function, which the solver's log and warnings give.
-    """
-    system = problem.system
-    u = Symbolic.sym("u", system.n_u)
-    # Row s: the states of scenario s
-    x = Symbolic.sym("x", n_scenarios, system.n_x)
-    y = Symbolic.sym("y", n_scenarios, system.n_y)
-    residuals = unknown_equations(u, x, y)
-    return _assemble(problem, u, x, y, residuals, objective, objective_name)
-
-
 def gp_deterministic_equivalent(
     problem: Problem,
     fitted: tuple[FittedGP, ...],
@@ -266,12 +241,8 @@ def gp_deterministic_equivalent(
     `problem.system.y`. The unknown states y_s of scenario s are the GPs' prediction at
     the scenario's arguments of h, mean + std * z_s (`_scenario_unknown_states`). With
     `unknown_states_as_variables` the y_s are variables too, and the unknown equations
-    of `build_deterministic_equivalent` are y_s - prediction (paper, Problem 8), which
-    helps IPOPT.
-
-    Otherwise the prediction is substituted for them, which only an explicit y allows,
-    so this stays here. Substituted unknown states are no variables, so they have no
-    bounds.
+    are y_s - prediction (paper, Problem 8), which helps IPOPT. Otherwise the prediction
+    is substituted for them, which only an explicit y allows.
 
     Raises `ValueError` for scenarios or fitted GPs without one column or one GP per
     unknown state.
@@ -290,24 +261,22 @@ def gp_deterministic_equivalent(
             f"({system.n_y}), got {len(fitted)}"
         )
         raise ValueError(msg)
+
+    # The symbols for u and each scenario's mechanistic states, and the GPs' prediction
     n_scenarios = len(scenarios.w)
-
-    # The unknown states as variables, tied to the prediction
-    if unknown_states_as_variables:
-
-        def unknown_equations(u: Any, x: Any, y: Any) -> Any:
-            """The unknown states' distance from the GPs' prediction."""
-            return y - _scenario_unknown_states(system, fitted, scenarios, u, x)
-
-        return build_deterministic_equivalent(
-            problem, n_scenarios, unknown_equations, objective, objective_name
-        )
-
-    # The prediction in their place
     u = Symbolic.sym("u", system.n_u)
+    # Row s: the mechanistic states of scenario s
     x = Symbolic.sym("x", n_scenarios, system.n_x)
-    y = _scenario_unknown_states(system, fitted, scenarios, u, x)
-    return _assemble(problem, u, x, y, None, objective, objective_name)
+    prediction = _scenario_unknown_states(system, fitted, scenarios, u, x)
+
+    # The scenarios of the unknown states: variables tied to the GP, or the GP itself
+    y, unknown_equations = prediction, None
+    if unknown_states_as_variables:
+        y = Symbolic.sym("y", n_scenarios, system.n_y)
+        unknown_equations = y - prediction
+    return build_deterministic_equivalent(
+        problem, u, x, y, unknown_equations, objective, objective_name
+    )
 
 
 def fit_surrogate(

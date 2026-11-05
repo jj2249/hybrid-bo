@@ -138,24 +138,29 @@ def oracle_optimum(
     """The oracle optimum: the lowest objective the oracle allows, min f(x, y, u)
     subject to g(x, y, u) = 0 and y = oracle(x, y, u), within the bounds.
 
-    `oracle` is written as for `oracle_measure`. This is the deterministic equivalent of
-    one scenario with the oracle as the unknown equations, minimizing f, as
-    `optimize_hybrid_model` does with the GPs. Solved by `solve_with_multistart` from
-    `n_starts` Latin hypercube starts over the start bounds of u, x and y, so it is the
-    best local optimum found, which can miss the global one: use it to find a benchmark
-    experiment's optimum once, from many starts, and state that value in the experiment.
-    Raises `ValueError` if the oracle doesn't give one value per unknown state, and
-    `NoSolutionError` if every start fails.
+    `oracle` is written as for `oracle_measure`, and may read y. This is the
+    deterministic equivalent of one scenario with the unknown equations tied to the
+    oracle, minimizing f, as `optimize_hybrid_model` does with the surrogate model.
+    Solved by `solve_with_multistart` from `n_starts` Latin hypercube starts over the
+    start bounds of u, x and y, so it is the best local optimum found, which can miss
+    the global one: use it to find a benchmark experiment's optimum once, from many
+    starts, and state that value in the experiment. Raises `ValueError` if the oracle
+    doesn't give one value per unknown state, and `NoSolutionError` if every start
+    fails.
     """
-    oracle_function = _trace_oracle(problem.system, oracle)
+    # The oracle, and the symbols of the one scenario, whose states are rows
+    system = problem.system
+    oracle_function = _trace_oracle(system, oracle)
+    u = Symbolic.sym("u", system.n_u)
+    x = Symbolic.sym("x", 1, system.n_x)
+    y = Symbolic.sym("y", 1, system.n_y)
 
-    def unknown_equations(u: Any, x: Any, y: Any) -> Any:
-        """The oracle's distance from the unknown states of the one scenario, whose
-        states are rows here and columns in the traced oracle."""
-        return oracle_function(x.T, y.T, u).T - y
-
-    hybrid = build_deterministic_equivalent(
-        problem, 1, unknown_equations, _minimize_f, "oracle_optimum"
+    # The unknown equations read y, so y stays a variable; the oracle takes columns
+    unknown_equations = oracle_function(x.T, y.T, u).T - y
+    equivalent = build_deterministic_equivalent(
+        problem, u, x, y, unknown_equations, _minimize_f, "oracle_optimum"
     )
-    starts = lhs(*hybrid.start_bounds, n_starts, rng)
-    return solve_with_multistart(hybrid.nlp, starts, solver).f
+
+    # The best of the starts over the start bounds of u, x and y
+    starts = lhs(*equivalent.start_bounds, n_starts, rng)
+    return solve_with_multistart(equivalent.nlp, starts, solver).f

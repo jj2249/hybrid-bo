@@ -518,8 +518,10 @@ def _unpack_scenarios(problem: DeterministicEquivalent, w) -> tuple[u, x, y]: ..
 
 def build_deterministic_equivalent(
     problem,
-    n_scenarios,
-    unknown_equations,  # (u, x, y) expressions -> residuals (S, P)
+    u,
+    x,
+    y,
+    unknown_equations,  # residuals (S, P), or None if y is an expression of u and x
     objective,  # (f, x, y, u) expressions -> (objective, std of f)
     objective_name,
 ) -> DeterministicEquivalent: ...
@@ -559,18 +561,20 @@ def optimize_hybrid_model(
 - **The unknown equations are the seam (#211).** The oracle optimum has the same
   variables, bounds and `g` as the nominal optimum, with `y` tied to the oracle instead
   of the GPs, and it is the benchmark the hybrid result is tested against, so the
-  formulation exists once. `build_deterministic_equivalent` takes the residual that ties the unknown
-  states, a plain function over `(u, x, y)`, with two adapters: the GPs' scenarios,
-  `y - prediction(x, u)` (`gp_deterministic_equivalent`), and the oracle, `oracle(x, y, u) - y`
-  (`oracle_optimum`). The residual reads `y` because the unknown equations are
-  `0 = h(x, y, u)`: `y = h(x, u)` is only the form the GP learns, and an oracle may be
-  implicit.
+  formulation exists once. `build_deterministic_equivalent` takes the symbols and the
+  residuals that tie the unknown states, as expressions over `(u, x, y)`, and has two
+  callers: `gp_deterministic_equivalent`, with `y - prediction(x, u)`, and
+  `oracle_optimum`, with `oracle(x, y, u) - y`. The residuals read `y` because the
+  unknown equations are `0 = h(x, y, u)`: `y = h(x, u)` is only the form the GP learns,
+  and an oracle may be implicit.
 
   Substituting the prediction for `y` (`unknown_states_as_variables=False`) needs an
-  explicit `y`, which a residual doesn't give, so it isn't part of the seam: only
-  `gp_deterministic_equivalent` does it, going past `build_deterministic_equivalent` to `_assemble`, which
-  both share. `oracle_optimum` and `optimize_hybrid_model` share the objective `f`
-  (`_minimize_f`), and the dependency runs one way: `oracle.py` imports `hybrid_model.py`.
+  explicit `y`, which residuals don't give, so only `gp_deterministic_equivalent` does
+  it: it passes the prediction as `y`, and None for the residuals. The builder takes
+  expressions, not a function of the symbols, so that this needs no second entry point,
+  and each caller builds its symbols once. `oracle_optimum` and `optimize_hybrid_model`
+  share the objective `f` (`_minimize_f`), and the dependency runs one way: `oracle.py`
+  imports `hybrid_model.py`.
 - **`AcquisitionProblem` is an alias of `DeterministicEquivalent`.** Hybrid BO's acquisition
   problem is a deterministic equivalent whose objective is an acquisition function. Standard
   BO's is no deterministic equivalent, having no hybrid model, but needs the same fields with

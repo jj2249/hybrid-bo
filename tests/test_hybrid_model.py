@@ -17,13 +17,17 @@ from hybrid_bo.problem import Symbolic
 
 
 def test_the_unknown_equations_tie_each_scenario_after_its_known_equations():
-    """The residual passed to `build_deterministic_equivalent` reads u, x and y of each
-    scenario, and each scenario's rows of the constraints are g, then that residual."""
+    """The residuals passed to `build_deterministic_equivalent` read u, x and y, and each
+    scenario's rows of the constraints are g, then its row of the residuals."""
     # Two scenarios of the illustrative example, tied by y = x + u
+    u_sym = Symbolic.sym("u", 1)
+    x_sym, y_sym = Symbolic.sym("x", 2, 1), Symbolic.sym("y", 2, 1)
     built = build_deterministic_equivalent(
         ex.problem,
-        2,
-        lambda u, x, y: y - x - cas.repmat(u, 2, 1),
+        u_sym,
+        x_sym,
+        y_sym,
+        y_sym - x_sym - cas.repmat(u_sym, 2, 1),
         lambda f, _x, _y, _u: (cas.sum1(f), Symbolic(0)),
         "test",
     )
@@ -34,12 +38,38 @@ def test_the_unknown_equations_tie_each_scenario_after_its_known_equations():
     assert built.nlp.g is not None  # a problem over scenarios has constraints
     constraints = built.nlp.g(w).full().ravel()
 
-    # Check: g and the residual, scenario by scenario, and the variables' order
+    # Check: g and the residuals, scenario by scenario, and the variables' order
     g = (x + np.exp(x) - y).ravel()
     residual = (y - x - u).ravel()
     np.testing.assert_allclose(constraints, [g[0], residual[0], g[1], residual[1]])
     for unpacked, packed in zip(_unpack(built, w), (u, x, y), strict=True):
         np.testing.assert_array_equal(unpacked, packed)
+
+
+def test_unknown_states_given_as_an_expression_add_no_variables_or_equations():
+    """With None for the unknown equations, y is an expression of u and x: the variables
+    are u and the x_s, and the constraints g alone, read at that y."""
+    # Two scenarios of the illustrative example, with y = x + u substituted
+    u_sym, x_sym = Symbolic.sym("u", 1), Symbolic.sym("x", 2, 1)
+    built = build_deterministic_equivalent(
+        ex.problem,
+        u_sym,
+        x_sym,
+        x_sym + cas.repmat(u_sym, 2, 1),
+        None,
+        lambda f, _x, _y, _u: (cas.sum1(f), Symbolic(0)),
+        "test",
+    )
+
+    # The constraints at a point
+    u, x = np.array([0.3]), np.array([[0.1], [0.2]])
+    assert built.nlp.g is not None  # a problem over scenarios has constraints
+    constraints = built.nlp.g(_pack(u, x)).full().ravel()
+
+    # Check: no y among the variables, and g at y = x + u
+    assert not built.unknown_states_as_variables
+    assert len(built.nlp.lower) == 3
+    np.testing.assert_allclose(constraints, (np.exp(x) - u).ravel())
 
 
 def data_of(problem: hb.Problem, measure: hb.Measure, n: int) -> hb.History:
