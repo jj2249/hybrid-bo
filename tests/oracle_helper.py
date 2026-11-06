@@ -5,7 +5,7 @@ import casadi as cas
 import numpy as np
 
 from hybrid_bo.problem import Problem, Symbolic, _to_casadi_function, lhs_points
-from hybrid_bo.solvers import _find_root
+from hybrid_bo.solvers import RootProblem, find_root
 
 
 def _root(problem: Problem, oracle, u: np.ndarray, rng) -> np.ndarray:
@@ -15,11 +15,18 @@ def _root(problem: Problem, oracle, u: np.ndarray, rng) -> np.ndarray:
     oracle_function = _to_casadi_function(
         "oracle", oracle, system.x, system.y, system.u
     )
-    w = Symbolic.sym("w", len(states))
+    w, u_symbol = Symbolic.sym("w", len(states)), Symbolic.sym("u", system.n_u)
     x, y = w[: system.n_x], w[system.n_x :]
-    residuals = cas.vertcat(system.g(x, y, u), oracle_function(x, y, u) - y)
+    residual = cas.vertcat(
+        system.g(x, y, u_symbol), oracle_function(x, y, u_symbol) - y
+    )
+    root_problem = RootProblem(
+        cas.Function("oracle_system", [w, u_symbol], [residual]),
+        np.array([var.lower for var in states]),
+        np.array([var.upper for var in states]),
+    )
     starts = lhs_points(states, 100, rng)
-    return _find_root(w, residuals, states, starts, 1e-10)
+    return find_root(root_problem, u, starts, 1e-10)
 
 
 def measure_oracle(problem: Problem, oracle, noise_std: float):

@@ -16,6 +16,7 @@ from typing import Any
 import casadi as cas
 import numpy as np
 
+from hybrid_bo.errors import RootFindingError
 from hybrid_bo.gp import FittedGP
 from hybrid_bo.hybrid_model import (
     DeterministicEquivalent,
@@ -23,7 +24,7 @@ from hybrid_bo.hybrid_model import (
     gp_deterministic_equivalent,
 )
 from hybrid_bo.problem import Problem, Symbolic, start_bounds
-from hybrid_bo.solvers import NLP
+from hybrid_bo.solvers import NLP, RootProblem, find_root
 from hybrid_bo.utils import log_softplus
 
 # Added to the standard deviation in EI, so a zero std doesn't divide by zero
@@ -175,14 +176,14 @@ def replay(
     Standard BO's is analytic. With u fixed, hybrid BO's constraints are a square system
     in the scenario states, which Newton's method solves point by point outwards from
     `solution`, each from the nearest point solved, to stay on the branch the optimizer
-    chose. A point fails if a residual is above `_REPLAY_TOLERANCE` or a state is outside
-    its bounds.
+    chose. A point fails if the residual norm is above `_REPLAY_TOLERANCE` or a state is
+    outside its bounds.
     """
     if problem.scenario_values is None:
         values = problem.nlp.f.map(len(u))(u.T).full().ravel()
         return Replay(values, problem.ei(values))
 
-    # Newton's method on the constraints, with the states as unknowns and u fixed
+    # The constraints as a root problem: the states are unknowns and u a parameter
     nlp, n_u = problem.nlp, problem.n_u
     assert nlp.g is not None and solution.x is not None and solution.y is not None
     stored = problem.pack(solution)[n_u:]
@@ -190,9 +191,7 @@ def replay(
     equations = cas.Function(
         "replay", [states, u_fixed], [nlp.g(cas.vertcat(u_fixed, states))]
     )
-    newton = None
-    if len(stored) > 0:
-        newton = cas.rootfinder("replay", "newton", equations, {"error_on_fail": False})
+    root_problem = RootProblem(equations, nlp.lower[n_u:], nlp.upper[n_u:])
 
     # Outwards from the stored solution, each point from the nearest one solved
     solved_u, solved_states = [solution.u], [stored]
@@ -203,13 +202,11 @@ def replay(
     y = np.full((len(u), n_scenarios, n_y), np.nan)
     for i in np.argsort(np.linalg.norm(u - solution.u, axis=1)):
         nearest = np.argmin(np.linalg.norm(np.array(solved_u) - u[i], axis=1))
-        root = solved_states[nearest]
-        if newton is not None:
-            root = newton(root, u[i]).full().ravel()
-            residual = equations(root, u[i]).full()
-            inside = (root >= nlp.lower[n_u:]) & (root <= nlp.upper[n_u:])
-            if np.abs(residual).max() > _REPLAY_TOLERANCE or not inside.all():
-                continue
+        start = solved_states[nearest][np.newaxis]
+        try:
+            root = find_root(root_problem, u[i], start, _REPLAY_TOLERANCE)
+        except RootFindingError:
+            continue
         w = np.concatenate([u[i], root])
         values[i] = float(nlp.f(w))
         f_i, y_i = problem.scenario_values(w)

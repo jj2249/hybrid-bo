@@ -8,6 +8,10 @@
 - **Breaking:** `hb.saa_scenarios` and `Scenarios` are gone: pass draws `z` and weights `w`.
   `approximation` is keyword-only, and `AcquisitionSolution` is `Solution`.
 - `hb.expected_improvement` is public.
+- **Breaking:** `reconstruct_states` solves with CasADi's Newton method instead of scipy's
+  `fsolve`, which is no longer a dependency. With several roots in the bounds, it may find
+  a different one.
+- **Breaking:** Ctrl-C during IPOPT skips one start rather than stopping the solve.
 - **Breaking:** `hb.fit_gp(gp, X, Y, rng)` is `gp.fit(X, Y, rng)`, `predict(fitted, X)` is
   `fitted.predict(X)`, and `log_marginal_likelihood` is a method of `FittedGP`.
 - **Breaking:** `2.0 * kernel` is gone: write `Scale(kernel, 2.0)`. `covariance` and

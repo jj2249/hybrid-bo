@@ -1,33 +1,31 @@
-"""Nonlinear programs, the multistart solver and the root finder.
+"""Running the solvers: everything here takes a problem someone else built.
 
-An `NLP` describes the problem, `Ipopt` the solver settings, and `solve_with_multistart`
-builds the CasADi `Opti` problem once, solves it from several starts and keeps the best
-solution. `_find_root` solves the root-finding problem. The caller draws the starts (with `lhs`), so the draw order stays visible
-where the generator is used.
+An `NLP` and `Ipopt` describe an optimization, and `solve_with_multistart` solves it from
+several starts and keeps the best solution. A `RootProblem` describes a square system of
+equations, and `find_root` solves it from several starts and keeps the first root. The
+caller draws the starts (with `lhs`), so the draw order stays visible where the generator
+is used.
 """
 
 import logging
-import signal
-import threading
-import warnings
-from collections.abc import Generator, Sequence
-from contextlib import contextmanager
 from dataclasses import dataclass, field
-from types import FrameType
+from functools import cached_property
 from typing import Any
 
 import casadi as cas
 import numpy as np
-import scipy
 
 from hybrid_bo.errors import NoSolutionError, RootFindingError
-from hybrid_bo.problem import Var
 
 _logger = logging.getLogger(__name__)
 
 # Objectives closer than this (relative, or absolute below 1) tie in
 # `solve_with_multistart`
 _TIE_TOLERANCE = 1e-13
+
+# Newton's method converges in a few iterations or not at all, and a start that doesn't
+# would otherwise run CasADi's default of 1000
+_NEWTON_MAX_ITERATIONS = 100
 
 
 @dataclass(frozen=True)
@@ -52,6 +50,26 @@ class Ipopt:
     solver_options: dict[str, Any] = field(default_factory=lambda: {"print_level": 0})
 
 
+@dataclass(frozen=True)
+class RootProblem:
+    """residual(w, p) = 0 for w, with lower <= w <= upper, at given parameters p.
+
+    `residual` is a `cas.Function` of the columns w and p, with one equation per entry of
+    w. The bounds have shape (n,) and may be infinite.
+    """
+
+    residual: cas.Function
+    lower: np.ndarray
+    upper: np.ndarray
+
+    @cached_property
+    def newton(self) -> cas.Function:
+        """Newton's method on the residual: (start, p) -> w. Built once, on first use."""
+        # `find_root` checks every result itself
+        options = {"error_on_fail": False, "max_iter": _NEWTON_MAX_ITERATIONS}
+        return cas.rootfinder("newton", "newton", self.residual, options)
+
+
 def solve_with_multistart(
     nlp: NLP, starts: np.ndarray, solver: Ipopt
 ) -> tuple[np.ndarray, float]:
@@ -61,8 +79,9 @@ def solve_with_multistart(
     result doesn't depend on the platform's arithmetic.
 
     A start that fails is expected, so it is skipped. Starts that ran IPOPT to its
-    iteration limit are counted in one warning. Raises `NoSolutionError` if every start fails, and
-    `KeyboardInterrupt` on Ctrl-C, even while IPOPT runs.
+    iteration limit are counted in one warning. Raises `NoSolutionError` if every start
+    fails. CasADi catches a Ctrl-C inside IPOPT and fails that start, so Ctrl-C skips one
+    start rather than stopping the solve.
     """
     # Build the problem once, with the bounds as constraints (as the pre-refactor
     # optimizer had them, so IPOPT takes the steps the regression baselines record)
@@ -82,12 +101,8 @@ def solve_with_multistart(
         opti.set_initial(w, start)
         opti.solver("ipopt", solver.plugin_options, solver.solver_options)
         try:
-            with _interrupts_noticed() as interrupts:
-                solution = opti.solve()
-        except RuntimeError as error:
-            # CasADi catches a Ctrl-C inside IPOPT and fails the solve instead
-            if interrupts:
-                raise KeyboardInterrupt from error
+            solution = opti.solve()
+        except RuntimeError:
             at_limit = opti.stats()["return_status"] == "Maximum_Iterations_Exceeded"
             if at_limit:
                 n_at_limit += 1
@@ -120,65 +135,25 @@ def solve_with_multistart(
     return best, f_best
 
 
-@contextmanager
-def _interrupts_noticed() -> Generator[list[int]]:
-    """Yields a list that gets an entry for each Ctrl-C (SIGINT) during the block,
-    which is still handled as before. Only the main thread handles signals, and only
-    a Python handler can be wrapped, so otherwise the list stays empty."""
-    previous = signal.getsignal(signal.SIGINT)
-    interrupts = []
-    is_main_thread = threading.current_thread() is threading.main_thread()
-    if not (is_main_thread and callable(previous)):
-        yield interrupts
-        return
-
-    def noticing(signum: int, frame: FrameType | None) -> None:
-        """Records the interrupt, then handles it as the previous handler did."""
-        interrupts.append(signum)
-        previous(signum, frame)
-
-    signal.signal(signal.SIGINT, noticing)
-    try:
-        yield interrupts
-    finally:
-        signal.signal(signal.SIGINT, previous)
-
-
-def _find_root(
-    w: Any, residuals: Any, variables: Sequence[Var], starts: np.ndarray, tol: float
+def find_root(
+    problem: RootProblem, p: np.ndarray, starts: np.ndarray, tol: float
 ) -> np.ndarray:
-    """A root of `residuals`, a column expression in the column of symbols `w`.
-
-    Runs fsolve with the CasADi Jacobian from each row of `starts` in turn and returns
-    the first root, shape (d,), whose residual norm is below `tol` and that lies within
-    the bounds of `variables` (one per entry of `w`). A start that fails is expected,
-    so fsolve's convergence warnings are silenced. With no variables (no unmeasured
-    states, as without known equations) the root is empty and nothing is solved.
+    """A root of `problem` at the parameters p (k,), by Newton's method from each row of
+    `starts` (n_starts, n) in turn: the first, shape (n,), whose residual norm is below
+    `tol` and that lies within the bounds. A start that fails is expected, so it is
+    skipped. With no variables the root is empty and nothing is solved.
 
     Raises `RootFindingError` if no start gives such a root.
     """
-    if not variables:
+    if len(problem.lower) == 0:
         return np.zeros(0)
-
-    # Numeric residual and Jacobian, and the box a root must lie in
-    residual = cas.Function("residual", [w], [residuals])
-    jacobian = cas.Function("jacobian", [w], [cas.jacobian(residuals, w)])
-    lower = np.array([var.lower for var in variables])
-    upper = np.array([var.upper for var in variables])
 
     # The first start that converges to a root within the bounds wins
     for start in starts:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", RuntimeWarning)
-            root = scipy.optimize.fsolve(
-                lambda w: residual(w[:, np.newaxis]).full().ravel(),
-                start,
-                fprime=lambda w: jacobian(w[:, np.newaxis]).full(),
-            )
-        is_root = np.linalg.norm(residual(root[:, np.newaxis]).full()) < tol
-        if is_root and np.all(lower <= root) and np.all(root <= upper):
+        root = problem.newton(start, p).full().ravel()
+        is_root = np.linalg.norm(problem.residual(root, p).full()) < tol
+        if is_root and np.all(problem.lower <= root) and np.all(root <= problem.upper):
             return root
 
-    names = ", ".join(var.name for var in variables)
-    msg = f"No root for {names} within the bounds from {len(starts)} starts"
+    msg = f"No root within the bounds from {len(starts)} starts"
     raise RootFindingError(msg)

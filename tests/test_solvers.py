@@ -1,14 +1,19 @@
 """NLPs and the multistart solver."""
 
 import logging
-import signal
 
 import casadi as cas
 import numpy as np
 import pytest
 
-from hybrid_bo import NoSolutionError
-from hybrid_bo.solvers import NLP, Ipopt, solve_with_multistart
+from hybrid_bo import NoSolutionError, RootFindingError
+from hybrid_bo.solvers import (
+    NLP,
+    Ipopt,
+    RootProblem,
+    find_root,
+    solve_with_multistart,
+)
 
 w = cas.SX.sym("w")
 # Two local minima, near -1 (the global one) and near +1
@@ -145,46 +150,43 @@ def test_other_failures_are_not_warned_about(caplog):
     assert not caplog.records
 
 
-class InterruptingObjective(cas.Callback):
-    """The double well's objective, evaluated in Python, which sends this process
-    SIGINT (Ctrl-C) on its first evaluation, so the interrupt arrives while IPOPT
-    runs."""
-
-    def __init__(self):
-        """Builds the callback, with finite-difference derivatives."""
-        super().__init__()
-        self.construct("interrupting", {"enable_fd": True})
-
-    def get_n_in(self):
-        """One input, w."""
-        return 1
-
-    def get_n_out(self):
-        """One output, f."""
-        return 1
-
-    def eval(self, args):
-        """Sends SIGINT, then evaluates the double well."""
-        signal.raise_signal(signal.SIGINT)
-        return [DOUBLE_WELL.f(args[0])]
+# x^2 = p, with x a variable and p a parameter
+ROOT_W, ROOT_P = cas.SX.sym("x"), cas.SX.sym("p")
+SQUARE = cas.Function("square", [ROOT_W, ROOT_P], [ROOT_W**2 - ROOT_P])
 
 
-def test_ctrl_c_inside_ipopt_stops_solve_with_multistart():
-    """Ctrl-C while IPOPT solves stops `solve_with_multistart` with `KeyboardInterrupt`,
-    although CasADi catches the interrupt and reports a failed solve (#155), and the
-    Ctrl-C handler is put back afterwards."""
-    objective = InterruptingObjective()
-    nlp = NLP(
-        cas.Function("f", [w], [objective(w)]),
-        DOUBLE_WELL.lower,
-        DOUBLE_WELL.upper,
+def test_find_root_gives_the_root_at_the_parameters():
+    """The same problem is solved at each parameter, from the start's side."""
+    problem = RootProblem(SQUARE, np.array([-10.0]), np.array([10.0]))
+
+    np.testing.assert_allclose(
+        find_root(problem, np.array([4.0]), np.array([[1.0]]), 1e-10), [2.0]
     )
-    quasi_newton = Ipopt(
-        solver_options={"print_level": 0, "hessian_approximation": "limited-memory"}
+    np.testing.assert_allclose(
+        find_root(problem, np.array([9.0]), np.array([[-1.0]]), 1e-10), [-3.0]
     )
-    handler = signal.getsignal(signal.SIGINT)
 
-    with pytest.raises(KeyboardInterrupt):
-        solve_with_multistart(nlp, np.array([[1.5], [-1.5]]), quasi_newton)
 
-    assert signal.getsignal(signal.SIGINT) is handler
+def test_find_root_skips_a_root_outside_the_bounds():
+    """A start that reaches a root outside the bounds fails, and the next start is used."""
+    problem = RootProblem(SQUARE, np.array([0.0]), np.array([10.0]))
+    starts = np.array([[-1.0], [1.0]])
+
+    root = find_root(problem, np.array([4.0]), starts, 1e-10)
+
+    np.testing.assert_allclose(root, [2.0])
+
+
+def test_find_root_raises_when_no_start_gives_a_root():
+    """x^2 = -1 has no real root."""
+    problem = RootProblem(SQUARE, np.array([-10.0]), np.array([10.0]))
+
+    with pytest.raises(RootFindingError, match="from 2 starts"):
+        find_root(problem, np.array([-1.0]), np.array([[1.0], [2.0]]), 1e-10)
+
+
+def test_find_root_with_no_variables_is_empty():
+    """With no unknowns nothing is solved."""
+    problem = RootProblem(SQUARE, np.zeros(0), np.zeros(0))
+
+    assert find_root(problem, np.array([1.0]), np.zeros((1, 0)), 1e-10).shape == (0,)
