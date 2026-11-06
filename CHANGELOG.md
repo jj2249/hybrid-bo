@@ -2,13 +2,21 @@
 
 ## 0.8.1 (2026-11-06)
 
-The solvers and the hybrid problem hold their own behavior, and `solve` returns plain
-values. The regression results don't change.
+A hybrid model can now be optimized without BO, the solvers hold their own behavior, and
+`solve` returns plain values. The regression results don't change.
 
-- **Breaking:** `hb.hybrid_deterministic_equivalent(...)` is `hb.DeterministicEquivalent(...)`,
-  with the same arguments. It holds an `NLP` as `.nlp` rather than being one, so `.f`, `.g`
-  and the bounds are on `.nlp`.
-- **Breaking:** `solve` returns values: `u, x, y, value` from a `DeterministicEquivalent`, and
+- **Breaking:** `hb.hybrid_deterministic_equivalent(problem, fitted, z, w, incumbent,
+  acquisition=hb.EI())` is `hb.HybridNLP(problem, fitted, z, w, objective=hb.EI(incumbent))`.
+  It holds an `NLP` as `.nlp` rather than being one, so `.f`, `.g` and the bounds are on
+  `.nlp`.
+- `objective` is any function of f under the scenarios and the weights, and `hb.mean` gives
+  the expected objective, or the nominal one over one scenario at `z = 0`.
+- **Breaking:** `hb.EI` and `hb.SoftEI` hold the incumbent: `hb.EI(incumbent)` and
+  `hb.SoftEI(incumbent, temperature=...)`. `hybrid_bo.acquisition` is `hybrid_bo.bo`.
+- **Breaking:** the plots show the objective that was minimized, so EI is `-EI`, SoftEI is
+  `-log SoftEI` and the trial point sits at a minimum. `hb.plots.acquisition_on_grid` is
+  `hb.plots.objective_on_grid`, and `from_objective` is gone.
+- **Breaking:** `solve` returns values: `u, x, y, value` from a `HybridNLP`, and
   `w, value` from an `NLP`, so the trial point of `hb.standard_acquisition` is the first of
   them. `Solution` and `ScenarioSolution` are gone, and the plots take what `solve` returned.
 - **Breaking:** `find_root(problem, p, starts, tol)` is `problem.solve(p, starts, tol)`, and

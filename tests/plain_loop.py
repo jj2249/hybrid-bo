@@ -1,6 +1,8 @@
 """The loop a script writes, one point at a time. `measure` is the script's function of
 (u, rng), returning the measured variables as an array."""
 
+from collections.abc import Callable
+
 import numpy as np
 
 import hybrid_bo as hb
@@ -40,7 +42,7 @@ def hybrid_loop(
     *,
     n_iterations: int,
     gp: GP,
-    acquisition: hb.EI | hb.SoftEI,
+    acquisition: Callable[[float], hb.EI | hb.SoftEI],
     unknown_states_as_variables: bool = True,
 ) -> tuple[hb.Dataset, list[tuple]]:
     """Hybrid BO from `dataset`, with the scenarios z and w drawn once, before the loop.
@@ -51,16 +53,15 @@ def hybrid_loop(
     for _ in range(n_iterations):
         fitted = hb.fit_surrogate(problem.system, dataset, gp=gp, rng=rng)
         incumbent = hb.incumbents(dataset)[-1]
-        equivalent = hb.DeterministicEquivalent(
+        hybrid_nlp = hb.HybridNLP(
             problem,
             fitted,
             z,
             w,
-            incumbent,
-            acquisition=acquisition,
+            objective=acquisition(incumbent),
             unknown_states_as_variables=unknown_states_as_variables,
         )
-        solution = equivalent.solve(rng)
+        solution = hybrid_nlp.solve(rng)
         dataset = hb.extend(dataset, evaluate_point(problem, measure, solution[0], rng))
         solutions.append(solution)
     return dataset, solutions

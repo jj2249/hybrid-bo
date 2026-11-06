@@ -8,7 +8,7 @@ time, and each result is mapped to the keys of the stored JSON to compare.
 """
 
 import json
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from functools import partial
 from pathlib import Path
 
@@ -31,7 +31,9 @@ Result = tuple[hb.Dataset, Sequence[tuple]]
 
 
 def run_hybrid_bo(
-    acquisition: hb.EI | hb.SoftEI, measure: hb.Measure, rng: np.random.Generator
+    acquisition: Callable[[float], hb.EI | hb.SoftEI],
+    measure: hb.Measure,
+    rng: np.random.Generator,
 ) -> Result:
     """Hybrid BO: the initial points, the scenarios once, then the loop."""
     points = hb.lhs_points(ex.system.u, ex.N_INITIAL, rng)
@@ -83,10 +85,10 @@ def run_uniform_sampling(measure: hb.Measure, rng: np.random.Generator) -> Resul
 
 # The illustrative example's methods, with their labels in the stored results
 METHODS = {
-    "hybrid_bo": partial(run_hybrid_bo, hb.EI()),
+    "hybrid_bo": partial(run_hybrid_bo, hb.EI),
     "hybrid_bo_soft": partial(
         run_hybrid_bo,
-        hb.SoftEI(temperature=50e-3),
+        partial(hb.SoftEI, temperature=50e-3),
     ),
     "standard_bo": run_standard_bo,
     "latin_hypercube_sampling": run_latin_hypercube_sampling,

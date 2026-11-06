@@ -18,15 +18,14 @@ simulator or an oracle of your own:
    w = np.full(25, 1 / 25)
    for _ in range(10):
        fitted = hb.fit_surrogate(system, dataset, gp=gp, rng=rng)
-       equivalent = hb.DeterministicEquivalent(
+       hybrid_nlp = hb.HybridNLP(
            problem,
            fitted,
            z,
            w,
-           hb.incumbents(dataset)[-1],
-           acquisition=hb.EI(),
+           objective=hb.EI(hb.incumbents(dataset)[-1]),
        )
-       u, x, y, value = equivalent.solve(rng)
+       u, x, y, value = hybrid_nlp.solve(rng)
        measured = measure(u, rng)
        new = hb.reconstruct_states(
            problem, u=u[None], measured=measured[None], rng=rng

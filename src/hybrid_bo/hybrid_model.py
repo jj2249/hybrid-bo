@@ -1,28 +1,37 @@
 """The hybrid model as an optimization problem: the known equations with the surrogate
 model embedded, over scenarios of the GPs' prediction of the unknown states.
 
-Hybrid BO's acquisition function has no closed form, so a `DeterministicEquivalent`
-replaces it with a sample average over scenarios: `solve` it for the next trial point, and
-pass it to the plots to see what was minimized.
+A `HybridNLP` discretizes the unknown states into scenarios, and minimizes an objective of
+f under them. For hybrid BO that objective is an acquisition function; `mean` optimizes the
+hybrid model itself. `solve` it, and pass it to the plots to see what was minimized.
 """
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 import casadi as cas
 import numpy as np
 
-from hybrid_bo.acquisition import EI, SoftEI
 from hybrid_bo.gp import FittedGP
 from hybrid_bo.problem import Problem, Symbolic, Var, start_bounds
 from hybrid_bo.solvers import NLP, Ipopt
 
 
+def mean(f: Any, w: np.ndarray) -> Any:
+    """The weighted average of f (S, 1) with weights w (S,): an objective with no
+    acquisition function. Over one scenario at z = 0 it is the nominal objective."""
+    return Symbolic(w).T @ f
+
+
 @dataclass(frozen=True, init=False)
-class DeterministicEquivalent:
-    """The acquisition problem of hybrid BO (paper, Problems 8 and 9): the hybrid model
-    over the scenarios, minimizing the sample average of `acquisition` under them.
+class HybridNLP:
+    """The hybrid model over scenarios, as an NLP: the paper's deterministic equivalent
+    (Problems 8 and 9) when `objective` is an acquisition function.
+
+    `objective` maps f under each scenario (S, 1) and the weights w (S,) to the value to
+    minimize: `hb.EI`, `hb.SoftEI`, `hb.mean` or a function of your own, called once with
+    CasADi symbols.
 
     The scenarios are the draws z (S, P), one row per scenario, and the weights w (S,),
     which sum to 1. For a sample average, `z = rng.standard_normal((S, P))` and
@@ -50,7 +59,6 @@ class DeterministicEquivalent:
     n_u: int
     n_x: int
     weights: np.ndarray
-    acquisition: EI | SoftEI
     unknown_states_as_variables: bool
     scenario_values: cas.Function
 
@@ -60,9 +68,8 @@ class DeterministicEquivalent:
         fitted: tuple[FittedGP, ...],
         z: np.ndarray,
         w: np.ndarray,
-        incumbent: float,
         *,
-        acquisition: EI | SoftEI,
+        objective: Callable[[Any, np.ndarray], Any],
         unknown_states_as_variables: bool = True,
     ) -> None:
         # The checks
@@ -133,9 +140,7 @@ class DeterministicEquivalent:
         f = cas.vertcat(*f_parts)
         decisions = self.pack(u, x, y)
         nlp = NLP(
-            cas.Function(
-                "acquisition", [decisions], [acquisition.objective(f, w, incumbent)]
-            ),
+            cas.Function("objective", [decisions], [objective(f, w)]),
             np.array([var.lower for var in variables]),
             np.array([var.upper for var in variables]),
             cas.Function("g", [decisions], [cas.vertcat(*constraints)]),
@@ -146,7 +151,6 @@ class DeterministicEquivalent:
         object.__setattr__(self, "n_u", system.n_u)
         object.__setattr__(self, "n_x", system.n_x)
         object.__setattr__(self, "weights", w)
-        object.__setattr__(self, "acquisition", acquisition)
         object.__setattr__(self, "scenario_values", scenario_values)
 
     @property
@@ -161,8 +165,8 @@ class DeterministicEquivalent:
         n_starts: int = 10,
         solver: Ipopt = Ipopt(),  # noqa: B008  (frozen, never mutated)
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
-        """The trial point u (N,), the scenario states there, x (S, M) and y (S, P), one
-        row per scenario, and the objective.
+        """The minimizer u (N,), the scenario states there, x (S, M) and y (S, P), one row
+        per scenario, and the objective.
 
         Raises `NoSolutionError` if every start fails.
         """

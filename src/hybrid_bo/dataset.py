@@ -12,7 +12,7 @@ class Dataset:
     the order the points were taken, which `incumbents` relies on.
 
     `x` and `y` are measured (the measured variables) and reconstructed (the rest), except
-    that `hb.plots.acquisition_on_grid` fills a dataset per scenario with predicted ones.
+    that `hb.plots.objective_on_grid` fills a dataset per scenario with predicted ones.
     """
 
     u: np.ndarray  # (n, N)

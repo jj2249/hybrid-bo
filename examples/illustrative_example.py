@@ -43,13 +43,12 @@ def measure(u, rng):
     return np.sin(u)
 
 
-# The prior GP, and the acquisition function
+# The prior GP
 gp = hb.gp.GP(
     mean=hb.gp.Zero(),
     kernel=hb.gp.Scale(hb.gp.Matern52(), hb.gp.Param((0.1, 10.0))),
     noise_std=0.0,
 )
-acquisition = hb.SoftEI(temperature=50e-3)
 
 figure, axes = plt.subplots(3, 2, sharex=True, figsize=(10, 8), layout="constrained")
 
@@ -67,16 +66,15 @@ for seed in range(N_RUNS):
         before = dataset
         incumbent = hb.incumbents(dataset)[-1]
         fitted = hb.fit_surrogate(system, dataset, gp=gp, rng=rng)
-        equivalent = hb.DeterministicEquivalent(
+        hybrid_nlp = hb.HybridNLP(
             problem,
             fitted,
             z,
             w,
-            incumbent,
-            acquisition=acquisition,
+            objective=hb.SoftEI(incumbent, temperature=50e-3),
             unknown_states_as_variables=False,
         )
-        solution = equivalent.solve(rng)
+        solution = hybrid_nlp.solve(rng)
         u_new = solution[0][None]
         new = hb.reconstruct_states(
             problem, u=u_new, measured=measure(u_new, rng), rng=rng
@@ -85,7 +83,7 @@ for seed in range(N_RUNS):
     hybrid_curves.append(hb.incumbents(dataset))
 
 # The last iteration of the last run
-hb.plots.iteration(equivalent, solution, fitted[0], before, axes[:, 0])
+hb.plots.iteration(hybrid_nlp, solution, fitted[0], before, axes[:, 0])
 axes[0, 0].set(title="Hybrid BO, SAA-SoftEI", ylabel="y")
 
 # Standard BO: a GP of the objective
