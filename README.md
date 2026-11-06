@@ -11,11 +11,19 @@ The library fits GPs and solves one iteration of BO. You write the loop.
 ## Install
 
 ```bash
-pip install "hybrid-bo[plots] @ git+https://github.com/jj2249/hybrid-bo.git@<tag>"
+pip install "hybrid-bo[plots] @ git+https://github.com/jj2249/hybrid-bo.git"
 ```
 
-`plots` adds matplotlib. To work on the library, install [pixi](https://pixi.sh);
-`pixi run -e dev docs` builds the API docs into `docs/_build/html`.
+`plots` adds matplotlib. Add `@<commit>` to the URL to pin a version: `v0.6.0`, the last
+release, has the old API that this README doesn't describe.
+
+To work on the library, install [pixi](https://pixi.sh):
+
+```bash
+pixi run -e dev test    # pytest
+pixi run -e dev check   # lint, format and type check
+pixi run -e dev docs    # the API docs, in docs/_build/html
+```
 
 ## Use
 
@@ -56,14 +64,17 @@ def evaluate(u, rng):
 
 rng = np.random.default_rng(0)
 gp = hb.gp.GP(mean=hb.gp.Zero(), kernel=hb.gp.Matern52(), noise_std=0.0)
+points = hb.lhs_points(system.u, 5, rng)
+initial = hb.reconstruct_states(
+    problem, u=points, measured=measure(points, rng), rng=rng
+)
 ```
 
 **Hybrid BO** fits a GP to each unknown state. Draw the scenarios once, before the loop,
 and keep them: nothing checks that they stay the same.
 
 ```python
-points = hb.lhs_points(system.u, 5, rng)
-dataset = hb.reconstruct_states(problem, u=points, measured=np.sin(points), rng=rng)
+dataset = initial
 scenarios = hb.saa_scenarios(25, system.n_y, rng)
 
 for _ in range(10):
@@ -82,6 +93,8 @@ for _ in range(10):
 **Standard BO** fits one GP to the objective:
 
 ```python
+dataset = initial
+
 for _ in range(10):
     fitted = hb.fit_gp(gp, dataset.u, dataset.f, rng)
     solution = hb.standard_trial_point(problem, fitted, hb.incumbents(dataset)[-1], rng)
@@ -92,9 +105,15 @@ for _ in range(10):
 `hb.uniform_points`:
 
 ```python
+dataset = initial
+
 for point in hb.uniform_points(system.u, 10, rng):
     dataset = hb.extend(dataset, evaluate(point, rng))
 ```
+
+A fit or a trial point raises `hb.NoSolutionError` if every start fails, and
+`hb.reconstruct_states` raises `hb.RootFindingError` if the known equations have no root
+or a value isn't finite. Your loop decides what to do: nothing is caught for you.
 
 The library logs what it fits and how many starts of each solve succeed, at `INFO` on the
 `hybrid_bo` logger; `logging.getLogger("hybrid_bo").setLevel(logging.INFO)` shows it.
