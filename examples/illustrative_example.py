@@ -38,7 +38,7 @@ system = hb.System(
 problem = hb.Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x - 4))
 
 
-def measure(u):
+def measure(u, rng):
     """The system: here an oracle, but it could run a plant or a simulator."""
     return np.sin(u)
 
@@ -59,7 +59,7 @@ for seed in range(N_RUNS):
     rng = np.random.default_rng(seed)
     points = hb.lhs_points(system.u, N_INITIAL, rng)
     dataset = hb.reconstruct_states(
-        problem, u=points, measured=measure(points), rng=rng
+        problem, u=points, measured=measure(points, rng), rng=rng
     )
     z = rng.standard_normal((25, system.n_y))  # the scenarios, once, before the loop
     w = np.full(25, 1 / 25)
@@ -72,7 +72,9 @@ for seed in range(N_RUNS):
         )
         solution = acquisition.solve(rng)
         u_new = solution.u[None]
-        new = hb.reconstruct_states(problem, u=u_new, measured=measure(u_new), rng=rng)
+        new = hb.reconstruct_states(
+            problem, u=u_new, measured=measure(u_new, rng), rng=rng
+        )
         dataset = hb.extend(dataset, new)
     hybrid_curves.append(hb.incumbents(dataset))
 
@@ -86,7 +88,7 @@ for seed in range(N_RUNS):
     rng = np.random.default_rng(seed)
     points = hb.lhs_points(system.u, N_INITIAL, rng)
     dataset = hb.reconstruct_states(
-        problem, u=points, measured=measure(points), rng=rng
+        problem, u=points, measured=measure(points, rng), rng=rng
     )
     for _ in range(N_ITERATIONS):
         before = dataset
@@ -95,7 +97,9 @@ for seed in range(N_RUNS):
         acquisition = hb.standard_acquisition(problem, fitted, incumbent)
         solution = acquisition.solve(rng)
         u_new = solution.u[None]
-        new = hb.reconstruct_states(problem, u=u_new, measured=measure(u_new), rng=rng)
+        new = hb.reconstruct_states(
+            problem, u=u_new, measured=measure(u_new, rng), rng=rng
+        )
         dataset = hb.extend(dataset, new)
     standard_curves.append(hb.incumbents(dataset))
 
@@ -106,7 +110,7 @@ axes[1, 1].set(title="Standard BO", ylabel="f")
 
 # The true curves: the states and f at a grid of u, from the system itself
 grid = np.linspace(-2.0, 2.0, 201)[:, None]
-truth = hb.reconstruct_states(problem, u=grid, measured=measure(grid), rng=rng)
+truth = hb.reconstruct_states(problem, u=grid, measured=measure(grid, rng), rng=rng)
 axes[0, 0].plot(grid, truth.y, "k--", label="oracle")
 axes[1, 0].plot(grid, truth.f, "k--", label="oracle")
 axes[1, 1].plot(grid, truth.f, "k--", label="oracle")

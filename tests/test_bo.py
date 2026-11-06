@@ -1,5 +1,6 @@
 """One iteration of hybrid and standard BO, and the loop a script writes around it."""
 
+import dataclasses
 import logging
 
 import casadi as cas
@@ -452,6 +453,23 @@ def test_acquisition_on_grid_gives_the_solution_and_solves_the_equations(approxi
         np.testing.assert_array_equal(scenario.u, u)
         np.testing.assert_allclose(x + np.exp(x) - y, 0.0, atol=1e-7)
         np.testing.assert_allclose(f, (6 * x[:, 0] - 2) ** 2 * np.sin(12 * x[:, 0] - 4))
+
+
+def test_acquisition_on_grid_leaves_a_gap_where_a_point_fails():
+    """A state that would leave its bounds is a failed point, and NaN in every output."""
+    built, solution, *_ = solved_iteration()
+    n_u = built.n_u
+    upper = np.concatenate([built.nlp.upper[:n_u], built.pack(solution)[n_u:] + 1e-6])
+    bounded = dataclasses.replace(
+        built, nlp=dataclasses.replace(built.nlp, upper=upper)
+    )
+    u = np.array([solution.u, solution.u + 1.0, solution.u - 1.0])
+
+    ei, scenarios = hb.plots.acquisition_on_grid(bounded, solution, u)
+
+    assert np.isfinite(ei[0])
+    assert np.isnan(ei[1:]).any()
+    assert np.array_equal(np.isnan(ei), np.isnan(scenarios[0].f))
 
 
 def test_acquisition_on_grid_of_standard_bo_is_analytic():

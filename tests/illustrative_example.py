@@ -1,11 +1,8 @@
-"""The illustrative example of the paper as an experiment, run with every method.
+"""The illustrative example of the paper, which the tests share.
 
 One decision variable u, one mechanistic state x and one unknown state y. The known
 equation is x + exp(x) = y; the unknown equation is y = sin(u), which only the oracle
 knows.
-
-The tests share it, and the docs quote it. Run it with
-`pixi run -e experiments python tests/illustrative_example.py NAME`.
 """
 
 import casadi as cas
@@ -36,12 +33,6 @@ def oracle(v):
 
 
 measure = measure_oracle(problem, oracle, noise_std=0.0)
-
-# The oracle optimum, at u = -0.45: regret is measured from it, the library
-# never see it. Found once with
-# hb.oracle_optimum(problem, oracle, np.random.default_rng(0), n_starts=200), and
-# checked: hybrid BO runs reach it, and none evaluates a point below it
-optimum = -50.4608044704652
 
 # The prior GP of every BO method, which each fits to its own data: a zero mean and an
 # output scale times a Matern-5/2 kernel, both fitted within these bounds (in scaled

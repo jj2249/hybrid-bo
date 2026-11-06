@@ -86,19 +86,11 @@ class DeterministicEquivalent:
 
     def unpack(self, w: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
         """The u (N,), x (S, M) and y (S, P) (None unless they are variables) held in a
-        numeric decision vector w of this problem; undoes `pack`.
-
-        Raises `ValueError` if w has the wrong length for the problem.
-        """
+        numeric decision vector w of this problem; undoes `pack`."""
         # One column per state of each scenario; a problem over u alone has no scenarios
         w = np.asarray(w, dtype=float).ravel()
         n_u, n_x, n_scenarios = self.n_u, self.n_x, self.n_scenarios
         n_states = (len(w) - n_u) // n_scenarios if n_scenarios else 0
-        n_y = n_states - n_x
-        fits = len(w) == n_u + n_scenarios * n_states and n_y >= 0
-        if not fits or (n_y > 0) != self.unknown_states_as_variables:
-            msg = f"A decision vector of length {len(w)} doesn't fit this problem"
-            raise ValueError(msg)
         states = w[n_u:].reshape((n_scenarios, n_states), order="F")
         y = states[:, n_x:] if self.unknown_states_as_variables else None
         return w[:n_u], states[:, :n_x], y

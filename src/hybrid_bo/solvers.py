@@ -87,8 +87,8 @@ def solve_with_multistart(
     fails. CasADi catches a Ctrl-C inside IPOPT and fails that start, so Ctrl-C skips one
     start rather than stopping the solve.
     """
-    # Build the problem once, with the bounds as constraints (as the pre-refactor
-    # optimizer had them, so IPOPT takes the steps the regression baselines record)
+    # Build the problem once, with the bounds as constraints, so IPOPT takes the steps
+    # the regression baselines record
     opti = cas.Opti()
     w = opti.variable(len(nlp.lower))
     opti.minimize(nlp.f(w))

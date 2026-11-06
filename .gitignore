@@ -25,7 +25,7 @@ docs/_templates/
 
 
 
-# Personal Claude Code settings (shared skills in .claude/skills are committed)
+# Personal Claude Code settings
 .claude/settings.local.json
 
 # Coverage data

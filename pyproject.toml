@@ -52,8 +52,6 @@ lint = "ruff check --fix"
 format = "ruff format"
 typecheck = "ty check"
 test = "pytest"
-# Coverage starts before pytest: pytest imports hybrid_bo while reading
-# `filterwarnings`, which pytest-cov would miss
 coverage = "coverage run -m pytest && coverage report --show-missing && coverage html"
 check = { depends-on = ["lint", "format", "typecheck"] }
 setup-hooks = "pre-commit install"

@@ -4,10 +4,7 @@ These lock in the *current* behavior. If a PR intentionally changes behavior,
 regenerate with `pixi run -e dev test --update-baselines` and review the JSON diff.
 
 Each method runs as the plain loop a script writes (`plain_loop.py`), one point at a
-time. The baselines were
-recorded by the pre-refactor code, so each result is mapped to the keys of its result
-files (`ResultsBO`) to compare. The acquisition problems' solutions (#53) came later and
-have keys of their own.
+time, and each result is mapped to the keys of the stored JSON to compare.
 """
 
 import json
