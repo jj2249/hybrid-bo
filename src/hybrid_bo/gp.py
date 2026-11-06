@@ -349,8 +349,8 @@ class FittedGP:
 
     def log_marginal_likelihood(self) -> Any:
         """The log marginal likelihood of the scaled training data, the quantity `GP.fit`
-        maximizes, as a CasADi scalar: a function of the hyperparameters while they are
-        symbols. `float(cas.evalf(...))` gives the number once they are numbers."""
+        maximizes. A number, or a CasADi expression while the hyperparameters are the
+        symbols `GP.fit` searches over."""
         gp = self.gp
         X, Y = Symbolic(self.X), Symbolic(self.Y)
 
@@ -365,11 +365,12 @@ class FittedGP:
         residual = Y - gp.mean.at(X)
         L = cas.chol(K).T
         alpha = cas.solve(L.T, cas.solve(L, residual))
-        return -0.5 * (
+        value = -0.5 * (
             residual.T @ alpha
             + 2 * cas.sum1(cas.log(cas.diag(L)))
             + len(self.Y) * np.log(2 * np.pi)
         )
+        return value if cas.symvar(value) else float(cas.evalf(value))
 
     def predict(self, X: Any) -> tuple[Any, Any]:
         """The conditional mean and standard deviation at the rows of X (n, d), in

@@ -109,8 +109,9 @@ def test_log_marginal_likelihood(fitted):
     training data."""
     K = matern52(X_train, X_train) + (NOISE_STD**2 + JITTER) * np.eye(len(X_train))
     ref = multivariate_normal(np.zeros(len(X_train)), K).logpdf(Y_train)
+    assert isinstance(fitted.log_marginal_likelihood(), float)
     np.testing.assert_allclose(
-        float(cas.evalf(fitted.log_marginal_likelihood())), ref, rtol=RTOL, atol=ATOL
+        fitted.log_marginal_likelihood(), ref, rtol=RTOL, atol=ATOL
     )
 
 
@@ -220,22 +221,18 @@ def test_fit_maximizes_the_log_marginal_likelihood():
 
     # The likelihood at every grid point, on the same scaled training data
     grid = [
-        float(
-            cas.evalf(
-                dataclasses.replace(
-                    fitted,
-                    gp=GP(
-                        mean=Zero(),
-                        kernel=Scale(Matern52((lengthscale,)), outputscale),
-                        noise_std=0.0,
-                    ),
-                ).log_marginal_likelihood()
-            )
-        )
+        dataclasses.replace(
+            fitted,
+            gp=GP(
+                mean=Zero(),
+                kernel=Scale(Matern52((lengthscale,)), outputscale),
+                noise_std=0.0,
+            ),
+        ).log_marginal_likelihood()
         for outputscale in np.geomspace(0.1, 10.0, 15)
         for lengthscale in np.geomspace(1e-3, 1e2, 15)
     ]
-    assert float(cas.evalf(fitted.log_marginal_likelihood())) >= max(grid) - 1e-8
+    assert fitted.log_marginal_likelihood() >= max(grid) - 1e-8
 
 
 def test_fit_fills_in_params_and_keeps_fixed_values():
@@ -284,8 +281,8 @@ def test_noise_is_in_measured_units():
     scaled_noise = dataclasses.replace(fitted.gp, noise_std=noise_std / Y.std())
     reference = FittedGP(scaled_noise, fitted.X, fitted.Y, fitted.x_scaler, identity)
     np.testing.assert_allclose(
-        float(cas.evalf(fitted.log_marginal_likelihood())),
-        float(cas.evalf(reference.log_marginal_likelihood())),
+        fitted.log_marginal_likelihood(),
+        reference.log_marginal_likelihood(),
         rtol=RTOL,
         atol=ATOL,
     )
