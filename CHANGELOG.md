@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.8.1 (2026-11-06)
+## 0.9.0 (2026-11-06)
 
 A hybrid model can now be optimized without BO, the solvers hold their own behavior, and
 `solve` returns plain values. The regression results don't change.

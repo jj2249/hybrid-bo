@@ -11,7 +11,7 @@ The library fits GPs and solves one iteration of BO. You write the loop.
 ## Install
 
 ```bash
-pip install "hybrid-bo[plots] @ git+https://github.com/jj2249/hybrid-bo.git@v0.8.1"
+pip install "hybrid-bo[plots] @ git+https://github.com/jj2249/hybrid-bo.git@v0.9.0"
 ```
 
 `plots` adds matplotlib. The tag fixes the version, so the library can't change under your
