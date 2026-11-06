@@ -76,8 +76,12 @@ class NLP:
 
         Raises `NoSolutionError` if every start fails.
         """
-        starts = lhs(*(self.start_bounds or (self.lower, self.upper)), n_starts, rng)
+        starts = self._starts(n_starts, rng)
         return Solution(*solve_with_multistart(self, starts, solver))
+
+    def _starts(self, n_starts: int, rng: np.random.Generator) -> np.ndarray:
+        """`n_starts` Latin hypercube starts over the start bounds, shape (n_starts, n)."""
+        return lhs(*(self.start_bounds or (self.lower, self.upper)), n_starts, rng)
 
 
 @dataclass(frozen=True)

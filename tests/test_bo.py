@@ -141,7 +141,7 @@ def test_solving_the_equivalent_gives_the_trial_point_and_states(
     np.testing.assert_allclose(residuals, 0.0, atol=1e-6)
 
     # Check the value against the problem's objective at the solution
-    expected = float(built.nlp.f(built.pack(solution)))
+    expected = float(built.f(built.pack(solution)))
     assert solution.value == pytest.approx(expected, rel=1e-9)
 
 
@@ -210,7 +210,7 @@ def test_ei_is_the_weighted_average_over_the_scenarios():
     _, saa, w, f = ei_problems(incumbent=1.0, temperature=0.5)
 
     expected = W @ np.minimum(f - 1.0, 0)
-    np.testing.assert_allclose(saa.nlp.f(w).full().item(), expected, rtol=1e-10)
+    np.testing.assert_allclose(saa.f(w).full().item(), expected, rtol=1e-10)
 
 
 def test_soft_ei_ei_is_minus_log_the_weighted_smooth_improvement():
@@ -220,7 +220,7 @@ def test_soft_ei_ei_is_minus_log_the_weighted_smooth_improvement():
 
     smooth = 0.5 * np.log1p(np.exp((1.0 - f) / 0.5))
     expected = -np.log(W @ smooth)
-    np.testing.assert_allclose(soft.nlp.f(w).full().item(), expected, rtol=1e-10)
+    np.testing.assert_allclose(soft.f(w).full().item(), expected, rtol=1e-10)
 
 
 @pytest.mark.parametrize("temperature", [0.0, -1.0, np.inf, np.nan])
@@ -238,12 +238,12 @@ def test_soft_ei_ei_has_a_gradient_where_no_scenario_improves():
     assert np.all(f > -1.0)
 
     # SAA-EI is flat there
-    assert saa.nlp.f(w).full().item() == 0
-    assert np.all(gradient(saa.nlp, w) == 0)
+    assert saa.f(w).full().item() == 0
+    assert np.all(gradient(saa, w) == 0)
 
     # SAA-SoftEI's objective and its gradient in u
-    assert np.isfinite(soft.nlp.f(w).full().item())
-    u_gradient, _, _ = soft.unpack(gradient(soft.nlp, w))
+    assert np.isfinite(soft.f(w).full().item())
+    u_gradient, _, _ = soft.unpack(gradient(soft, w))
     assert np.all(np.isfinite(u_gradient)) and np.all(u_gradient != 0)
 
 
@@ -257,9 +257,9 @@ def test_soft_ei_ei_is_finite_far_from_the_incumbent(incumbent):
     assert np.all(np.abs(a) > 1000)
 
     # Check
-    value = soft.nlp.f(w).full().item()
+    value = soft.f(w).full().item()
     assert np.isfinite(value)
-    assert np.all(np.isfinite(gradient(soft.nlp, w)))
+    assert np.all(np.isfinite(gradient(soft, w)))
     if incumbent < 0:
         expected = -(np.log(0.002) + scipy.special.logsumexp(a, b=W))
         np.testing.assert_allclose(value, expected, rtol=1e-12)
@@ -482,10 +482,8 @@ def test_acquisition_on_grid_leaves_a_gap_where_a_point_fails():
     """A state that would leave its bounds is a failed point, and NaN in every output."""
     built, solution, *_ = solved_iteration()
     n_u = built.n_u
-    upper = np.concatenate([built.nlp.upper[:n_u], built.pack(solution)[n_u:] + 1e-6])
-    bounded = dataclasses.replace(
-        built, nlp=dataclasses.replace(built.nlp, upper=upper)
-    )
+    upper = np.concatenate([built.upper[:n_u], built.pack(solution)[n_u:] + 1e-6])
+    bounded = dataclasses.replace(built, upper=upper)
     u = np.array([solution.u, solution.u + 1.0, solution.u - 1.0])
 
     ei, scenarios = hb.plots.acquisition_on_grid(bounded, solution, u)

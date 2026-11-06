@@ -18,17 +18,13 @@ from hybrid_bo.acquisition import EI, SoftEI
 from hybrid_bo.gp import FittedGP
 from hybrid_bo.problem import Problem, Symbolic, Var, start_bounds
 from hybrid_bo.solvers import NLP, Ipopt, Solution, solve_with_multistart
-from hybrid_bo.utils import lhs
 
 
-@dataclass(frozen=True)
-class DeterministicEquivalent:
-    """A deterministic equivalent: the NLP over the decision vector, and the order of its
-    variables.
-
-    The decision vector holds the N decision variables u, then the S scenario copies of
-    the M mechanistic states x (S, M), then those of the unknown states y (S, P) if they
-    are variables.
+@dataclass(frozen=True, kw_only=True)
+class DeterministicEquivalent(NLP):
+    """An `NLP` over a decision vector that holds the N decision variables u, then the S
+    scenario copies of the M mechanistic states x (S, M), then those of the unknown states
+    y (S, P) if they are variables. What it adds to an `NLP` says what those variables mean.
 
     `weights` (S,) are the scenario weights, and `acquisition` is the function the
     objective averages. `scenario_values` maps the decision vector to f under each
@@ -36,7 +32,6 @@ class DeterministicEquivalent:
     predicted by the GPs.
     """
 
-    nlp: NLP
     n_u: int
     n_x: int
     weights: np.ndarray
@@ -56,13 +51,12 @@ class DeterministicEquivalent:
         n_starts: int = 10,
         solver: Ipopt = Ipopt(),  # noqa: B008  (frozen, never mutated)
     ) -> Solution:
-        """The minimizer, from `n_starts` Latin hypercube starts over the start bounds.
+        """The minimizer, with the scenario states there, from `n_starts` Latin hypercube
+        starts over the start bounds.
 
         Raises `NoSolutionError` if every start fails.
         """
-        assert self.nlp.start_bounds is not None
-        starts = lhs(*self.nlp.start_bounds, n_starts, rng)
-        w, value = solve_with_multistart(self.nlp, starts, solver)
+        w, value = solve_with_multistart(self, self._starts(n_starts, rng), solver)
         u, x, _ = self.unpack(w)
         return Solution(u, value, x, self.scenario_values(w)[1].full())
 
@@ -185,7 +179,7 @@ def hybrid_deterministic_equivalent(
 
     f = cas.vertcat(*f_parts)
     decisions = _pack(u, x, y if unknown_states_as_variables else None)
-    nlp = NLP(
+    return DeterministicEquivalent(
         cas.Function(
             "acquisition", [decisions], [acquisition.objective(f, w, incumbent)]
         ),
@@ -193,13 +187,10 @@ def hybrid_deterministic_equivalent(
         np.array([var.upper for var in variables]),
         cas.Function("g", [decisions], [cas.vertcat(*constraints)]),
         start_bounds(variables),
-    )
-    return DeterministicEquivalent(
-        nlp,
-        system.n_u,
-        system.n_x,
-        w,
-        acquisition,
-        unknown_states_as_variables,
-        cas.Function("scenario_values", [decisions], [f, y]),
+        n_u=system.n_u,
+        n_x=system.n_x,
+        weights=w,
+        acquisition=acquisition,
+        unknown_states_as_variables=unknown_states_as_variables,
+        scenario_values=cas.Function("scenario_values", [decisions], [f, y]),
     )
