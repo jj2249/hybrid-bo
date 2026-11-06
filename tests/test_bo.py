@@ -31,11 +31,6 @@ def draw_scenarios(
     return rng.standard_normal((n, n_y)), np.full(n, 1 / n)
 
 
-def measure_sin(u: np.ndarray, rng: np.random.Generator) -> np.ndarray:
-    """A real system to the library: it returns the measured y = sin(u) and no more."""
-    return np.sin(u)
-
-
 def training_data() -> hb.Dataset:
     """Five points of the illustrative example, with y = sin(u) as if measured."""
     u = np.linspace(-1.8, 1.8, 5)[:, np.newaxis]
@@ -317,12 +312,12 @@ def test_hybrid_bo_runs_with_a_measurement_of_your_own(
     rng = np.random.default_rng(0)
     points = hb.lhs_points(problem.system.u, 5, rng)
     z, w = draw_scenarios(5, problem.system.n_y, rng)
-    start = evaluate_points(problem, measure_sin, points, rng)
+    start = evaluate_points(problem, ex.measure, points, rng)
 
     # Act
     dataset, solutions = hybrid_loop(
         problem,
-        measure_sin,
+        ex.measure,
         start,
         z,
         w,
@@ -372,10 +367,10 @@ def test_standard_bo_runs_with_a_measurement_of_your_own():
     """A measurement that only returns an array goes through standard BO's loop."""
     rng = np.random.default_rng(0)
     points = hb.lhs_points(ex.system.u, 5, rng)
-    start = evaluate_points(ex.problem, measure_sin, points, rng)
+    start = evaluate_points(ex.problem, ex.measure, points, rng)
 
     dataset, solutions = standard_loop(
-        ex.problem, measure_sin, start, rng, n_iterations=2, gp=ex.gp
+        ex.problem, ex.measure, start, rng, n_iterations=2, gp=ex.gp
     )
 
     trial_points = np.array([solution[0] for solution in solutions])
@@ -524,7 +519,7 @@ def test_objective_on_grid_works_with_no_states_to_solve():
     problem = no_known_equations_problem()
     rng = np.random.default_rng(0)
     points = hb.lhs_points(problem.system.u, 5, rng)
-    dataset = evaluate_points(problem, measure_sin, points, rng)
+    dataset = evaluate_points(problem, ex.measure, points, rng)
     fitted = hb.fit_surrogate(problem.system, dataset, gp=ex.gp, rng=rng)
     z, w = draw_scenarios(N_SCENARIOS, 1, rng)
     incumbent = hb.incumbents(dataset)[-1]

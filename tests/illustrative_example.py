@@ -1,12 +1,12 @@
 """The illustrative example of the paper, which the tests share.
 
 One decision variable u, one mechanistic state x and one unknown state y. The known
-equation is x + exp(x) = y; the unknown equation is y = sin(u), which only the oracle
-knows.
+equation is x + exp(x) = y; the unknown equation is y = sin(u), which only the
+measurement knows.
 """
 
 import casadi as cas
-from oracle_helper import measure_oracle
+import numpy as np
 
 import hybrid_bo as hb
 
@@ -26,13 +26,11 @@ system = hb.System(
 problem = hb.Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x - 4))
 
 
-# Measurement: an oracle plays the real system
-def oracle(v):
-    """The unknown equation y = h(u), hidden from the library."""
-    return [cas.sin(v.u)]
+# Measurement: this plays the real system
+def measure(u: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    """The measured y = h(u) at u (N,), hidden from the library."""
+    return np.sin(u)
 
-
-measure = measure_oracle(problem, oracle, noise_std=0.0)
 
 # The prior GP of every BO method, which each fits to its own data: a zero mean and an
 # output scale times a Matern-5/2 kernel, both fitted within these bounds (in scaled

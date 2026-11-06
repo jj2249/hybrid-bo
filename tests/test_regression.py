@@ -15,7 +15,6 @@ from pathlib import Path
 import illustrative_example as ex
 import numpy as np
 import pytest
-from oracle_helper import oracle_incumbents, oracle_states
 from plain_loop import evaluate_points, hybrid_loop, standard_loop
 
 import hybrid_bo as hb
@@ -98,25 +97,15 @@ METHODS = {
 
 def as_baseline_columns(
     dataset: hb.Dataset,
-    states: np.ndarray,
     solutions: Sequence[tuple],
 ) -> dict[str, np.ndarray]:
-    """The run under the `ResultsBO` keys: they store y inside x, f as a column, and
-    split every array into the initial points and the rest."""
-    f_oracle = np.array(
-        [
-            ex.problem.f(row[:1], row[1:], u).full().item()
-            for row, u in zip(states, dataset.u, strict=True)
-        ]
-    )
+    """The run under the stored keys: they store y inside x, f as a column, and split
+    every array into the initial points and the rest."""
     columns = {
         "u": dataset.u,
         "x": np.column_stack([dataset.x, dataset.y]),
         "f": dataset.f[:, np.newaxis],
         "incumbents": hb.incumbents(dataset)[:, np.newaxis],
-        "x_no_noise": states,
-        "f_no_noise": f_oracle[:, np.newaxis],
-        "incumbents_no_noise": oracle_incumbents(dataset.f, f_oracle)[:, np.newaxis],
     }
     n = ex.N_INITIAL
     baseline = {
@@ -137,17 +126,12 @@ def as_baseline_columns(
 
 
 def run_method(method: str) -> dict[str, np.ndarray]:
-    """Runs one run of a method as the experiment does and returns it under the
-    `ResultsBO` keys."""
+    """Runs one run of a method as the experiment does and returns it under the stored
+    keys."""
     # As in the experiment: one generator per run, initial points drawn from it
     rng = np.random.default_rng(SEED).spawn(1)[0]
     dataset, solutions = METHODS[method](ex.measure, rng)
-
-    # The oracle values for the columns that score the run, from a generator of their own
-    states = oracle_states(
-        ex.problem, ex.oracle, dataset.u, np.random.default_rng(SEED)
-    )
-    return as_baseline_columns(dataset, states, solutions)
+    return as_baseline_columns(dataset, solutions)
 
 
 # `parametrize` runs the test once per method, each as its own test case. The other
