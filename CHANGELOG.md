@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Breaking:** The oracle has a module of its own: `oracle_measure`, `oracle_optimum`,
+  `OracleMeasurement` and `OracleSimulation` moved from `hb.evaluation` to `hb.oracle`.
+  `hb.oracle_measure` and `hb.oracle_optimum` stay at the top level (#211).
+- `hb.oracle_optimum` solves a deterministic equivalent with the unknown equations tied
+  to the oracle, and no longer builds its own problem. Its value doesn't change (#211).
 - **Breaking:** `hb.solvers.multistart` is now `hb.solvers.solve_with_multistart`
   (#210).
 - The S2MPJ benchmarks live in a project of their own, `hybrid-bo-s2mpj`.

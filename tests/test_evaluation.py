@@ -31,8 +31,9 @@ from hybrid_bo import (
     oracle_incumbents,
     oracle_measure,
 )
-from hybrid_bo.evaluation import OracleMeasurement, evaluate, reconstruct
+from hybrid_bo.evaluation import evaluate, reconstruct
 from hybrid_bo.history import n_iterations
+from hybrid_bo.oracle import OracleMeasurement
 
 
 def illustrative_measure(problem: Problem, noise_std: float):

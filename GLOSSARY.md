@@ -204,8 +204,8 @@ _Avoid_: incumbents_no_noise, true incumbent
 
 **Oracle optimum** (`f*`):
 The best objective value the oracle allows: the reference that regret is measured
-against. Benchmark experiments only; always stated by the experiment, never computed,
-since a search can miss it.
+against. Benchmark experiments only: the experiment states it, found once by
+`oracle_optimum` from many starts, since a search can miss it.
 _Avoid_: true optimum, global optimum
 
 **Regret**:
@@ -261,8 +261,9 @@ _Avoid_: smoothing, beta
 
 **Scenario**:
 One realization of the GP's prediction of the unknown states, with its own mechanistic
-states, in a scenario problem: many drawn ones for the sample-average approximation, the
-nominal scenario alone for linearization and the nominal optimum.
+states, in a deterministic equivalent: many drawn ones for the sample-average
+approximation, the nominal scenario alone for linearization and the nominal optimum.
+Finding the oracle optimum has one scenario too, with the oracle in place of the GP.
 _Avoid_: GP sample, posterior sample, sample
 
 **Scenario draws** (`z`, one per scenario):
@@ -274,11 +275,17 @@ _Avoid_: xi, gaussian_standard_samples
 The weight of each scenario in an average over the scenarios, such as the acquisition
 function's; `1/S` for SAA.
 
-**Scenario problem** (`scenario_problem`):
-The hybrid model as an optimization problem: given scenarios, each with its own states
-under the known equations and the surrogate model, and a given objective of them. Hybrid
-BO's acquisition problem is one, with an acquisition function as the objective; the
-nominal optimum's is another, over the nominal scenario, with `f` as the objective.
+**Deterministic equivalent** (`build_deterministic_equivalent`):
+The known and unknown equations as one optimization problem over discrete scenarios: the
+decision variables are shared, each scenario has its own states under the known
+equations and the unknown equations, tied to the surrogate model or to the oracle, and a
+given objective reduces them to one number. Tied to the surrogate model it is the hybrid
+model as one problem. Hybrid BO's acquisition problem is one, with an acquisition
+function as the objective. With drawn scenarios it approximates the problem under the
+GP's uncertainty. Over the nominal scenario alone it is the degenerate case, with no
+uncertainty left, as in the nominal optimum. Tied to the oracle it has one scenario and
+nothing to draw, as in finding the oracle optimum.
+_Avoid_: scenario problem, extensive form
 
 **Nominal states** (`x̄`, `ȳ`):
 The states the hybrid model gives when the GP is replaced by its mean: the mechanistic
@@ -292,10 +299,10 @@ the only scenario of linearization and of the nominal optimum.
 _Avoid_: mean scenario, zero scenario
 
 **Nominal optimum** (`optimize_hybrid_model`):
-The lowest objective the hybrid model allows with the GP replaced by its mean: the scenario
-problem of the nominal scenario, minimizing `f`. Solved once from fitted GPs, with no
-acquisition function and no measurements, so it is no method, and it can sit where the GP
-only extrapolates.
+The lowest objective the hybrid model allows with the GP replaced by its mean: the
+deterministic equivalent of the nominal scenario, minimizing `f`. Solved once from
+fitted GPs, with no acquisition function and no measurements, so it is no method, and it
+can sit where the GP only extrapolates.
 _Avoid_: model optimum, surrogate optimum, predicted optimum
 
 **Linearization**:

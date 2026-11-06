@@ -288,6 +288,11 @@ class System:
         return len(self.y)
 
 
+def _states(system: System) -> tuple[Var, ...]:
+    """The states in the order used for arrays of states: x, then y."""
+    return (*system.x, *system.y)
+
+
 def _h_inputs(system: System, u: Any, x: Any) -> list[Any]:
     """The arguments of h at each row of u (n, N) and x (n, M), numeric or CasADi, as
     a list of columns in the order of `system.h_inputs`."""

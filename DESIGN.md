@@ -199,7 +199,7 @@ frozen dataclass, so membership checks use its equality; no CasADi `==` is invol
 `lhs(lower, upper, n, rng)` and `uniform(...)` stay the array primitives the library
 uses for starts; `initial_points` is the `Var` front end for experiments.
 
-### Evaluation (`evaluation.py`, `history.py`, `errors.py`)
+### Evaluation (`evaluation.py`, `oracle.py`, `history.py`, `errors.py`)
 
 ```python
 @dataclass(frozen=True)
@@ -216,7 +216,7 @@ Measure = Callable[
 
 def oracle_measure(
     system,
-    oracle: Callable,  # like g: lambda v: [cas.sin(v.u)], y = oracle(x, u)
+    oracle: Callable,  # like g: lambda v: [cas.sin(v.u)], y = oracle(x, y, u)
     noise_std: float = 0.0,
     n_starts: int = 100,
     tol: float = 1e-10,
@@ -230,7 +230,12 @@ def evaluate(
 
 - A **measurement** returns the measured variables for one trial point. A real
   system supplies only this, as a plain array.
-- The **oracle simulation** solves `g` with `y = oracle(x, u)` for every state
+- **The oracle has a module of its own**, `oracle.py`, since only benchmark experiments
+  need it. `evaluation.py` imports `OracleMeasurement` from it, for `Measure` and to
+  tell an oracle's measurement from a real system's, so `oracle.py` never imports
+  `evaluation.py`. What both need sits below them: `_find_root` in `solvers.py` and
+  `_states` in `problem.py`.
+- The **oracle simulation** solves `g` with `y = oracle(x, y, u)` for every state
   (root-finding with CasADi Jacobians), reads the measured variables and adds
   `rng.normal(0, noise_std)`. Its full states are the **oracle values**, returned in an
   `OracleMeasurement`.
@@ -496,7 +501,7 @@ def nominal_scenario(n_y: int) -> Scenarios: ...  # z = 0, w = 1
 
 
 @dataclass(frozen=True)
-class ScenarioProblem:
+class DeterministicEquivalent:
     nlp: NLP
     start_bounds: tuple[np.ndarray, np.ndarray]  # (lower, upper), for lhs
     n_u: int  # the variable order of w, read by _unpack
@@ -507,18 +512,27 @@ class ScenarioProblem:
 
 
 def _pack(u, x=None, y=None): ...  # numpy or CasADi
-def _unpack(problem: ScenarioProblem, w) -> tuple[u, x, y | None]: ...
-def _unpack_scenarios(problem: ScenarioProblem, w) -> tuple[u, x, y]: ...
+def _unpack(problem: DeterministicEquivalent, w) -> tuple[u, x, y | None]: ...
+def _unpack_scenarios(problem: DeterministicEquivalent, w) -> tuple[u, x, y]: ...
 
 
-def scenario_problem(
+def build_deterministic_equivalent(
+    problem,
+    u,
+    x,
+    y,
+    unknown_equations,  # residuals (S, P), or None if y is an expression of u and x
+    objective,  # (f, x, y, u) expressions -> (objective, std of f)
+    objective_name,
+) -> DeterministicEquivalent: ...
+def gp_deterministic_equivalent(
     problem,
     fitted,
     scenarios,
-    objective,  # (f, x, y, u) expressions -> (objective, std of f)
+    objective,
     unknown_states_as_variables,
     objective_name,
-) -> ScenarioProblem: ...
+) -> DeterministicEquivalent: ...
 def fit_surrogate(
     system, history, *, gp, rng, n_starts=10, solver=Ipopt()
 ) -> tuple[FittedGP, ...]: ...
@@ -539,23 +553,42 @@ def optimize_hybrid_model(
   | SAA-EI, SoftSAA-EI, SAA-LCB | an acquisition function of the `f_s` | S scenarios |
   | Lin-EI | EI of `f` with its sensitivity | the nominal scenario |
 
-  So `scenario_problem` takes both, `hybrid_acquisition` supplies an objective, and
-  `hybrid_bo` is the loop around them: `fit_surrogate`, `solve_with_multistart`,
-  evaluate. `acquisition.py` imports `hybrid_model.py`, never the reverse. The objective
-  is a function because it is built from the problem's own symbols. It also states the
-  std of `f` that `scenario_values` reports, which is 0 for the nominal optimum.
-- **`AcquisitionProblem` is an alias of `ScenarioProblem`.** Hybrid BO's acquisition
-  problem is a scenario problem whose objective is an acquisition function. Standard
-  BO's is no scenario problem, having no hybrid model, but needs the same fields with
-  no scenarios (`w` is `u`), so it shares the type.
+  So `gp_deterministic_equivalent` takes both, `hybrid_acquisition` supplies an
+  objective, and `hybrid_bo` is the loop around them: `fit_surrogate`,
+  `solve_with_multistart`, evaluate. `acquisition.py` imports `hybrid_model.py`, never
+  the reverse. The objective is a function because it is built from the problem's own
+  symbols. It also states the std of `f` that `scenario_values` reports, which is 0 for
+  the nominal optimum.
+- **The unknown equations are the seam (#211).** The oracle optimum has the same
+  variables, bounds and `g` as the nominal optimum, with `y` tied to the oracle instead
+  of the GPs, and it is the benchmark the hybrid result is tested against, so the
+  formulation exists once. `build_deterministic_equivalent` takes the symbols and the
+  residuals that tie the unknown states, as expressions over `(u, x, y)`, and has two
+  callers: `gp_deterministic_equivalent`, with `y - prediction(x, u)`, and
+  `oracle_optimum`, with `oracle(x, y, u) - y`. The residuals read `y` because the
+  unknown equations are `0 = h(x, y, u)`: `y = h(x, u)` is only the form the GP learns,
+  and an oracle may be implicit.
+
+  Substituting the prediction for `y` (`unknown_states_as_variables=False`) needs an
+  explicit `y`, which residuals don't give, so only `gp_deterministic_equivalent` does
+  it: it passes the prediction as `y`, and None for the residuals. The builder takes
+  expressions, not a function of the symbols, so that this needs no second entry point,
+  and each caller builds its symbols once. `oracle_optimum` and `optimize_hybrid_model`
+  share the objective `f` (`_minimize_f`), and the dependency runs one way: `oracle.py`
+  imports `hybrid_model.py`.
+- **`AcquisitionProblem` is an alias of `DeterministicEquivalent`.** Hybrid BO's
+  acquisition problem is a deterministic equivalent whose objective is an acquisition
+  function. Standard BO's is no deterministic equivalent, having no hybrid model, but
+  needs the same fields with no scenarios (`w` is `u`), so it shares the type.
 - **`fit_surrogate` takes a `History`.** A history is every state at every point, which
   is what the fit needs and what a caller's sensors don't give. Measurements from
   elsewhere become one through `reconstruct`, so there is one way in, and a finished
   run's history fits as it is.
 - **`hybrid_bo` doesn't call `optimize_hybrid_model`.** They solve the same problem with
-  a different objective: an acquisition function of `f`, or `f` itself. `scenario_problem`
-  requires the objective (ADR 0009), and `optimize_hybrid_model` fixes it to `f` by name.
-  `hybrid_bo` calls `scenario_problem` through `hybrid_acquisition` because it needs the
+  a different objective: an acquisition function of `f`, or `f` itself.
+  `gp_deterministic_equivalent` requires the objective (ADR 0009), and
+  `optimize_hybrid_model` fixes it to `f` by name. `hybrid_bo` calls
+  `gp_deterministic_equivalent` through `hybrid_acquisition` because it needs the
   problem unsolved for the replay.
 - **`optimize_hybrid_model` is not a method.** It measures nothing, so it has no run, no
   artifact and no settings, only a solution. It has no uncertainty in it, so it trusts
@@ -579,7 +612,7 @@ class LCB:
 def saa_scenarios(n: int, n_y: int, rng) -> Scenarios: ...  # z ~ N(0, I), w = 1/S
 
 
-AcquisitionProblem = ScenarioProblem
+AcquisitionProblem = DeterministicEquivalent
 
 
 @dataclass(frozen=True, kw_only=True)

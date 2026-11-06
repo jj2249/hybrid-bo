@@ -15,6 +15,7 @@ from hybrid_bo import (
     gp,
     history,
     hybrid_model,
+    oracle,
     plots,
     problem,
     run,
@@ -35,7 +36,7 @@ from hybrid_bo.errors import (
     ReplayWarning,
     RootFindingError,
 )
-from hybrid_bo.evaluation import Measure, oracle_measure, oracle_optimum, reconstruct
+from hybrid_bo.evaluation import Measure, reconstruct
 from hybrid_bo.history import (
     History,
     check_oracle_optimum,
@@ -43,6 +44,7 @@ from hybrid_bo.history import (
     oracle_incumbents,
 )
 from hybrid_bo.hybrid_model import fit_surrogate, optimize_hybrid_model
+from hybrid_bo.oracle import oracle_measure, oracle_optimum
 from hybrid_bo.problem import Problem, System, Var
 from hybrid_bo.run import Run
 from hybrid_bo.sampling import initial_points

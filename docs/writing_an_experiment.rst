@@ -102,7 +102,7 @@ A benchmark experiment: an oracle
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 To test a method you write the unknown equations in closed form, the *oracle*, and
-:py:func:`~hybrid_bo.evaluation.oracle_measure` simulates the system from ``g`` and
+:py:func:`~hybrid_bo.oracle.oracle_measure` simulates the system from ``g`` and
 the oracle together. The methods only see the measured variables, with normal noise
 of the standard deviation you state (``noise_std``, 0 for none); a run also keeps the
 true (*oracle*) values, so the methods can be scored.
@@ -114,7 +114,7 @@ true (*oracle*) values, so the methods can be scored.
 
 The *oracle optimum* is the true minimum of the problem, which regret is measured from.
 State it: nothing searches for it, since a search can miss it. Find it once with
-:py:func:`~hybrid_bo.evaluation.oracle_optimum` (with many starts), check it, and paste
+:py:func:`~hybrid_bo.oracle.oracle_optimum` (with many starts), check it, and paste
 the value as above. :py:func:`~hybrid_bo.history.check_oracle_optimum` warns if a run
 evaluates a point below it.
 
