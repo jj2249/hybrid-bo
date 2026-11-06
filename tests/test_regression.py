@@ -159,7 +159,7 @@ def run_method(method: str) -> dict[str, np.ndarray]:
     `ResultsBO` keys."""
     # The loop sees the measured variables alone, as with a real system; the oracle
     # values are kept here, for the columns that score the run
-    measurements: list[OracleMeasurement] = []
+    measurements = []
 
     def measure(u: np.ndarray, rng: np.random.Generator) -> np.ndarray:
         """The oracle simulation, noting what it gave."""

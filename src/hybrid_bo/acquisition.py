@@ -392,9 +392,11 @@ def hybrid_trial_point(
 
     The caller draws `scenarios` once, before the first iteration (`saa_scenarios`, or
     `nominal_scenario` for linearization), and passes the same ones every time: nothing
-    here checks that.
+    here checks that. The problem runs over `scenarios`, however many they are:
+    `approximation.n_scenarios` isn't read.
 
-    Raises what `hybrid_acquisition` raises, and `NoSolutionError` if every start fails.
+    Raises `TypeError`, `NotImplementedError` or `ValueError` for the choices and
+    scenarios `hybrid_acquisition` refuses, and `NoSolutionError` if every start fails.
     """
     acquisition_problem = hybrid_acquisition(
         problem, fitted, scenarios, incumbent, acquisition, approximation

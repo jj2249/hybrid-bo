@@ -133,6 +133,7 @@ def test_trial_point_functions_draw_only_their_starts():
 def test_hybrid_trial_point_refuses_what_its_acquisition_problem_refuses():
     """The checks of `hybrid_acquisition` hold: linearization runs over the nominal
     scenario alone, and has no LCB."""
+    # Setup: a surrogate model and scenarios that aren't the nominal one
     rng = np.random.default_rng(2)
     dataset = training_data()
     fitted = hb.fit_surrogate(ex.system, dataset, gp=ex.gp, rng=rng)

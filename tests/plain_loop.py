@@ -1,4 +1,4 @@
-"""A BO loop as a script writes it: the library's functions in a plain loop.
+"""An optimization loop as a script writes it: the library's functions in a plain loop.
 
 Each point is measured and its states reconstructed before the next one is measured, so
 the draws come in the order DESIGN.md states ("Order of random draws"). `measure` is the
@@ -6,6 +6,7 @@ script's function of (u, rng), returning the measured variables as an array.
 """
 
 from collections.abc import Callable
+from dataclasses import replace
 
 import numpy as np
 
@@ -33,11 +34,12 @@ def evaluate_points(
     points: np.ndarray,
     rng: np.random.Generator,
 ) -> hb.Dataset:
-    """The dataset of the rows of `points` (n, N), evaluated one after the other."""
+    """The dataset of the rows of `points` (n, N), evaluated one after the other, all
+    of them its initial points."""
     dataset = evaluate_point(problem, measure, points[0], rng)
     for u in points[1:]:
         dataset = hb.extend(dataset, evaluate_point(problem, measure, u, rng))
-    return dataset
+    return replace(dataset, n_initial=len(points))
 
 
 def hybrid_loop(

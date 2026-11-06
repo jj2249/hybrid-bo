@@ -80,6 +80,7 @@ The original code was hard to change for three reasons:
 - **A slim top level** (#52). `hb.*` holds what a typical script uses: `Var`, `System`,
   `Problem`, `Measure`, `oracle_measure`, `initial_points`, the methods,
   `reconstruct_states`, `fit_surrogate`, `optimize_hybrid_model`,
+  `hybrid_trial_point`, `standard_trial_point`, `saa_scenarios`, `nominal_scenario`,
   `EI`, `LCB`, `oracle_optimum`, `save_run`, `load_run`, `save_runs`, `load_runs`, `Run`, `Dataset`,
   `extend`, `incumbents`, `oracle_incumbents`, `check_oracle_optimum`, the errors and `plots`. Everything else is reached through its module (`hb.gp.fit_gp`,
   `hb.solvers.solve_with_multistart`). A new name joins the top level only if the
@@ -589,9 +590,9 @@ def optimize_hybrid_model(
 - **`hybrid_bo` doesn't call `optimize_hybrid_model`.** They solve the same problem with
   a different objective: an acquisition function of `f`, or `f` itself.
   `gp_deterministic_equivalent` requires the objective (ADR 0009), and
-  `optimize_hybrid_model` fixes it to `f` by name. `hybrid_bo` calls
-  `gp_deterministic_equivalent` through `hybrid_acquisition` because it needs the
-  problem unsolved for the replay.
+  `optimize_hybrid_model` fixes it to `f` by name. `hybrid_bo` reaches
+  `gp_deterministic_equivalent` through `hybrid_trial_point` and `hybrid_acquisition`,
+  which the replay also calls, because it needs the problem unsolved.
 - **`optimize_hybrid_model` is not a method.** It measures nothing, so it has no run, no
   artifact and no settings, only a solution. It has no uncertainty in it, so it trusts
   the GP's mean even far from the data. Its unknown states are always variables, since

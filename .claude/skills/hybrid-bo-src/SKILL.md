@@ -264,7 +264,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   solver)` and `hybrid_trial_point(problem, fitted, scenarios, incumbent, rng, *,
   acquisition, approximation, n_starts, solver)` solve one acquisition problem: `lhs`
   starts, `solve_with_multistart`, and the `AcquisitionSolution`. They draw only their
-  starts, and the caller draws the scenarios once. They live here, not in
+  starts, and the caller draws the scenarios once; `approximation.n_scenarios` isn't
+  read, so nothing checks it against them. They live here, not in
   `hybrid_model.py`, because this module imports that one, never the reverse.
   `replay(acquisition_problem, solution, u, at_trial) -> Replay(values, f, f_std)`
   (ADR 0005): the problem with u fixed at each row of u, row `at_trial` the trial
@@ -409,10 +410,12 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 ## Testing rules
 
 - `pixi run -e dev test` runs in about a minute. Run it for every change.
-- `tests/test_regression.py` runs each method of `tests/illustrative_example.py`
-  (seed 0, 2 iterations) and compares with `tests/data/regression/*.json`. The
-  baselines were recorded by the pre-refactor code, so the test maps each `Run` to
-  their `ResultsBO` keys (`x` holds `[x, y]`, `*_initial`/`*_bo` halves), plus
+- `tests/test_regression.py` runs each method of `tests/illustrative_example.py` as the
+  plain loop in `tests/plain_loop.py` (seed 0, 2 iterations) and compares with
+  `tests/data/regression/*.json`; `tests/test_plain_loop.py` ties `hybrid_bo`,
+  `standard_bo` and the baselines to that loop while they exist. The baselines were
+  recorded by the pre-refactor code, so the test maps each result to their `ResultsBO`
+  keys (`x` holds `[x, y]`, `*_initial`/`*_bo` halves), plus
   `acquisition_values` (BO methods) and `acquisition_x`/`acquisition_y` (hybrid BO)
   since #53. A non-logic PR must not change stored values. A logic PR regenerates
   them with `--update-baselines` and explains the diff. Regenerating on another
