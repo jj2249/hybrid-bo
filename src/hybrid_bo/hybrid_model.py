@@ -16,7 +16,7 @@ import numpy as np
 from hybrid_bo.gp import FittedGP, predict
 from hybrid_bo.problem import Problem, Symbolic, System, Var, start_bounds
 from hybrid_bo.solvers import NLP, Ipopt, solve_with_multistart
-from hybrid_bo.utils import _lhs
+from hybrid_bo.utils import lhs
 
 
 @dataclass(frozen=True)
@@ -72,7 +72,7 @@ class DeterministicEquivalent:
 
         Raises `NoSolutionError` if every start fails.
         """
-        starts = _lhs(*self.start_bounds, n_starts, rng)
+        starts = lhs(*self.start_bounds, n_starts, rng)
         w, value = solve_with_multistart(self.nlp, starts, solver)
         if self.scenario_values is None:
             return Solution(w, value)

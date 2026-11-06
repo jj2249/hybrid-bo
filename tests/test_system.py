@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 from hybrid_bo import Problem, System, Var, lhs_points
-from hybrid_bo.utils import _lhs
+from hybrid_bo.utils import lhs
 
 
 def test_illustrative_equations_take_x_y_u(illustrative_problem):
@@ -176,7 +176,7 @@ def test_lhs_points_is_lhs_over_the_start_bounds():
 
     points = lhs_points(variables, 4, np.random.default_rng(0))
 
-    expected = _lhs(
+    expected = lhs(
         np.array([-2.0, 0.0]), np.array([2.0, 5.0]), 4, np.random.default_rng(0)
     )
     np.testing.assert_array_equal(points, expected)
