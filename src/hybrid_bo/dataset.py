@@ -1,32 +1,28 @@
-"""The data of a set of points: what a surrogate is fitted to and the plots draw."""
+"""A set of evaluated points: what a surrogate is fitted to."""
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
 
 @dataclass(frozen=True)
 class Dataset:
-    """The decision variables, states and objective of a set of points, one row each:
-    what a surrogate is fitted to and what the plots draw.
+    """The decision variables, states and objective of a set of points, one row each, in
+    the order the points were taken, which `incumbents` relies on.
 
-    Rows are in the order the points were taken, which `incumbents` relies on. The
-    first `n_initial` rows are the initial points.
-
-    `x`, `y` and `f` are measured (the measured variables) and reconstructed (the
-    rest): only what a real system gives.
+    `x` and `y` are measured (the measured variables) and reconstructed (the rest).
     """
 
     u: np.ndarray  # (n, N)
     x: np.ndarray  # (n, M)
     y: np.ndarray  # (n, P)
     f: np.ndarray  # (n,)
-    n_initial: int
 
 
 def extend(dataset: Dataset, new: Dataset) -> Dataset:
-    """A new dataset: the rows of `dataset` followed by those of `new`, with the initial
-    points of `dataset`. A point is a one-row dataset, so this appends too.
+    """A new dataset: the rows of `dataset` followed by those of `new`. A point is a
+    one-row dataset, so this appends too.
 
     Raises numpy's `ValueError` if a field's columns don't match between the two.
     """
@@ -35,16 +31,24 @@ def extend(dataset: Dataset, new: Dataset) -> Dataset:
         x=np.concatenate([dataset.x, new.x]),
         y=np.concatenate([dataset.y, new.y]),
         f=np.concatenate([dataset.f, new.f]),
-        n_initial=dataset.n_initial,
     )
 
 
-def n_iterations(dataset: Dataset) -> int:
-    """The number of points evaluated after the initial points: the iterations, or
-    the design points for the baselines."""
-    return len(dataset.u) - dataset.n_initial
-
-
 def incumbents(dataset: Dataset) -> np.ndarray:
-    """The best measured objective value after each evaluation, shape (n,)."""
+    """The best measured objective value after each point, shape (n,)."""
     return np.minimum.accumulate(dataset.f)
+
+
+def save_dataset(dataset: Dataset, path: str | Path) -> None:
+    """Writes `dataset` to a new `.npz` file `path`.
+
+    Raises `FileExistsError` if `path` exists.
+    """
+    with Path(path).open("xb") as file:
+        np.savez(file, u=dataset.u, x=dataset.x, y=dataset.y, f=dataset.f)
+
+
+def load_dataset(path: str | Path) -> Dataset:
+    """The dataset `save_dataset` wrote to `path`, ready to fit or to `extend`."""
+    with np.load(path) as saved:
+        return Dataset(saved["u"], saved["x"], saved["y"], saved["f"])

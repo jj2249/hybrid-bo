@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 from scipy.stats import multivariate_normal
 
+from hybrid_bo.errors import NoSolutionError
 from hybrid_bo.gp import (
     GP,
     FittedGP,
@@ -182,9 +183,9 @@ def test_hyperparameters_are_fitted_output_scales_first():
     """The search entries are each output scale, outermost first, then the lengthscale:
     one per input with ARD, one without, and none for a fixed value."""
     # Setup: an output scale at each level, and a lengthscale to fit
-    outer = Param(2.0, (1.0, 3.0))
-    inner = Param(1.0, (0.1, 10.0))
-    lengthscale = Param(0.5, (0.1, 1.0))
+    outer = Param((1.0, 3.0))
+    inner = Param((0.1, 10.0))
+    lengthscale = Param((0.1, 1.0))
 
     # Check: with ARD, without it, and with a fixed lengthscale
     assert _params(Scale(Scale(Matern52(lengthscale), inner), outer), 2) == [
@@ -202,7 +203,7 @@ def test_hyperparameters_are_fitted_output_scales_first():
 
 def test_with_values_replaces_each_param_in_fit_order():
     """Each `Param` takes its value in the order of `_params`, and fixed values stay."""
-    param = Param(1.0, (0.1, 10.0))
+    param = Param((0.1, 10.0))
 
     # An ARD lengthscale takes one value per input, a shared one a single value
     kernel = Scale(Scale(Matern52(param), 1.5), param)
@@ -308,7 +309,7 @@ def test_noise_is_in_measured_units():
 @pytest.mark.parametrize("data", FIT_DATA, ids=list(FIT_DATA))
 def test_fit_draws_one_lhs_and_nothing_from_the_stream(data):
     """A fit's only draw is its Latin hypercube of starts, which takes the next
-    spawned child and leaves the stream untouched (DESIGN.md, order of draws)."""
+    spawned child and leaves the stream untouched."""
     X, Y = FIT_DATA[data]
     rng = np.random.default_rng(1)
 
@@ -334,61 +335,41 @@ def test_fit_without_params_draws_nothing():
     assert rng.spawn(1)[0].random() == np.random.default_rng(1).spawn(1)[0].random()
 
 
-def test_failed_fit_keeps_initial_values(caplog):
-    """A fit whose solver fails keeps the initial values and logs that it did.
-
-    `caplog` is a pytest fixture that captures log records during the test.
-    """
+def test_failed_fit_raises():
+    """A fit whose every start fails raises, and the script decides what to do."""
     X, Y = FIT_DATA["1d"]
     no_iterations = Ipopt(solver_options={"print_level": 0, "max_iter": 0})
-    fitted = fit_gp(DEFAULT, X, Y, np.random.default_rng(0), solver=no_iterations)
 
-    assert fitted.gp == GP(
-        mean=Zero(), kernel=Scale(Matern52((1.0,)), 1.0), noise_std=0.0
-    )
-    assert "initial values" in caplog.text
+    with pytest.raises(NoSolutionError):
+        fit_gp(DEFAULT, X, Y, np.random.default_rng(0), solver=no_iterations)
 
 
 def test_fit_converges_on_clustered_inputs(caplog):
-    """Every start of a fit converges when the inputs cluster, as they do once a run
+    """Every start of a fit converges when the inputs cluster, as they do once BO
     converges: the jitter keeps the training covariance well conditioned (#107).
 
     With a jitter of 1e-10 these six points (iteration 5 of the illustrative example,
     seed 0, inputs to four digits, outputs sin(u) as its noise-free oracle gives) gave
-    cond(K) of about 1e11, and 7 of 10 starts ran to IPOPT's iteration limit. A start
-    that hits the limit fails, so no failed start means every start converged; this
+    cond(K) of about 1e11, and 7 of 10 starts ran to IPOPT's iteration limit; this
     stands in for timing the fit, which would be flaky.
+
+    `caplog` is a pytest fixture that captures log records during the test.
     """
     X = np.array([-1.8859, 1.3673, -1.9739, -1.591, -1.5762, -1.57])[:, None]
 
-    # Record the solver's debug messages, which count the failed starts
-    with caplog.at_level(logging.DEBUG, logger="hybrid_bo.solvers"):
-        fit_gp(DEFAULT, X, np.sin(X[:, 0]), np.random.default_rng(0))
+    fit_gp(DEFAULT, X, np.sin(X[:, 0]), np.random.default_rng(0))
 
-    assert "0 of 10 starts failed" in caplog.text
+    assert "iteration limit" not in caplog.text
 
 
 def test_nearly_singular_covariance_is_warned_about(caplog):
-    """A fit whose training covariance is nearly singular at the fitted parameters
-    (near-duplicate inputs and a tiny jitter) logs a warning giving the condition
-    number and the jitter.
-
-    The check runs at whichever parameters the fit keeps, so a few iterations from
-    two starts are enough (a full fit on these data takes about 20s).
-    """
+    """A GP whose training covariance is nearly singular (near-duplicate inputs and a
+    tiny jitter) logs a warning giving the condition number and the jitter."""
     # Two inputs 1e-9 apart, with a jitter far below that
     X = np.array([0.0, 0.5, 0.5 + 1e-9, 1.0])[:, None]
-    gp = replace(DEFAULT, jitter=1e-14)
-    few_iterations = Ipopt(solver_options={"print_level": 0, "max_iter": 10})
+    gp = GP(mean=Zero(), kernel=Matern52(0.3), noise_std=0.0, jitter=1e-14)
 
-    fit_gp(
-        gp,
-        X,
-        np.sin(X[:, 0]),
-        np.random.default_rng(0),
-        n_starts=2,
-        solver=few_iterations,
-    )
+    fit_gp(gp, X, np.sin(X[:, 0]), np.random.default_rng(0))
 
     # One warning about the conditioning, whose arguments are the condition number
     # (above the threshold) and the jitter
@@ -412,7 +393,7 @@ def test_well_conditioned_fit_is_not_warned_about(caplog):
 
 def test_param_is_fitted_within_its_bounds():
     """A `Param` with narrow bounds is fitted inside them."""
-    gp = GP(mean=Zero(), kernel=Matern52(Param(0.5, (0.4, 0.6))), noise_std=0.0)
+    gp = GP(mean=Zero(), kernel=Matern52(Param((0.4, 0.6))), noise_std=0.0)
 
     fitted = fit_gp(gp, *FIT_DATA["2d"], np.random.default_rng(0))
 

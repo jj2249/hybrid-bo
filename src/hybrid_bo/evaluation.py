@@ -1,39 +1,25 @@
-"""Evaluation: running measurements at trial points and reconstructing the states.
+"""Reconstruction: from measurements to the states and the objective.
 
-A measurement maps the decision variables to the measured variables (ADR 0001). After
-every measurement the library solves the root-finding problem, the known equations `g`
-for the unmeasured states, and computes the objective. The measurement can be:
-
-- **A real system**: the plant itself, or an in silico simulation that stands in for it
-  (e.g. a flowsheet simulator). You write the measurement as a function that runs it and
-  returns only the measured variables as an array. This is all a real system supplies.
-- **The oracle simulation** (`measure_oracle`, in `oracle.py`), for benchmark
-  experiments, which returns the measured variables too: the oracle values stay in
-  `oracle.py`, for scoring afterwards.
-
-**Measurements the caller already has.** `reconstruct_states` is `evaluate` without
-the measurement: it solves the root-finding problem for given measured variables.
+A measurement maps the decision variables to the measured variables. You write it as a
+function of (u, rng) that runs the system, whether a plant, an external simulator or an
+oracle of your own, and returns only the measured variables as an array.
+`reconstruct_states` then solves the root-finding problem, the known equations `g` for
+the unmeasured states, and computes the objective.
 """
 
-import warnings
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 
 import casadi as cas
 import numpy as np
 
 from hybrid_bo.dataset import Dataset
-from hybrid_bo.errors import (
-    HybridBOError,
-    OutOfBoundsWarning,
-    RootFindingError,
-)
+from hybrid_bo.errors import RootFindingError
 from hybrid_bo.problem import Problem, Symbolic, System, Var, _states
 from hybrid_bo.sampling import _start_bounds, lhs
 from hybrid_bo.solvers import _find_root
 
 # Runs the system at u (N,) and returns the measured variables (P,) in the order of
-# `system.measured`, whether a real system (the plant or an in silico simulation of it)
-# or the oracle simulation.
+# `system.measured`
 Measure = Callable[[np.ndarray, np.random.Generator], np.ndarray]
 
 
@@ -69,79 +55,13 @@ def _reconstruct(
     return np.array([values[var] for var in states])
 
 
-def _evaluate_point(
-    system: System,
-    measure: Measure,
-    u: np.ndarray,
-    rng: np.random.Generator,
-    n_starts: int,
-    tol: float,
-) -> np.ndarray:
-    """Runs the measurement at u (N,) and reconstructs the states (M + P,).
-
-    Raises `ValueError` if the measurement returns the wrong shape, and
-    `RootFindingError` if a measured variable isn't finite or no start gives a root.
-    """
-    # The measurement
-    measured = np.asarray(measure(u, rng), dtype=float)
-    if measured.shape != (system.n_y,):
-        msg = (
-            f"The measurement must return the {system.n_y} measured variables with "
-            f"shape ({system.n_y},), got shape {measured.shape}"
-        )
-        raise ValueError(msg)
-
-    # A value that isn't finite fails here: with no unmeasured states nothing is solved,
-    # and a measured variable outside g would give a root all the same
-    if not np.isfinite(measured).all():
-        names = ", ".join(var.name for var in system.measured)
-        msg = f"At u = {u}, ({names}) = {measured} holds a value that isn't finite"
-        raise RootFindingError(msg)
-
-    # The root-finding problem, from starts over the unmeasured variables
-    starts = lhs(*_start_bounds(_unmeasured(system)), n_starts, rng)
-    return _reconstruct(system, u, measured, starts, tol)
-
-
 def _dataset(problem: Problem, u: np.ndarray, states: list[np.ndarray]) -> Dataset:
     """The Dataset of the points u (n, N) with their states, all initial points."""
     system = problem.system
     array = np.reshape(states, (len(states), system.n_x + system.n_y))
     x, y = array[:, : system.n_x], array[:, system.n_x :]
     f = np.array([problem.f(*point).full().item() for point in zip(x, y, u)])
-    return Dataset(u, x, y, f, n_initial=len(u))
-
-
-def evaluate(
-    problem: Problem,
-    measure: Measure,
-    u: np.ndarray,
-    rng: np.random.Generator,
-    n_starts: int = 100,
-    tol: float = 1e-10,
-) -> Dataset:
-    """Evaluates each row of u (n, N) in turn and returns them as initial points.
-
-    Each evaluation runs the measurement, then solves the root-finding problem for the
-    unmeasured states from `n_starts` Latin hypercube starts over their start bounds,
-    then computes `f`.
-
-    Raises `ValueError` if the measurement returns the wrong shape, and
-    `RootFindingError` (from the oracle simulation, a measured variable that isn't
-    finite, or the root-finding problem) with the points evaluated before it as
-    `error.dataset`.
-    """
-    states: list[np.ndarray] = []
-    for u_point in u:
-        try:
-            point = _evaluate_point(
-                problem.system, measure, u_point, rng, n_starts, tol
-            )
-        except HybridBOError as error:
-            error.dataset = _dataset(problem, u[: len(states)], states)
-            raise
-        states.append(point)
-    return _dataset(problem, u, states)
+    return Dataset(u, x, y, f)
 
 
 def _check_measurements(system: System, u: np.ndarray, measured: np.ndarray) -> None:
@@ -155,17 +75,6 @@ def _check_measurements(system: System, u: np.ndarray, measured: np.ndarray) -> 
             f"point of u and a column per variable, got {measured.shape}"
         )
         raise ValueError(msg)
-
-
-def _outside_bounds(variables: Sequence[Var], values: np.ndarray) -> list[str]:
-    """A description of each variable with values (n, len(variables)) outside its
-    bounds, naming the rows."""
-    outside = []
-    for var, column in zip(variables, values.T, strict=True):
-        rows = np.flatnonzero((column < var.lower) | (column > var.upper))
-        if len(rows) > 0:
-            outside.append(f"{var.name} at rows {rows.tolist()}")
-    return outside
 
 
 def reconstruct_states(
@@ -185,9 +94,8 @@ def reconstruct_states(
     for the unmeasured states from `n_starts` Latin hypercube starts over their start
     bounds, then computes `f`.
 
-    A `u` or a measured variable outside its bounds is still a measurement, so it is kept,
-    with one `OutOfBoundsWarning`. An unmeasured state must lie within its bounds, which
-    may be what picks the right root.
+    An unmeasured state must lie within its bounds, which may be what picks the right
+    root.
 
     Raises `ValueError` if a shape is wrong. Every row is tried: `RootFindingError` names
     all that gave no root or hold a value that isn't finite, with the others as
@@ -198,10 +106,6 @@ def reconstruct_states(
     u = np.asarray(u, dtype=float)
     measured = np.asarray(measured, dtype=float)
     _check_measurements(system, u, measured)
-    outside = _outside_bounds(system.u, u) + _outside_bounds(system.measured, measured)
-    if outside:
-        msg = f"Measurements outside their bounds: {', '.join(outside)}"
-        warnings.warn(msg, OutOfBoundsWarning, stacklevel=2)
 
     # The root-finding problem of each row, noting the rows that fail. A value that
     # isn't finite fails too: with no unmeasured states nothing would be solved

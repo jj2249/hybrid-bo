@@ -1,16 +1,9 @@
 """The hybrid model as an optimization problem: the known equations with the surrogate
-model embedded.
+model embedded, over scenarios of the GPs' prediction of the unknown states.
 
-`build_deterministic_equivalent` builds the problem for given unknown equations and a
-given objective; the caller solves it by `solve_with_multistart`, and
-`_unpack_scenarios` reads the solution. `gp_deterministic_equivalent` ties the unknown
-equations to the surrogate model, and `oracle_optimum` ties them to the oracle.
-
-Everything that solves the hybrid model is one use of `gp_deterministic_equivalent`.
-`optimize_hybrid_model` is the simplest: the nominal scenario, minimizing the objective
-f itself, with no Bayesian optimization. Hybrid BO's acquisition problem
-(`hybrid_acquisition`) supplies an acquisition function as the objective, and
-`hybrid_bo` is the loop around it: fit, solve, evaluate.
+`gp_deterministic_equivalent` builds the problem for a given objective, and hybrid BO's
+acquisition problem (`hybrid_acquisition`) is its one use. `_unpack_scenarios` reads a
+solution.
 """
 
 from collections.abc import Callable, Sequence
@@ -23,13 +16,8 @@ import numpy as np
 from hybrid_bo.dataset import Dataset
 from hybrid_bo.gp import GP, FittedGP, fit_gp, predict
 from hybrid_bo.problem import Problem, Symbolic, System, Var, _h_inputs
-from hybrid_bo.sampling import _start_bounds, lhs
-from hybrid_bo.solvers import NLP, Ipopt, solve_with_multistart
-
-# What a deterministic equivalent minimizes, from CasADi expressions of f under each
-# scenario (S, 1), the scenario states x (S, M) and y (S, P), and u (N, 1): the
-# objective (1, 1), and the std of f (1, 1) that `scenario_values` reports
-ScenarioObjective = Callable[[Any, Any, Any, Any], tuple[Any, Any]]
+from hybrid_bo.sampling import _start_bounds
+from hybrid_bo.solvers import NLP, Ipopt
 
 
 @dataclass(frozen=True)
@@ -61,12 +49,6 @@ class Scenarios:
         object.__setattr__(self, "w", w)
 
 
-def nominal_scenario(n_y: int) -> Scenarios:
-    """The nominal scenario, the only scenario of linearization and of the nominal
-    optimum: zero scenario draws z (1, n_y) and weight 1."""
-    return Scenarios(np.zeros((1, n_y)), np.ones(1))
-
-
 @dataclass(frozen=True)
 class DeterministicEquivalent:
     """A deterministic equivalent: the NLP over the decision vector w, the start bounds
@@ -77,9 +59,8 @@ class DeterministicEquivalent:
     `_pack` and `_unpack` are the only code that knows this order. The defaults are
     those of a problem over u alone, such as standard BO's acquisition problem.
 
-    `scenario_values` maps w to f under each scenario (S, 1), the scenarios' unknown
-    states y (S, P), read from w or predicted by the GPs, and the std of f (1, 1), as
-    the objective states it.
+    `scenario_y` maps w to the scenarios' unknown states y (S, P), read from w or
+    predicted by the GPs.
     """
 
     nlp: NLP
@@ -88,7 +69,7 @@ class DeterministicEquivalent:
     n_x: int = 0
     n_scenarios: int = 0
     unknown_states_as_variables: bool = False
-    scenario_values: cas.Function | None = None
+    scenario_y: cas.Function | None = None
 
 
 def _pack(u: Any, x: Any = None, y: Any = None) -> Any:
@@ -130,12 +111,11 @@ def _unpack_scenarios(
     problem: DeterministicEquivalent, w: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """The u (N,), x (S, M) and y (S, P) of a numeric decision vector w of a problem
-    over scenarios: `_unpack`, with y from `scenario_values`, so the GPs' prediction
-    when it was substituted for the unknown states."""
+    over scenarios: `_unpack`, with y from `scenario_y`, so the GPs' prediction when it
+    was substituted for the unknown states."""
     u, x, _ = _unpack(problem, w)
-    assert problem.scenario_values is not None  # a problem over scenarios has them
-    _, y, _ = problem.scenario_values(w)
-    return u, x, y.full()
+    assert problem.scenario_y is not None  # a problem over scenarios has it
+    return u, x, problem.scenario_y(w).full()
 
 
 def _scenario_unknown_states(
@@ -157,92 +137,26 @@ def _scenario_unknown_states(
     return cas.horzcat(*mean) + cas.horzcat(*std) * Symbolic(scenarios.z)
 
 
-def _minimize_f(f: Any, _x: Any, _y: Any, _u: Any) -> tuple[Any, Any]:
-    """The objective f itself, of one scenario, so f has no spread."""
-    return f, Symbolic(0)
-
-
-def build_deterministic_equivalent(
-    problem: Problem,
-    u: Any,
-    x: Any,
-    y: Any,
-    unknown_equations: Any | None,
-    objective: ScenarioObjective,
-    objective_name: str,
-) -> DeterministicEquivalent:
-    """The known and unknown equations over scenarios, minimizing `objective`, from
-    CasADi expressions: the symbols u (N, 1) and x (S, M), with one row per scenario, and
-    the unknown states y (S, P).
-
-    Each scenario s has its own copies x_s and y_s of the states, and the known
-    equations g(x_s, y_s, u) = 0 are constraints. `unknown_equations` holds the residuals
-    (S, P) that tie the unknown states, which may read y: y is then symbols, and each
-    scenario's row of residuals follows its known equations. With None, y is already an
-    expression of u and x, so it adds no variables and no equations.
-
-    The variables are u, the x_s and, if variables, the y_s, in `_pack`'s order. Each
-    variable is boxed by its bounds and started within its start bounds; substituted
-    unknown states are no variables, so they have no bounds. `objective_name` names the
-    objective's function, which the solver's log and warnings give.
-    """
-    # Each scenario: its known equations, its unknown equations, and its f
-    system = problem.system
-    n_scenarios = x.size1()
-    unknown_states_as_variables = unknown_equations is not None
-    constraints, f_parts = [], []
-    for s in range(n_scenarios):
-        x_s, y_s = x[s, :].T, y[s, :].T
-        constraints.append(system.g(x_s, y_s, u))
-        if unknown_states_as_variables:
-            constraints.append(unknown_equations[s, :].T)
-        f_parts.append(problem.f(x_s, y_s, u))
-    f = cas.vertcat(*f_parts)
-    minimized, f_std = objective(f, x, y, u)
-
-    # The Var of each entry of w, each state once per scenario, for the bounds
-    def per_scenario(variables: Sequence[Var]) -> np.ndarray:
-        """The variables repeated in a row per scenario, (S, len(variables))."""
-        return np.tile(np.array(variables, dtype=object), (n_scenarios, 1))
-
-    unknown = per_scenario(system.y) if unknown_states_as_variables else None
-    variables = _pack(np.array(system.u, dtype=object), per_scenario(system.x), unknown)
-
-    w = _pack(u, x, y if unknown_states_as_variables else None)
-    nlp = NLP(
-        cas.Function(objective_name, [w], [minimized]),
-        np.array([var.lower for var in variables]),
-        np.array([var.upper for var in variables]),
-        cas.Function("g", [w], [cas.vertcat(*constraints)]),
-    )
-    return DeterministicEquivalent(
-        nlp,
-        _start_bounds(variables),
-        system.n_u,
-        system.n_x,
-        n_scenarios,
-        unknown_states_as_variables,
-        cas.Function("scenario_values", [w], [f, y, f_std]),
-    )
-
-
 def gp_deterministic_equivalent(
     problem: Problem,
     fitted: tuple[FittedGP, ...],
     scenarios: Scenarios,
-    objective: ScenarioObjective,
+    objective: Callable[[Any], Any],
     unknown_states_as_variables: bool,
-    objective_name: str,
 ) -> DeterministicEquivalent:
-    """The hybrid model over the scenarios of the surrogate model, minimizing
-    `objective`.
+    """The hybrid model over the scenarios of the surrogate model, minimizing `objective`
+    of f under each scenario (S, 1).
 
     `fitted` is the surrogate model: one fitted GP per unknown state, in the order of
-    `problem.system.y`. The unknown states y_s of scenario s are the GPs' prediction at
-    the scenario's arguments of h, mean + std * z_s (`_scenario_unknown_states`). With
-    `unknown_states_as_variables` the y_s are variables too, and the unknown equations
-    are y_s - prediction (paper, Problem 8), which helps IPOPT. Otherwise the prediction
-    is substituted for them, which only an explicit y allows.
+    `problem.system.y`. Each scenario s has its own copies x_s and y_s of the states, and
+    the known equations g(x_s, y_s, u) = 0 are constraints. The unknown states y_s are
+    the GPs' prediction at the scenario's arguments of h, mean + std * z_s
+    (`_scenario_unknown_states`). With `unknown_states_as_variables` the y_s are variables
+    too, tied by y_s - prediction = 0 (paper, Problem 8), which helps IPOPT. Otherwise the
+    prediction is substituted for them, so they add no variables and have no bounds.
+
+    The variables are u, the x_s and, if variables, the y_s, in `_pack`'s order, each
+    boxed by its bounds and started within its start bounds.
 
     Raises `ValueError` for scenarios or fitted GPs without one column or one GP per
     unknown state.
@@ -262,20 +176,48 @@ def gp_deterministic_equivalent(
         )
         raise ValueError(msg)
 
-    # The symbols for u and each scenario's mechanistic states, and the GPs' prediction
+    # The symbols for u and each scenario's mechanistic states (row s: scenario s), and
+    # the unknown states: variables tied to the GP, or the GP itself
     n_scenarios = len(scenarios.w)
     u = Symbolic.sym("u", system.n_u)
-    # Row s: the mechanistic states of scenario s
     x = Symbolic.sym("x", n_scenarios, system.n_x)
     prediction = _scenario_unknown_states(system, fitted, scenarios, u, x)
-
-    # The scenarios of the unknown states: variables tied to the GP, or the GP itself
-    y, unknown_equations = prediction, None
+    y = prediction
     if unknown_states_as_variables:
         y = Symbolic.sym("y", n_scenarios, system.n_y)
-        unknown_equations = y - prediction
-    return build_deterministic_equivalent(
-        problem, u, x, y, unknown_equations, objective, objective_name
+
+    # Each scenario: its known equations, its tie to the GP, and its f
+    constraints, f_parts = [], []
+    for s in range(n_scenarios):
+        x_s, y_s = x[s, :].T, y[s, :].T
+        constraints.append(system.g(x_s, y_s, u))
+        if unknown_states_as_variables:
+            constraints.append((y - prediction)[s, :].T)
+        f_parts.append(problem.f(x_s, y_s, u))
+
+    # The Var of each entry of w, each state once per scenario, for the bounds
+    def per_scenario(variables: Sequence[Var]) -> np.ndarray:
+        """The variables repeated in a row per scenario, (S, len(variables))."""
+        return np.tile(np.array(variables, dtype=object), (n_scenarios, 1))
+
+    unknown = per_scenario(system.y) if unknown_states_as_variables else None
+    variables = _pack(np.array(system.u, dtype=object), per_scenario(system.x), unknown)
+
+    w = _pack(u, x, y if unknown_states_as_variables else None)
+    nlp = NLP(
+        cas.Function("acquisition", [w], [objective(cas.vertcat(*f_parts))]),
+        np.array([var.lower for var in variables]),
+        np.array([var.upper for var in variables]),
+        cas.Function("g", [w], [cas.vertcat(*constraints)]),
+    )
+    return DeterministicEquivalent(
+        nlp,
+        _start_bounds(variables),
+        system.n_u,
+        system.n_x,
+        n_scenarios,
+        unknown_states_as_variables,
+        cas.Function("scenario_y", [w], [y]),
     )
 
 
@@ -292,57 +234,7 @@ def fit_surrogate(
     of `dataset` over the arguments of h, one fitted GP per unknown state, in the order
     of `system.y`.
 
-    The dataset is a run's, or `reconstruct_states` makes it from measurements taken
-    elsewhere. Each GP is fitted by `fit_gp` from `n_starts` starts.
+    Each GP is fitted by `fit_gp` from `n_starts` starts.
     """
     X = np.column_stack(_h_inputs(system, dataset.u, dataset.x))
     return tuple(fit_gp(gp, X, y, rng, n_starts, solver) for y in dataset.y.T)
-
-
-@dataclass(frozen=True)
-class NominalOptimum:
-    """The nominal optimum: the decision variables u (N,), the nominal states x (M,) and
-    y (P,) there, and the objective f."""
-
-    u: np.ndarray
-    x: np.ndarray
-    y: np.ndarray
-    f: float
-
-
-def optimize_hybrid_model(
-    problem: Problem,
-    fitted: tuple[FittedGP, ...],
-    rng: np.random.Generator,
-    *,
-    n_starts: int = 10,
-    solver: Ipopt = Ipopt(),  # noqa: B008  (frozen, never mutated)
-) -> NominalOptimum:
-    """The nominal optimum: the lowest objective the hybrid model allows with the GPs
-    replaced by their mean, min f(x, y, u) subject to g(x, y, u) = 0 and y = the GPs'
-    mean at (x, u), within the bounds.
-
-    `fitted` is the surrogate model (`fit_surrogate`). This is the deterministic
-    equivalent of the nominal scenario, minimizing f, solved once: no acquisition
-    function, no measurements. It has no uncertainty in it, so it trusts the GPs' mean
-    even far from their training data, and the optimum can sit where the model only
-    extrapolates.
-
-    Solved by `solve_with_multistart` from `n_starts` Latin hypercube starts over the
-    start bounds of the variables, so it is the best local optimum found: raise
-    `n_starts` if the objective has several. The unknown states are variables, so their
-    bounds hold. Raises `ValueError` unless `fitted` has one GP per unknown state, and
-    `NoSolutionError` if every start fails.
-    """
-    nominal = gp_deterministic_equivalent(
-        problem,
-        fitted,
-        nominal_scenario(problem.system.n_y),
-        _minimize_f,
-        unknown_states_as_variables=True,
-        objective_name="nominal_optimum",
-    )
-    starts = lhs(*nominal.start_bounds, n_starts, rng)
-    solution = solve_with_multistart(nominal.nlp, starts, solver)
-    u, x, y = _unpack_scenarios(nominal, solution.w)
-    return NominalOptimum(u, x[0], y[0], solution.f)

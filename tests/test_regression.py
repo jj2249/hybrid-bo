@@ -4,7 +4,7 @@ These lock in the *current* behavior. If a PR intentionally changes behavior,
 regenerate with `pixi run -e dev test --update-baselines` and review the JSON diff.
 
 Each method runs as the plain loop a script writes (`plain_loop.py`), one point at a
-time, drawing what the method it replaces drew in the same order. The baselines were
+time. The baselines were
 recorded by the pre-refactor code, so each result is mapped to the keys of its result
 files (`ResultsBO`) to compare. The acquisition problems' solutions (#53) came later and
 have keys of their own.
@@ -17,6 +17,7 @@ from pathlib import Path
 import illustrative_example as ex
 import numpy as np
 import pytest
+from oracle_helper import oracle_incumbents, oracle_states
 from plain_loop import evaluate_points, hybrid_loop, standard_loop
 
 import hybrid_bo as hb
@@ -33,16 +34,11 @@ Result = tuple[hb.Dataset, list[AcquisitionSolution]]
 
 
 def run_hybrid_bo(
-    approximation: hb.SAA | hb.SoftSAA | hb.Linearization,
-    measure: hb.Measure,
-    rng: np.random.Generator,
+    approximation: hb.SAA | hb.SoftSAA, measure: hb.Measure, rng: np.random.Generator
 ) -> Result:
     """Hybrid BO: the initial points, the scenarios once, then the loop."""
-    points = hb.initial_points(ex.system.u, ex.N_INITIAL, rng)
-    if isinstance(approximation, hb.Linearization):
-        scenarios = hb.nominal_scenario(ex.system.n_y)
-    else:
-        scenarios = hb.saa_scenarios(approximation.n_scenarios, ex.system.n_y, rng)
+    points = hb.lhs_points(ex.system.u, ex.N_INITIAL, rng)
+    scenarios = hb.saa_scenarios(25, ex.system.n_y, rng)
     return hybrid_loop(
         ex.problem,
         measure,
@@ -51,14 +47,13 @@ def run_hybrid_bo(
         rng,
         n_iterations=N_ITERATIONS,
         gp=ex.gp,
-        acquisition=hb.EI(),
         approximation=approximation,
     )
 
 
 def run_standard_bo(measure: hb.Measure, rng: np.random.Generator) -> Result:
     """Standard BO: the initial points, then the loop."""
-    points = hb.initial_points(ex.system.u, ex.N_INITIAL, rng)
+    points = hb.lhs_points(ex.system.u, ex.N_INITIAL, rng)
     return standard_loop(
         ex.problem,
         measure,
@@ -66,7 +61,6 @@ def run_standard_bo(measure: hb.Measure, rng: np.random.Generator) -> Result:
         rng,
         n_iterations=N_ITERATIONS,
         gp=ex.gp,
-        acquisition=hb.EI(),
     )
 
 
@@ -74,29 +68,26 @@ def run_latin_hypercube_sampling(
     measure: hb.Measure, rng: np.random.Generator
 ) -> Result:
     """Latin hypercube sampling: the initial points and the design, then every point."""
-    points = hb.initial_points(ex.system.u, ex.N_INITIAL, rng)
-    design = hb.initial_points(ex.system.u, N_ITERATIONS, rng)
+    points = hb.lhs_points(ex.system.u, ex.N_INITIAL, rng)
+    design = hb.lhs_points(ex.system.u, N_ITERATIONS, rng)
     all_points = np.concatenate([points, design])
     return evaluate_points(ex.problem, measure, all_points, rng), []
 
 
 def run_uniform_sampling(measure: hb.Measure, rng: np.random.Generator) -> Result:
     """Uniform sampling: the initial points and the design, then every point."""
-    points = hb.initial_points(ex.system.u, ex.N_INITIAL, rng)
-    lower, upper = (np.array([bound]) for bound in ex.u.start)
-    design = hb.sampling.uniform(lower, upper, N_ITERATIONS, rng)
+    points = hb.lhs_points(ex.system.u, ex.N_INITIAL, rng)
+    design = hb.uniform_points(ex.system.u, N_ITERATIONS, rng)
     all_points = np.concatenate([points, design])
     return evaluate_points(ex.problem, measure, all_points, rng), []
 
 
 # The illustrative example's methods, with their labels in the stored results
-_SUBSTITUTED = {"unknown_states_as_variables": False}
 METHODS = {
-    "hybrid_bo": partial(run_hybrid_bo, hb.SAA(n_scenarios=25, **_SUBSTITUTED)),
-    "hybrid_bo_lin": partial(run_hybrid_bo, hb.Linearization(**_SUBSTITUTED)),
+    "hybrid_bo": partial(run_hybrid_bo, hb.SAA(unknown_states_as_variables=False)),
     "hybrid_bo_soft": partial(
         run_hybrid_bo,
-        hb.SoftSAA(temperature=50e-3, n_scenarios=25, **_SUBSTITUTED),
+        hb.SoftSAA(temperature=50e-3, unknown_states_as_variables=False),
     ),
     "standard_bo": run_standard_bo,
     "latin_hypercube_sampling": run_latin_hypercube_sampling,
@@ -106,19 +97,25 @@ METHODS = {
 
 def as_baseline_columns(
     dataset: hb.Dataset,
-    values: hb.oracle.OracleValues,
+    states: np.ndarray,
     solutions: list[AcquisitionSolution],
 ) -> dict[str, np.ndarray]:
     """The run under the `ResultsBO` keys: they store y inside x, f as a column, and
     split every array into the initial points and the rest."""
+    f_oracle = np.array(
+        [
+            ex.problem.f(row[:1], row[1:], u).full().item()
+            for row, u in zip(states, dataset.u, strict=True)
+        ]
+    )
     columns = {
         "u": dataset.u,
         "x": np.column_stack([dataset.x, dataset.y]),
         "f": dataset.f[:, np.newaxis],
         "incumbents": hb.incumbents(dataset)[:, np.newaxis],
-        "x_no_noise": np.column_stack([values.x, values.y]),
-        "f_no_noise": values.f[:, np.newaxis],
-        "incumbents_no_noise": hb.oracle_incumbents(dataset, values.f)[:, np.newaxis],
+        "x_no_noise": states,
+        "f_no_noise": f_oracle[:, np.newaxis],
+        "incumbents_no_noise": oracle_incumbents(dataset.f, f_oracle)[:, np.newaxis],
     }
     n = ex.N_INITIAL
     baseline = {
@@ -147,10 +144,10 @@ def run_method(method: str) -> dict[str, np.ndarray]:
     dataset, solutions = METHODS[method](ex.measure, rng)
 
     # The oracle values for the columns that score the run, from a generator of their own
-    values = hb.oracle_values(
+    states = oracle_states(
         ex.problem, ex.oracle, dataset.u, np.random.default_rng(SEED)
     )
-    return as_baseline_columns(dataset, values, solutions)
+    return as_baseline_columns(dataset, states, solutions)
 
 
 # `parametrize` runs the test once per method, each as its own test case. The other

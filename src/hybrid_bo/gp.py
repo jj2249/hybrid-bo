@@ -1,6 +1,6 @@
 """Gaussian processes: the prior GP, fitting it to data, and predicting.
 
-A prior GP is data (ADR 0008): `GP(mean=..., kernel=..., noise_std=...)`, with the
+A prior GP is data: `GP(mean=..., kernel=..., noise_std=...)`, with the
 mean and the kernel from a closed set of frozen dataclasses (`Zero`; `Scale`, `Matern12`,
 `Matern32`, `Matern52`, `SquaredExponential`). Each kernel declares its hyperparameters as
 fields: a number fixes the value, a `Param` is fitted within its bounds. Kernel
@@ -16,7 +16,6 @@ points.
 
 import dataclasses
 import logging
-import time
 import typing
 from dataclasses import dataclass
 from typing import Any, assert_never
@@ -24,7 +23,6 @@ from typing import Any, assert_never
 import casadi as cas
 import numpy as np
 
-from hybrid_bo.errors import NoSolutionError
 from hybrid_bo.problem import Symbolic
 from hybrid_bo.sampling import lhs
 from hybrid_bo.solvers import NLP, Ipopt, solve_with_multistart
@@ -37,24 +35,18 @@ CONDITION_THRESHOLD = 1e10
 
 @dataclass(frozen=True)
 class Param:
-    """A hyperparameter to fit: its initial value and its bounds, the hard limits of the
-    fit and where its multistart draws the starts.
+    """A hyperparameter to fit: its bounds, the hard limits of the fit and where its
+    multistart draws the starts.
 
     With `log`, fitting searches over its logarithm, so the bounds must be positive.
-    Raises `ValueError` if the initial value is outside the bounds, or `log` is set
-    with a bound that isn't positive.
+    Raises `ValueError` if `log` is set with a bound that isn't positive.
     """
 
-    init: float
     bounds: tuple[float, float]
     log: bool = True
 
     def __post_init__(self) -> None:
-        lower, upper = self.bounds
-        if not lower <= self.init <= upper:
-            msg = f"Param init ({self.init}) must be inside the bounds {self.bounds}"
-            raise ValueError(msg)
-        if self.log and lower <= 0:
+        if self.log and self.bounds[0] <= 0:
             msg = (
                 f"A Param fitted in log space needs positive bounds, got "
                 f"{self.bounds}; use log=False otherwise"
@@ -68,8 +60,8 @@ Lengthscale = float | tuple[float, ...] | Param
 
 class _Scalable:
     """Gives a kernel `*` with a number or a `Param`, on either side: shorthand for
-    `Scale`, which it builds (`Param(1.0, (0.1, 10.0)) * Matern52()` is
-    `Scale(Matern52(), Param(1.0, (0.1, 10.0)))`). There is no product of kernels."""
+    `Scale`, which it builds (`Param((0.1, 10.0)) * Matern52()` is
+    `Scale(Matern52(), Param((0.1, 10.0)))`). There is no product of kernels."""
 
     def __mul__(self, outputscale: "float | Param") -> "Scale":
         """The kernel times an output scale, as a `Scale`.
@@ -108,7 +100,7 @@ class Matern12(_Scalable):
     every input. Raises `ValueError` for a lengthscale per input without `ard`.
     """
 
-    lengthscale: Lengthscale = Param(1.0, (1e-3, 1e2))
+    lengthscale: Lengthscale = Param((1e-3, 1e2))
     ard: bool = True
 
     def __post_init__(self) -> None:
@@ -119,7 +111,7 @@ class Matern12(_Scalable):
 class Matern32(_Scalable):
     """The Matern-3/2 kernel. Its lengthscale is as `Matern12`'s."""
 
-    lengthscale: Lengthscale = Param(1.0, (1e-3, 1e2))
+    lengthscale: Lengthscale = Param((1e-3, 1e2))
     ard: bool = True
 
     def __post_init__(self) -> None:
@@ -130,7 +122,7 @@ class Matern32(_Scalable):
 class Matern52(_Scalable):
     """The Matern-5/2 kernel. Its lengthscale is as `Matern12`'s."""
 
-    lengthscale: Lengthscale = Param(1.0, (1e-3, 1e2))
+    lengthscale: Lengthscale = Param((1e-3, 1e2))
     ard: bool = True
 
     def __post_init__(self) -> None:
@@ -142,7 +134,7 @@ class SquaredExponential(_Scalable):
     """The squared exponential (RBF, Gaussian) kernel. Its lengthscale is as
     `Matern12`'s."""
 
-    lengthscale: Lengthscale = Param(1.0, (1e-3, 1e2))
+    lengthscale: Lengthscale = Param((1e-3, 1e2))
     ard: bool = True
 
     def __post_init__(self) -> None:
@@ -154,7 +146,7 @@ class Scale(_Scalable):
     """A kernel times an output scale, unsquared; `outputscale * kernel` builds it."""
 
     kernel: "Kernel"
-    outputscale: float | Param = Param(1.0, (0.1, 10.0))
+    outputscale: float | Param = Param((0.1, 10.0))
 
 
 @dataclass(frozen=True)
@@ -165,8 +157,6 @@ class Zero:
 Stationary = Matern12 | Matern32 | Matern52 | SquaredExponential
 Kernel = Stationary | Scale
 Mean = Zero
-# The closed set, by name, for saving and loading
-TYPES = (Param, Matern12, Matern32, Matern52, SquaredExponential, Scale, Zero)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -178,7 +168,7 @@ class GP:
     measured units (those of the training outputs); 0 is noise-free, and the fitted
     GP then nearly interpolates its data. `jitter` is added to the diagonal of the
     scaled training covariance, a nugget that keeps it well conditioned when inputs
-    cluster (DESIGN.md). Raises `ValueError` if `noise_std` is negative.
+    cluster. Raises `ValueError` if `noise_std` is negative.
     """
 
     mean: Mean
@@ -204,7 +194,7 @@ class Scaler:
 class FittedGP:
     """A fitted GP: a prior GP with every hyperparameter fitted to its training data, held
     with that data (scaled) and the scalers that produced it. It describes itself, so
-    `predict` takes nothing else and a run saves it whole (ADR 0008).
+    `predict` takes nothing else.
 
     Raises `ValueError` if the GP has a `Param` left.
     """
@@ -410,16 +400,15 @@ def fit_gp(
     variance (`standard`), then maximizes the log marginal likelihood over every
     `Param` (log ones in log space) with `solve_with_multistart`, from `n_starts` Latin
     hypercube starts over their bounds; a lengthscale with ARD has one entry per column
-    of X. A GP without a `Param` is only conditioned on the data, with no draws. If
-    every start fails, it keeps the initial values and logs a warning. It also warns if
+    of X. A GP without a `Param` is only conditioned on the data, with no draws. It warns if
     the training covariance at the kept values has a condition number above
     `CONDITION_THRESHOLD`. Logs the time taken at debug level.
 
-    Raises `ValueError` if a fixed lengthscale per input doesn't have one entry per
+    Raises `NoSolutionError` if every start fails, and `ValueError` if a fixed lengthscale
+    per input doesn't have one entry per
     column of X.
     """
     # Scale the data, and list what there is to fit
-    start = time.perf_counter()
     x_scaler, y_scaler = minmax(X), standard(Y[:, np.newaxis])
     X_scaled, Y_scaled = scale(x_scaler, X), scale(y_scaler, Y[:, np.newaxis]).ravel()
     n_inputs = X.shape[1]
@@ -430,7 +419,6 @@ def fit_gp(
         is_log = np.array([param.log for param in params])
         lower = np.array([param.bounds[0] for param in params])
         upper = np.array([param.bounds[1] for param in params])
-        init = np.array([param.init for param in params])
 
         def to_search_space(values: np.ndarray) -> np.ndarray:
             """Hyperparameter entries as search-space entries: logarithms for log ones."""
@@ -451,11 +439,7 @@ def fit_gp(
 
         # Multistart from Latin hypercube starts over the bounds
         starts = lhs(nlp.lower, nlp.upper, n_starts, rng)
-        try:
-            w_best = solve_with_multistart(nlp, starts, solver).w
-        except NoSolutionError:
-            _logger.warning("Every GP fit failed; keeping the initial values")
-            w_best = to_search_space(init)
+        w_best = solve_with_multistart(nlp, starts, solver).w
 
         # Back from the search space, to the numbers the fitted GP holds
         values = np.where(is_log, np.exp(w_best), w_best).tolist()
@@ -475,7 +459,6 @@ def fit_gp(
             condition_number,
             gp.jitter,
         )
-    _logger.debug("Fitted the GP in %.2fs", time.perf_counter() - start)
     return FittedGP(fitted_gp, X_scaled, Y_scaled, x_scaler, y_scaler)
 
 

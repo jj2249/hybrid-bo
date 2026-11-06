@@ -1,69 +1,20 @@
 """Bayesian optimization of partially known systems with hybrid models.
 
-The top level holds what a typical script uses: define a problem, run a method, look
-at the results. Everything else is reachable through its module (`hb.gp.fit_gp`,
-`hb.solvers.solve_with_multistart`).
+The library solves one iteration; you write the loop, and it holds what a loop uses.
 """
 
-# Every submodule, so type checkers see `hb.gp.fit_gp` after `import hybrid_bo as hb`
-from hybrid_bo import (
-    acquisition,
-    baselines,
-    bo,
-    dataset,
-    errors,
-    evaluation,
-    gp,
-    hybrid_model,
-    oracle,
-    plots,
-    problem,
-    run,
-    sampling,
-    saving,
-    settings,
-    solvers,
-)
+from hybrid_bo import gp, plots
 from hybrid_bo.acquisition import (
-    EI,
-    LCB,
     SAA,
-    Linearization,
     SoftSAA,
     hybrid_trial_point,
     saa_scenarios,
     standard_trial_point,
 )
-from hybrid_bo.baselines import latin_hypercube_sampling, uniform_sampling
-from hybrid_bo.bo import hybrid_bo, standard_bo
-from hybrid_bo.dataset import (
-    Dataset,
-    extend,
-    incumbents,
-)
-from hybrid_bo.errors import (
-    HybridBOError,
-    NoSolutionError,
-    OracleOptimumWarning,
-    OutOfBoundsWarning,
-    ReconstructionWarning,
-    ReplayWarning,
-    RootFindingError,
-)
+from hybrid_bo.dataset import Dataset, extend, incumbents, load_dataset, save_dataset
+from hybrid_bo.errors import HybridBOError, NoSolutionError, RootFindingError
 from hybrid_bo.evaluation import Measure, reconstruct_states
-from hybrid_bo.hybrid_model import (
-    fit_surrogate,
-    nominal_scenario,
-    optimize_hybrid_model,
-)
-from hybrid_bo.oracle import (
-    check_reconstruction,
-    measure_oracle,
-    oracle_incumbents,
-    oracle_optimum,
-    oracle_values,
-)
+from hybrid_bo.gp import fit_gp
+from hybrid_bo.hybrid_model import fit_surrogate
 from hybrid_bo.problem import Problem, System, Var
-from hybrid_bo.run import Run
-from hybrid_bo.sampling import initial_points
-from hybrid_bo.saving import load_run, load_runs, save_run, save_runs
+from hybrid_bo.sampling import lhs_points, uniform_points

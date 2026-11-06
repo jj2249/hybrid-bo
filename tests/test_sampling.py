@@ -48,7 +48,7 @@ def test_shape_and_bounds(sample):
 
 def test_lhs_spawns_instead_of_consuming_the_stream():
     """lhs takes the generator's next spawned child and leaves its stream untouched,
-    the scipy behavior the draw order relies on (DESIGN.md)."""
+    the scipy behavior the draw order relies on."""
     rng = np.random.default_rng(0)
     lhs(np.zeros(1), np.ones(1), 3, rng)
     second = lhs(np.zeros(1), np.ones(1), 3, rng)

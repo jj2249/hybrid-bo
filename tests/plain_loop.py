@@ -1,17 +1,12 @@
-"""An optimization loop as a script writes it: the library's functions in a plain loop.
-
-Each point is measured and its states reconstructed before the next one is measured, so
-the draws come in the order DESIGN.md states ("Order of random draws"). `measure` is the
-script's function of (u, rng), returning the measured variables as an array.
-"""
-
-from dataclasses import replace
+"""The loop a script writes, one point at a time. `measure` is the script's function of
+(u, rng), returning the measured variables as an array."""
 
 import numpy as np
 
 import hybrid_bo as hb
 from hybrid_bo.acquisition import AcquisitionSolution
-from hybrid_bo.gp import GP, fit_gp
+from hybrid_bo.gp import GP
+from hybrid_bo.hybrid_model import Scenarios
 
 
 def evaluate_point(
@@ -30,25 +25,23 @@ def evaluate_points(
     points: np.ndarray,
     rng: np.random.Generator,
 ) -> hb.Dataset:
-    """The dataset of the rows of `points` (n, N), evaluated one after the other, all
-    of them its initial points."""
+    """The dataset of the rows of `points` (n, N), evaluated one after the other."""
     dataset = evaluate_point(problem, measure, points[0], rng)
     for u in points[1:]:
         dataset = hb.extend(dataset, evaluate_point(problem, measure, u, rng))
-    return replace(dataset, n_initial=len(points))
+    return dataset
 
 
 def hybrid_loop(
     problem: hb.Problem,
     measure: hb.Measure,
     dataset: hb.Dataset,
-    scenarios: hb.hybrid_model.Scenarios,
+    scenarios: Scenarios,
     rng: np.random.Generator,
     *,
     n_iterations: int,
     gp: GP,
-    acquisition: hb.EI | hb.LCB,
-    approximation: hb.SAA | hb.SoftSAA | hb.Linearization,
+    approximation: hb.SAA | hb.SoftSAA,
 ) -> tuple[hb.Dataset, list[AcquisitionSolution]]:
     """Hybrid BO from `dataset`, with the scenarios drawn once, before the loop.
 
@@ -63,7 +56,6 @@ def hybrid_loop(
             scenarios,
             hb.incumbents(dataset)[-1],
             rng,
-            acquisition=acquisition,
             approximation=approximation,
         )
         dataset = hb.extend(dataset, evaluate_point(problem, measure, solution.u, rng))
@@ -79,7 +71,6 @@ def standard_loop(
     *,
     n_iterations: int,
     gp: GP,
-    acquisition: hb.EI | hb.LCB,
 ) -> tuple[hb.Dataset, list[AcquisitionSolution]]:
     """Standard BO from `dataset`: a GP of the measured objective over u.
 
@@ -87,13 +78,9 @@ def standard_loop(
     """
     solutions = []
     for _ in range(n_iterations):
-        fitted = fit_gp(gp, dataset.u, dataset.f, rng)
+        fitted = hb.fit_gp(gp, dataset.u, dataset.f, rng)
         solution = hb.standard_trial_point(
-            problem,
-            fitted,
-            hb.incumbents(dataset)[-1],
-            rng,
-            acquisition=acquisition,
+            problem, fitted, hb.incumbents(dataset)[-1], rng
         )
         dataset = hb.extend(dataset, evaluate_point(problem, measure, solution.u, rng))
         solutions.append(solution)

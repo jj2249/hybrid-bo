@@ -10,7 +10,6 @@ where the generator is used.
 import logging
 import signal
 import threading
-import time
 import warnings
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
@@ -68,10 +67,8 @@ def solve_with_multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Soluti
     Objectives that differ only by rounding tie, and the earlier start wins, so the
     result doesn't depend on the platform's arithmetic.
 
-    A start that fails is expected, so it is logged (at debug level, without a
-    traceback) and skipped; so are the number that failed and the time taken, under
-    the name of `nlp.f`. Starts that ran IPOPT to its iteration limit are also
-    counted in one warning. Raises `NoSolutionError` if every start fails, and
+    A start that fails is expected, so it is skipped. Starts that ran IPOPT to its
+    iteration limit are counted in one warning. Raises `NoSolutionError` if every start fails, and
     `KeyboardInterrupt` on Ctrl-C, even while IPOPT runs.
     """
     # Build the problem once, with the bounds as constraints (as the pre-refactor
@@ -87,8 +84,7 @@ def solve_with_multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Soluti
     opti.subject_to(w <= nlp.upper[:, np.newaxis])
 
     # Solve it from each start; a NaN objective never wins, nor does a tie with the best
-    started = time.perf_counter()
-    best, f_best, n_failed, n_at_limit = None, np.inf, 0, 0
+    best, f_best, n_at_limit = None, np.inf, 0
     for i, start in enumerate(starts):
         opti.set_initial(w, start)
         opti.solver("ipopt", solver.plugin_options, solver.solver_options)
@@ -99,8 +95,6 @@ def solve_with_multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Soluti
             # CasADi catches a Ctrl-C inside IPOPT and fails the solve instead
             if interrupts:
                 raise KeyboardInterrupt from error
-            _logger.debug("Start %d of %d failed: %s", i + 1, len(starts), error)
-            n_failed += 1
             at_limit = opti.stats()["return_status"] == "Maximum_Iterations_Exceeded"
             if at_limit:
                 n_at_limit += 1
@@ -111,13 +105,6 @@ def solve_with_multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Soluti
         )
         if f < f_best and not ties_best:
             best, f_best = np.atleast_1d(solution.value(w)).astype(float), f
-    _logger.debug(
-        "%s: %d of %d starts failed, %.2fs",
-        nlp.f.name(),
-        n_failed,
-        len(starts),
-        time.perf_counter() - started,
-    )
     if n_at_limit:
         _logger.warning(
             "%s: %d of %d starts stopped at IPOPT's iteration limit",

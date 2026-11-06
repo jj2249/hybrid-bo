@@ -45,28 +45,15 @@ def _start_bounds(variables: Sequence[Var]) -> tuple[np.ndarray, np.ndarray]:
     )
 
 
-def initial_points(
+def lhs_points(
     variables: Sequence[Var], n: int, rng: np.random.Generator
 ) -> np.ndarray:
     """n points from a Latin hypercube over the variables' start bounds, shape (n, d)."""
     return lhs(*_start_bounds(variables), n, rng)
 
 
-def _starting_points(
-    variables: Sequence[Var],
-    n_initial: int | None,
-    points: np.ndarray | None,
-    rng: np.random.Generator,
+def uniform_points(
+    variables: Sequence[Var], n: int, rng: np.random.Generator
 ) -> np.ndarray:
-    """The points a run starts from: `points`, or `n_initial` drawn with
-    `initial_points`.
-
-    Raises `ValueError` unless exactly one of them is given.
-    """
-    if (n_initial is None) == (points is None):
-        msg = "Give exactly one of n_initial and initial_points"
-        raise ValueError(msg)
-    if points is not None:
-        return np.asarray(points, dtype=float)
-    assert n_initial is not None
-    return initial_points(variables, n_initial, rng)
+    """n points drawn uniformly from the variables' start bounds, shape (n, d)."""
+    return uniform(*_start_bounds(variables), n, rng)
