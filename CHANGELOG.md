@@ -12,7 +12,8 @@ A hybrid model can now be optimized without BO, the solvers hold their own behav
 - `objective` is any function of f under the scenarios and the weights, and `hb.mean` gives
   the expected objective, or the nominal one over one scenario at `z = 0`.
 - **Breaking:** `hb.EI` and `hb.SoftEI` hold the incumbent: `hb.EI(incumbent)` and
-  `hb.SoftEI(incumbent, temperature=...)`. `hybrid_bo.acquisition` is `hybrid_bo.bo`.
+  `hb.SoftEI(incumbent, temperature=...)`. `hybrid_bo.acquisition` is `hybrid_bo.bo`, and
+  `hybrid_bo.hybrid_model` is `hybrid_bo.hybrid_problem`.
 - **Breaking:** the plots show the objective that was minimized, so EI is `-EI`, SoftEI is
   `-log SoftEI` and the trial point sits at a minimum. `hb.plots.acquisition_on_grid` is
   `hb.plots.objective_on_grid`, and `from_objective` is gone.

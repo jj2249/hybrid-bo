@@ -13,10 +13,7 @@ from typing import Any
 import casadi as cas
 import numpy as np
 
-from hybrid_bo.utils import lhs, uniform
-
-# The symbol type of all library math: `cas.chol` has no MX overload, so SX only
-Symbolic = cas.SX
+from hybrid_bo.utils import Symbolic, lhs, uniform
 
 
 @dataclass(frozen=True, init=False)
@@ -179,33 +176,6 @@ def _to_casadi_function(
     )
 
 
-def _check_unique(names: Sequence[str], label: str) -> None:
-    """Raises `ValueError` naming every name that appears more than once.
-
-    `label` says which collection was checked, for the message.
-    """
-    repeated = sorted({name for name in names if names.count(name) > 1})
-    if repeated:
-        msg = f"{label} must not repeat a variable; repeated: {', '.join(repeated)}"
-        raise ValueError(msg)
-
-
-def _check_drawn_from(
-    chosen: Sequence[Var], allowed: Sequence[Var], label: str, where: str
-) -> None:
-    """Checks that `chosen` (e.g. `h_inputs`) only uses variables from `allowed`.
-
-    Raises `ValueError` if a variable isn't in `allowed` or appears twice. `label`
-    names the argument and `where` describes `allowed` (e.g. "u or x"), for the
-    message.
-    """
-    for var in chosen:
-        if var not in allowed:
-            msg = f"{label} contains {var.name!r}, which is not one of {where}"
-            raise ValueError(msg)
-    _check_unique([var.name for var in chosen], label)
-
-
 @dataclass(frozen=True, init=False)
 class System:
     """The physical process (paper, Problem 4).
@@ -244,8 +214,7 @@ class System:
         h_inputs: Sequence[Var],
         measured: Sequence[Var],
     ) -> None:
-        # The variables: u and y are non-empty, x and g go together, and every name
-        # is unique
+        # The variables: u and y are non-empty, and x and g go together
         u, x, y = tuple(u), tuple(x), tuple(y)
         for block, label in ((u, "u"), (y, "y")):
             if not block:
@@ -260,12 +229,27 @@ class System:
                 "for a system without known equations"
             )
             raise ValueError(msg)
-        _check_unique([var.name for var in (*u, *x, *y)], "u, x and y together")
 
-        # The structure: what h depends on, and what the sensors read
+        # The structure: every name is unique, and h and the sensors use variables of the
+        # system
         h_inputs, measured = tuple(h_inputs), tuple(measured)
-        _check_drawn_from(h_inputs, (*u, *x), "h_inputs", "u or x")
-        _check_drawn_from(measured, (*x, *y), "measured", "x or y")
+        for chosen, allowed, label, where in (
+            ((*u, *x, *y), (*u, *x, *y), "u, x and y together", "u, x or y"),
+            (h_inputs, (*u, *x), "h_inputs", "u or x"),
+            (measured, (*x, *y), "measured", "x or y"),
+        ):
+            for var in chosen:
+                if var not in allowed:
+                    msg = f"{label} contains {var.name!r}, which is not one of {where}"
+                    raise ValueError(msg)
+            names = [var.name for var in chosen]
+            repeated = sorted({name for name in names if names.count(name) > 1})
+            if repeated:
+                msg = (
+                    f"{label} must not repeat a variable; repeated: "
+                    f"{', '.join(repeated)}"
+                )
+                raise ValueError(msg)
         if len(measured) != len(y):
             msg = (
                 f"There must be as many measured variables as unknown states "

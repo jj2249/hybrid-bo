@@ -13,9 +13,9 @@ import numpy as np
 from hybrid_bo.dataset import Dataset
 from hybrid_bo.errors import RootFindingError
 from hybrid_bo.gp import FittedGP
-from hybrid_bo.hybrid_model import HybridNLP
-from hybrid_bo.problem import Symbolic
+from hybrid_bo.hybrid_problem import HybridNLP
 from hybrid_bo.solvers import NLP, RootProblem
+from hybrid_bo.utils import Symbolic
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes

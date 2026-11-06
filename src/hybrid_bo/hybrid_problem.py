@@ -14,8 +14,9 @@ import casadi as cas
 import numpy as np
 
 from hybrid_bo.gp import FittedGP
-from hybrid_bo.problem import Problem, Symbolic, Var, start_bounds
+from hybrid_bo.problem import Problem, Var, start_bounds
 from hybrid_bo.solvers import NLP, Ipopt
+from hybrid_bo.utils import Symbolic
 
 
 def mean(f: Any, w: np.ndarray) -> Any:

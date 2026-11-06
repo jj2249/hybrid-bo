@@ -23,9 +23,9 @@ import casadi as cas
 import numpy as np
 
 from hybrid_bo.dataset import Dataset
-from hybrid_bo.problem import Symbolic, System
+from hybrid_bo.problem import System
 from hybrid_bo.solvers import NLP, Ipopt
-from hybrid_bo.utils import Scaler
+from hybrid_bo.utils import Scaler, Symbolic
 
 _logger = logging.getLogger(__name__)
 

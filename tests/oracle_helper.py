@@ -4,8 +4,9 @@
 import casadi as cas
 import numpy as np
 
-from hybrid_bo.problem import Problem, Symbolic, _to_casadi_function, lhs_points
+from hybrid_bo.problem import Problem, _to_casadi_function, lhs_points
 from hybrid_bo.solvers import RootProblem
+from hybrid_bo.utils import Symbolic
 
 
 def _root(problem: Problem, oracle, u: np.ndarray, rng) -> np.ndarray:

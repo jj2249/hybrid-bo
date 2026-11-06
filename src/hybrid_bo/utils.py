@@ -1,11 +1,14 @@
-"""Numerical tools that know nothing of systems or GPs: drawing points from a box, affine
-scaling, and a stable log softplus."""
+"""Numerical tools that know nothing of systems or GPs: the symbol type, drawing points
+from a box, affine scaling, and a stable log softplus."""
 
 from dataclasses import dataclass
 from typing import Any
 
 import casadi as cas
 import numpy as np
+
+# The symbol type of all library math: `cas.chol` has no MX overload, so SX only
+Symbolic = cas.SX
 
 # Below this t, log log(1 + exp(t)) is t within about 1e-13
 LOG_SOFTPLUS_LINEAR_BELOW = -30.0

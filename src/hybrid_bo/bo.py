@@ -17,9 +17,9 @@ import casadi as cas
 import numpy as np
 
 from hybrid_bo.gp import FittedGP
-from hybrid_bo.problem import Problem, Symbolic, start_bounds
+from hybrid_bo.problem import Problem, start_bounds
 from hybrid_bo.solvers import NLP
-from hybrid_bo.utils import log_softplus
+from hybrid_bo.utils import Symbolic, log_softplus
 
 # Added to the standard deviation in EI, so a zero std doesn't divide by zero
 _EI_STD_EPSILON = 1e-10
