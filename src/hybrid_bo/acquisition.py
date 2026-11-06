@@ -8,7 +8,6 @@ Problems 8 and 9), or `SoftSAA`, its smooth version.
 Each gives a `DeterministicEquivalent`, and its `solve` is one iteration of BO.
 """
 
-import dataclasses
 from dataclasses import dataclass
 from typing import Any
 
@@ -110,7 +109,7 @@ def standard_acquisition(
         np.array([var.lower for var in u_vars]),
         np.array([var.upper for var in u_vars]),
     )
-    return DeterministicEquivalent(nlp, start_bounds(u_vars), len(u_vars))
+    return DeterministicEquivalent(nlp, start_bounds(u_vars), len(u_vars), np.negative)
 
 
 def hybrid_acquisition(
@@ -134,12 +133,12 @@ def hybrid_acquisition(
     isn't one column of z and one fitted GP per unknown state.
     """
     z, w = np.asarray(z, dtype=float), np.asarray(w, dtype=float)
-    built = gp_deterministic_equivalent(
+    return gp_deterministic_equivalent(
         problem,
         fitted,
         z,
         w,
         lambda f: approximation.objective(f, w, incumbent),
+        approximation.ei,
         approximation.unknown_states_as_variables,
     )
-    return dataclasses.replace(built, ei=approximation.ei)

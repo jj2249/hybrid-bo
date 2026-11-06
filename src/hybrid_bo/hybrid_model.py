@@ -14,7 +14,7 @@ import casadi as cas
 import numpy as np
 
 from hybrid_bo.gp import FittedGP
-from hybrid_bo.problem import Problem, Symbolic, System, Var, start_bounds
+from hybrid_bo.problem import Problem, Symbolic, Var, start_bounds
 from hybrid_bo.solvers import NLP, Ipopt, solve_with_multistart
 from hybrid_bo.utils import lhs
 
@@ -50,11 +50,11 @@ class DeterministicEquivalent:
     nlp: NLP
     start_bounds: tuple[np.ndarray, np.ndarray]
     n_u: int
+    ei: Callable[[np.ndarray], np.ndarray]
     n_x: int = 0
     weights: np.ndarray = field(default_factory=lambda: np.zeros(0))
     unknown_states_as_variables: bool = False
     scenario_values: cas.Function | None = None
-    ei: Callable[[np.ndarray], np.ndarray] = np.negative
 
     @property
     def n_scenarios(self) -> int:
@@ -117,30 +117,13 @@ def _pack(u: Any, x: Any = None, y: Any = None) -> Any:
     return cas.vertcat(u, *(cas.vec(block) for block in states))
 
 
-def _scenario_unknown_states(
-    system: System,
-    fitted: tuple[FittedGP, ...],
-    z: np.ndarray,
-    u: Any,
-    x: Any,
-) -> Any:
-    """The scenarios' unknown states (S, P), symbolic: unknown state j of scenario s
-    is GP j's prediction at the scenario's arguments of h, mean_j + std_j * z_sj, for
-    u (N, 1) and x (S, M). `fitted` holds one fitted GP per unknown state, in the
-    order of `system.y`.
-    """
-    # One column of mean and std per unknown state, matching the columns of z
-    inputs = cas.horzcat(*system.h_arguments(cas.repmat(u.T, len(z), 1), x))
-    mean, std = zip(*(gp.predict(inputs) for gp in fitted), strict=True)
-    return cas.horzcat(*mean) + cas.horzcat(*std) * Symbolic(z)
-
-
 def gp_deterministic_equivalent(
     problem: Problem,
     fitted: tuple[FittedGP, ...],
     z: np.ndarray,
     w: np.ndarray,
     objective: Callable[[Any], Any],
+    ei: Callable[[np.ndarray], np.ndarray],
     unknown_states_as_variables: bool,
 ) -> DeterministicEquivalent:
     """The hybrid model over the scenarios of the surrogate model, minimizing `objective`
@@ -150,8 +133,7 @@ def gp_deterministic_equivalent(
     `fitted` is the surrogate model: one fitted GP per unknown state, in the order of
     `problem.system.y`. Each scenario s has its own copies x_s and y_s of the states, and
     the known equations g(x_s, y_s, u) = 0 are constraints. The unknown states y_s are
-    the GPs' prediction at the scenario's arguments of h, mean + std * z_s
-    (`_scenario_unknown_states`). With `unknown_states_as_variables` the y_s are variables
+    the GPs' prediction at the scenario's arguments of h, mean + std * z_s. With `unknown_states_as_variables` the y_s are variables
     too, tied by y_s - prediction = 0 (paper, Problem 8), which helps IPOPT. Otherwise the
     prediction is substituted for them, so they add no variables and have no bounds.
 
@@ -190,7 +172,12 @@ def gp_deterministic_equivalent(
     n_scenarios = len(w)
     u = Symbolic.sym("u", system.n_u)
     x = Symbolic.sym("x", n_scenarios, system.n_x)
-    prediction = _scenario_unknown_states(system, fitted, z, u, x)
+
+    # Unknown state j of scenario s is GP j's prediction at the scenario's arguments of h,
+    # mean_j + std_j * z_sj: one column of mean and std per unknown state, like z
+    h_arguments = cas.horzcat(*system.h_arguments(cas.repmat(u.T, n_scenarios, 1), x))
+    mean, std = zip(*(gp.predict(h_arguments) for gp in fitted), strict=True)
+    prediction = cas.horzcat(*mean) + cas.horzcat(*std) * Symbolic(z)
     y = prediction
     if unknown_states_as_variables:
         y = Symbolic.sym("y", n_scenarios, system.n_y)
@@ -224,6 +211,7 @@ def gp_deterministic_equivalent(
         nlp,
         start_bounds(variables),
         system.n_u,
+        ei,
         system.n_x,
         w,
         unknown_states_as_variables,
