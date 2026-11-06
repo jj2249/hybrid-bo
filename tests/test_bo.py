@@ -399,3 +399,139 @@ def test_surrogate_draws_the_gp_and_its_points_in_measured_units():
     )
     drawn = np.asarray(ax.collections[-1].get_offsets())
     np.testing.assert_allclose(drawn, np.column_stack([dataset.u, dataset.y]))
+
+
+@pytest.mark.parametrize(
+    "approximation",
+    [
+        hb.SAA(),
+        hb.SAA(unknown_states_as_variables=False),
+        hb.SoftSAA(temperature=0.5),
+    ],
+)
+def test_replay_gives_the_solution_and_solves_the_equations(approximation):
+    """At the trial point the replay is the stored solution, and over a grid each
+    scenario's states solve the known equations and f is the objective there."""
+    # Setup: one solved iteration
+    rng = np.random.default_rng(2)
+    dataset = training_data()
+    fitted = hb.fit_surrogate(ex.system, dataset, gp=ex.gp, rng=rng)
+    scenarios = hb.saa_scenarios(N_SCENARIOS, ex.system.n_y, rng)
+    incumbent = hb.incumbents(dataset)[-1]
+    solution = hb.hybrid_trial_point(
+        ex.problem, fitted, scenarios, incumbent, rng, approximation=approximation
+    )
+    built = hybrid_acquisition(ex.problem, fitted, scenarios, incumbent, approximation)
+
+    # Act: the trial point, then a grid
+    u = np.vstack([solution.u, np.linspace(-1.9, 1.9, 21)[:, np.newaxis]])
+    replayed = hb.replay(built, solution, u)
+
+    # Check: the stored solution at the trial point
+    assert replayed.x is not None and replayed.y is not None and replayed.f is not None
+    assert solution.x is not None
+    assert replayed.values[0] == pytest.approx(solution.value, rel=1e-6, abs=1e-8)
+    np.testing.assert_allclose(replayed.x[0], solution.x, atol=1e-6)
+
+    # Check: the equations and the objective wherever a root was found
+    solved = np.isfinite(replayed.values)
+    assert solved.mean() > 0.8
+    x, y, f = replayed.x[solved], replayed.y[solved], replayed.f[solved]
+    np.testing.assert_allclose(x + np.exp(x) - y, 0.0, atol=1e-7)
+    np.testing.assert_allclose(f, (6 * x[..., 0] - 2) ** 2 * np.sin(12 * x[..., 0] - 4))
+
+
+def test_replay_of_standard_bo_is_the_analytic_objective():
+    """Standard BO has no states, so its replay is -EI at each point."""
+    rng = np.random.default_rng(2)
+    dataset = training_data()
+    fitted = hb.fit_gp(ex.gp, dataset.u, dataset.f, rng)
+    incumbent = float(hb.incumbents(dataset)[-1])
+    solution = hb.standard_trial_point(ex.problem, fitted, incumbent, rng)
+    built = standard_acquisition(ex.problem, fitted, incumbent)
+
+    replayed = hb.replay(built, solution, solution.u[np.newaxis])
+
+    assert replayed.values[0] == pytest.approx(solution.value)
+
+
+def test_replay_works_with_no_states_to_solve():
+    """With no known equations and the GP substituted, there is nothing to solve."""
+    problem = no_known_equations_problem()
+    rng = np.random.default_rng(0)
+    points = hb.lhs_points(problem.system.u, 5, rng)
+    dataset = evaluate_points(problem, measure_sin, points, rng)
+    fitted = hb.fit_surrogate(problem.system, dataset, gp=ex.gp, rng=rng)
+    scenarios = hb.saa_scenarios(N_SCENARIOS, 1, rng)
+    incumbent = hb.incumbents(dataset)[-1]
+    approximation = hb.SAA(unknown_states_as_variables=False)
+    solution = hb.hybrid_trial_point(
+        problem, fitted, scenarios, incumbent, rng, approximation=approximation
+    )
+    built = hybrid_acquisition(problem, fitted, scenarios, incumbent, approximation)
+
+    replayed = hb.replay(built, solution, np.array([[0.1], [solution.u[0]]]))
+
+    assert np.all(np.isfinite(replayed.values))
+    assert replayed.values[1] == pytest.approx(solution.value)
+
+
+def solved_iteration() -> tuple:
+    """A hybrid iteration with SoftSAA: the problem, solution, GP, data and scenarios."""
+    rng = np.random.default_rng(2)
+    dataset = training_data()
+    fitted = hb.fit_surrogate(ex.system, dataset, gp=ex.gp, rng=rng)
+    scenarios = hb.saa_scenarios(N_SCENARIOS, ex.system.n_y, rng)
+    incumbent = hb.incumbents(dataset)[-1]
+    approximation = hb.SoftSAA(temperature=0.5)
+    solution = hb.hybrid_trial_point(
+        ex.problem, fitted, scenarios, incumbent, rng, approximation=approximation
+    )
+    built = hybrid_acquisition(ex.problem, fitted, scenarios, incumbent, approximation)
+    return built, solution, fitted[0], dataset, scenarios
+
+
+def test_soft_saa_replays_ei_from_its_log():
+    """SoftSAA minimizes -log EI, so the replay's EI is exp of minus the objective."""
+    built, solution, *_ = solved_iteration()
+
+    replayed = hb.replay(built, solution, solution.u[np.newaxis])
+
+    np.testing.assert_allclose(replayed.ei, np.exp(-replayed.values))
+
+
+def test_iteration_draws_hybrid_bos_panels():
+    """The GP, f under the scenarios and EI, whose peak is at the trial point."""
+    built, solution, fitted, dataset, scenarios = solved_iteration()
+    axes = matplotlib.figure.Figure().subplots(3)
+
+    hb.plots.iteration(built, solution, fitted, dataset, axes, scenarios)
+
+    u, ei = (np.asarray(data) for data in axes[2].get_lines()[0].get_data())
+    assert abs(u[np.nanargmax(ei)] - solution.u[0]) <= u[1] - u[0]
+    for ax in axes:
+        assert ax.get_lines()[-1].get_label() == "trial point"
+
+
+def test_iteration_draws_standard_bos_panels():
+    """The GP of f and EI, on two axes."""
+    rng = np.random.default_rng(2)
+    dataset = training_data()
+    fitted = hb.fit_gp(ex.gp, dataset.u, dataset.f, rng)
+    incumbent = float(hb.incumbents(dataset)[-1])
+    solution = hb.standard_trial_point(ex.problem, fitted, incumbent, rng)
+    built = standard_acquisition(ex.problem, fitted, incumbent)
+    axes = matplotlib.figure.Figure().subplots(2)
+
+    hb.plots.iteration(built, solution, fitted, dataset, axes)
+
+    assert axes[1].get_ylabel() == "EI"
+
+
+def test_iteration_needs_one_axes_per_panel():
+    """Hybrid BO draws three panels, so two axes are refused."""
+    built, solution, fitted, dataset, scenarios = solved_iteration()
+    axes = matplotlib.figure.Figure().subplots(2)
+
+    with pytest.raises(ValueError, match="panels"):
+        hb.plots.iteration(built, solution, fitted, dataset, axes, scenarios)

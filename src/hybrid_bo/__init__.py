@@ -7,8 +7,11 @@ from hybrid_bo import gp, plots
 from hybrid_bo.acquisition import (
     SAA,
     SoftSAA,
+    hybrid_acquisition,
     hybrid_trial_point,
+    replay,
     saa_scenarios,
+    standard_acquisition,
     standard_trial_point,
 )
 from hybrid_bo.dataset import Dataset, extend, incumbents, load_dataset, save_dataset

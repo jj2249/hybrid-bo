@@ -5,7 +5,10 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from hybrid_bo.acquisition import AcquisitionProblem, AcquisitionSolution, replay
+from hybrid_bo.dataset import Dataset
 from hybrid_bo.gp import FittedGP, predict, unscale
+from hybrid_bo.hybrid_model import Scenarios
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -60,3 +63,55 @@ def surrogate(fitted: FittedGP, lower: float, upper: float, ax: "Axes") -> "Axes
     )
     ax.legend()
     return ax
+
+
+def iteration(
+    problem: AcquisitionProblem,
+    solution: AcquisitionSolution,
+    fitted: FittedGP,
+    dataset: Dataset,
+    axes: "Sequence[Axes]",
+    scenarios: Scenarios | None = None,
+) -> None:
+    """Draws one iteration of one decision variable on `axes`: the state before the trial
+    point `solution`, over the start bounds of u, as `replay` gives it, so the panels show
+    the function the solver minimized. `dataset` holds the points before the trial point.
+
+    Standard BO has two panels, its GP of f and EI. Hybrid BO, with its `scenarios`, has
+    three: `fitted`, the GP of an unknown state of u alone, then f under the scenarios,
+    their weighted mean and std, and EI. A point the replay didn't solve is a gap.
+
+    Raises `ValueError` if there isn't one decision variable, or one axes per panel.
+    """
+    # The checks
+    panels = list(axes)
+    if problem.n_u != 1:
+        msg = f"The panels draw one decision variable, got {problem.n_u}"
+        raise ValueError(msg)
+    if len(panels) != (2 if scenarios is None else 3):
+        msg = f"Standard BO draws 2 panels and hybrid BO 3, got {len(panels)} axes"
+        raise ValueError(msg)
+
+    # The GP, in its panel's color, and the replay over the start bounds of u
+    lower, upper = (float(bound[0]) for bound in problem.start_bounds)
+    surrogate(fitted, lower, upper, panels[0])
+    color = panels[0].get_lines()[0].get_color()
+    u = np.linspace(lower, upper, 201)
+    replayed = replay(problem, solution, u[:, np.newaxis])
+
+    # f under the scenarios, with the points so far
+    if scenarios is not None:
+        assert replayed.f is not None
+        mean = replayed.f @ scenarios.w
+        std = np.sqrt((replayed.f - mean[:, np.newaxis]) ** 2 @ scenarios.w)
+        panels[1].plot(u, mean, color=color, label="mean over scenarios")
+        panels[1].fill_between(u, mean - std, mean + std, color=color, alpha=0.2)
+        panels[1].scatter(dataset.u[:, 0], dataset.f, color="k", label="points")
+        panels[1].set_ylabel("f")
+
+    # EI, and the trial point on every panel
+    panels[-1].plot(u, replayed.ei, color=color, label="EI")
+    panels[-1].set(xlabel="u", ylabel="EI")
+    for ax in panels:
+        ax.axvline(solution.u[0], color=color, linestyle=":", label="trial point")
+        ax.legend(fontsize="small")

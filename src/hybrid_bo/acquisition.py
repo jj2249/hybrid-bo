@@ -6,10 +6,10 @@ of the unknown states (`hybrid_acquisition`): `SAA`, a weighted sample average (
 Problems 8 and 9), or `SoftSAA`, its smooth version.
 
 `hybrid_trial_point` and `standard_trial_point` solve one acquisition problem from fitted
-GPs: one iteration of BO.
+GPs: one iteration of BO. `replay` evaluates a problem at given points, to draw it.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, assert_never
 
 import casadi as cas
@@ -20,6 +20,7 @@ from hybrid_bo.hybrid_model import (
     DeterministicEquivalent,
     Scenarios,
     _pack,
+    _unpack,
     _unpack_scenarios,
     gp_deterministic_equivalent,
 )
@@ -32,6 +33,9 @@ _EI_STD_EPSILON = 1e-10
 
 # Below this a / tau, log log(1 + exp(a / tau)) is a / tau within about 1e-13
 _LOG_SOFTPLUS_LINEAR_BELOW = -30.0
+
+# A replay's root solves each equation to this
+_REPLAY_TOLERANCE = 1e-8
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -172,13 +176,14 @@ def hybrid_acquisition(
             case _:
                 assert_never(approximation)
 
-    return gp_deterministic_equivalent(
+    built = gp_deterministic_equivalent(
         problem,
         fitted,
         scenarios,
         objective,
         approximation.unknown_states_as_variables,
     )
+    return replace(built, log_ei=isinstance(approximation, SoftSAA))
 
 
 def standard_trial_point(
@@ -229,3 +234,70 @@ def hybrid_trial_point(
     solution = solve_with_multistart(acquisition_problem.nlp, starts, solver)
     u, x, y = _unpack_scenarios(acquisition_problem, solution.w)
     return AcquisitionSolution(u, solution.f, x, y)
+
+
+@dataclass(frozen=True)
+class Replay:
+    """An acquisition problem at the rows of u (n, N): its objective there (n,), EI (n,)
+    and, for hybrid BO, f (n, S) and the states x (n, S, M) and y (n, S, P) under each
+    scenario. NaN where the scenario states weren't solved."""
+
+    values: np.ndarray
+    ei: np.ndarray
+    f: np.ndarray | None = None
+    x: np.ndarray | None = None
+    y: np.ndarray | None = None
+
+
+def replay(
+    problem: AcquisitionProblem, solution: AcquisitionSolution, u: np.ndarray
+) -> Replay:
+    """The acquisition problem with u fixed at each row of u (n, N), for drawing it: the
+    function the problem minimized, whatever the equations are.
+
+    Standard BO's is analytic. With u fixed, hybrid BO's constraints are a square system
+    in the scenario states, which Newton's method solves point by point outwards from
+    `solution`, each from the nearest point solved, to stay on the branch the optimizer
+    chose. A point fails if a residual is above `_REPLAY_TOLERANCE` or a state is outside
+    its bounds.
+    """
+    if problem.scenario_values is None:
+        values = problem.nlp.f.map(len(u))(u.T).full().ravel()
+        return Replay(values, -values)
+
+    # Newton's method on the constraints, with the states as unknowns and u fixed
+    nlp, n_u = problem.nlp, problem.n_u
+    assert nlp.g is not None and solution.x is not None and solution.y is not None
+    stored_y = solution.y if problem.unknown_states_as_variables else None
+    stored = _pack(np.empty(0), solution.x, stored_y)
+    states, u_fixed = Symbolic.sym("v", len(stored)), Symbolic.sym("u", n_u)
+    equations = cas.Function(
+        "replay", [states, u_fixed], [nlp.g(cas.vertcat(u_fixed, states))]
+    )
+    newton = None
+    if len(stored) > 0:
+        newton = cas.rootfinder("replay", "newton", equations, {"error_on_fail": False})
+
+    # Outwards from the stored solution, each point from the nearest one solved
+    solved_u, solved_states = [solution.u], [stored]
+    n_scenarios, n_y = solution.y.shape
+    values = np.full(len(u), np.nan)
+    f = np.full((len(u), n_scenarios), np.nan)
+    x = np.full((len(u), *solution.x.shape), np.nan)
+    y = np.full((len(u), n_scenarios, n_y), np.nan)
+    for i in np.argsort(np.linalg.norm(u - solution.u, axis=1)):
+        nearest = np.argmin(np.linalg.norm(np.array(solved_u) - u[i], axis=1))
+        root = solved_states[nearest]
+        if newton is not None:
+            root = newton(root, u[i]).full().ravel()
+            residual = equations(root, u[i]).full()
+            inside = (root >= nlp.lower[n_u:]) & (root <= nlp.upper[n_u:])
+            if np.abs(residual).max() > _REPLAY_TOLERANCE or not inside.all():
+                continue
+        w = np.concatenate([u[i], root])
+        values[i] = float(nlp.f(w))
+        f_i, y_i = problem.scenario_values(w)
+        f[i], y[i], x[i] = f_i.full().ravel(), y_i.full(), _unpack(problem, w)[1]
+        solved_u.append(u[i])
+        solved_states.append(root)
+    return Replay(values, np.exp(-values) if problem.log_ei else -values, f, x, y)

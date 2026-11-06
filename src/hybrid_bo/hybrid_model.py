@@ -59,8 +59,9 @@ class DeterministicEquivalent:
     `_pack` and `_unpack` are the only code that knows this order. The defaults are
     those of a problem over u alone, such as standard BO's acquisition problem.
 
-    `scenario_y` maps w to the scenarios' unknown states y (S, P), read from w or
-    predicted by the GPs.
+    `scenario_values` maps w to f under each scenario (S, 1) and the scenarios' unknown
+    states y (S, P), read from w or predicted by the GPs.
+    `log_ei` says the objective is -log EI rather than -EI.
     """
 
     nlp: NLP
@@ -69,7 +70,8 @@ class DeterministicEquivalent:
     n_x: int = 0
     n_scenarios: int = 0
     unknown_states_as_variables: bool = False
-    scenario_y: cas.Function | None = None
+    scenario_values: cas.Function | None = None
+    log_ei: bool = False
 
 
 def _pack(u: Any, x: Any = None, y: Any = None) -> Any:
@@ -111,11 +113,11 @@ def _unpack_scenarios(
     problem: DeterministicEquivalent, w: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """The u (N,), x (S, M) and y (S, P) of a numeric decision vector w of a problem
-    over scenarios: `_unpack`, with y from `scenario_y`, so the GPs' prediction when it
-    was substituted for the unknown states."""
+    over scenarios: `_unpack`, with y from `scenario_values`, so the GPs' prediction when
+    it was substituted for the unknown states."""
     u, x, _ = _unpack(problem, w)
-    assert problem.scenario_y is not None  # a problem over scenarios has it
-    return u, x, problem.scenario_y(w).full()
+    assert problem.scenario_values is not None  # a problem over scenarios has it
+    return u, x, problem.scenario_values(w)[1].full()
 
 
 def _scenario_unknown_states(
@@ -203,9 +205,10 @@ def gp_deterministic_equivalent(
     unknown = per_scenario(system.y) if unknown_states_as_variables else None
     variables = _pack(np.array(system.u, dtype=object), per_scenario(system.x), unknown)
 
+    f = cas.vertcat(*f_parts)
     w = _pack(u, x, y if unknown_states_as_variables else None)
     nlp = NLP(
-        cas.Function("acquisition", [w], [objective(cas.vertcat(*f_parts))]),
+        cas.Function("acquisition", [w], [objective(f)]),
         np.array([var.lower for var in variables]),
         np.array([var.upper for var in variables]),
         cas.Function("g", [w], [cas.vertcat(*constraints)]),
@@ -217,7 +220,7 @@ def gp_deterministic_equivalent(
         system.n_x,
         n_scenarios,
         unknown_states_as_variables,
-        cas.Function("scenario_y", [w], [y]),
+        cas.Function("scenario_values", [w], [f, y]),
     )
 
 

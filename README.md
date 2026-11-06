@@ -104,7 +104,10 @@ dataset = hb.load_dataset("dataset.npz")
 ```
 
 Plots draw on the axes you give them: `hb.plots.convergence` and `hb.plots.regret` take
-incumbent curves per label, and `hb.plots.surrogate` draws a fitted GP of one input.
+incumbent curves per label, `hb.plots.surrogate` draws a fitted GP of one input, and
+`hb.plots.iteration` draws what an iteration minimized, from `hb.replay`, which evaluates
+an acquisition problem over a grid of `u` with the scenario states and `f` at each point.
+`examples/illustrative_example.py` compares hybrid and standard BO and draws both.
 
 ## License
 
