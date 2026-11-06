@@ -67,7 +67,7 @@ for seed in range(N_RUNS):
         before = dataset
         incumbent = hb.incumbents(dataset)[-1]
         fitted = hb.fit_surrogate(system, dataset, gp=gp, rng=rng)
-        equivalent = hb.hybrid_deterministic_equivalent(
+        equivalent = hb.DeterministicEquivalent(
             problem,
             fitted,
             z,
@@ -77,7 +77,7 @@ for seed in range(N_RUNS):
             unknown_states_as_variables=False,
         )
         solution = equivalent.solve(rng)
-        u_new = solution.u[None]
+        u_new = solution[0][None]
         new = hb.reconstruct_states(
             problem, u=u_new, measured=measure(u_new, rng), rng=rng
         )
@@ -102,7 +102,7 @@ for seed in range(N_RUNS):
         fitted = gp.fit(dataset.u, dataset.f, rng)
         standard = hb.standard_acquisition(problem, fitted, incumbent)
         solution = standard.solve(rng)
-        u_new = solution.w[None]
+        u_new = solution[0][None]
         new = hb.reconstruct_states(
             problem, u=u_new, measured=measure(u_new, rng), rng=rng
         )

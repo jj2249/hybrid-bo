@@ -4,7 +4,7 @@ Standard BO's EI is exact: the GP gives the mean and standard deviation of f in 
 form (`expected_improvement`), so `standard_acquisition` minimizes it directly.
 
 Hybrid BO has no closed form, because f depends on the GPs' prediction through the
-equations, so `hybrid_deterministic_equivalent` averages over scenarios: a sample-average
+equations, so `DeterministicEquivalent` averages over scenarios: a sample-average
 approximation of an acquisition function. `EI` and `SoftEI` are the functions it can
 average, giving SAA-EI and SAA-SoftEI. `SoftEI` reformulates the acquisition function; the
 sample average is the same for both.

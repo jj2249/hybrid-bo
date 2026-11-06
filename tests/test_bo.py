@@ -1,5 +1,6 @@
 """One iteration of hybrid and standard BO, and the loop a script writes around it."""
 
+import copy
 import dataclasses
 import logging
 
@@ -15,7 +16,6 @@ from plain_loop import evaluate_points, hybrid_loop, standard_loop
 from scipy.stats import norm
 
 import hybrid_bo as hb
-from hybrid_bo.hybrid_model import _pack
 
 N_SCENARIOS = 4
 
@@ -100,7 +100,7 @@ def test_scenarios_reject_inconsistent_draws_or_weights(z, w):
 
     # `raises` passes only if the block raises that exception
     with pytest.raises(ValueError, match="Scenario"):
-        hb.hybrid_deterministic_equivalent(
+        hb.DeterministicEquivalent(
             ex.problem, (fitted,), z, w, 0.0, acquisition=hb.EI()
         )
 
@@ -119,7 +119,7 @@ def test_solving_the_equivalent_gives_the_trial_point_and_states(
     incumbent = hb.incumbents(dataset)[-1]
 
     # Act
-    built = hb.hybrid_deterministic_equivalent(
+    built = hb.DeterministicEquivalent(
         ex.problem,
         fitted,
         z,
@@ -128,21 +128,20 @@ def test_solving_the_equivalent_gives_the_trial_point_and_states(
         acquisition=hb.EI(),
         unknown_states_as_variables=unknown_states_as_variables,
     )
-    solution = built.solve(rng)
+    u, x, y, value = built.solve(rng)
 
     # Check the shapes, and the bounds of u
-    assert solution.x is not None and solution.y is not None
-    assert solution.u.shape == (ex.system.n_u,)
-    assert solution.x.shape == solution.y.shape == (N_SCENARIOS, 1)
-    assert np.all(np.abs(solution.u) <= 2.0 + 1e-6)
+    assert u.shape == (ex.system.n_u,)
+    assert x.shape == y.shape == (N_SCENARIOS, 1)
+    assert np.all(np.abs(u) <= 2.0 + 1e-6)
 
     # Check the known equations of every scenario
-    residuals = solution.x + np.exp(solution.x) - solution.y
+    residuals = x + np.exp(x) - y
     np.testing.assert_allclose(residuals, 0.0, atol=1e-6)
 
     # Check the value against the problem's objective at the solution
-    expected = float(built.f(solution.w))
-    assert solution.value == pytest.approx(expected, rel=1e-9)
+    expected = float(built.nlp.f(built.pack(u, x, y)))
+    assert value == pytest.approx(expected, rel=1e-9)
 
 
 def test_solving_standard_acquisition_minimizes_analytic_ei():
@@ -156,17 +155,17 @@ def test_solving_standard_acquisition_minimizes_analytic_ei():
 
     # Act
     built = hb.standard_acquisition(ex.problem, fitted, incumbent)
-    solution = built.solve(rng)
+    u, value = built.solve(rng)
 
     # Check against EI in closed form
-    mean, std = fitted.predict(solution.w[np.newaxis])
+    mean, std = fitted.predict(u[np.newaxis])
     gamma = (incumbent - mean[0]) / std[0]
     expected_ei = (incumbent - mean[0]) * norm.cdf(gamma) + std[0] * norm.pdf(gamma)
-    assert solution.value == pytest.approx(-expected_ei, rel=1e-6)
+    assert value == pytest.approx(-expected_ei, rel=1e-6)
 
     # Check that no other point of a grid has a better value
     grid = np.linspace(-2.0, 2.0, 201)[np.newaxis]
-    assert solution.value <= built.f.map(201)(grid).full().min() + 1e-9
+    assert value <= built.f.map(201)(grid).full().min() + 1e-9
 
 
 def ei_problems(incumbent: float, temperature: float):
@@ -182,7 +181,7 @@ def ei_problems(incumbent: float, temperature: float):
     f = x**2 + mean + std * Z[:, 0]
 
     soft, saa = (
-        hb.hybrid_deterministic_equivalent(
+        hb.DeterministicEquivalent(
             problem,
             (fitted,),
             Z,
@@ -193,7 +192,7 @@ def ei_problems(incumbent: float, temperature: float):
         )
         for acquisition in (hb.SoftEI(temperature=temperature), hb.EI())
     )
-    return soft, saa, _pack(np.array([u]), x[:, np.newaxis]), f
+    return soft, saa, soft.pack(np.array([u]), x[:, np.newaxis]), f
 
 
 def gradient(nlp, w: np.ndarray) -> np.ndarray:
@@ -209,7 +208,7 @@ def test_ei_is_the_weighted_average_over_the_scenarios():
     _, saa, w, f = ei_problems(incumbent=1.0, temperature=0.5)
 
     expected = W @ np.minimum(f - 1.0, 0)
-    np.testing.assert_allclose(saa.f(w).full().item(), expected, rtol=1e-10)
+    np.testing.assert_allclose(saa.nlp.f(w).full().item(), expected, rtol=1e-10)
 
 
 def test_soft_ei_ei_is_minus_log_the_weighted_smooth_improvement():
@@ -219,7 +218,7 @@ def test_soft_ei_ei_is_minus_log_the_weighted_smooth_improvement():
 
     smooth = 0.5 * np.log1p(np.exp((1.0 - f) / 0.5))
     expected = -np.log(W @ smooth)
-    np.testing.assert_allclose(soft.f(w).full().item(), expected, rtol=1e-10)
+    np.testing.assert_allclose(soft.nlp.f(w).full().item(), expected, rtol=1e-10)
 
 
 @pytest.mark.parametrize("temperature", [0.0, -1.0, np.inf, np.nan])
@@ -237,12 +236,12 @@ def test_soft_ei_ei_has_a_gradient_where_no_scenario_improves():
     assert np.all(f > -1.0)
 
     # SAA-EI is flat there
-    assert saa.f(w).full().item() == 0
-    assert np.all(gradient(saa, w) == 0)
+    assert saa.nlp.f(w).full().item() == 0
+    assert np.all(gradient(saa.nlp, w) == 0)
 
     # SAA-SoftEI's objective and its gradient in u
-    assert np.isfinite(soft.f(w).full().item())
-    u_gradient, _, _ = soft.unpack(gradient(soft, w))
+    assert np.isfinite(soft.nlp.f(w).full().item())
+    u_gradient, _, _ = soft.unpack(gradient(soft.nlp, w))
     assert np.all(np.isfinite(u_gradient)) and np.all(u_gradient != 0)
 
 
@@ -256,9 +255,9 @@ def test_soft_ei_ei_is_finite_far_from_the_incumbent(incumbent):
     assert np.all(np.abs(a) > 1000)
 
     # Check
-    value = soft.f(w).full().item()
+    value = soft.nlp.f(w).full().item()
     assert np.isfinite(value)
-    assert np.all(np.isfinite(gradient(soft, w)))
+    assert np.all(np.isfinite(gradient(soft.nlp, w)))
     if incumbent < 0:
         expected = -(np.log(0.002) + scipy.special.logsumexp(a, b=W))
         np.testing.assert_allclose(value, expected, rtol=1e-12)
@@ -272,11 +271,11 @@ def test_the_equivalent_needs_one_gp_and_column_per_unknown_state():
     z, w = draw_scenarios(3, 2, np.random.default_rng(0))
 
     with pytest.raises(ValueError, match="one column of z"):
-        hb.hybrid_deterministic_equivalent(
+        hb.DeterministicEquivalent(
             ex.problem, (fitted,), z, w, 0.0, acquisition=hb.EI()
         )
     with pytest.raises(ValueError, match="one fitted GP"):
-        hb.hybrid_deterministic_equivalent(
+        hb.DeterministicEquivalent(
             ex.problem, (fitted, fitted), Z, W, 0.0, acquisition=hb.EI()
         )
 
@@ -321,7 +320,7 @@ def test_hybrid_bo_runs_with_a_measurement_of_your_own(
 
     # Check: the measured y, and the trial points in the dataset
     np.testing.assert_array_equal(dataset.y, np.sin(dataset.u))
-    trial_points = np.array([solution.u for solution in solutions])
+    trial_points = np.array([solution[0] for solution in solutions])
     np.testing.assert_array_equal(dataset.u[5:], trial_points)
 
 
@@ -351,7 +350,7 @@ def test_hybrid_bo_runs_with_two_unknown_states():
     )
 
     assert dataset.y.shape == (7, 2)
-    assert solutions[0].y is not None and solutions[0].y.shape == (5, 2)
+    assert solutions[0][2].shape == (5, 2)
 
 
 def test_standard_bo_runs_with_a_measurement_of_your_own():
@@ -364,7 +363,7 @@ def test_standard_bo_runs_with_a_measurement_of_your_own():
         ex.problem, measure_sin, start, rng, n_iterations=2, gp=ex.gp
     )
 
-    trial_points = np.array([solution.w for solution in solutions])
+    trial_points = np.array([solution[0] for solution in solutions])
     np.testing.assert_array_equal(dataset.u[5:], trial_points)
 
 
@@ -444,7 +443,7 @@ def test_acquisition_on_grid_gives_the_solution_and_solves_the_equations(
     fitted = hb.fit_surrogate(ex.system, dataset, gp=ex.gp, rng=rng)
     z, w = draw_scenarios(N_SCENARIOS, ex.system.n_y, rng)
     incumbent = hb.incumbents(dataset)[-1]
-    built = hb.hybrid_deterministic_equivalent(
+    built = hb.DeterministicEquivalent(
         ex.problem,
         fitted,
         z,
@@ -456,16 +455,15 @@ def test_acquisition_on_grid_gives_the_solution_and_solves_the_equations(
     solution = built.solve(rng)
 
     # Act: the trial point, then a grid
-    u = np.vstack([solution.u, np.linspace(-1.9, 1.9, 21)[:, np.newaxis]])
+    u = np.vstack([solution[0], np.linspace(-1.9, 1.9, 21)[:, np.newaxis]])
     ei, scenarios = hb.plots.acquisition_on_grid(built, solution, u)
 
     # Check: the stored solution at the trial point
-    assert solution.x is not None
     assert ei[0] == pytest.approx(
-        built.acquisition.from_objective(np.array(solution.value)), rel=1e-6, abs=1e-8
+        built.acquisition.from_objective(np.array(solution[-1])), rel=1e-6, abs=1e-8
     )
     x_at_trial_point = np.array([scenario.x[0] for scenario in scenarios])
-    np.testing.assert_allclose(x_at_trial_point, solution.x, atol=1e-6)
+    np.testing.assert_allclose(x_at_trial_point, solution[1], atol=1e-6)
 
     # Check: the equations and the objective wherever a root was found
     solved = np.isfinite(ei)
@@ -481,9 +479,11 @@ def test_acquisition_on_grid_leaves_a_gap_where_a_point_fails():
     """A state that would leave its bounds is a failed point, and NaN in every output."""
     built, solution, *_ = solved_iteration()
     n_u = built.n_u
-    upper = np.concatenate([built.upper[:n_u], solution.w[n_u:] + 1e-6])
-    bounded = dataclasses.replace(built, upper=upper)
-    u = np.array([solution.u, solution.u + 1.0, solution.u - 1.0])
+    stored = built.pack(*solution[:3])[n_u:]
+    upper = np.concatenate([built.nlp.upper[:n_u], stored + 1e-6])
+    bounded = copy.copy(built)
+    object.__setattr__(bounded, "nlp", dataclasses.replace(built.nlp, upper=upper))
+    u = np.array([solution[0], solution[0] + 1.0, solution[0] - 1.0])
 
     ei, scenarios = hb.plots.acquisition_on_grid(bounded, solution, u)
 
@@ -502,10 +502,10 @@ def test_acquisition_on_grid_of_standard_bo_is_analytic():
     solution = built.solve(rng)
 
     ei, scenarios = hb.plots.acquisition_on_grid(
-        built, solution, solution.w[np.newaxis]
+        built, solution, solution[0][np.newaxis]
     )
 
-    assert ei[0] == pytest.approx(-solution.value)
+    assert ei[0] == pytest.approx(-solution[-1])
     assert scenarios == ()
 
 
@@ -518,7 +518,7 @@ def test_acquisition_on_grid_works_with_no_states_to_solve():
     fitted = hb.fit_surrogate(problem.system, dataset, gp=ex.gp, rng=rng)
     z, w = draw_scenarios(N_SCENARIOS, 1, rng)
     incumbent = hb.incumbents(dataset)[-1]
-    built = hb.hybrid_deterministic_equivalent(
+    built = hb.DeterministicEquivalent(
         problem,
         fitted,
         z,
@@ -529,11 +529,11 @@ def test_acquisition_on_grid_works_with_no_states_to_solve():
     )
     solution = built.solve(rng)
 
-    u = np.array([[0.1], [solution.u[0]]])
+    u = np.array([[0.1], [solution[0][0]]])
     ei, _ = hb.plots.acquisition_on_grid(built, solution, u)
 
     assert np.all(np.isfinite(ei))
-    assert ei[1] == pytest.approx(-solution.value)
+    assert ei[1] == pytest.approx(-solution[-1])
 
 
 def solved_iteration() -> tuple:
@@ -543,7 +543,7 @@ def solved_iteration() -> tuple:
     fitted = hb.fit_surrogate(ex.system, dataset, gp=ex.gp, rng=rng)
     z, w = draw_scenarios(N_SCENARIOS, ex.system.n_y, rng)
     incumbent = hb.incumbents(dataset)[-1]
-    built = hb.hybrid_deterministic_equivalent(
+    built = hb.DeterministicEquivalent(
         ex.problem, fitted, z, w, incumbent, acquisition=hb.SoftEI(temperature=0.5)
     )
     solution = built.solve(rng)
@@ -554,9 +554,9 @@ def test_soft_ei_gives_ei_from_its_log():
     """SoftEI minimizes -log SoftEI, so it is exp of minus the objective."""
     built, solution, *_ = solved_iteration()
 
-    ei, _ = hb.plots.acquisition_on_grid(built, solution, solution.u[np.newaxis])
+    ei, _ = hb.plots.acquisition_on_grid(built, solution, solution[0][np.newaxis])
 
-    np.testing.assert_allclose(ei, np.exp(-solution.value), rtol=1e-6)
+    np.testing.assert_allclose(ei, np.exp(-solution[-1]), rtol=1e-6)
 
 
 def test_iteration_draws_hybrid_bos_panels():
@@ -567,7 +567,7 @@ def test_iteration_draws_hybrid_bos_panels():
     hb.plots.iteration(built, solution, fitted, dataset, axes)
 
     u, ei = (np.asarray(data) for data in axes[2].get_lines()[0].get_data())
-    assert abs(u[np.nanargmax(ei)] - solution.u[0]) <= u[1] - u[0]
+    assert abs(u[np.nanargmax(ei)] - solution[0][0]) <= u[1] - u[0]
     for ax in axes:
         assert ax.get_lines()[-1].get_label() == "trial point"
 

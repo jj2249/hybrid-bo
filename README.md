@@ -80,7 +80,7 @@ w = np.full(25, 1 / 25)
 
 for _ in range(10):
     fitted = hb.fit_surrogate(system, dataset, gp=gp, rng=rng)
-    equivalent = hb.hybrid_deterministic_equivalent(
+    equivalent = hb.DeterministicEquivalent(
         problem,
         fitted,
         z,
@@ -88,12 +88,12 @@ for _ in range(10):
         hb.incumbents(dataset)[-1],
         acquisition=hb.EI(),  # or hb.SoftEI(temperature=...)
     )
-    solution = equivalent.solve(rng)
-    dataset = hb.extend(dataset, evaluate(solution.u, rng))
+    u, x, y, value = equivalent.solve(rng)
+    dataset = hb.extend(dataset, evaluate(u, rng))
 ```
 
 **Standard BO** fits one GP to the objective, so EI is exact and needs no scenarios.
-Its variables are just `u`, so `solution.w` is the trial point:
+Its variables are just `u`, so `solve` gives the trial point and the objective:
 
 ```python
 dataset = initial
@@ -101,8 +101,8 @@ dataset = initial
 for _ in range(10):
     fitted = gp.fit(dataset.u, dataset.f, rng)
     standard = hb.standard_acquisition(problem, fitted, hb.incumbents(dataset)[-1])
-    solution = standard.solve(rng)
-    dataset = hb.extend(dataset, evaluate(solution.w, rng))
+    u, value = standard.solve(rng)
+    dataset = hb.extend(dataset, evaluate(u, rng))
 ```
 
 **A baseline** is points through the same steps, from `hb.lhs_points` or

@@ -5,8 +5,6 @@ import numpy as np
 
 import hybrid_bo as hb
 from hybrid_bo.gp import GP
-from hybrid_bo.hybrid_model import ScenarioSolution
-from hybrid_bo.solvers import Solution
 
 
 def evaluate_point(
@@ -44,7 +42,7 @@ def hybrid_loop(
     gp: GP,
     acquisition: hb.EI | hb.SoftEI,
     unknown_states_as_variables: bool = True,
-) -> tuple[hb.Dataset, list[ScenarioSolution]]:
+) -> tuple[hb.Dataset, list[tuple]]:
     """Hybrid BO from `dataset`, with the scenarios z and w drawn once, before the loop.
 
     Returns the grown dataset and each iteration's solution.
@@ -53,7 +51,7 @@ def hybrid_loop(
     for _ in range(n_iterations):
         fitted = hb.fit_surrogate(problem.system, dataset, gp=gp, rng=rng)
         incumbent = hb.incumbents(dataset)[-1]
-        equivalent = hb.hybrid_deterministic_equivalent(
+        equivalent = hb.DeterministicEquivalent(
             problem,
             fitted,
             z,
@@ -63,7 +61,7 @@ def hybrid_loop(
             unknown_states_as_variables=unknown_states_as_variables,
         )
         solution = equivalent.solve(rng)
-        dataset = hb.extend(dataset, evaluate_point(problem, measure, solution.u, rng))
+        dataset = hb.extend(dataset, evaluate_point(problem, measure, solution[0], rng))
         solutions.append(solution)
     return dataset, solutions
 
@@ -76,7 +74,7 @@ def standard_loop(
     *,
     n_iterations: int,
     gp: GP,
-) -> tuple[hb.Dataset, list[Solution]]:
+) -> tuple[hb.Dataset, list[tuple]]:
     """Standard BO from `dataset`: a GP of the measured objective over u.
 
     Returns the grown dataset and each iteration's solution.
@@ -86,6 +84,6 @@ def standard_loop(
         fitted = gp.fit(dataset.u, dataset.f, rng)
         incumbent = hb.incumbents(dataset)[-1]
         solution = hb.standard_acquisition(problem, fitted, incumbent).solve(rng)
-        dataset = hb.extend(dataset, evaluate_point(problem, measure, solution.w, rng))
+        dataset = hb.extend(dataset, evaluate_point(problem, measure, solution[0], rng))
         solutions.append(solution)
     return dataset, solutions

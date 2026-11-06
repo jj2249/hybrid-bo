@@ -11,8 +11,6 @@ from hybrid_bo.solvers import (
     NLP,
     Ipopt,
     RootProblem,
-    _solve_with_multistart,
-    find_root,
 )
 
 w = cas.SX.sym("w")
@@ -25,9 +23,9 @@ DOUBLE_WELL = NLP(
 
 
 def test_best_start_wins():
-    """With one start in each well, `_solve_with_multistart` returns the global minimum
+    """With one start in each well, `NLP.solve_from` returns the global minimum
     and its objective value."""
-    w, f = _solve_with_multistart(DOUBLE_WELL, np.array([[1.5], [-1.5]]), Ipopt())
+    w, f = DOUBLE_WELL.solve_from(np.array([[1.5], [-1.5]]), Ipopt())
     assert w.shape == (1,)
     assert w[0] < 0
     np.testing.assert_allclose(f, DOUBLE_WELL.f(w).full().item())
@@ -35,7 +33,7 @@ def test_best_start_wins():
 
 def test_a_tie_keeps_the_earlier_start():
     """When two starts reach minima whose objectives differ only by rounding,
-    `_solve_with_multistart` keeps the earlier start, so the result doesn't depend on the
+    `NLP.solve_from` keeps the earlier start, so the result doesn't depend on the
     last bits of the platform's arithmetic (the illustrative example's standard BO has
     such a tie, which macOS and Windows broke differently)."""
     # Two wells, at -1 and +1, the later one lower by 2e-14
@@ -45,14 +43,14 @@ def test_a_tie_keeps_the_earlier_start():
         upper=np.array([2.0]),
     )
 
-    best, _ = _solve_with_multistart(tied, np.array([[-1.5], [1.5]]), Ipopt())
+    best, _ = tied.solve_from(np.array([[-1.5], [1.5]]), Ipopt())
 
     assert best[0] < 0
 
 
 def test_one_start_finds_its_local_minimum():
     """A single start in the right well stays there, at the local minimum."""
-    w, _ = _solve_with_multistart(DOUBLE_WELL, np.array([[1.5]]), Ipopt())
+    w, _ = DOUBLE_WELL.solve_from(np.array([[1.5]]), Ipopt())
     assert w[0] > 0
 
 
@@ -67,7 +65,7 @@ def test_bounds_and_constraints():
         g=cas.Function("g", [v], [v[0] + v[1] - 1]),
     )
 
-    w, _ = _solve_with_multistart(nlp, np.array([[1.0, 1.0]]), Ipopt())
+    w, _ = nlp.solve_from(np.array([[1.0, 1.0]]), Ipopt())
 
     np.testing.assert_allclose(w, [0.7, 0.3], atol=1e-6)
 
@@ -83,14 +81,14 @@ def test_an_empty_constraint_is_no_constraint():
         g=cas.Function("g", [w], [cas.SX(0, 1)]),
     )
 
-    best, _ = _solve_with_multistart(nlp, np.array([[-1.5]]), Ipopt())
+    best, _ = nlp.solve_from(np.array([[-1.5]]), Ipopt())
 
-    reference, _ = _solve_with_multistart(DOUBLE_WELL, np.array([[-1.5]]), Ipopt())
+    reference, _ = DOUBLE_WELL.solve_from(np.array([[-1.5]]), Ipopt())
     np.testing.assert_allclose(best, reference, atol=1e-8)
 
 
 def test_every_start_failing_raises():
-    """When no start converges, `_solve_with_multistart` raises NoSolutionError."""
+    """When no start converges, `NLP.solve_from` raises NoSolutionError."""
     # w**2 + 1 = 0 has no real solution
     infeasible = NLP(
         DOUBLE_WELL.f,
@@ -101,11 +99,11 @@ def test_every_start_failing_raises():
 
     # `pytest.raises` fails the test unless the block raises that exception
     with pytest.raises(NoSolutionError):
-        _solve_with_multistart(infeasible, np.array([[0.5], [-0.5]]), Ipopt())
+        infeasible.solve_from(np.array([[0.5], [-0.5]]), Ipopt())
 
 
 def test_starts_at_the_iteration_limit_are_warned_about(caplog):
-    """When starts run IPOPT to its iteration limit, `_solve_with_multistart` logs one
+    """When starts run IPOPT to its iteration limit, `NLP.solve_from` logs one
     warning giving how many of the starts did and the name of the NLP's objective, even
     though another start succeeded."""
     # The Rosenbrock function, which five iterations solve only from its minimum
@@ -123,7 +121,7 @@ def test_starts_at_the_iteration_limit_are_warned_about(caplog):
 
     # Solve, recording every log message
     with caplog.at_level(logging.DEBUG):
-        _solve_with_multistart(rosenbrock, starts, five_iterations)
+        rosenbrock.solve_from(starts, five_iterations)
 
     # One warning, counting the two starts away from the minimum
     warnings = [
@@ -145,7 +143,7 @@ def test_other_failures_are_not_warned_about(caplog):
     )
 
     with pytest.raises(NoSolutionError):
-        _solve_with_multistart(infeasible, np.array([[0.5], [-0.5]]), Ipopt())
+        infeasible.solve_from(np.array([[0.5], [-0.5]]), Ipopt())
 
     assert not caplog.records
 
@@ -155,56 +153,56 @@ ROOT_W, ROOT_P = cas.SX.sym("x"), cas.SX.sym("p")
 SQUARE = cas.Function("square", [ROOT_W, ROOT_P], [ROOT_W**2 - ROOT_P])
 
 
-def test_find_root_gives_the_root_at_the_parameters():
+def test_root_problem_gives_the_root_at_the_parameters():
     """The same problem is solved at each parameter, from the start's side."""
     problem = RootProblem(SQUARE, np.array([-10.0]), np.array([10.0]))
 
     np.testing.assert_allclose(
-        find_root(problem, np.array([4.0]), np.array([[1.0]]), 1e-10), [2.0]
+        problem.solve(np.array([4.0]), np.array([[1.0]]), 1e-10), [2.0]
     )
     np.testing.assert_allclose(
-        find_root(problem, np.array([9.0]), np.array([[-1.0]]), 1e-10), [-3.0]
+        problem.solve(np.array([9.0]), np.array([[-1.0]]), 1e-10), [-3.0]
     )
 
 
-def test_find_root_skips_a_root_outside_the_bounds():
+def test_root_problem_skips_a_root_outside_the_bounds():
     """A start that reaches a root outside the bounds fails, and the next start is used."""
     problem = RootProblem(SQUARE, np.array([0.0]), np.array([10.0]))
     starts = np.array([[-1.0], [1.0]])
 
-    root = find_root(problem, np.array([4.0]), starts, 1e-10)
+    root = problem.solve(np.array([4.0]), starts, 1e-10)
 
     np.testing.assert_allclose(root, [2.0])
 
 
-def test_find_root_raises_when_no_start_gives_a_root():
+def test_root_problem_raises_when_no_start_gives_a_root():
     """x^2 = -1 has no real root."""
     problem = RootProblem(SQUARE, np.array([-10.0]), np.array([10.0]))
 
     with pytest.raises(RootFindingError, match="from 2 starts"):
-        find_root(problem, np.array([-1.0]), np.array([[1.0], [2.0]]), 1e-10)
+        problem.solve(np.array([-1.0]), np.array([[1.0], [2.0]]), 1e-10)
 
 
-def test_find_root_with_no_variables_is_empty():
+def test_root_problem_with_no_variables_is_empty():
     """With no unknowns nothing is solved."""
     problem = RootProblem(SQUARE, np.zeros(0), np.zeros(0))
 
-    assert find_root(problem, np.array([1.0]), np.zeros((1, 0)), 1e-10).shape == (0,)
+    assert problem.solve(np.array([1.0]), np.zeros((1, 0)), 1e-10).shape == (0,)
 
 
-def test_find_root_is_quiet_when_every_start_diverges(capfd):
+def test_root_problem_is_quiet_when_every_start_diverges(capfd):
     """A start that fails is expected, so it prints nothing, even through infinity."""
     w, p = cas.SX.sym("w"), cas.SX.sym("p")
     residual = cas.Function("residual", [w, p], [cas.exp(w) - p])
     problem = RootProblem(residual, np.array([-np.inf]), np.array([np.inf]))
 
     with pytest.raises(RootFindingError):
-        find_root(problem, np.array([-1.0]), np.array([[0.0], [2.0]]), 1e-10)
+        problem.solve(np.array([-1.0]), np.array([[0.0], [2.0]]), 1e-10)
 
     assert capfd.readouterr().err == ""
 
 
-def test_find_root_refuses_equations_that_do_not_determine_the_variables():
+def test_root_problem_refuses_equations_that_do_not_determine_the_variables():
     """CasADi refuses a structurally singular system, and that is a `RootFindingError`
     like any other failure to find a root."""
     w, p = cas.SX.sym("w"), cas.SX.sym("p")
@@ -213,4 +211,4 @@ def test_find_root_refuses_equations_that_do_not_determine_the_variables():
     )
 
     with pytest.raises(RootFindingError, match="singular"):
-        find_root(problem, np.array([0.0]), np.array([[0.0]]), 1e-10)
+        problem.solve(np.array([0.0]), np.array([[0.0]]), 1e-10)

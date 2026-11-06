@@ -15,7 +15,7 @@ import numpy as np
 from hybrid_bo.dataset import Dataset
 from hybrid_bo.errors import RootFindingError
 from hybrid_bo.problem import Problem, Symbolic, System, lhs_points
-from hybrid_bo.solvers import RootProblem, find_root
+from hybrid_bo.solvers import RootProblem
 
 # Runs the system at u (N,) and returns the measured variables (P,) in the order of
 # `system.measured`
@@ -90,7 +90,7 @@ def reconstruct_states(
                 msg = f"Row {row} holds a value that isn't finite"
                 raise RootFindingError(msg)
             p = np.concatenate([u_point, measured_point])
-            root = find_root(root_finding_problem, p, starts, tol)
+            root = root_finding_problem.solve(p, starts, tol)
             values = dict(zip(system.unmeasured, root, strict=True))
             values |= dict(zip(system.measured, measured_point, strict=True))
             states.append(np.array([values[var] for var in system.states]))

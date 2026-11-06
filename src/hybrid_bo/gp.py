@@ -25,7 +25,7 @@ import numpy as np
 from hybrid_bo.dataset import Dataset
 from hybrid_bo.problem import Symbolic, System
 from hybrid_bo.solvers import NLP, Ipopt
-from hybrid_bo.utils import Scaler, minmax, scale, standard, unscale
+from hybrid_bo.utils import Scaler
 
 _logger = logging.getLogger(__name__)
 
@@ -240,8 +240,8 @@ class GP:
         """This GP fitted to the inputs X (n, d) and outputs Y (n,). The GP itself doesn't
         change.
 
-        Scales the inputs onto [0, 1] (`minmax`) and the outputs to zero mean and unit
-        variance (`standard`), then maximizes the log marginal likelihood over every
+        Scales the inputs onto [0, 1] (`Scaler.minmax`) and the outputs to zero mean and unit
+        variance (`Scaler.standard`), then maximizes the log marginal likelihood over every
         `Param` (log ones in log space) with `NLP.solve`, from `n_starts`
         Latin hypercube starts over their bounds; a lengthscale with ARD has one entry per
         column of X. A GP without a `Param` is only conditioned on the data, with no
@@ -265,9 +265,9 @@ class GP:
             raise ValueError(msg)
 
         # Scale the data, and list what there is to fit
-        x_scaler, y_scaler = minmax(X), standard(Y[:, np.newaxis])
-        X_scaled = scale(x_scaler, X)
-        Y_scaled = scale(y_scaler, Y[:, np.newaxis]).ravel()
+        x_scaler, y_scaler = Scaler.minmax(X), Scaler.standard(Y[:, np.newaxis])
+        X_scaled = x_scaler.scale(X)
+        Y_scaled = y_scaler.scale(Y[:, np.newaxis]).ravel()
         n_inputs = X.shape[1]
         params = self.kernel.params(n_inputs)
         fitted_gp = self
@@ -300,7 +300,7 @@ class GP:
             )
 
             # Multistart from Latin hypercube starts over the bounds
-            w_best = nlp.solve(rng, n_starts=n_starts, solver=solver).w
+            w_best, _ = nlp.solve(rng, n_starts=n_starts, solver=solver)
 
             # Back from the search space, to the numbers the fitted GP holds
             values = np.where(is_log, np.exp(w_best), w_best).tolist()
@@ -402,7 +402,7 @@ class FittedGP:
         gp = self.gp
         X_train, Y_train = Symbolic(self.X), Symbolic(self.Y)
         X_symbols = Symbolic.sym("X", 1 if is_numeric else X.shape[0], X.shape[1])
-        X_scaled = scale(self.x_scaler, X_symbols)
+        X_scaled = self.x_scaler.scale(X_symbols)
 
         # K = k(X, X) + (noise variance + jitter) I = L L', with the noise in scaled
         # units. CasADi's `chol` gives the upper factor
@@ -426,7 +426,7 @@ class FittedGP:
             "predict",
             [X_symbols],
             [
-                unscale(self.y_scaler, mean),
+                self.y_scaler.unscale(mean),
                 cas.sqrt(variance) / self.y_scaler.slope[0],
             ],
         )

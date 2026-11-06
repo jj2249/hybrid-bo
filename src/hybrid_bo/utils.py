@@ -50,35 +50,33 @@ class Scaler:
     slope: np.ndarray  # (d,)
     intercept: np.ndarray  # (d,)
 
+    @classmethod
+    def minmax(cls, values: np.ndarray) -> "Scaler":
+        """The scaler that maps each column of `values` (n, d) onto [0, 1].
 
-def minmax(values: np.ndarray) -> Scaler:
-    """The scaler that maps each column of `values` (n, d) onto [0, 1].
+        A constant column is shifted to 0 instead.
+        """
+        low, high = values.min(0), values.max(0)
+        span = np.where(low == high, 1.0, high - low)
+        return cls(1 / span, -low / span)
 
-    A constant column is shifted to 0 instead.
-    """
-    low, high = values.min(0), values.max(0)
-    span = np.where(low == high, 1.0, high - low)
-    return Scaler(1 / span, -low / span)
+    @classmethod
+    def standard(cls, values: np.ndarray) -> "Scaler":
+        """The scaler that gives each column of `values` (n, d) zero mean and unit standard
+        deviation (`ddof=0`). A constant column is only shifted."""
+        mean, std = values.mean(0), values.std(0)
+        std = np.where(std == 0.0, 1.0, std)
+        return cls(1 / std, -mean / std)
 
+    def scale(self, values: Any) -> Any:
+        """Scales the rows of `values` (n, d), numeric or CasADi."""
+        n = values.shape[0]
+        return values * np.tile(self.slope, (n, 1)) + np.tile(self.intercept, (n, 1))
 
-def standard(values: np.ndarray) -> Scaler:
-    """The scaler that gives each column of `values` (n, d) zero mean and unit standard
-    deviation (`ddof=0`). A constant column is only shifted."""
-    mean, std = values.mean(0), values.std(0)
-    std = np.where(std == 0.0, 1.0, std)
-    return Scaler(1 / std, -mean / std)
-
-
-def scale(scaler: Scaler, values: Any) -> Any:
-    """Scales the rows of `values` (n, d), numeric or CasADi."""
-    n = values.shape[0]
-    return values * np.tile(scaler.slope, (n, 1)) + np.tile(scaler.intercept, (n, 1))
-
-
-def unscale(scaler: Scaler, scaled: Any) -> Any:
-    """Undoes `scale` on the rows of `scaled` (n, d), numeric or CasADi."""
-    n = scaled.shape[0]
-    return (scaled - np.tile(scaler.intercept, (n, 1))) / np.tile(scaler.slope, (n, 1))
+    def unscale(self, scaled: Any) -> Any:
+        """Undoes `scale` on the rows of `scaled` (n, d), numeric or CasADi."""
+        n = scaled.shape[0]
+        return (scaled - np.tile(self.intercept, (n, 1))) / np.tile(self.slope, (n, 1))
 
 
 def log_softplus(t: Any) -> Any:
