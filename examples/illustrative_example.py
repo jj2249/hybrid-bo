@@ -102,7 +102,7 @@ for seed in range(N_RUNS):
         fitted = gp.fit(dataset.u, dataset.f, rng)
         standard = hb.standard_acquisition(problem, fitted, incumbent)
         solution = standard.solve(rng)
-        u_new = solution.u[None]
+        u_new = solution.w[None]
         new = hb.reconstruct_states(
             problem, u=u_new, measured=measure(u_new, rng), rng=rng
         )

@@ -8,6 +8,7 @@ time, and each result is mapped to the keys of the stored JSON to compare.
 """
 
 import json
+from collections.abc import Sequence
 from functools import partial
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from oracle_helper import oracle_incumbents, oracle_states
 from plain_loop import evaluate_points, hybrid_loop, standard_loop
 
 import hybrid_bo as hb
+from hybrid_bo.hybrid_model import ScenarioSolution
 from hybrid_bo.solvers import Solution
 
 BASELINE_DIR = Path(__file__).parent / "data" / "regression"
@@ -27,7 +29,7 @@ RTOL, ATOL = 1e-6, 1e-8
 SEED, N_ITERATIONS = 0, 2
 
 # What a run of a method gives: the dataset, and each iteration's solution
-Result = tuple[hb.Dataset, list[Solution]]
+Result = tuple[hb.Dataset, Sequence[Solution]]
 
 
 def run_hybrid_bo(
@@ -97,7 +99,7 @@ METHODS = {
 def as_baseline_columns(
     dataset: hb.Dataset,
     states: np.ndarray,
-    solutions: list[Solution],
+    solutions: Sequence[Solution],
 ) -> dict[str, np.ndarray]:
     """The run under the `ResultsBO` keys: they store y inside x, f as a column, and
     split every array into the initial points and the rest."""
@@ -127,11 +129,10 @@ def as_baseline_columns(
     # scenario states (iteration, scenario, state)
     if solutions:
         baseline["acquisition_values"] = np.array([s.value for s in solutions])
-    x = [s.x for s in solutions if s.x is not None]
-    y = [s.y for s in solutions if s.y is not None]
-    if x and y:
-        baseline["acquisition_x"] = np.stack(x)
-        baseline["acquisition_y"] = np.stack(y)
+    scenario_solutions = [s for s in solutions if isinstance(s, ScenarioSolution)]
+    if scenario_solutions:
+        baseline["acquisition_x"] = np.stack([s.x for s in scenario_solutions])
+        baseline["acquisition_y"] = np.stack([s.y for s in scenario_solutions])
     return baseline
 
 

@@ -92,7 +92,8 @@ for _ in range(10):
     dataset = hb.extend(dataset, evaluate(solution.u, rng))
 ```
 
-**Standard BO** fits one GP to the objective, so EI is exact and needs no scenarios:
+**Standard BO** fits one GP to the objective, so EI is exact and needs no scenarios.
+Its variables are just `u`, so `solution.w` is the trial point:
 
 ```python
 dataset = initial
@@ -101,7 +102,7 @@ for _ in range(10):
     fitted = gp.fit(dataset.u, dataset.f, rng)
     standard = hb.standard_acquisition(problem, fitted, hb.incumbents(dataset)[-1])
     solution = standard.solve(rng)
-    dataset = hb.extend(dataset, evaluate(solution.u, rng))
+    dataset = hb.extend(dataset, evaluate(solution.w, rng))
 ```
 
 **A baseline** is points through the same steps, from `hb.lhs_points` or

@@ -11,8 +11,8 @@ from hybrid_bo.solvers import (
     NLP,
     Ipopt,
     RootProblem,
+    _solve_with_multistart,
     find_root,
-    solve_with_multistart,
 )
 
 w = cas.SX.sym("w")
@@ -25,9 +25,9 @@ DOUBLE_WELL = NLP(
 
 
 def test_best_start_wins():
-    """With one start in each well, `solve_with_multistart` returns the global minimum
+    """With one start in each well, `_solve_with_multistart` returns the global minimum
     and its objective value."""
-    w, f = solve_with_multistart(DOUBLE_WELL, np.array([[1.5], [-1.5]]), Ipopt())
+    w, f = _solve_with_multistart(DOUBLE_WELL, np.array([[1.5], [-1.5]]), Ipopt())
     assert w.shape == (1,)
     assert w[0] < 0
     np.testing.assert_allclose(f, DOUBLE_WELL.f(w).full().item())
@@ -35,7 +35,7 @@ def test_best_start_wins():
 
 def test_a_tie_keeps_the_earlier_start():
     """When two starts reach minima whose objectives differ only by rounding,
-    `solve_with_multistart` keeps the earlier start, so the result doesn't depend on the
+    `_solve_with_multistart` keeps the earlier start, so the result doesn't depend on the
     last bits of the platform's arithmetic (the illustrative example's standard BO has
     such a tie, which macOS and Windows broke differently)."""
     # Two wells, at -1 and +1, the later one lower by 2e-14
@@ -45,14 +45,14 @@ def test_a_tie_keeps_the_earlier_start():
         upper=np.array([2.0]),
     )
 
-    best, _ = solve_with_multistart(tied, np.array([[-1.5], [1.5]]), Ipopt())
+    best, _ = _solve_with_multistart(tied, np.array([[-1.5], [1.5]]), Ipopt())
 
     assert best[0] < 0
 
 
 def test_one_start_finds_its_local_minimum():
     """A single start in the right well stays there, at the local minimum."""
-    w, _ = solve_with_multistart(DOUBLE_WELL, np.array([[1.5]]), Ipopt())
+    w, _ = _solve_with_multistart(DOUBLE_WELL, np.array([[1.5]]), Ipopt())
     assert w[0] > 0
 
 
@@ -67,7 +67,7 @@ def test_bounds_and_constraints():
         g=cas.Function("g", [v], [v[0] + v[1] - 1]),
     )
 
-    w, _ = solve_with_multistart(nlp, np.array([[1.0, 1.0]]), Ipopt())
+    w, _ = _solve_with_multistart(nlp, np.array([[1.0, 1.0]]), Ipopt())
 
     np.testing.assert_allclose(w, [0.7, 0.3], atol=1e-6)
 
@@ -83,14 +83,14 @@ def test_an_empty_constraint_is_no_constraint():
         g=cas.Function("g", [w], [cas.SX(0, 1)]),
     )
 
-    best, _ = solve_with_multistart(nlp, np.array([[-1.5]]), Ipopt())
+    best, _ = _solve_with_multistart(nlp, np.array([[-1.5]]), Ipopt())
 
-    reference, _ = solve_with_multistart(DOUBLE_WELL, np.array([[-1.5]]), Ipopt())
+    reference, _ = _solve_with_multistart(DOUBLE_WELL, np.array([[-1.5]]), Ipopt())
     np.testing.assert_allclose(best, reference, atol=1e-8)
 
 
 def test_every_start_failing_raises():
-    """When no start converges, `solve_with_multistart` raises NoSolutionError."""
+    """When no start converges, `_solve_with_multistart` raises NoSolutionError."""
     # w**2 + 1 = 0 has no real solution
     infeasible = NLP(
         DOUBLE_WELL.f,
@@ -101,11 +101,11 @@ def test_every_start_failing_raises():
 
     # `pytest.raises` fails the test unless the block raises that exception
     with pytest.raises(NoSolutionError):
-        solve_with_multistart(infeasible, np.array([[0.5], [-0.5]]), Ipopt())
+        _solve_with_multistart(infeasible, np.array([[0.5], [-0.5]]), Ipopt())
 
 
 def test_starts_at_the_iteration_limit_are_warned_about(caplog):
-    """When starts run IPOPT to its iteration limit, `solve_with_multistart` logs one
+    """When starts run IPOPT to its iteration limit, `_solve_with_multistart` logs one
     warning giving how many of the starts did and the name of the NLP's objective, even
     though another start succeeded."""
     # The Rosenbrock function, which five iterations solve only from its minimum
@@ -123,7 +123,7 @@ def test_starts_at_the_iteration_limit_are_warned_about(caplog):
 
     # Solve, recording every log message
     with caplog.at_level(logging.DEBUG):
-        solve_with_multistart(rosenbrock, starts, five_iterations)
+        _solve_with_multistart(rosenbrock, starts, five_iterations)
 
     # One warning, counting the two starts away from the minimum
     warnings = [
@@ -145,7 +145,7 @@ def test_other_failures_are_not_warned_about(caplog):
     )
 
     with pytest.raises(NoSolutionError):
-        solve_with_multistart(infeasible, np.array([[0.5], [-0.5]]), Ipopt())
+        _solve_with_multistart(infeasible, np.array([[0.5], [-0.5]]), Ipopt())
 
     assert not caplog.records
 

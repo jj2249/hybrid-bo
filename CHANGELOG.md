@@ -10,7 +10,8 @@
   reformulates the acquisition function. `unknown_states_as_variables` is a keyword of
   `hb.hybrid_deterministic_equivalent`.
 - **Breaking:** `hb.saa_scenarios` and `Scenarios` are gone: pass draws `z` and weights `w`.
-  `AcquisitionSolution` is `Solution`.
+  `AcquisitionSolution` is `Solution` for standard BO, whose trial point is `solution.w`, and
+  `ScenarioSolution` for hybrid BO, with `u`, `x` and `y`.
 - `hb.expected_improvement` is public.
 - **Breaking:** `hb.replay` and `Replay` are gone: `hb.plots.acquisition_on_grid` gives the
   acquisition and a `Dataset` per scenario. `hybrid_bo.evaluation` is now `hybrid_bo.reconstruction`.
@@ -19,6 +20,7 @@
   a different one. Known equations that can't determine the unmeasured states now raise
   `RootFindingError` at every row, where `fsolve` could return an arbitrary value.
 - **Breaking:** Ctrl-C during IPOPT skips one start rather than stopping the solve.
+- **Breaking:** `solve_with_multistart` is private: call `.solve(rng)` on an `NLP`.
 - **Breaking:** `hb.fit_gp(gp, X, Y, rng)` is `gp.fit(X, Y, rng)`, `predict(fitted, X)` is
   `fitted.predict(X)`, and `log_marginal_likelihood` is a method of `FittedGP`.
 - **Breaking:** `2.0 * kernel` is gone: write `Scale(kernel, 2.0)`. `covariance` and

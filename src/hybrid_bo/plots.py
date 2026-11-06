@@ -100,8 +100,7 @@ def acquisition_on_grid(
     # The constraints as a root problem: the states are unknowns and u a parameter
     n_u = problem.n_u
     assert problem.g is not None
-    assert solution.x is not None and solution.y is not None
-    stored = problem.pack(solution)[n_u:]
+    stored = solution.w[n_u:]
     states, u_fixed = Symbolic.sym("v", len(stored)), Symbolic.sym("u", n_u)
     equations = cas.Function(
         "scenario_states", [states, u_fixed], [problem.g(cas.vertcat(u_fixed, states))]
@@ -109,12 +108,12 @@ def acquisition_on_grid(
     root_problem = RootProblem(equations, problem.lower[n_u:], problem.upper[n_u:])
 
     # Outwards from the stored solution, each point from the nearest one solved
-    solved_u, solved_states = [solution.u], [stored]
+    solved_u, solved_states = [solution.w[:n_u]], [stored]
     values = np.full(len(u), np.nan)
     f = np.full((len(u), problem.n_scenarios), np.nan)
-    x = np.full((len(u), *solution.x.shape), np.nan)
-    y = np.full((len(u), *solution.y.shape), np.nan)
-    for i in np.argsort(np.linalg.norm(u - solution.u, axis=1)):
+    x = np.full((len(u), problem.n_scenarios, problem.n_x), np.nan)
+    y = np.full((len(u), *problem.scenario_values(solution.w)[1].shape), np.nan)
+    for i in np.argsort(np.linalg.norm(u - solved_u[0], axis=1)):
         nearest = np.argmin(np.linalg.norm(np.array(solved_u) - u[i], axis=1))
         start = solved_states[nearest][np.newaxis]
         try:
@@ -155,8 +154,9 @@ def iteration(
     # The checks
     panels = list(axes)
     is_hybrid = isinstance(problem, DeterministicEquivalent)
-    if len(solution.u) != 1:
-        msg = f"The panels draw one decision variable, got {len(solution.u)}"
+    n_u = problem.n_u if is_hybrid else len(problem.lower)
+    if n_u != 1:
+        msg = f"The panels draw one decision variable, got {n_u}"
         raise ValueError(msg)
     if len(panels) != (3 if is_hybrid else 2):
         msg = f"Standard BO draws 2 panels and hybrid BO 3, got {len(panels)} axes"
@@ -184,5 +184,5 @@ def iteration(
     panels[-1].plot(u, acquisition, color=color, label="acquisition")
     panels[-1].set(xlabel="u", ylabel="acquisition")
     for ax in panels:
-        ax.axvline(solution.u[0], color=color, linestyle=":", label="trial point")
+        ax.axvline(solution.w[0], color=color, linestyle=":", label="trial point")
         ax.legend(fontsize="small")

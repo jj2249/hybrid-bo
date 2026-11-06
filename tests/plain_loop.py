@@ -5,6 +5,7 @@ import numpy as np
 
 import hybrid_bo as hb
 from hybrid_bo.gp import GP
+from hybrid_bo.hybrid_model import ScenarioSolution
 from hybrid_bo.solvers import Solution
 
 
@@ -43,7 +44,7 @@ def hybrid_loop(
     gp: GP,
     acquisition: hb.EI | hb.SoftEI,
     unknown_states_as_variables: bool = True,
-) -> tuple[hb.Dataset, list[Solution]]:
+) -> tuple[hb.Dataset, list[ScenarioSolution]]:
     """Hybrid BO from `dataset`, with the scenarios z and w drawn once, before the loop.
 
     Returns the grown dataset and each iteration's solution.
@@ -85,6 +86,6 @@ def standard_loop(
         fitted = gp.fit(dataset.u, dataset.f, rng)
         incumbent = hb.incumbents(dataset)[-1]
         solution = hb.standard_acquisition(problem, fitted, incumbent).solve(rng)
-        dataset = hb.extend(dataset, evaluate_point(problem, measure, solution.u, rng))
+        dataset = hb.extend(dataset, evaluate_point(problem, measure, solution.w, rng))
         solutions.append(solution)
     return dataset, solutions

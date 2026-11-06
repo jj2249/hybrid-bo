@@ -1,10 +1,8 @@
 """Running the solvers: everything here takes a problem someone else built.
 
-An `NLP` and `Ipopt` describe an optimization, and `solve_with_multistart` solves it from
-several starts and keeps the best solution. A `RootProblem` describes a square system of
-equations, and `find_root` solves it from several starts and keeps the first root. The
-caller draws the starts (with `lhs`), so the draw order stays visible where the generator
-is used.
+An `NLP` and `Ipopt` describe an optimization, and `NLP.solve` solves it from several
+starts and keeps the best solution. A `RootProblem` describes a square system of
+equations, and `find_root` solves it from several starts and keeps the first root.
 """
 
 import logging
@@ -21,7 +19,7 @@ from hybrid_bo.utils import lhs
 _logger = logging.getLogger(__name__)
 
 # Objectives closer than this (relative, or absolute below 1) tie in
-# `solve_with_multistart`
+# `_solve_with_multistart`
 _TIE_TOLERANCE = 1e-13
 
 # Newton's method converges in a few iterations or not at all, and a start that doesn't
@@ -39,14 +37,10 @@ class Ipopt:
 
 @dataclass(frozen=True)
 class Solution:
-    """The solution of an acquisition problem: the trial point u (N,), the objective the
-    problem minimizes there and, for hybrid BO, the scenario states there, x (S, M) and
-    y (S, P), one row per scenario. Standard BO has no scenario states, so they are None."""
+    """A solution of an `NLP`: the variables w (n,) and the objective there."""
 
-    u: np.ndarray
+    w: np.ndarray
     value: float
-    x: np.ndarray | None = None
-    y: np.ndarray | None = None
 
 
 @dataclass(frozen=True)
@@ -71,17 +65,12 @@ class NLP:
         n_starts: int = 10,
         solver: Ipopt = Ipopt(),  # noqa: B008  (frozen, never mutated)
     ) -> Solution:
-        """The minimizer over u = w, from `n_starts` Latin hypercube starts over the start
-        bounds: an acquisition problem over the decision variables alone.
+        """The minimizer, from `n_starts` Latin hypercube starts over the start bounds.
 
         Raises `NoSolutionError` if every start fails.
         """
-        starts = self._starts(n_starts, rng)
-        return Solution(*solve_with_multistart(self, starts, solver))
-
-    def _starts(self, n_starts: int, rng: np.random.Generator) -> np.ndarray:
-        """`n_starts` Latin hypercube starts over the start bounds, shape (n_starts, n)."""
-        return lhs(*(self.start_bounds or (self.lower, self.upper)), n_starts, rng)
+        starts = lhs(*(self.start_bounds or (self.lower, self.upper)), n_starts, rng)
+        return Solution(*_solve_with_multistart(self, starts, solver))
 
 
 @dataclass(frozen=True)
@@ -108,7 +97,7 @@ class RootProblem:
         return cas.rootfinder("newton", "newton", self.residual, options)
 
 
-def solve_with_multistart(
+def _solve_with_multistart(
     nlp: NLP, starts: np.ndarray, solver: Ipopt
 ) -> tuple[np.ndarray, float]:
     """Builds `nlp` as a CasADi `Opti` problem, solves it with IPOPT from each row of

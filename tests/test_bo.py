@@ -141,13 +141,13 @@ def test_solving_the_equivalent_gives_the_trial_point_and_states(
     np.testing.assert_allclose(residuals, 0.0, atol=1e-6)
 
     # Check the value against the problem's objective at the solution
-    expected = float(built.f(built.pack(solution)))
+    expected = float(built.f(solution.w))
     assert solution.value == pytest.approx(expected, rel=1e-9)
 
 
 def test_solving_standard_acquisition_minimizes_analytic_ei():
     """The solution holds the trial point and -EI there, computed here from the GP's
-    mean and std, and no scenario states."""
+    mean and std."""
     # Setup: a GP of the objective
     rng = np.random.default_rng(2)
     dataset = training_data()
@@ -159,11 +159,10 @@ def test_solving_standard_acquisition_minimizes_analytic_ei():
     solution = built.solve(rng)
 
     # Check against EI in closed form
-    mean, std = fitted.predict(solution.u[np.newaxis])
+    mean, std = fitted.predict(solution.w[np.newaxis])
     gamma = (incumbent - mean[0]) / std[0]
     expected_ei = (incumbent - mean[0]) * norm.cdf(gamma) + std[0] * norm.pdf(gamma)
     assert solution.value == pytest.approx(-expected_ei, rel=1e-6)
-    assert solution.x is None and solution.y is None
 
     # Check that no other point of a grid has a better value
     grid = np.linspace(-2.0, 2.0, 201)[np.newaxis]
@@ -365,7 +364,7 @@ def test_standard_bo_runs_with_a_measurement_of_your_own():
         ex.problem, measure_sin, start, rng, n_iterations=2, gp=ex.gp
     )
 
-    trial_points = np.array([solution.u for solution in solutions])
+    trial_points = np.array([solution.w for solution in solutions])
     np.testing.assert_array_equal(dataset.u[5:], trial_points)
 
 
@@ -482,7 +481,7 @@ def test_acquisition_on_grid_leaves_a_gap_where_a_point_fails():
     """A state that would leave its bounds is a failed point, and NaN in every output."""
     built, solution, *_ = solved_iteration()
     n_u = built.n_u
-    upper = np.concatenate([built.upper[:n_u], built.pack(solution)[n_u:] + 1e-6])
+    upper = np.concatenate([built.upper[:n_u], solution.w[n_u:] + 1e-6])
     bounded = dataclasses.replace(built, upper=upper)
     u = np.array([solution.u, solution.u + 1.0, solution.u - 1.0])
 
@@ -503,7 +502,7 @@ def test_acquisition_on_grid_of_standard_bo_is_analytic():
     solution = built.solve(rng)
 
     ei, scenarios = hb.plots.acquisition_on_grid(
-        built, solution, solution.u[np.newaxis]
+        built, solution, solution.w[np.newaxis]
     )
 
     assert ei[0] == pytest.approx(-solution.value)

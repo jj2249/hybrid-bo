@@ -24,8 +24,8 @@ import numpy as np
 
 from hybrid_bo.dataset import Dataset
 from hybrid_bo.problem import Symbolic, System
-from hybrid_bo.solvers import NLP, Ipopt, solve_with_multistart
-from hybrid_bo.utils import Scaler, lhs, minmax, scale, standard, unscale
+from hybrid_bo.solvers import NLP, Ipopt
+from hybrid_bo.utils import Scaler, minmax, scale, standard, unscale
 
 _logger = logging.getLogger(__name__)
 
@@ -242,7 +242,7 @@ class GP:
 
         Scales the inputs onto [0, 1] (`minmax`) and the outputs to zero mean and unit
         variance (`standard`), then maximizes the log marginal likelihood over every
-        `Param` (log ones in log space) with `solve_with_multistart`, from `n_starts`
+        `Param` (log ones in log space) with `NLP.solve`, from `n_starts`
         Latin hypercube starts over their bounds; a lengthscale with ARD has one entry per
         column of X. A GP without a `Param` is only conditioned on the data, with no
         draws. It warns if the training covariance at the kept values has a condition
@@ -300,8 +300,7 @@ class GP:
             )
 
             # Multistart from Latin hypercube starts over the bounds
-            starts = lhs(nlp.lower, nlp.upper, n_starts, rng)
-            w_best, _ = solve_with_multistart(nlp, starts, solver)
+            w_best = nlp.solve(rng, n_starts=n_starts, solver=solver).w
 
             # Back from the search space, to the numbers the fitted GP holds
             values = np.where(is_log, np.exp(w_best), w_best).tolist()

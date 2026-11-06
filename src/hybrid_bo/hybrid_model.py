@@ -17,7 +17,18 @@ import numpy as np
 from hybrid_bo.acquisition import EI, SoftEI
 from hybrid_bo.gp import FittedGP
 from hybrid_bo.problem import Problem, Symbolic, Var, start_bounds
-from hybrid_bo.solvers import NLP, Ipopt, Solution, solve_with_multistart
+from hybrid_bo.solvers import NLP, Ipopt, Solution
+
+
+@dataclass(frozen=True)
+class ScenarioSolution(Solution):
+    """The solution of a deterministic equivalent: as well as the decision vector w, the
+    trial point u (N,) and the scenario states there, x (S, M) and y (S, P), one row per
+    scenario."""
+
+    u: np.ndarray
+    x: np.ndarray
+    y: np.ndarray
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -50,24 +61,19 @@ class DeterministicEquivalent(NLP):
         *,
         n_starts: int = 10,
         solver: Ipopt = Ipopt(),  # noqa: B008  (frozen, never mutated)
-    ) -> Solution:
-        """The minimizer, with the scenario states there, from `n_starts` Latin hypercube
-        starts over the start bounds.
+    ) -> ScenarioSolution:
+        """The minimizer, with the trial point and the scenario states there.
 
         Raises `NoSolutionError` if every start fails.
         """
-        w, value = solve_with_multistart(self, self._starts(n_starts, rng), solver)
-        u, x, _ = self.unpack(w)
-        return Solution(u, value, x, self.scenario_values(w)[1].full())
-
-    def pack(self, solution: Solution) -> np.ndarray:
-        """The decision vector of a solution of this problem."""
-        y = solution.y if self.unknown_states_as_variables else None
-        return _pack(solution.u, solution.x, y)
+        solution = super().solve(rng, n_starts=n_starts, solver=solver)
+        u, x, _ = self.unpack(solution.w)
+        y = self.scenario_values(solution.w)[1].full()
+        return ScenarioSolution(solution.w, solution.value, u, x, y)
 
     def unpack(self, w: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
         """The u (N,), x (S, M) and y (S, P) (None unless they are variables) held in a
-        numeric decision vector w of this problem; undoes `pack`."""
+        numeric decision vector w of this problem."""
         # One column per state of each scenario
         w = np.asarray(w, dtype=float).ravel()
         states = w[self.n_u :].reshape((self.n_scenarios, -1), order="F")
