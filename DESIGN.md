@@ -428,11 +428,12 @@ builds `Scale(kernel, outputscale)`: the experiment shows the output scale where
 math has it, and the stored GP, its repr and its JSON hold the `Scale`. It is the
 only operator; `kernel * kernel` raises `TypeError` (the kernels share `_Scalable`).
 
-- **Hyperparameters.** A kernel's hyperparameters are its fields whose type admits a
-  `Param`; a number fixes one. They are fitted in a fixed order: a node's own
-  hyperparameters before those of the kernels it holds, so `Scale(Matern52())` fits the output scale, then the
-  lengthscales, as `default_gp` did. A lengthscale with `ard` (the default) has one
-  entry per input, the count taken from the training data at fit time; a fixed one
+- **Hyperparameters.** The hyperparameters are `Scale`'s output scale and a stationary
+  kernel's lengthscale; a number fixes one. The kernels are a closed set, so
+  `_params` and `_with_values` match on the kernel to walk them. They are fitted in a
+  fixed order: an output scale before the kernel it scales, so `Scale(Matern52())` fits
+  the output scale, then the lengthscales, as `default_gp` did. A lengthscale with
+  `ard` (the default) has one entry per input, the count taken from the training data at fit time; a fixed one
   given as one number applies to every input. A fitted GP holds the numbers: a float,
   or a tuple of one per input.
 - **Units.** Kernel hyperparameters are in scaled units, as the fit sees them
