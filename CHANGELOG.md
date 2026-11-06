@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Breaking:** `hb.hybrid_trial_point` and `hb.standard_trial_point` are gone: build with
+  `hb.hybrid_acquisition` or `hb.standard_acquisition` and call `.solve(rng)`, and pass the
+  same object to `hb.plots.iteration`.
+- **Breaking:** `hb.saa_scenarios` and `Scenarios` are gone: pass draws `z` and weights `w`.
+  `approximation` is keyword-only, and `AcquisitionSolution` is `Solution`.
+- `hb.expected_improvement` is public.
 - **Breaking:** `HybridBOError` is gone; catch `NoSolutionError` or `RootFindingError`.
 - **Breaking:** The scalers `hb.gp.minmax`, `standard`, `scale` and `unscale` are in
   `hybrid_bo.utils`, and `minmax` maps onto [0, 1] only. `hybrid_bo.sampling` is gone.

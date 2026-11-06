@@ -14,14 +14,20 @@ from plain_loop import evaluate_points, hybrid_loop, standard_loop
 from scipy.stats import norm
 
 import hybrid_bo as hb
-from hybrid_bo.acquisition import hybrid_acquisition, standard_acquisition
 from hybrid_bo.gp import predict
-from hybrid_bo.hybrid_model import Scenarios, _pack, _unpack
+from hybrid_bo.hybrid_model import _pack
 
 N_SCENARIOS = 4
 
 # Three scenarios with unequal weights, so a plain mean would give other values
-SCENARIOS = Scenarios(z=np.array([[-1.0], [0.5], [2.0]]), w=np.array([0.2, 0.3, 0.5]))
+Z, W = np.array([[-1.0], [0.5], [2.0]]), np.array([0.2, 0.3, 0.5])
+
+
+def draw_scenarios(
+    n: int, n_y: int, rng: np.random.Generator
+) -> tuple[np.ndarray, np.ndarray]:
+    """n scenarios for the sample average: standard normal draws, equal weights."""
+    return rng.standard_normal((n, n_y)), np.full(n, 1 / n)
 
 
 def measure_sin(u: np.ndarray, rng: np.random.Generator) -> np.ndarray:
@@ -76,15 +82,6 @@ def two_unknown_states_problem() -> hb.Problem:
     return hb.Problem(system, f=lambda v: v.x**2 + (v.y1 - v.y2) ** 2)
 
 
-def test_saa_scenarios_are_standard_normal_with_equal_weights():
-    """`saa_scenarios` draws z (n, P) from the generator's stream, with weights 1/n."""
-    scenarios = hb.saa_scenarios(4, 2, np.random.default_rng(0))
-
-    expected = np.random.default_rng(0).standard_normal((4, 2))
-    np.testing.assert_array_equal(scenarios.z, expected)
-    np.testing.assert_array_equal(scenarios.w, np.full(4, 0.25))
-
-
 # `parametrize` runs the test once per entry, with the entry as the argument
 @pytest.mark.parametrize(
     ("z", "w"),
@@ -97,27 +94,34 @@ def test_saa_scenarios_are_standard_normal_with_equal_weights():
 )
 def test_scenarios_reject_inconsistent_draws_or_weights(z, w):
     """The draws must be (S, P), with S weights that are >= 0 and sum to 1."""
+    fitted = hb.fit_gp(
+        ex.gp, np.array([[0.0], [1.0]]), np.array([0.0, 1.0]), np.random.default_rng(0)
+    )
+
     # `raises` passes only if the block raises that exception
     with pytest.raises(ValueError, match="Scenario"):
-        Scenarios(z, w)
+        hb.hybrid_acquisition(ex.problem, (fitted,), z, w, 0.0, approximation=hb.SAA())
 
 
 @pytest.mark.parametrize("unknown_states_as_variables", [True, False])
-def test_hybrid_trial_point_solves_the_acquisition_problem(unknown_states_as_variables):
+def test_solving_hybrid_acquisition_gives_the_trial_point_and_states(
+    unknown_states_as_variables,
+):
     """The solution holds the trial point, the acquisition problem's objective there
     and each scenario's states, which satisfy the known equations."""
     # Setup: a surrogate model and the scenarios, drawn by the caller
     rng = np.random.default_rng(2)
     dataset = training_data()
     fitted = hb.fit_surrogate(ex.system, dataset, gp=ex.gp, rng=rng)
-    scenarios = hb.saa_scenarios(N_SCENARIOS, ex.system.n_y, rng)
+    z, w = draw_scenarios(N_SCENARIOS, ex.system.n_y, rng)
     incumbent = hb.incumbents(dataset)[-1]
     approximation = hb.SAA(unknown_states_as_variables=unknown_states_as_variables)
 
     # Act
-    solution = hb.hybrid_trial_point(
-        ex.problem, fitted, scenarios, incumbent, rng, approximation=approximation
+    built = hb.hybrid_acquisition(
+        ex.problem, fitted, z, w, incumbent, approximation=approximation
     )
+    solution = built.solve(rng)
 
     # Check the shapes, and the bounds of u
     assert solution.x is not None and solution.y is not None
@@ -130,13 +134,11 @@ def test_hybrid_trial_point_solves_the_acquisition_problem(unknown_states_as_var
     np.testing.assert_allclose(residuals, 0.0, atol=1e-6)
 
     # Check the value against the problem's objective at the solution
-    built = hybrid_acquisition(ex.problem, fitted, scenarios, incumbent, approximation)
-    y = solution.y if unknown_states_as_variables else None
-    expected = float(built.nlp.f(_pack(solution.u, solution.x, y)))
+    expected = float(built.nlp.f(built.pack(solution)))
     assert solution.value == pytest.approx(expected, rel=1e-9)
 
 
-def test_standard_trial_point_minimizes_analytic_ei():
+def test_solving_standard_acquisition_minimizes_analytic_ei():
     """The solution holds the trial point and -EI there, computed here from the GP's
     mean and std, and no scenario states."""
     # Setup: a GP of the objective
@@ -146,7 +148,8 @@ def test_standard_trial_point_minimizes_analytic_ei():
     incumbent = float(hb.incumbents(dataset)[-1])
 
     # Act
-    solution = hb.standard_trial_point(ex.problem, fitted, incumbent, rng)
+    built = hb.standard_acquisition(ex.problem, fitted, incumbent)
+    solution = built.solve(rng)
 
     # Check against EI in closed form
     mean, std = predict(fitted, solution.u[np.newaxis])
@@ -157,12 +160,11 @@ def test_standard_trial_point_minimizes_analytic_ei():
 
     # Check that no other point of a grid has a better value
     grid = np.linspace(-2.0, 2.0, 201)[np.newaxis]
-    built = standard_acquisition(ex.problem, fitted, incumbent)
     assert solution.value <= built.nlp.f.map(201)(grid).full().min() + 1e-9
 
 
 def ei_problems(incumbent: float, temperature: float):
-    """The SoftSAA and SAA problems of the illustrative system over SCENARIOS, with the
+    """The SoftSAA and SAA problems of the illustrative system over Z and W, with the
     GP substituted, and the decision vector and f_s (S,) at u = 0.3 and x = (-1, 0, 0.5)."""
     problem = h_of_x_problem()
     X = np.array([[-1.5, -1.0], [-0.5, 0.2], [0.4, -0.3], [1.7, 0.6]])
@@ -173,10 +175,12 @@ def ei_problems(incumbent: float, temperature: float):
 
     # The reference values: y_s = mean + std * z_s at each scenario's arguments of h
     mean, std = predict(fitted, np.column_stack([np.full_like(x, u), x]))
-    f = x**2 + mean + std * SCENARIOS.z[:, 0]
+    f = x**2 + mean + std * Z[:, 0]
 
     soft, saa = (
-        hybrid_acquisition(problem, (fitted,), SCENARIOS, incumbent, approximation)
+        hb.hybrid_acquisition(
+            problem, (fitted,), Z, W, incumbent, approximation=approximation
+        )
         for approximation in (
             hb.SoftSAA(temperature=temperature, unknown_states_as_variables=False),
             hb.SAA(unknown_states_as_variables=False),
@@ -197,7 +201,7 @@ def test_saa_ei_is_the_weighted_average_over_the_scenarios():
     states predicted by the GP at each scenario's arguments of h."""
     _, saa, w, f = ei_problems(incumbent=1.0, temperature=0.5)
 
-    expected = SCENARIOS.w @ np.minimum(f - 1.0, 0)
+    expected = W @ np.minimum(f - 1.0, 0)
     np.testing.assert_allclose(saa.nlp.f(w).full().item(), expected, rtol=1e-10)
 
 
@@ -207,7 +211,7 @@ def test_soft_saa_ei_is_minus_log_the_weighted_smooth_improvement():
     soft, _, w, f = ei_problems(incumbent=1.0, temperature=0.5)
 
     smooth = 0.5 * np.log1p(np.exp((1.0 - f) / 0.5))
-    expected = -np.log(SCENARIOS.w @ smooth)
+    expected = -np.log(W @ smooth)
     np.testing.assert_allclose(soft.nlp.f(w).full().item(), expected, rtol=1e-10)
 
 
@@ -231,7 +235,7 @@ def test_soft_saa_ei_has_a_gradient_where_no_scenario_improves():
 
     # SoftSAA-EI's objective and its gradient in u
     assert np.isfinite(soft.nlp.f(w).full().item())
-    u_gradient, _, _ = _unpack(soft, gradient(soft.nlp, w))
+    u_gradient, _, _ = soft.unpack(gradient(soft.nlp, w))
     assert np.all(np.isfinite(u_gradient)) and np.all(u_gradient != 0)
 
 
@@ -249,7 +253,7 @@ def test_soft_saa_ei_is_finite_far_from_the_incumbent(incumbent):
     assert np.isfinite(value)
     assert np.all(np.isfinite(gradient(soft.nlp, w)))
     if incumbent < 0:
-        expected = -(np.log(0.002) + scipy.special.logsumexp(a, b=SCENARIOS.w))
+        expected = -(np.log(0.002) + scipy.special.logsumexp(a, b=W))
         np.testing.assert_allclose(value, expected, rtol=1e-12)
 
 
@@ -258,12 +262,14 @@ def test_the_acquisition_problem_needs_one_gp_and_column_per_unknown_state():
     fitted = hb.fit_gp(
         ex.gp, np.array([[0.0], [1.0]]), np.array([0.0, 1.0]), np.random.default_rng(0)
     )
-    scenarios = hb.saa_scenarios(3, 2, np.random.default_rng(0))
+    z, w = draw_scenarios(3, 2, np.random.default_rng(0))
 
     with pytest.raises(ValueError, match="one column of z"):
-        hybrid_acquisition(ex.problem, (fitted,), scenarios, 0.0, hb.SAA())
+        hb.hybrid_acquisition(ex.problem, (fitted,), z, w, 0.0, approximation=hb.SAA())
     with pytest.raises(ValueError, match="one fitted GP"):
-        hybrid_acquisition(ex.problem, (fitted, fitted), SCENARIOS, 0.0, hb.SAA())
+        hb.hybrid_acquisition(
+            ex.problem, (fitted, fitted), Z, W, 0.0, approximation=hb.SAA()
+        )
 
 
 @pytest.mark.parametrize(
@@ -285,7 +291,7 @@ def test_hybrid_bo_runs_with_a_measurement_of_your_own(problem, approximation):
     # Setup: the initial points and the scenarios, drawn once
     rng = np.random.default_rng(0)
     points = hb.lhs_points(problem.system.u, 5, rng)
-    scenarios = hb.saa_scenarios(5, problem.system.n_y, rng)
+    z, w = draw_scenarios(5, problem.system.n_y, rng)
     start = evaluate_points(problem, measure_sin, points, rng)
 
     # Act
@@ -293,7 +299,8 @@ def test_hybrid_bo_runs_with_a_measurement_of_your_own(problem, approximation):
         problem,
         measure_sin,
         start,
-        scenarios,
+        z,
+        w,
         rng,
         n_iterations=2,
         gp=ex.gp,
@@ -310,7 +317,7 @@ def test_hybrid_bo_runs_with_two_unknown_states():
     """Each unknown state gets its own GP, and the scenarios a column each."""
     problem = two_unknown_states_problem()
     rng = np.random.default_rng(0)
-    scenarios = hb.saa_scenarios(5, 2, rng)
+    z, w = draw_scenarios(5, 2, rng)
 
     def measure(u: np.ndarray, rng: np.random.Generator) -> np.ndarray:
         """Both unknown states."""
@@ -323,7 +330,8 @@ def test_hybrid_bo_runs_with_two_unknown_states():
         problem,
         measure,
         start,
-        scenarios,
+        z,
+        w,
         rng,
         n_iterations=2,
         gp=ex.gp,
@@ -420,12 +428,12 @@ def test_replay_gives_the_solution_and_solves_the_equations(approximation):
     rng = np.random.default_rng(2)
     dataset = training_data()
     fitted = hb.fit_surrogate(ex.system, dataset, gp=ex.gp, rng=rng)
-    scenarios = hb.saa_scenarios(N_SCENARIOS, ex.system.n_y, rng)
+    z, w = draw_scenarios(N_SCENARIOS, ex.system.n_y, rng)
     incumbent = hb.incumbents(dataset)[-1]
-    solution = hb.hybrid_trial_point(
-        ex.problem, fitted, scenarios, incumbent, rng, approximation=approximation
+    built = hb.hybrid_acquisition(
+        ex.problem, fitted, z, w, incumbent, approximation=approximation
     )
-    built = hybrid_acquisition(ex.problem, fitted, scenarios, incumbent, approximation)
+    solution = built.solve(rng)
 
     # Act: the trial point, then a grid
     u = np.vstack([solution.u, np.linspace(-1.9, 1.9, 21)[:, np.newaxis]])
@@ -451,8 +459,8 @@ def test_replay_of_standard_bo_is_the_analytic_objective():
     dataset = training_data()
     fitted = hb.fit_gp(ex.gp, dataset.u, dataset.f, rng)
     incumbent = float(hb.incumbents(dataset)[-1])
-    solution = hb.standard_trial_point(ex.problem, fitted, incumbent, rng)
-    built = standard_acquisition(ex.problem, fitted, incumbent)
+    built = hb.standard_acquisition(ex.problem, fitted, incumbent)
+    solution = built.solve(rng)
 
     replayed = hb.replay(built, solution, solution.u[np.newaxis])
 
@@ -466,13 +474,13 @@ def test_replay_works_with_no_states_to_solve():
     points = hb.lhs_points(problem.system.u, 5, rng)
     dataset = evaluate_points(problem, measure_sin, points, rng)
     fitted = hb.fit_surrogate(problem.system, dataset, gp=ex.gp, rng=rng)
-    scenarios = hb.saa_scenarios(N_SCENARIOS, 1, rng)
+    z, w = draw_scenarios(N_SCENARIOS, 1, rng)
     incumbent = hb.incumbents(dataset)[-1]
     approximation = hb.SAA(unknown_states_as_variables=False)
-    solution = hb.hybrid_trial_point(
-        problem, fitted, scenarios, incumbent, rng, approximation=approximation
+    built = hb.hybrid_acquisition(
+        problem, fitted, z, w, incumbent, approximation=approximation
     )
-    built = hybrid_acquisition(problem, fitted, scenarios, incumbent, approximation)
+    solution = built.solve(rng)
 
     replayed = hb.replay(built, solution, np.array([[0.1], [solution.u[0]]]))
 
@@ -481,18 +489,18 @@ def test_replay_works_with_no_states_to_solve():
 
 
 def solved_iteration() -> tuple:
-    """A hybrid iteration with SoftSAA: the problem, solution, GP, data and scenarios."""
+    """A hybrid iteration with SoftSAA: the problem, solution, GP and data."""
     rng = np.random.default_rng(2)
     dataset = training_data()
     fitted = hb.fit_surrogate(ex.system, dataset, gp=ex.gp, rng=rng)
-    scenarios = hb.saa_scenarios(N_SCENARIOS, ex.system.n_y, rng)
+    z, w = draw_scenarios(N_SCENARIOS, ex.system.n_y, rng)
     incumbent = hb.incumbents(dataset)[-1]
     approximation = hb.SoftSAA(temperature=0.5)
-    solution = hb.hybrid_trial_point(
-        ex.problem, fitted, scenarios, incumbent, rng, approximation=approximation
+    built = hb.hybrid_acquisition(
+        ex.problem, fitted, z, w, incumbent, approximation=approximation
     )
-    built = hybrid_acquisition(ex.problem, fitted, scenarios, incumbent, approximation)
-    return built, solution, fitted[0], dataset, scenarios
+    solution = built.solve(rng)
+    return built, solution, fitted[0], dataset
 
 
 def test_soft_saa_replays_ei_from_its_log():
@@ -506,10 +514,10 @@ def test_soft_saa_replays_ei_from_its_log():
 
 def test_iteration_draws_hybrid_bos_panels():
     """The GP, f under the scenarios and EI, whose peak is at the trial point."""
-    built, solution, fitted, dataset, scenarios = solved_iteration()
+    built, solution, fitted, dataset = solved_iteration()
     axes = matplotlib.figure.Figure().subplots(3)
 
-    hb.plots.iteration(built, solution, fitted, dataset, axes, scenarios)
+    hb.plots.iteration(built, solution, fitted, dataset, axes)
 
     u, ei = (np.asarray(data) for data in axes[2].get_lines()[0].get_data())
     assert abs(u[np.nanargmax(ei)] - solution.u[0]) <= u[1] - u[0]
@@ -523,8 +531,8 @@ def test_iteration_draws_standard_bos_panels():
     dataset = training_data()
     fitted = hb.fit_gp(ex.gp, dataset.u, dataset.f, rng)
     incumbent = float(hb.incumbents(dataset)[-1])
-    solution = hb.standard_trial_point(ex.problem, fitted, incumbent, rng)
-    built = standard_acquisition(ex.problem, fitted, incumbent)
+    built = hb.standard_acquisition(ex.problem, fitted, incumbent)
+    solution = built.solve(rng)
     axes = matplotlib.figure.Figure().subplots(2)
 
     hb.plots.iteration(built, solution, fitted, dataset, axes)
@@ -534,11 +542,11 @@ def test_iteration_draws_standard_bos_panels():
 
 def test_iteration_needs_one_axes_per_panel():
     """Hybrid BO draws three panels, so two axes are refused."""
-    built, solution, fitted, dataset, scenarios = solved_iteration()
+    built, solution, fitted, dataset = solved_iteration()
     axes = matplotlib.figure.Figure().subplots(2)
 
     with pytest.raises(ValueError, match="panels"):
-        hb.plots.iteration(built, solution, fitted, dataset, axes, scenarios)
+        hb.plots.iteration(built, solution, fitted, dataset, axes)
 
 
 def test_fits_and_solves_are_logged(caplog):

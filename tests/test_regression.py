@@ -21,7 +21,7 @@ from oracle_helper import oracle_incumbents, oracle_states
 from plain_loop import evaluate_points, hybrid_loop, standard_loop
 
 import hybrid_bo as hb
-from hybrid_bo.acquisition import AcquisitionSolution
+from hybrid_bo.hybrid_model import Solution
 
 BASELINE_DIR = Path(__file__).parent / "data" / "regression"
 RTOL, ATOL = 1e-6, 1e-8
@@ -30,7 +30,7 @@ RTOL, ATOL = 1e-6, 1e-8
 SEED, N_ITERATIONS = 0, 2
 
 # What a run of a method gives: the dataset, and each iteration's solution
-Result = tuple[hb.Dataset, list[AcquisitionSolution]]
+Result = tuple[hb.Dataset, list[Solution]]
 
 
 def run_hybrid_bo(
@@ -38,12 +38,13 @@ def run_hybrid_bo(
 ) -> Result:
     """Hybrid BO: the initial points, the scenarios once, then the loop."""
     points = hb.lhs_points(ex.system.u, ex.N_INITIAL, rng)
-    scenarios = hb.saa_scenarios(25, ex.system.n_y, rng)
+    z = rng.standard_normal((25, ex.system.n_y))
     return hybrid_loop(
         ex.problem,
         measure,
         evaluate_points(ex.problem, measure, points, rng),
-        scenarios,
+        z,
+        np.full(25, 1 / 25),
         rng,
         n_iterations=N_ITERATIONS,
         gp=ex.gp,
@@ -98,7 +99,7 @@ METHODS = {
 def as_baseline_columns(
     dataset: hb.Dataset,
     states: np.ndarray,
-    solutions: list[AcquisitionSolution],
+    solutions: list[Solution],
 ) -> dict[str, np.ndarray]:
     """The run under the `ResultsBO` keys: they store y inside x, f as a column, and
     split every array into the initial points and the rest."""

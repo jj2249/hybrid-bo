@@ -14,17 +14,19 @@ simulator or an oracle of your own:
 
    import hybrid_bo as hb
 
-   scenarios = hb.saa_scenarios(25, system.n_y, rng)  # once, before the loop
+   z = rng.standard_normal((25, system.n_y))  # once, before the loop
+   w = np.full(25, 1 / 25)
    for _ in range(10):
        fitted = hb.fit_surrogate(system, dataset, gp=gp, rng=rng)
-       solution = hb.hybrid_trial_point(
+       acquisition = hb.hybrid_acquisition(
            problem,
            fitted,
-           scenarios,
+           z,
+           w,
            hb.incumbents(dataset)[-1],
-           rng,
            approximation=hb.SAA(),
        )
+       solution = acquisition.solve(rng)
        measured = measure(solution.u, rng)
        new = hb.reconstruct_states(
            problem, u=solution.u[None], measured=measured[None], rng=rng

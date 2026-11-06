@@ -23,7 +23,8 @@ from typing import Any, assert_never
 import casadi as cas
 import numpy as np
 
-from hybrid_bo.problem import Symbolic
+from hybrid_bo.dataset import Dataset
+from hybrid_bo.problem import Symbolic, System
 from hybrid_bo.solvers import NLP, Ipopt, solve_with_multistart
 from hybrid_bo.utils import Scaler, _lhs, minmax, scale, standard, unscale
 
@@ -394,7 +395,7 @@ def fit_gp(
 
         # Multistart from Latin hypercube starts over the bounds
         starts = _lhs(nlp.lower, nlp.upper, n_starts, rng)
-        w_best = solve_with_multistart(nlp, starts, solver).w
+        w_best, _ = solve_with_multistart(nlp, starts, solver)
 
         # Back from the search space, to the numbers the fitted GP holds
         values = np.where(is_log, np.exp(w_best), w_best).tolist()
@@ -454,3 +455,26 @@ def predict(fitted: FittedGP, X: Any) -> tuple[Any, Any]:
         mean, std = function.map(len(X))(X.reshape(1, -1))
         return mean.full().ravel(), std.full().ravel()
     return function(X)
+
+
+def fit_surrogate(
+    system: System,
+    dataset: Dataset,
+    *,
+    gp: GP,
+    rng: np.random.Generator,
+    n_starts: int = 10,
+    solver: Ipopt = Ipopt(),  # noqa: B008  (frozen, never mutated)
+) -> tuple[FittedGP, ...]:
+    """The surrogate model of the system: the prior GP `gp` fitted to each unknown state
+    of `dataset` over the arguments of h, one fitted GP per unknown state, in the order
+    of `system.y`.
+
+    Each GP is fitted by `fit_gp` from `n_starts` starts.
+    """
+    X = np.column_stack(system.h_arguments(dataset.u, dataset.x))
+    fitted = []
+    for var, y in zip(system.y, dataset.y.T, strict=True):
+        _logger.info("Fitting the GP of %s", var.name)
+        fitted.append(fit_gp(gp, X, y, rng, n_starts, solver))
+    return tuple(fitted)

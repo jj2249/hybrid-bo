@@ -61,22 +61,23 @@ for seed in range(N_RUNS):
     dataset = hb.reconstruct_states(
         problem, u=points, measured=measure(points), rng=rng
     )
-    scenarios = hb.saa_scenarios(25, system.n_y, rng)  # once, before the loop
+    z = rng.standard_normal((25, system.n_y))  # the scenarios, once, before the loop
+    w = np.full(25, 1 / 25)
     for _ in range(N_ITERATIONS):
         before = dataset
         incumbent = hb.incumbents(dataset)[-1]
         fitted = hb.fit_surrogate(system, dataset, gp=gp, rng=rng)
-        solution = hb.hybrid_trial_point(
-            problem, fitted, scenarios, incumbent, rng, approximation=approximation
+        acquisition = hb.hybrid_acquisition(
+            problem, fitted, z, w, incumbent, approximation=approximation
         )
+        solution = acquisition.solve(rng)
         u_new = solution.u[None]
         new = hb.reconstruct_states(problem, u=u_new, measured=measure(u_new), rng=rng)
         dataset = hb.extend(dataset, new)
     hybrid_curves.append(hb.incumbents(dataset))
 
 # The last iteration of the last run
-built = hb.hybrid_acquisition(problem, fitted, scenarios, incumbent, approximation)
-hb.plots.iteration(built, solution, fitted[0], before, axes[:, 0], scenarios)
+hb.plots.iteration(acquisition, solution, fitted[0], before, axes[:, 0])
 axes[0, 0].set(title="Hybrid BO, SoftSAA-EI", ylabel="y")
 
 # Standard BO: a GP of the objective
@@ -91,7 +92,8 @@ for seed in range(N_RUNS):
         before = dataset
         incumbent = hb.incumbents(dataset)[-1]
         fitted = hb.fit_gp(gp, dataset.u, dataset.f, rng)
-        solution = hb.standard_trial_point(problem, fitted, incumbent, rng)
+        acquisition = hb.standard_acquisition(problem, fitted, incumbent)
+        solution = acquisition.solve(rng)
         u_new = solution.u[None]
         new = hb.reconstruct_states(problem, u=u_new, measured=measure(u_new), rng=rng)
         dataset = hb.extend(dataset, new)
@@ -99,8 +101,7 @@ for seed in range(N_RUNS):
 
 axes[0, 1].remove()
 axes[1, 1].set_prop_cycle(color=["tab:orange"])
-built = hb.standard_acquisition(problem, fitted, incumbent)
-hb.plots.iteration(built, solution, fitted, before, axes[1:, 1])
+hb.plots.iteration(acquisition, solution, fitted, before, axes[1:, 1])
 axes[1, 1].set(title="Standard BO", ylabel="f")
 
 # The true curves: the states and f at a grid of u, from the system itself

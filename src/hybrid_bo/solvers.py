@@ -52,17 +52,11 @@ class Ipopt:
     solver_options: dict[str, Any] = field(default_factory=lambda: {"print_level": 0})
 
 
-@dataclass(frozen=True)
-class Solution:
-    """A solution of an NLP: the variables w (n,) and the objective there."""
-
-    w: np.ndarray
-    f: float
-
-
-def solve_with_multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Solution:
+def solve_with_multistart(
+    nlp: NLP, starts: np.ndarray, solver: Ipopt
+) -> tuple[np.ndarray, float]:
     """Builds `nlp` as a CasADi `Opti` problem, solves it with IPOPT from each row of
-    `starts` (n_starts, n), and returns the solution with the lowest objective.
+    `starts` (n_starts, n), and returns the best w (n,) and its objective.
     Objectives that differ only by rounding tie, and the earlier start wins, so the
     result doesn't depend on the platform's arithmetic.
 
@@ -123,7 +117,7 @@ def solve_with_multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Soluti
     if best is None:
         msg = f"Every one of the {len(starts)} starts failed"
         raise NoSolutionError(msg)
-    return Solution(best, f_best)
+    return best, f_best
 
 
 @contextmanager

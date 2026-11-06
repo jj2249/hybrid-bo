@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from hybrid_bo.acquisition import AcquisitionProblem, AcquisitionSolution, replay
+from hybrid_bo.acquisition import replay
 from hybrid_bo.dataset import Dataset
 from hybrid_bo.gp import FittedGP, predict
-from hybrid_bo.hybrid_model import Scenarios
+from hybrid_bo.hybrid_model import DeterministicEquivalent, Solution
 from hybrid_bo.utils import unscale
 
 if TYPE_CHECKING:
@@ -71,29 +71,28 @@ def surrogate(fitted: FittedGP, lower: float, upper: float, ax: "Axes") -> "Axes
 
 
 def iteration(
-    problem: AcquisitionProblem,
-    solution: AcquisitionSolution,
+    problem: DeterministicEquivalent,
+    solution: Solution,
     fitted: FittedGP,
     dataset: Dataset,
     axes: "Sequence[Axes]",
-    scenarios: Scenarios | None = None,
 ) -> None:
     """Draws one iteration of one decision variable on `axes`: the state before the trial
     point `solution`, over the start bounds of u, as `replay` gives it, so the panels show
     the function the solver minimized. `dataset` holds the points before the trial point.
 
-    Standard BO has two panels, its GP of f and EI. Hybrid BO, with its `scenarios`, has
-    three: `fitted`, the GP of an unknown state of u alone, then f under the scenarios,
+    Standard BO has two panels, its GP of f and EI. Hybrid BO has three: `fitted`, the GP of an unknown state of u alone, then f under the scenarios,
     their weighted mean and std, and EI. A point the replay didn't solve is a gap.
 
     Raises `ValueError` if there isn't one decision variable, or one axes per panel.
     """
     # The checks
     panels = list(axes)
+    is_hybrid = problem.n_scenarios > 0
     if problem.n_u != 1:
         msg = f"The panels draw one decision variable, got {problem.n_u}"
         raise ValueError(msg)
-    if len(panels) != (2 if scenarios is None else 3):
+    if len(panels) != (3 if is_hybrid else 2):
         msg = f"Standard BO draws 2 panels and hybrid BO 3, got {len(panels)} axes"
         raise ValueError(msg)
 
@@ -105,10 +104,10 @@ def iteration(
     replayed = replay(problem, solution, u[:, np.newaxis])
 
     # f under the scenarios, with the points so far
-    if scenarios is not None:
+    if is_hybrid:
         assert replayed.f is not None
-        mean = replayed.f @ scenarios.w
-        std = np.sqrt((replayed.f - mean[:, np.newaxis]) ** 2 @ scenarios.w)
+        mean = replayed.f @ problem.weights
+        std = np.sqrt((replayed.f - mean[:, np.newaxis]) ** 2 @ problem.weights)
         panels[1].plot(u, mean, color=color, label="mean over scenarios")
         panels[1].fill_between(u, mean - std, mean + std, color=color, alpha=0.2)
         panels[1].scatter(dataset.u[:, 0], dataset.f, color="k", label="points")

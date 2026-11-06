@@ -4,9 +4,8 @@
 import numpy as np
 
 import hybrid_bo as hb
-from hybrid_bo.acquisition import AcquisitionSolution
 from hybrid_bo.gp import GP
-from hybrid_bo.hybrid_model import Scenarios
+from hybrid_bo.hybrid_model import Solution
 
 
 def evaluate_point(
@@ -36,28 +35,26 @@ def hybrid_loop(
     problem: hb.Problem,
     measure: hb.Measure,
     dataset: hb.Dataset,
-    scenarios: Scenarios,
+    z: np.ndarray,
+    w: np.ndarray,
     rng: np.random.Generator,
     *,
     n_iterations: int,
     gp: GP,
     approximation: hb.SAA | hb.SoftSAA,
-) -> tuple[hb.Dataset, list[AcquisitionSolution]]:
-    """Hybrid BO from `dataset`, with the scenarios drawn once, before the loop.
+) -> tuple[hb.Dataset, list[Solution]]:
+    """Hybrid BO from `dataset`, with the scenarios z and w drawn once, before the loop.
 
     Returns the grown dataset and each iteration's solution.
     """
     solutions = []
     for _ in range(n_iterations):
         fitted = hb.fit_surrogate(problem.system, dataset, gp=gp, rng=rng)
-        solution = hb.hybrid_trial_point(
-            problem,
-            fitted,
-            scenarios,
-            hb.incumbents(dataset)[-1],
-            rng,
-            approximation=approximation,
+        incumbent = hb.incumbents(dataset)[-1]
+        acquisition = hb.hybrid_acquisition(
+            problem, fitted, z, w, incumbent, approximation=approximation
         )
+        solution = acquisition.solve(rng)
         dataset = hb.extend(dataset, evaluate_point(problem, measure, solution.u, rng))
         solutions.append(solution)
     return dataset, solutions
@@ -71,7 +68,7 @@ def standard_loop(
     *,
     n_iterations: int,
     gp: GP,
-) -> tuple[hb.Dataset, list[AcquisitionSolution]]:
+) -> tuple[hb.Dataset, list[Solution]]:
     """Standard BO from `dataset`: a GP of the measured objective over u.
 
     Returns the grown dataset and each iteration's solution.
@@ -79,9 +76,8 @@ def standard_loop(
     solutions = []
     for _ in range(n_iterations):
         fitted = hb.fit_gp(gp, dataset.u, dataset.f, rng)
-        solution = hb.standard_trial_point(
-            problem, fitted, hb.incumbents(dataset)[-1], rng
-        )
+        incumbent = hb.incumbents(dataset)[-1]
+        solution = hb.standard_acquisition(problem, fitted, incumbent).solve(rng)
         dataset = hb.extend(dataset, evaluate_point(problem, measure, solution.u, rng))
         solutions.append(solution)
     return dataset, solutions

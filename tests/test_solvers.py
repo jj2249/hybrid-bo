@@ -22,10 +22,10 @@ DOUBLE_WELL = NLP(
 def test_best_start_wins():
     """With one start in each well, `solve_with_multistart` returns the global minimum
     and its objective value."""
-    solution = solve_with_multistart(DOUBLE_WELL, np.array([[1.5], [-1.5]]), Ipopt())
-    assert solution.w.shape == (1,)
-    assert solution.w[0] < 0
-    np.testing.assert_allclose(solution.f, DOUBLE_WELL.f(solution.w).full().item())
+    w, f = solve_with_multistart(DOUBLE_WELL, np.array([[1.5], [-1.5]]), Ipopt())
+    assert w.shape == (1,)
+    assert w[0] < 0
+    np.testing.assert_allclose(f, DOUBLE_WELL.f(w).full().item())
 
 
 def test_a_tie_keeps_the_earlier_start():
@@ -40,15 +40,15 @@ def test_a_tie_keeps_the_earlier_start():
         upper=np.array([2.0]),
     )
 
-    solution = solve_with_multistart(tied, np.array([[-1.5], [1.5]]), Ipopt())
+    best, _ = solve_with_multistart(tied, np.array([[-1.5], [1.5]]), Ipopt())
 
-    assert solution.w[0] < 0
+    assert best[0] < 0
 
 
 def test_one_start_finds_its_local_minimum():
     """A single start in the right well stays there, at the local minimum."""
-    solution = solve_with_multistart(DOUBLE_WELL, np.array([[1.5]]), Ipopt())
-    assert solution.w[0] > 0
+    w, _ = solve_with_multistart(DOUBLE_WELL, np.array([[1.5]]), Ipopt())
+    assert w[0] > 0
 
 
 def test_bounds_and_constraints():
@@ -62,9 +62,9 @@ def test_bounds_and_constraints():
         g=cas.Function("g", [v], [v[0] + v[1] - 1]),
     )
 
-    solution = solve_with_multistart(nlp, np.array([[1.0, 1.0]]), Ipopt())
+    w, _ = solve_with_multistart(nlp, np.array([[1.0, 1.0]]), Ipopt())
 
-    np.testing.assert_allclose(solution.w, [0.7, 0.3], atol=1e-6)
+    np.testing.assert_allclose(w, [0.7, 0.3], atol=1e-6)
 
 
 def test_an_empty_constraint_is_no_constraint():
@@ -78,10 +78,10 @@ def test_an_empty_constraint_is_no_constraint():
         g=cas.Function("g", [w], [cas.SX(0, 1)]),
     )
 
-    solution = solve_with_multistart(nlp, np.array([[-1.5]]), Ipopt())
+    best, _ = solve_with_multistart(nlp, np.array([[-1.5]]), Ipopt())
 
-    reference = solve_with_multistart(DOUBLE_WELL, np.array([[-1.5]]), Ipopt())
-    np.testing.assert_allclose(solution.w, reference.w, atol=1e-8)
+    reference, _ = solve_with_multistart(DOUBLE_WELL, np.array([[-1.5]]), Ipopt())
+    np.testing.assert_allclose(best, reference, atol=1e-8)
 
 
 def test_every_start_failing_raises():

@@ -70,23 +70,25 @@ initial = hb.reconstruct_states(
 )
 ```
 
-**Hybrid BO** fits a GP to each unknown state. Draw the scenarios once, before the loop,
-and keep them: nothing checks that they stay the same.
+**Hybrid BO** fits a GP to each unknown state. The scenarios are draws `z` and weights `w`.
+Draw them once, before the loop, and keep them: nothing checks that they stay the same.
 
 ```python
 dataset = initial
-scenarios = hb.saa_scenarios(25, system.n_y, rng)
+z = rng.standard_normal((25, system.n_y))
+w = np.full(25, 1 / 25)
 
 for _ in range(10):
     fitted = hb.fit_surrogate(system, dataset, gp=gp, rng=rng)
-    solution = hb.hybrid_trial_point(
+    acquisition = hb.hybrid_acquisition(
         problem,
         fitted,
-        scenarios,
+        z,
+        w,
         hb.incumbents(dataset)[-1],
-        rng,
         approximation=hb.SAA(),  # or hb.SoftSAA(temperature=...)
     )
+    solution = acquisition.solve(rng)
     dataset = hb.extend(dataset, evaluate(solution.u, rng))
 ```
 
@@ -97,7 +99,8 @@ dataset = initial
 
 for _ in range(10):
     fitted = hb.fit_gp(gp, dataset.u, dataset.f, rng)
-    solution = hb.standard_trial_point(problem, fitted, hb.incumbents(dataset)[-1], rng)
+    acquisition = hb.standard_acquisition(problem, fitted, hb.incumbents(dataset)[-1])
+    solution = acquisition.solve(rng)
     dataset = hb.extend(dataset, evaluate(solution.u, rng))
 ```
 
@@ -111,7 +114,7 @@ for point in hb.uniform_points(system.u, 10, rng):
     dataset = hb.extend(dataset, evaluate(point, rng))
 ```
 
-A fit or a trial point raises `hb.NoSolutionError` if every start fails, and
+A fit or a `solve` raises `hb.NoSolutionError` if every start fails, and
 `hb.reconstruct_states` raises `hb.RootFindingError` if the known equations have no root
 or a value isn't finite. Your loop decides what to do: nothing is caught for you.
 
