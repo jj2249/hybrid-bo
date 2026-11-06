@@ -1,10 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.8.0 (2026-11-06)
+
+The library is rewritten to read like the math, for a scientist reading the code: methods
+that return data replace many private functions, and the names say what things are. The
+regression results don't change. Nearly every call changes, so see the README for the new
+loop.
 
 - **Breaking:** `hb.hybrid_trial_point`, `hb.standard_trial_point` and `hb.hybrid_acquisition`
   are gone: build with `hb.hybrid_deterministic_equivalent` or `hb.standard_acquisition`,
-  call `.solve(rng)`, and pass the same object to `hb.plots.iteration`.
+  call `.solve(rng)`, and pass the same object to `hb.plots.iteration`, which no longer
+  takes the scenarios.
 - **Breaking:** `hb.SAA` and `hb.SoftSAA` are `hb.EI` and `hb.SoftEI`, passed as
   `acquisition=`: the sample average is what the deterministic equivalent does, and SoftEI
   reformulates the acquisition function. `unknown_states_as_variables` is a keyword of
@@ -12,9 +18,9 @@
 - **Breaking:** `hb.saa_scenarios` and `Scenarios` are gone: pass draws `z` and weights `w`.
   `AcquisitionSolution` is `Solution` for standard BO, whose trial point is `solution.w`, and
   `ScenarioSolution` for hybrid BO, with `u`, `x` and `y`.
-- `hb.expected_improvement` is public.
 - **Breaking:** `hb.replay` and `Replay` are gone: `hb.plots.acquisition_on_grid` gives the
-  acquisition and a `Dataset` per scenario. `hybrid_bo.evaluation` is now `hybrid_bo.reconstruction`.
+  acquisition and a `Dataset` per scenario. `hybrid_bo.evaluation` is now
+  `hybrid_bo.reconstruction`.
 - **Breaking:** `reconstruct_states` solves with CasADi's Newton method instead of scipy's
   `fsolve`, which is no longer a dependency. With several roots in the bounds, it may find
   a different one. Known equations that can't determine the unmeasured states now raise
@@ -26,10 +32,12 @@
 - **Breaking:** `2.0 * kernel` is gone: write `Scale(kernel, 2.0)`. `covariance` and
   `prior_mean` are the methods `kernel.covariance(X1, X2)` and `mean.at(X)`.
 - **Breaking:** A fit raises `ValueError` for shapes that don't match and for NaN or
-  infinity, and `predict` for a numeric X that isn't a 2-D array.
+  infinity, and `predict` for a numeric X that isn't a finite 2-D array with the columns of
+  the training inputs.
 - **Breaking:** `HybridBOError` is gone; catch `NoSolutionError` or `RootFindingError`.
 - **Breaking:** The scalers `hb.gp.minmax`, `standard`, `scale` and `unscale` are in
   `hybrid_bo.utils`, and `minmax` maps onto [0, 1] only. `hybrid_bo.sampling` is gone.
+- New: `hb.expected_improvement` is public.
 - New: `plt.style.use("hybrid_bo.default")` gives the library's look: a grid, so far.
 
 ## 0.7.0 (2026-11-06)
