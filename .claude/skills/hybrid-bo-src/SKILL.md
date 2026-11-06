@@ -256,10 +256,16 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `saa_scenarios(n, n_y, rng)` draws SAA's scenarios, and `hybrid_acquisition(...,
   acquisition, approximation)` is `gp_deterministic_equivalent` with the acquisition
   function as the objective.
-  `AcquisitionSolution(value, x, y)` is one iteration's solution: the minimized
-  objective at the trial point and, for hybrid BO, the scenario states `(S, M)`,
+  `AcquisitionSolution(u, value, x, y)` is one iteration's solution: the trial point,
+  the minimized objective there and, for hybrid BO, the scenario states `(S, M)`,
   `(S, P)` (x from `_unpack`, y from `scenario_values`, so predicted when the y_s
   are substituted).
+  `standard_trial_point(problem, fitted, incumbent, rng, *, acquisition, n_starts,
+  solver)` and `hybrid_trial_point(problem, fitted, scenarios, incumbent, rng, *,
+  acquisition, approximation, n_starts, solver)` solve one acquisition problem: `lhs`
+  starts, `solve_with_multistart`, and the `AcquisitionSolution`. They draw only their
+  starts, and the caller draws the scenarios once. They live here, not in
+  `hybrid_model.py`, because this module imports that one, never the reverse.
   `replay(acquisition_problem, solution, u, at_trial) -> Replay(values, f, f_std)`
   (ADR 0005): the problem with u fixed at each row of u, row `at_trial` the trial
   point. Standard BO's objective is evaluated, mapped over u. Hybrid BO's optimizes
@@ -295,18 +301,15 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `hybrid_bo` take `problem` and `measure`, then only keywords: `n_iterations`, `rng`,
   `gp`, `acquisition`, either `n_initial` or `initial_points`
   (`sampling._starting_points`, drawn after the artifact) and search effort. `StandardBOSettings` and
-  `standard_bo` (fit `u -> f`, `_acquisition_problem`, `solve_with_multistart` from
-  `lhs` over the `u` start bounds; stores `AcquisitionSolution(value)`, so `x=None`),
+  `standard_bo` (fit `u -> f`, `standard_trial_point`; its solution has `x=None`),
   `HybridBOSettings` and `hybrid_bo` (artifact, then
   `saa_scenarios` or `nominal_scenario`, then the loop; `fit_surrogate`,
-  `_acquisition_problem`, `solve_with_multistart`, `_unpack_scenarios`; passes the
-  scenarios to the loop). `_method_artifact` builds both methods'
+  `hybrid_trial_point`; passes the scenarios to the loop). `_method_artifact` builds both methods'
   artifacts: the settings without the GP, and `gp`, the prior GP's repr.
   `_acquisition_problem(problem, dataset, *, n_evaluated, surrogate, scenarios,
-  settings)` is the one way to an acquisition problem: it reads the incumbent after the
-  first `n_evaluated` points of `dataset` and matches on the settings. The methods'
-  `trial_point`s call it with every point of their dataset, and
-  `iteration_problem(run, problem, i)`, which rebuilds iteration i's problem for the
+  settings)` reads the incumbent after the first `n_evaluated` points of `dataset` and
+  matches on the settings, to pick the builder the trial point functions call. Only
+  `iteration_problem(run, problem, i)` calls it, which rebuilds iteration i's problem for the
   replay, with the `n_initial + i` points before trial point i, from the stored
   surrogate, the run's scenarios and `run.settings` (`ValueError` for a baseline).
 - `plots.py`: static figures, no widgets and no `rng`. `regret(runs, optimum, ax)` and

@@ -5,15 +5,20 @@ the draws come in the order DESIGN.md states ("Order of random draws"). `measure
 script's function of (u, rng), returning the measured variables as an array.
 """
 
+from collections.abc import Callable
+
 import numpy as np
 
 import hybrid_bo as hb
 from hybrid_bo.acquisition import AcquisitionSolution
 from hybrid_bo.gp import GP, fit_gp
 
+# A measurement as a script writes it: the measured variables alone, no oracle values
+Measure = Callable[[np.ndarray, np.random.Generator], np.ndarray]
+
 
 def evaluate_point(
-    problem: hb.Problem, measure: hb.Measure, u: np.ndarray, rng: np.random.Generator
+    problem: hb.Problem, measure: Measure, u: np.ndarray, rng: np.random.Generator
 ) -> hb.Dataset:
     """Measures the system at u (N,) and solves for its states: a one-row dataset."""
     measured = measure(u, rng)
@@ -24,7 +29,7 @@ def evaluate_point(
 
 def evaluate_points(
     problem: hb.Problem,
-    measure: hb.Measure,
+    measure: Measure,
     points: np.ndarray,
     rng: np.random.Generator,
 ) -> hb.Dataset:
@@ -37,7 +42,7 @@ def evaluate_points(
 
 def hybrid_loop(
     problem: hb.Problem,
-    measure: hb.Measure,
+    measure: Measure,
     dataset: hb.Dataset,
     scenarios: hb.hybrid_model.Scenarios,
     rng: np.random.Generator,
@@ -70,7 +75,7 @@ def hybrid_loop(
 
 def standard_loop(
     problem: hb.Problem,
-    measure: hb.Measure,
+    measure: Measure,
     dataset: hb.Dataset,
     rng: np.random.Generator,
     *,

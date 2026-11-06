@@ -18,7 +18,7 @@ from pathlib import Path
 import illustrative_example as ex
 import numpy as np
 import pytest
-from plain_loop import evaluate_points, hybrid_loop, standard_loop
+from plain_loop import Measure, evaluate_points, hybrid_loop, standard_loop
 
 import hybrid_bo as hb
 from hybrid_bo.acquisition import AcquisitionSolution
@@ -36,7 +36,7 @@ Result = tuple[hb.Dataset, list[AcquisitionSolution]]
 
 def run_hybrid_bo(
     approximation: hb.SAA | hb.SoftSAA | hb.Linearization,
-    measure: hb.Measure,
+    measure: Measure,
     rng: np.random.Generator,
 ) -> Result:
     """Hybrid BO: the initial points, the scenarios once, then the loop."""
@@ -58,7 +58,7 @@ def run_hybrid_bo(
     )
 
 
-def run_standard_bo(measure: hb.Measure, rng: np.random.Generator) -> Result:
+def run_standard_bo(measure: Measure, rng: np.random.Generator) -> Result:
     """Standard BO: the initial points, then the loop."""
     points = hb.initial_points(ex.system.u, ex.N_INITIAL, rng)
     return standard_loop(
@@ -72,9 +72,7 @@ def run_standard_bo(measure: hb.Measure, rng: np.random.Generator) -> Result:
     )
 
 
-def run_latin_hypercube_sampling(
-    measure: hb.Measure, rng: np.random.Generator
-) -> Result:
+def run_latin_hypercube_sampling(measure: Measure, rng: np.random.Generator) -> Result:
     """Latin hypercube sampling: the initial points and the design, then every point."""
     points = hb.initial_points(ex.system.u, ex.N_INITIAL, rng)
     design = hb.initial_points(ex.system.u, N_ITERATIONS, rng)
@@ -82,7 +80,7 @@ def run_latin_hypercube_sampling(
     return evaluate_points(ex.problem, measure, all_points, rng), []
 
 
-def run_uniform_sampling(measure: hb.Measure, rng: np.random.Generator) -> Result:
+def run_uniform_sampling(measure: Measure, rng: np.random.Generator) -> Result:
     """Uniform sampling: the initial points and the design, then every point."""
     points = hb.initial_points(ex.system.u, ex.N_INITIAL, rng)
     lower, upper = (np.array([bound]) for bound in ex.u.start)

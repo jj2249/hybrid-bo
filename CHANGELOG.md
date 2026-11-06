@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- `hb.hybrid_trial_point` and `hb.standard_trial_point` solve one acquisition problem
+  from fitted GPs, from `lhs` starts, and return an `AcquisitionSolution`. The caller
+  draws the scenarios once, with `hb.saa_scenarios` or `hb.nominal_scenario`, which
+  joined the top level. `hybrid_bo` and `standard_bo` call them. Results don't change
+  (#221).
+- **Breaking:** `AcquisitionSolution` holds the trial point: `u` is its first field, and
+  it is required, so runs saved before this fail to load with `RunFormatError` (#221).
 - **Breaking:** `hb.History` is now `hb.Dataset`, and the module `hb.history` is
   `hb.dataset`. `error.history` is `error.dataset`, `run.history` is `run.dataset`, and
   the `history` argument of `hb.incumbents`, `hb.oracle_incumbents`,

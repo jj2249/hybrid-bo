@@ -3,7 +3,6 @@ methods it replaces."""
 
 import illustrative_example as ex
 import numpy as np
-import pytest
 from plain_loop import evaluate_points, hybrid_loop, standard_loop
 
 import hybrid_bo as hb
@@ -163,6 +162,4 @@ def test_the_standard_loop_is_standard_bo():
     # Check
     np.testing.assert_array_equal(dataset.u, run.dataset.u)
     np.testing.assert_array_equal(dataset.f, run.dataset.f)
-    assert [s.value for s in solutions] == pytest.approx(
-        [a.value for a in run.acquisitions], rel=0
-    )
+    assert [s.value for s in solutions] == [a.value for a in run.acquisitions]
