@@ -459,6 +459,7 @@ def fit_gp(
             condition_number,
             gp.jitter,
         )
+    _logger.info("Fitted %r to %d points", fitted_gp.kernel, len(X))
     return FittedGP(fitted_gp, X_scaled, Y_scaled, x_scaler, y_scaler)
 
 

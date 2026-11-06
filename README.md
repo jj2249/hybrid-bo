@@ -96,6 +96,9 @@ for point in hb.uniform_points(system.u, 10, rng):
     dataset = hb.extend(dataset, evaluate(point, rng))
 ```
 
+The library logs what it fits and how many starts of each solve succeed, at `INFO` on the
+`hybrid_bo` logger; `logging.getLogger("hybrid_bo").setLevel(logging.INFO)` shows it.
+
 A dataset can be saved, and extended later. Nothing records how it was produced.
 
 ```python

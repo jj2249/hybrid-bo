@@ -6,6 +6,7 @@ acquisition problem (`hybrid_acquisition`) is its one use. `_unpack_scenarios` r
 solution.
 """
 
+import logging
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -18,6 +19,8 @@ from hybrid_bo.gp import GP, FittedGP, fit_gp, predict
 from hybrid_bo.problem import Problem, Symbolic, System, Var, _h_inputs
 from hybrid_bo.sampling import _start_bounds
 from hybrid_bo.solvers import NLP, Ipopt
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -240,4 +243,8 @@ def fit_surrogate(
     Each GP is fitted by `fit_gp` from `n_starts` starts.
     """
     X = np.column_stack(_h_inputs(system, dataset.u, dataset.x))
-    return tuple(fit_gp(gp, X, y, rng, n_starts, solver) for y in dataset.y.T)
+    fitted = []
+    for var, y in zip(system.y, dataset.y.T, strict=True):
+        _logger.info("Fitting the GP of %s", var.name)
+        fitted.append(fit_gp(gp, X, y, rng, n_starts, solver))
+    return tuple(fitted)

@@ -1,5 +1,7 @@
 """One iteration of hybrid and standard BO, and the loop a script writes around it."""
 
+import logging
+
 import casadi as cas
 import illustrative_example as ex
 import matplotlib.figure
@@ -535,3 +537,19 @@ def test_iteration_needs_one_axes_per_panel():
 
     with pytest.raises(ValueError, match="panels"):
         hb.plots.iteration(built, solution, fitted, dataset, axes, scenarios)
+
+
+def test_fits_and_solves_are_logged(caplog):
+    """At `INFO`, the log says which unknown state is fitted, what it was fitted to, and
+    how many starts of each solve succeeded.
+
+    `caplog` is a pytest fixture that captures log records during the test.
+    """
+    with caplog.at_level(logging.INFO, logger="hybrid_bo"):
+        hb.fit_surrogate(
+            ex.system, training_data(), gp=ex.gp, rng=np.random.default_rng(0)
+        )
+
+    assert "Fitting the GP of y" in caplog.text
+    assert "to 5 points" in caplog.text
+    assert "negative_log_marginal_likelihood: 10 of 10 starts solved" in caplog.text

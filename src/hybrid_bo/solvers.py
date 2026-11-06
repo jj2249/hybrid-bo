@@ -84,7 +84,7 @@ def solve_with_multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Soluti
     opti.subject_to(w <= nlp.upper[:, np.newaxis])
 
     # Solve it from each start; a NaN objective never wins, nor does a tie with the best
-    best, f_best, n_at_limit = None, np.inf, 0
+    best, f_best, n_solved, n_at_limit = None, np.inf, 0, 0
     for i, start in enumerate(starts):
         opti.set_initial(w, start)
         opti.solver("ipopt", solver.plugin_options, solver.solver_options)
@@ -99,6 +99,7 @@ def solve_with_multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Soluti
             if at_limit:
                 n_at_limit += 1
             continue
+        n_solved += 1
         f = float(solution.value(opti.f))
         ties_best = best is not None and f >= f_best - _TIE_TOLERANCE * max(
             1.0, abs(f_best)
@@ -112,6 +113,13 @@ def solve_with_multistart(nlp: NLP, starts: np.ndarray, solver: Ipopt) -> Soluti
             n_at_limit,
             len(starts),
         )
+    _logger.info(
+        "%s: %d of %d starts solved, best %.6g",
+        nlp.f.name(),
+        n_solved,
+        len(starts),
+        f_best,
+    )
 
     if best is None:
         msg = f"Every one of the {len(starts)} starts failed"
