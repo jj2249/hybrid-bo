@@ -6,13 +6,9 @@ that fixture's value; `monkeypatch` is a fixture built into pytest.
 """
 
 import functools
-import importlib
-import subprocess
-import sys
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import replace
-from pathlib import Path
 
 import casadi as cas
 import illustrative_example as ex
@@ -386,24 +382,6 @@ def test_oracle_must_give_one_value_per_unknown_state():
         oracle_measure(
             two_branch_problem().system, oracle=lambda v: [v.u, 2 * v.u], noise_std=0.0
         )
-
-
-# `parametrize` runs the test once per experiment, with its module name as `name`
-@pytest.mark.parametrize("name", ["illustrative_example", "illustrative_example_2d"])
-def test_every_experiment_measurement_has_the_same_repr_in_another_process(name):
-    """Each experiment's measurement is described by the same text in another
-    process: a run's artifact holds that text, so it can't depend on the process."""
-    measure = importlib.import_module(name).measure
-
-    other = subprocess.run(
-        [sys.executable, "-c", f"import {name}; print(repr({name}.measure))"],
-        cwd=Path(__file__).parent,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-
-    assert other.stdout == repr(measure) + "\n"
 
 
 def dataset_of(f: list[float], f_oracle: list[float] | None = None) -> Dataset:

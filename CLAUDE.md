@@ -64,9 +64,8 @@ with a GitHub issue labeled `bug`: remove the marker when fixing the bug.
   operator may only build data (`Param(...) * Matern52()` is a `Scale`). Add a
   protocol only once a second implementation exists.
   The exception is a value the user passes where a function is expected, which may
-  be a frozen dataclass with `__call__` when it is data that the run's artifact
-  describes by its repr (the oracle simulation, `OracleSimulation`; #141): users
-  call and write it as a function.
+  be a frozen dataclass with `__call__` when it is data (the oracle simulation,
+  `OracleSimulation`; #141): users call and write it as a function.
 - American spelling everywhere, in code and prose (`optimization_loop`,
   "optimization loop").
 - Library code lives at the top level of `hybrid_bo`.

@@ -62,7 +62,7 @@ While the version is 0.x, a release is:
 0.x versions can be published there.
 
 The maintainer decides when to release, and should release before running studies
-that will be shared, so their runs' artifacts record a released version. The release PR,
+that will be shared, so they can name a released version. The release PR,
 which an agent can prepare:
 
 1. Sets `version` to the new version, chosen by the markers above.

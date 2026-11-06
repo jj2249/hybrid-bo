@@ -148,21 +148,10 @@ def test_load_run_after_save_run_gives_the_run_back(method, tmp_path):
     assert_same(round_trip(run, tmp_path), run)
 
 
-def test_a_saved_run_holds_its_artifact(tmp_path):
-    """A saved run's JSON has the run's artifact under `artifact`, and loading gives
-    it back."""
-    run = ex.standard_bo(np.random.default_rng(0))
-
-    path = hb.save_run(run, tmp_path / "run.json")
-
-    assert json.loads(path.read_text())["artifact"] == run.artifact
-    assert hb.load_run(path).artifact == run.artifact
-
-
 def test_save_and_load_keep_partial_runs_and_empty_arrays(tmp_path):
     """A run that failed at its first point (no evaluated points) round-trips too,
     with its arrays' shapes."""
-    run = hb.Run(dataset_of(0), artifact={"method": "m"}, method="m")
+    run = hb.Run(dataset_of(0), method="m")
 
     assert_same(round_trip(run, tmp_path), run)
 
@@ -220,12 +209,7 @@ def test_save_and_load_keep_every_kind_of_gp_parameter(tmp_path):
             for g in (gp, ard)
         )
     ]
-    run = hb.Run(
-        dataset_of(2),
-        artifact={"type": "an artifact entry"},
-        method="m",
-        surrogates=surrogates,
-    )
+    run = hb.Run(dataset_of(2), method="m", surrogates=surrogates)
 
     assert_same(round_trip(run, tmp_path), run)
 
@@ -237,7 +221,7 @@ def test_an_empty_array_in_an_optional_field_loads_with_its_shape(tmp_path):
     dataset = dataclasses.replace(
         dataset_of(3), x=np.zeros((3, 0)), x_oracle=np.zeros((3, 0))
     )
-    run = hb.Run(dataset, artifact={}, method="m")
+    run = hb.Run(dataset, method="m")
 
     assert_same(round_trip(run, tmp_path), run)
 
@@ -285,7 +269,7 @@ def test_save_and_load_keep_every_kind_of_method_settings(settings, tmp_path):
     """A run's settings round-trip whole and of the right types: each approximation
     with its own settings (SoftSAA's temperature), LCB with its factor, and a custom
     solver."""
-    run = hb.Run(dataset_of(0), {"method": "m"}, "m", settings=settings)
+    run = hb.Run(dataset_of(0), "m", settings=settings)
 
     loaded = round_trip(run, tmp_path)
 
@@ -321,7 +305,7 @@ def test_load_rejects_a_file_that_is_not_a_run_of_this_version(change, tmp_path)
     """A run saved by an older version, with a field `Run` no longer has or without
     one it needs, raises `RunFormatError`, not an error from inside the loader."""
     # Save a run, then change its fields
-    path = hb.save_run(hb.Run(dataset_of(0), {}, "m"), tmp_path / "run.json")
+    path = hb.save_run(hb.Run(dataset_of(0), "m"), tmp_path / "run.json")
     path.write_text(json.dumps(change(json.loads(path.read_text()))))
 
     with pytest.raises(hb.errors.RunFormatError, match="of this version"):
@@ -331,8 +315,8 @@ def test_load_rejects_a_file_that_is_not_a_run_of_this_version(change, tmp_path)
 def test_save_runs_and_load_runs_keep_the_runs_of_each_label(tmp_path):
     """A list of runs per label loads back as it was saved, in order."""
     runs = {
-        "a": [hb.Run(dataset_of(1), {}, "m"), hb.Run(dataset_of(2), {}, "m")],
-        "b": [hb.Run(dataset_of(3), {}, "m")],
+        "a": [hb.Run(dataset_of(1), "m"), hb.Run(dataset_of(2), "m")],
+        "b": [hb.Run(dataset_of(3), "m")],
     }
 
     loaded = hb.load_runs(hb.save_runs(runs, tmp_path / "study"))
@@ -343,7 +327,7 @@ def test_save_runs_and_load_runs_keep_the_runs_of_each_label(tmp_path):
 def test_save_runs_takes_an_empty_folder_and_refuses_any_other(tmp_path):
     """A script can make its folder before its runs start, but `save_runs` never mixes
     runs into an earlier study."""
-    runs = {"a": [hb.Run(dataset_of(1), {}, "m")]}
+    runs = {"a": [hb.Run(dataset_of(1), "m")]}
 
     # The empty folder of `tmp_path` is fine, and then it holds a study
     hb.save_runs(runs, tmp_path)
@@ -390,5 +374,5 @@ def test_save_run_refuses_an_existing_file(tmp_path):
     path.write_text("{}")
 
     with pytest.raises(FileExistsError):
-        hb.save_run(hb.Run(dataset_of(0), {}, "m"), path)
+        hb.save_run(hb.Run(dataset_of(0), "m"), path)
     assert path.read_text() == "{}"
