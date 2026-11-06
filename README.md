@@ -11,11 +11,11 @@ The library fits GPs and solves one iteration of BO. You write the loop.
 ## Install
 
 ```bash
-pip install "hybrid-bo[plots] @ git+https://github.com/jj2249/hybrid-bo.git"
+pip install "hybrid-bo[plots] @ git+https://github.com/jj2249/hybrid-bo.git@v0.7.0"
 ```
 
-`plots` adds matplotlib. Add `@<commit>` to the URL to pin a version: `v0.6.0`, the last
-release, has the old API that this README doesn't describe.
+`plots` adds matplotlib. The tag fixes the version, so the library can't change under your
+work.
 
 To work on the library, install [pixi](https://pixi.sh):
 
