@@ -14,31 +14,13 @@ import numpy as np
 
 from hybrid_bo.dataset import Dataset
 from hybrid_bo.errors import RootFindingError
-from hybrid_bo.problem import Problem, Symbolic, System, lhs_points
-from hybrid_bo.solvers import RootProblem, find_root
+from hybrid_bo.problem import Problem, lhs_points
+from hybrid_bo.solvers import RootProblem
+from hybrid_bo.utils import Symbolic
 
 # Runs the system at u (N,) and returns the measured variables (P,) in the order of
 # `system.measured`
 Measure = Callable[[np.ndarray, np.random.Generator], np.ndarray]
-
-
-def _root_finding_problem(system: System) -> RootProblem:
-    """The root-finding problem: `g` for the unmeasured states, with u and the measured
-    variables as its parameters, in that order."""
-    # Every state as a symbol: the unmeasured ones are unknowns, the measured parameters
-    w = Symbolic.sym("w", len(system.unmeasured))
-    u = Symbolic.sym("u", system.n_u)
-    measured = Symbolic.sym("measured", system.n_y)
-    symbols = dict(zip(system.unmeasured, cas.vertsplit(w), strict=True))
-    symbols |= dict(zip(system.measured, cas.vertsplit(measured), strict=True))
-    states = cas.vertcat(*(symbols[var] for var in system.states))
-
-    residual = system.g(states[: system.n_x], states[system.n_x :], u)
-    return RootProblem(
-        cas.Function("known_equations", [w, cas.vertcat(u, measured)], [residual]),
-        np.array([var.lower for var in system.unmeasured]),
-        np.array([var.upper for var in system.unmeasured]),
-    )
 
 
 def reconstruct_states(
@@ -78,9 +60,28 @@ def reconstruct_states(
         )
         raise ValueError(msg)
 
-    # The root-finding problem at each row, noting the rows that fail. A value that
-    # isn't finite fails too: with no unmeasured states nothing would be solved
-    root_finding_problem = _root_finding_problem(system)
+    # The root-finding problem: `g` for the unmeasured states, with u and the measured
+    # variables as its parameters, in that order. Every state is a symbol: the unmeasured
+    # ones are unknowns, the measured ones parameters
+    w = Symbolic.sym("w", len(system.unmeasured))
+    u_symbol = Symbolic.sym("u", system.n_u)
+    measured_symbol = Symbolic.sym("measured", system.n_y)
+    symbols = dict(zip(system.unmeasured, cas.vertsplit(w), strict=True))
+    symbols |= dict(zip(system.measured, cas.vertsplit(measured_symbol), strict=True))
+    state_symbols = cas.vertcat(*(symbols[var] for var in system.states))
+    residual = system.g(
+        state_symbols[: system.n_x], state_symbols[system.n_x :], u_symbol
+    )
+    root_finding_problem = RootProblem(
+        cas.Function(
+            "known_equations", [w, cas.vertcat(u_symbol, measured_symbol)], [residual]
+        ),
+        np.array([var.lower for var in system.unmeasured]),
+        np.array([var.upper for var in system.unmeasured]),
+    )
+
+    # Solve it at each row, noting the rows that fail. A value that isn't finite fails
+    # too: with no unmeasured states nothing would be solved
     states: list[np.ndarray] = []
     failed: list[int] = []
     for row, (u_point, measured_point) in enumerate(zip(u, measured, strict=True)):
@@ -90,7 +91,7 @@ def reconstruct_states(
                 msg = f"Row {row} holds a value that isn't finite"
                 raise RootFindingError(msg)
             p = np.concatenate([u_point, measured_point])
-            root = find_root(root_finding_problem, p, starts, tol)
+            root = root_finding_problem.solve(p, starts, tol)
             values = dict(zip(system.unmeasured, root, strict=True))
             values |= dict(zip(system.measured, measured_point, strict=True))
             states.append(np.array([values[var] for var in system.states]))

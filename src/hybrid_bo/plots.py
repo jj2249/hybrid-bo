@@ -5,7 +5,7 @@ The library's look is the matplotlib style `default.mplstyle`: call
 """
 
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import casadi as cas
 import numpy as np
@@ -13,15 +13,14 @@ import numpy as np
 from hybrid_bo.dataset import Dataset
 from hybrid_bo.errors import RootFindingError
 from hybrid_bo.gp import FittedGP
-from hybrid_bo.hybrid_model import DeterministicEquivalent
-from hybrid_bo.problem import Symbolic
-from hybrid_bo.solvers import NLP, RootProblem, Solution, find_root
-from hybrid_bo.utils import unscale
+from hybrid_bo.hybrid_problem import HybridNLP
+from hybrid_bo.solvers import NLP, RootProblem
+from hybrid_bo.utils import Symbolic
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
 
-# `acquisition_on_grid` solves the equations at each grid point to this
+# `objective_on_grid` solves the equations at each grid point to this
 _GRID_TOLERANCE = 1e-8
 
 
@@ -67,8 +66,8 @@ def surrogate(fitted: FittedGP, lower: float, upper: float, ax: "Axes") -> "Axes
         x, mean - 2 * std, mean + 2 * std, color=drawn.get_color(), alpha=0.2
     )
     ax.scatter(
-        unscale(fitted.x_scaler, fitted.X),
-        unscale(fitted.y_scaler, fitted.Y[:, np.newaxis]),
+        fitted.x_scaler.unscale(fitted.X),
+        fitted.y_scaler.unscale(fitted.Y[:, np.newaxis]),
         color="k",
         label="points",
     )
@@ -76,85 +75,86 @@ def surrogate(fitted: FittedGP, lower: float, upper: float, ax: "Axes") -> "Axes
     return ax
 
 
-def acquisition_on_grid(
-    problem: NLP,
-    solution: Solution,
+def objective_on_grid(
+    problem: NLP | HybridNLP,
+    solution: tuple[Any, ...],
     u: np.ndarray,
 ) -> tuple[np.ndarray, tuple[Dataset, ...]]:
-    """The acquisition problem over a grid of points nobody measured, to draw what the
-    solver minimized: the acquisition value at each row of u (n, N) and, for hybrid BO, one
+    """The problem over a grid of points nobody measured, to draw what the solver
+    minimized: the objective at each row of u (n, N) and, for a `HybridNLP`, one
     `Dataset` per scenario, of the states and f under that scenario at each row of u.
+    `solution` is what `problem.solve` returned.
 
     A `Dataset` of the system can't give this: it holds only the points that were
     measured, and the real system's states, not the GPs' prediction of them.
 
     Standard BO's acquisition is analytic, so it has no scenarios. With u fixed, hybrid
-    BO's constraints are a square system in the scenario states, which `find_root` solves point
-    by point outwards from `solution`, each from the nearest point solved, to stay on the
+    BO's constraints are a square system in the scenario states, which `RootProblem.solve` solves
+    point by point outwards from `solution`, each from the nearest point solved, to stay on the
     branch the optimizer chose. A point fails if the residual norm is above
     `_GRID_TOLERANCE` or a state is outside its bounds, and is NaN.
     """
-    if not isinstance(problem, DeterministicEquivalent):
-        return -problem.f.map(len(u))(u.T).full().ravel(), ()
+    if not isinstance(problem, HybridNLP):
+        return problem.f.map(len(u))(u.T).full().ravel(), ()
 
     # The constraints as a root problem: the states are unknowns and u a parameter
-    n_u = problem.n_u
-    assert problem.g is not None
-    stored = solution.w[n_u:]
+    nlp, n_u = problem.nlp, problem.n_u
+    assert nlp.g is not None
+    u_solved, x_solved, y_solved, _ = solution
+    stored = problem.pack(u_solved, x_solved, y_solved)[n_u:]
     states, u_fixed = Symbolic.sym("v", len(stored)), Symbolic.sym("u", n_u)
     equations = cas.Function(
-        "scenario_states", [states, u_fixed], [problem.g(cas.vertcat(u_fixed, states))]
+        "scenario_states", [states, u_fixed], [nlp.g(cas.vertcat(u_fixed, states))]
     )
-    root_problem = RootProblem(equations, problem.lower[n_u:], problem.upper[n_u:])
+    root_problem = RootProblem(equations, nlp.lower[n_u:], nlp.upper[n_u:])
 
     # Outwards from the stored solution, each point from the nearest one solved
-    solved_u, solved_states = [solution.w[:n_u]], [stored]
+    solved_u, solved_states = [u_solved], [stored]
     values = np.full(len(u), np.nan)
     f = np.full((len(u), problem.n_scenarios), np.nan)
     x = np.full((len(u), problem.n_scenarios, problem.n_x), np.nan)
-    y = np.full((len(u), *problem.scenario_values(solution.w)[1].shape), np.nan)
+    y = np.full((len(u), *y_solved.shape), np.nan)
     for i in np.argsort(np.linalg.norm(u - solved_u[0], axis=1)):
         nearest = np.argmin(np.linalg.norm(np.array(solved_u) - u[i], axis=1))
         start = solved_states[nearest][np.newaxis]
         try:
-            root = find_root(root_problem, u[i], start, _GRID_TOLERANCE)
+            root = root_problem.solve(u[i], start, _GRID_TOLERANCE)
         except RootFindingError:
             continue
         w = np.concatenate([u[i], root])
-        values[i] = float(problem.f(w))
+        values[i] = float(nlp.f(w))
         f_i, y_i = problem.scenario_values(w)
         f[i], y[i], x[i] = f_i.full().ravel(), y_i.full(), problem.unpack(w)[1]
         solved_u.append(u[i])
         solved_states.append(root)
 
     scenarios = range(problem.n_scenarios)
-    return problem.acquisition.from_objective(values), tuple(
-        Dataset(u, x[:, s], y[:, s], f[:, s]) for s in scenarios
-    )
+    return values, tuple(Dataset(u, x[:, s], y[:, s], f[:, s]) for s in scenarios)
 
 
 def iteration(
-    problem: NLP,
-    solution: Solution,
+    problem: NLP | HybridNLP,
+    solution: tuple[Any, ...],
     fitted: FittedGP,
     dataset: Dataset,
     axes: "Sequence[Axes]",
 ) -> None:
     """Draws one iteration of one decision variable on `axes`: the state before the trial
-    point `solution`, over the start bounds of u, as `acquisition_on_grid` gives it, so the
+    point `solution`, over the start bounds of u, as `objective_on_grid` gives it, so the
     panels show the function the solver minimized. `dataset` holds the points before the
     trial point.
 
-    Standard BO has two panels, its GP of f and the acquisition. Hybrid BO has three:
+    Standard BO has two panels, its GP of f and the objective. Hybrid BO has three:
     `fitted`, the GP of an unknown state of u alone, then f under the scenarios, their
-    weighted mean and std, and the acquisition. A point that wasn't solved is a gap.
+    weighted mean and std, and the objective. A point that wasn't solved is a gap.
 
     Raises `ValueError` if there isn't one decision variable, or one axes per panel.
     """
     # The checks
     panels = list(axes)
-    is_hybrid = isinstance(problem, DeterministicEquivalent)
-    n_u = problem.n_u if is_hybrid else len(problem.lower)
+    is_hybrid = isinstance(problem, HybridNLP)
+    nlp = problem.nlp if is_hybrid else problem
+    n_u = problem.n_u if is_hybrid else len(nlp.lower)
     if n_u != 1:
         msg = f"The panels draw one decision variable, got {n_u}"
         raise ValueError(msg)
@@ -162,13 +162,13 @@ def iteration(
         msg = f"Standard BO draws 2 panels and hybrid BO 3, got {len(panels)} axes"
         raise ValueError(msg)
 
-    # The GP, in its panel's color, and the acquisition over the start bounds of u
-    assert problem.start_bounds is not None
-    lower, upper = (float(bound[0]) for bound in problem.start_bounds)
+    # The GP, in its panel's color, and the objective over the start bounds of u
+    assert nlp.start_bounds is not None
+    lower, upper = (float(bound[0]) for bound in nlp.start_bounds)
     surrogate(fitted, lower, upper, panels[0])
     color = panels[0].get_lines()[0].get_color()
     u = np.linspace(lower, upper, 201)
-    acquisition, scenarios = acquisition_on_grid(problem, solution, u[:, np.newaxis])
+    objective, scenarios = objective_on_grid(problem, solution, u[:, np.newaxis])
 
     # f under the scenarios, with the points so far
     if is_hybrid:
@@ -180,9 +180,9 @@ def iteration(
         panels[1].scatter(dataset.u[:, 0], dataset.f, color="k", label="points")
         panels[1].set_ylabel("f")
 
-    # The acquisition, and the trial point on every panel
-    panels[-1].plot(u, acquisition, color=color, label="acquisition")
-    panels[-1].set(xlabel="u", ylabel="acquisition")
+    # The objective, and the trial point on every panel
+    panels[-1].plot(u, objective, color=color, label="objective")
+    panels[-1].set(xlabel="u", ylabel="objective")
     for ax in panels:
-        ax.axvline(solution.w[0], color=color, linestyle=":", label="trial point")
+        ax.axvline(solution[0][0], color=color, linestyle=":", label="trial point")
         ax.legend(fontsize="small")

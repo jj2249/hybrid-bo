@@ -4,8 +4,8 @@ Bayesian optimization of partially known systems with hybrid models
 ([arXiv 2603.11199](https://arxiv.org/abs/2603.11199)): minimize `f(x, y, u)` subject to
 known equations `0 = g(x, y, u)` and unknown equations `y = h(x, u)`, which a GP learns.
 
-Keep it small. It has one maintainer. The library fits GPs with CasADi and solves one
-iteration of hybrid or standard BO; the user writes the loop (see README.md). Prefer
+Keep it small. It has one maintainer. The library fits GPs with CasADi and solves a
+hybrid NLP or one iteration of hybrid or standard BO; the user writes the loop (see README.md). Prefer
 deleting code to adding it, and report the net lines of a change.
 
 ```bash
@@ -33,8 +33,8 @@ Decisions to keep, so they aren't undone:
   differences.
 - GPs are data: frozen dataclasses from a closed set of kernels, each holding its own math
   as methods. No custom kernels.
-- A default may set how hard we search, never what we search for: `acquisition`,
+- A default may set how hard we search, never what we search for: `objective`,
   `temperature` and `noise_std` are required.
 - The library has no loop or runner. The user writes the loop and the measurement.
-- Figures evaluate the acquisition problem over a grid from the stored solution, so they
+- Figures evaluate the problem over a grid from the stored solution, so they
   show what was minimized, on the solver's branch.

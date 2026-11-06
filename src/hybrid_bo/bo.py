@@ -1,25 +1,25 @@
-"""Acquisition functions, and standard BO's acquisition problem.
+"""Bayesian optimization: the acquisition functions, and standard BO's acquisition problem.
 
 Standard BO's EI is exact: the GP gives the mean and standard deviation of f in closed
 form (`expected_improvement`), so `standard_acquisition` minimizes it directly.
 
 Hybrid BO has no closed form, because f depends on the GPs' prediction through the
-equations, so `hybrid_deterministic_equivalent` averages over scenarios: a sample-average
-approximation of an acquisition function. `EI` and `SoftEI` are the functions it can
-average, giving SAA-EI and SAA-SoftEI. `SoftEI` reformulates the acquisition function; the
+equations, so a `HybridNLP` averages over scenarios: a sample-average approximation of an
+acquisition function. `EI` and `SoftEI` are its objectives for BO, giving SAA-EI and
+SAA-SoftEI. `SoftEI` reformulates the acquisition function; the
 sample average is the same for both.
 """
 
-from dataclasses import dataclass
+from dataclasses import KW_ONLY, dataclass
 from typing import Any
 
 import casadi as cas
 import numpy as np
 
 from hybrid_bo.gp import FittedGP
-from hybrid_bo.problem import Problem, Symbolic, start_bounds
+from hybrid_bo.problem import Problem, start_bounds
 from hybrid_bo.solvers import NLP
-from hybrid_bo.utils import log_softplus
+from hybrid_bo.utils import Symbolic, log_softplus
 
 # Added to the standard deviation in EI, so a zero std doesn't divide by zero
 _EI_STD_EPSILON = 1e-10
@@ -27,20 +27,19 @@ _EI_STD_EPSILON = 1e-10
 
 @dataclass(frozen=True)
 class EI:
-    """Expected improvement, as hybrid BO averages it over scenarios: SAA-EI (paper,
-    Problems 8 and 9). `expected_improvement` is the closed form standard BO uses."""
+    """Expected improvement below the incumbent, as hybrid BO averages it over scenarios:
+    SAA-EI (paper, Problems 8 and 9). `expected_improvement` is the closed form standard
+    BO uses."""
 
-    def objective(self, f: Any, w: np.ndarray, incumbent: float) -> Any:
+    incumbent: float
+
+    def __call__(self, f: Any, w: np.ndarray) -> Any:
         """-SAA-EI of f (S, 1) with weights w (S,): the weighted average of
         min(f_s - incumbent, 0)."""
-        return Symbolic(w).T @ cas.fmin(f - incumbent, 0)
-
-    def from_objective(self, value: np.ndarray) -> np.ndarray:
-        """EI from values of the objective, which is -EI."""
-        return -value
+        return Symbolic(w).T @ cas.fmin(f - self.incumbent, 0)
 
 
-@dataclass(frozen=True, kw_only=True)
+@dataclass(frozen=True)
 class SoftEI:
     """EI with each scenario's improvement max(a, 0) replaced by the smooth maximum
     tau log(1 + exp(a / tau)) at the temperature tau, and the problem minimizing -log of
@@ -50,6 +49,8 @@ class SoftEI:
     and finite.
     """
 
+    incumbent: float
+    _: KW_ONLY
     temperature: float
 
     def __post_init__(self) -> None:
@@ -58,17 +59,13 @@ class SoftEI:
             msg = f"SoftEI temperature must be finite and > 0, got {self.temperature}"
             raise ValueError(msg)
 
-    def objective(self, f: Any, w: np.ndarray, incumbent: float) -> Any:
+    def __call__(self, f: Any, w: np.ndarray) -> Any:
         """-log SAA-SoftEI of f (S, 1) with weights w (S,): -log of the weighted average
         of tau log(1 + exp(a_s / tau)) with a_s = incumbent - f_s, as a logsumexp over
         the scenarios."""
         tau = self.temperature
-        log_smooth = np.log(tau) + log_softplus((incumbent - f) / tau)
+        log_smooth = np.log(tau) + log_softplus((self.incumbent - f) / tau)
         return -cas.logsumexp(Symbolic(np.log(w)) + log_smooth)
-
-    def from_objective(self, value: np.ndarray) -> np.ndarray:
-        """SoftEI from values of the objective, which is -log SoftEI."""
-        return np.exp(-value)
 
 
 def expected_improvement(mean: Any, std: Any, incumbent: float) -> Any:

@@ -8,19 +8,16 @@ time, and each result is mapped to the keys of the stored JSON to compare.
 """
 
 import json
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from functools import partial
 from pathlib import Path
 
 import illustrative_example as ex
 import numpy as np
 import pytest
-from oracle_helper import oracle_incumbents, oracle_states
 from plain_loop import evaluate_points, hybrid_loop, standard_loop
 
 import hybrid_bo as hb
-from hybrid_bo.hybrid_model import ScenarioSolution
-from hybrid_bo.solvers import Solution
 
 BASELINE_DIR = Path(__file__).parent / "data" / "regression"
 RTOL, ATOL = 1e-6, 1e-8
@@ -29,11 +26,13 @@ RTOL, ATOL = 1e-6, 1e-8
 SEED, N_ITERATIONS = 0, 2
 
 # What a run of a method gives: the dataset, and each iteration's solution
-Result = tuple[hb.Dataset, Sequence[Solution]]
+Result = tuple[hb.Dataset, Sequence[tuple]]
 
 
 def run_hybrid_bo(
-    acquisition: hb.EI | hb.SoftEI, measure: hb.Measure, rng: np.random.Generator
+    acquisition: Callable[[float], hb.EI | hb.SoftEI],
+    measure: hb.Measure,
+    rng: np.random.Generator,
 ) -> Result:
     """Hybrid BO: the initial points, the scenarios once, then the loop."""
     points = hb.lhs_points(ex.system.u, ex.N_INITIAL, rng)
@@ -85,10 +84,10 @@ def run_uniform_sampling(measure: hb.Measure, rng: np.random.Generator) -> Resul
 
 # The illustrative example's methods, with their labels in the stored results
 METHODS = {
-    "hybrid_bo": partial(run_hybrid_bo, hb.EI()),
+    "hybrid_bo": partial(run_hybrid_bo, hb.EI),
     "hybrid_bo_soft": partial(
         run_hybrid_bo,
-        hb.SoftEI(temperature=50e-3),
+        partial(hb.SoftEI, temperature=50e-3),
     ),
     "standard_bo": run_standard_bo,
     "latin_hypercube_sampling": run_latin_hypercube_sampling,
@@ -98,25 +97,15 @@ METHODS = {
 
 def as_baseline_columns(
     dataset: hb.Dataset,
-    states: np.ndarray,
-    solutions: Sequence[Solution],
+    solutions: Sequence[tuple],
 ) -> dict[str, np.ndarray]:
-    """The run under the `ResultsBO` keys: they store y inside x, f as a column, and
-    split every array into the initial points and the rest."""
-    f_oracle = np.array(
-        [
-            ex.problem.f(row[:1], row[1:], u).full().item()
-            for row, u in zip(states, dataset.u, strict=True)
-        ]
-    )
+    """The run under the stored keys: they store y inside x, f as a column, and split
+    every array into the initial points and the rest."""
     columns = {
         "u": dataset.u,
         "x": np.column_stack([dataset.x, dataset.y]),
         "f": dataset.f[:, np.newaxis],
         "incumbents": hb.incumbents(dataset)[:, np.newaxis],
-        "x_no_noise": states,
-        "f_no_noise": f_oracle[:, np.newaxis],
-        "incumbents_no_noise": oracle_incumbents(dataset.f, f_oracle)[:, np.newaxis],
     }
     n = ex.N_INITIAL
     baseline = {
@@ -128,26 +117,21 @@ def as_baseline_columns(
     # The BO methods' acquisition solutions: the value per iteration, and hybrid BO's
     # scenario states (iteration, scenario, state)
     if solutions:
-        baseline["acquisition_values"] = np.array([s.value for s in solutions])
-    scenario_solutions = [s for s in solutions if isinstance(s, ScenarioSolution)]
+        baseline["acquisition_values"] = np.array([s[-1] for s in solutions])
+    scenario_solutions = [s for s in solutions if len(s) == 4]
     if scenario_solutions:
-        baseline["acquisition_x"] = np.stack([s.x for s in scenario_solutions])
-        baseline["acquisition_y"] = np.stack([s.y for s in scenario_solutions])
+        baseline["acquisition_x"] = np.stack([s[1] for s in scenario_solutions])
+        baseline["acquisition_y"] = np.stack([s[2] for s in scenario_solutions])
     return baseline
 
 
 def run_method(method: str) -> dict[str, np.ndarray]:
-    """Runs one run of a method as the experiment does and returns it under the
-    `ResultsBO` keys."""
+    """Runs one run of a method as the experiment does and returns it under the stored
+    keys."""
     # As in the experiment: one generator per run, initial points drawn from it
     rng = np.random.default_rng(SEED).spawn(1)[0]
     dataset, solutions = METHODS[method](ex.measure, rng)
-
-    # The oracle values for the columns that score the run, from a generator of their own
-    states = oracle_states(
-        ex.problem, ex.oracle, dataset.u, np.random.default_rng(SEED)
-    )
-    return as_baseline_columns(dataset, states, solutions)
+    return as_baseline_columns(dataset, solutions)
 
 
 # `parametrize` runs the test once per method, each as its own test case. The other

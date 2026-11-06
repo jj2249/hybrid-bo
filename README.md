@@ -11,7 +11,7 @@ The library fits GPs and solves one iteration of BO. You write the loop.
 ## Install
 
 ```bash
-pip install "hybrid-bo[plots] @ git+https://github.com/jj2249/hybrid-bo.git@v0.8.0"
+pip install "hybrid-bo[plots] @ git+https://github.com/jj2249/hybrid-bo.git@v0.9.0"
 ```
 
 `plots` adds matplotlib. The tag fixes the version, so the library can't change under your
@@ -80,20 +80,21 @@ w = np.full(25, 1 / 25)
 
 for _ in range(10):
     fitted = hb.fit_surrogate(system, dataset, gp=gp, rng=rng)
-    equivalent = hb.hybrid_deterministic_equivalent(
+    hybrid_nlp = hb.HybridNLP(
         problem,
         fitted,
         z,
         w,
-        hb.incumbents(dataset)[-1],
-        acquisition=hb.EI(),  # or hb.SoftEI(temperature=...)
+        objective=hb.EI(
+            hb.incumbents(dataset)[-1]
+        ),  # or hb.SoftEI(..., temperature=...)
     )
-    solution = equivalent.solve(rng)
-    dataset = hb.extend(dataset, evaluate(solution.u, rng))
+    u, x, y, value = hybrid_nlp.solve(rng)
+    dataset = hb.extend(dataset, evaluate(u, rng))
 ```
 
 **Standard BO** fits one GP to the objective, so EI is exact and needs no scenarios.
-Its variables are just `u`, so `solution.w` is the trial point:
+Its variables are just `u`, so `solve` gives the trial point and the objective:
 
 ```python
 dataset = initial
@@ -101,8 +102,20 @@ dataset = initial
 for _ in range(10):
     fitted = gp.fit(dataset.u, dataset.f, rng)
     standard = hb.standard_acquisition(problem, fitted, hb.incumbents(dataset)[-1])
-    solution = standard.solve(rng)
-    dataset = hb.extend(dataset, evaluate(solution.w, rng))
+    u, value = standard.solve(rng)
+    dataset = hb.extend(dataset, evaluate(u, rng))
+```
+
+**Without BO**, a `HybridNLP` optimizes the hybrid model itself. `objective` is any function
+of f under the scenarios and the weights. `hb.mean` gives the expected objective, and over
+one scenario at `z = 0`, the nominal objective:
+
+```python
+fitted = hb.fit_surrogate(system, dataset, gp=gp, rng=rng)
+nominal = hb.HybridNLP(
+    problem, fitted, np.zeros((1, system.n_y)), [1.0], objective=hb.mean
+)
+u, x, y, value = nominal.solve(rng)
 ```
 
 **A baseline** is points through the same steps, from `hb.lhs_points` or
@@ -132,7 +145,7 @@ dataset = hb.load_dataset("dataset.npz")
 Plots draw on the axes you give them: `hb.plots.convergence` and `hb.plots.regret` take
 incumbent curves per label, `hb.plots.surrogate` draws a fitted GP of one input, and
 `hb.plots.iteration` draws what an iteration minimized, from
-`hb.plots.acquisition_on_grid`, which gives the acquisition over a grid
+`hb.plots.objective_on_grid`, which gives the objective over a grid
 of `u` and a `Dataset` per scenario.
 `examples/illustrative_example.py` compares hybrid and standard BO and draws both.
 `plt.style.use("hybrid_bo.default")` gives the library's look; change it as any matplotlib
