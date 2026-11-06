@@ -201,7 +201,9 @@ uses for starts; `initial_points` is the `Var` front end for experiments.
 ### Evaluation (`evaluation.py`, `oracle.py`, `dataset.py`, `errors.py`)
 
 ```python
-Measure = Callable[[np.ndarray, np.random.Generator], np.ndarray]  # u (N,) -> measured (P,)
+Measure = Callable[
+    [np.ndarray, np.random.Generator], np.ndarray
+]  # u (N,) -> measured (P,)
 
 
 def measure_oracle(
