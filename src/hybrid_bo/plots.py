@@ -141,10 +141,12 @@ def iteration(
 ) -> None:
     """Draws one iteration of one decision variable on `axes`: the state before the trial
     point `solution`, over the start bounds of u, as `acquisition_on_grid` gives it, so the
-    panels show the function the solver minimized. `dataset` holds the points before the trial point.
+    panels show the function the solver minimized. `dataset` holds the points before the
+    trial point.
 
-    Standard BO has two panels, its GP of f and EI. Hybrid BO has three: `fitted`, the GP of an unknown state of u alone, then f under the scenarios,
-    their weighted mean and std, and EI. A point that wasn't solved is a gap.
+    Standard BO has two panels, its GP of f and EI. Hybrid BO has three: `fitted`, the GP
+    of an unknown state of u alone, then f under the scenarios, their weighted mean and
+    std, and EI. A point that wasn't solved is a gap.
 
     Raises `ValueError` if there isn't one decision variable, or one axes per panel.
     """

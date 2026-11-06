@@ -190,3 +190,27 @@ def test_find_root_with_no_variables_is_empty():
     problem = RootProblem(SQUARE, np.zeros(0), np.zeros(0))
 
     assert find_root(problem, np.array([1.0]), np.zeros((1, 0)), 1e-10).shape == (0,)
+
+
+def test_find_root_is_quiet_when_every_start_diverges(capfd):
+    """A start that fails is expected, so it prints nothing, even through infinity."""
+    w, p = cas.SX.sym("w"), cas.SX.sym("p")
+    residual = cas.Function("residual", [w, p], [cas.exp(w) - p])
+    problem = RootProblem(residual, np.array([-np.inf]), np.array([np.inf]))
+
+    with pytest.raises(RootFindingError):
+        find_root(problem, np.array([-1.0]), np.array([[0.0], [2.0]]), 1e-10)
+
+    assert capfd.readouterr().err == ""
+
+
+def test_find_root_refuses_equations_that_do_not_determine_the_variables():
+    """CasADi refuses a structurally singular system, and that is a `RootFindingError`
+    like any other failure to find a root."""
+    w, p = cas.SX.sym("w"), cas.SX.sym("p")
+    problem = RootProblem(
+        cas.Function("residual", [w, p], [p]), np.array([-1.0]), np.array([1.0])
+    )
+
+    with pytest.raises(RootFindingError, match="singular"):
+        find_root(problem, np.array([0.0]), np.array([[0.0]]), 1e-10)

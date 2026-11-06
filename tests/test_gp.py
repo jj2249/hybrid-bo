@@ -162,8 +162,10 @@ def test_inputs_of_different_widths_raise():
     fitted = gp.fit(X_train, Y_train, np.random.default_rng(0))
 
     # Check: twice the training columns, then half of them
-    with pytest.raises(ValueError, match="X1 has 4 inputs and X2 has 2"):
+    with pytest.raises(ValueError, match="X has 4 inputs and the GP has 2"):
         fitted.predict(np.zeros((3, 4)))
+    with pytest.raises(ValueError, match="X has 1 inputs and the GP has 2"):
+        fitted.predict(np.zeros((3, 1)))
     with pytest.raises(ValueError, match="X1 has 2 inputs and X2 has 1"):
         Matern52(0.3).covariance(cas.DM.zeros(3, 2), cas.DM.zeros(5, 1))
 
@@ -426,3 +428,9 @@ def test_fit_returns_a_new_fitted_gp_and_leaves_the_gp_alone():
     gp.fit(X_train, Y_train, np.random.default_rng(0))
 
     assert gp.kernel == Matern52()
+
+
+def test_predict_rejects_points_that_are_not_finite(fitted):
+    """NaN or infinity in X would give a plausible mean with a NaN std."""
+    with pytest.raises(ValueError, match="finite points"):
+        fitted.predict(np.array([[np.nan, 0.0]]))

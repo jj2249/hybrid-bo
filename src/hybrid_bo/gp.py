@@ -71,6 +71,7 @@ class Stationary(ABC):
     ard: bool = True
 
     def __post_init__(self) -> None:
+        """Raises `ValueError` for a lengthscale per input without `ard`."""
         if isinstance(self.lengthscale, tuple) and not self.ard:
             msg = f"A lengthscale per input needs ard=True, got {self!r}"
             raise ValueError(msg)
@@ -381,13 +382,19 @@ class FittedGP:
         mean and variance themselves are built in SX), returns two (n, 1) CasADi columns,
         for building acquisition problems.
 
-        Raises `ValueError` unless X is a 2-D numpy array or symbolic, with the columns of
-        the training inputs.
+        Raises `ValueError` unless X is a finite 2-D numpy array or symbolic, with the
+        columns of the training inputs.
         """
         # The checks
         is_numeric = not isinstance(X, cas.SX | cas.MX)
         if is_numeric and not (isinstance(X, np.ndarray) and X.ndim == 2):
             msg = f"predict needs a numpy X of shape (n_points, d), got {X!r}"
+            raise ValueError(msg)
+        if X.shape[1] != self.X.shape[1]:
+            msg = f"X has {X.shape[1]} inputs and the GP has {self.X.shape[1]}"
+            raise ValueError(msg)
+        if is_numeric and not np.isfinite(X).all():
+            msg = "predict needs finite points, but X holds NaN or infinity"
             raise ValueError(msg)
 
         # X in scaled units, as symbols, with the hyperparameters and data as constants.

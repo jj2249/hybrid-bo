@@ -65,8 +65,12 @@ class RootProblem:
     @cached_property
     def newton(self) -> cas.Function:
         """Newton's method on the residual: (start, p) -> w. Built once, on first use."""
-        # `find_root` checks every result itself
-        options = {"error_on_fail": False, "max_iter": _NEWTON_MAX_ITERATIONS}
+        # `find_root` checks every result itself, and a start that diverges is expected
+        options = {
+            "error_on_fail": False,
+            "max_iter": _NEWTON_MAX_ITERATIONS,
+            "show_eval_warnings": False,
+        }
         return cas.rootfinder("newton", "newton", self.residual, options)
 
 
@@ -143,14 +147,20 @@ def find_root(
     `tol` and that lies within the bounds. A start that fails is expected, so it is
     skipped. With no variables the root is empty and nothing is solved.
 
-    Raises `RootFindingError` if no start gives such a root.
+    Raises `RootFindingError` if no start gives such a root, or if the equations can't
+    determine the variables: CasADi refuses a structurally singular system.
     """
     if len(problem.lower) == 0:
         return np.zeros(0)
+    try:
+        newton = problem.newton
+    except RuntimeError as error:
+        msg = "The equations can't determine the variables: they are singular"
+        raise RootFindingError(msg) from error
 
     # The first start that converges to a root within the bounds wins
     for start in starts:
-        root = problem.newton(start, p).full().ravel()
+        root = newton(start, p).full().ravel()
         is_root = np.linalg.norm(problem.residual(root, p).full()) < tol
         if is_root and np.all(problem.lower <= root) and np.all(root <= problem.upper):
             return root

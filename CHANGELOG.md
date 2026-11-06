@@ -12,7 +12,8 @@
   and a `Dataset` per scenario. `hybrid_bo.evaluation` is now `hybrid_bo.reconstruction`.
 - **Breaking:** `reconstruct_states` solves with CasADi's Newton method instead of scipy's
   `fsolve`, which is no longer a dependency. With several roots in the bounds, it may find
-  a different one.
+  a different one. Known equations that can't determine the unmeasured states now raise
+  `RootFindingError` at every row, where `fsolve` could return an arbitrary value.
 - **Breaking:** Ctrl-C during IPOPT skips one start rather than stopping the solve.
 - **Breaking:** `hb.fit_gp(gp, X, Y, rng)` is `gp.fit(X, Y, rng)`, `predict(fitted, X)` is
   `fitted.predict(X)`, and `log_marginal_likelihood` is a method of `FittedGP`.
