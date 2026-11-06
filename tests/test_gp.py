@@ -17,6 +17,9 @@ from hybrid_bo.gp import (
     Scale,
     Scaler,
     Zero,
+    _params,
+    _with_values,
+    covariance,
     fit_gp,
     log_marginal_likelihood,
     predict,
@@ -123,7 +126,7 @@ def test_gp_checks():
     with pytest.raises(ValueError, match="noise_std"):
         GP(mean=Zero(), kernel=Matern52(), noise_std=-0.1)
     scaler = Scaler(np.ones(1), np.zeros(1))
-    with pytest.raises(ValueError, match=r"kernel\.lengthscale"):
+    with pytest.raises(ValueError, match=r"got Matern52\(lengthscale=Param"):
         FittedGP(
             GP(mean=Zero(), kernel=Matern52(), noise_std=0.0),
             X_train,
@@ -131,13 +134,83 @@ def test_gp_checks():
             scaler,
             scaler,
         )
-    with pytest.raises(ValueError, match="3 entries for 2 inputs"):
+    with pytest.raises(ValueError, match="lengthscale has 3 entries for 2 inputs"):
         fit_gp(
             GP(mean=Zero(), kernel=Matern52((0.1, 0.2, 0.3)), noise_std=0.0),
             X_train,
             Y_train,
             rng,
         )
+    with pytest.raises(ValueError, match="lengthscale has 1 entries for 2 inputs"):
+        fit_gp(
+            GP(mean=Zero(), kernel=Scale(Scale(Matern52((0.1,)))), noise_std=0.0),
+            X_train,
+            Y_train,
+            rng,
+        )
+
+
+def test_a_fitted_gp_rejects_a_param_whatever_the_width_of_its_inputs():
+    """A lengthscale with ARD is a `Param` left even with no input columns, where it has
+    no search entries."""
+    scaler = Scaler(np.ones(1), np.zeros(1))
+    with pytest.raises(ValueError, match="no Param left"):
+        FittedGP(
+            GP(mean=Zero(), kernel=Matern52(), noise_std=0.0),
+            np.zeros((2, 0)),
+            np.zeros(2),
+            scaler,
+            scaler,
+        )
+
+
+def test_inputs_of_different_widths_raise():
+    """A shared lengthscale can't hide inputs of different widths: CasADi would broadcast
+    a width that is a multiple of the other's, and return numbers."""
+    # Setup: a GP of two inputs with one fixed lengthscale
+    gp = GP(mean=Zero(), kernel=Matern52(0.3, ard=False), noise_std=0.0)
+    fitted = fit_gp(gp, X_train, Y_train, np.random.default_rng(0))
+
+    # Check: twice the training columns, then half of them
+    with pytest.raises(ValueError, match="X1 has 4 inputs and X2 has 2"):
+        predict(fitted, np.zeros((3, 4)))
+    with pytest.raises(ValueError, match="X1 has 2 inputs and X2 has 1"):
+        covariance(Matern52(0.3), cas.DM.zeros(3, 2), cas.DM.zeros(5, 1))
+
+
+def test_hyperparameters_are_fitted_output_scales_first():
+    """The search entries are each output scale, outermost first, then the lengthscale:
+    one per input with ARD, one without, and none for a fixed value."""
+    # Setup: an output scale at each level, and a lengthscale to fit
+    outer = Param(2.0, (1.0, 3.0))
+    inner = Param(1.0, (0.1, 10.0))
+    lengthscale = Param(0.5, (0.1, 1.0))
+
+    # Check: with ARD, without it, and with a fixed lengthscale
+    assert _params(Scale(Scale(Matern52(lengthscale), inner), outer), 2) == [
+        outer,
+        inner,
+        lengthscale,
+        lengthscale,
+    ]
+    assert _params(Scale(Matern52(lengthscale, ard=False), outer), 2) == [
+        outer,
+        lengthscale,
+    ]
+    assert _params(Scale(Scale(Matern52(0.3), 2.0), outer), 2) == [outer]
+
+
+def test_with_values_replaces_each_param_in_fit_order():
+    """Each `Param` takes its value in the order of `_params`, and fixed values stay."""
+    param = Param(1.0, (0.1, 10.0))
+
+    # An ARD lengthscale takes one value per input, a shared one a single value
+    kernel = Scale(Scale(Matern52(param), 1.5), param)
+    assert _with_values(kernel, [2.0, 0.3, 0.4], 2) == Scale(
+        Scale(Matern52((0.3, 0.4)), 1.5), 2.0
+    )
+    shared = Scale(Matern52(param, ard=False), param)
+    assert _with_values(shared, [2.0, 0.3], 2) == Scale(Matern52(0.3, ard=False), 2.0)
 
 
 # Fitting: the regression baselines pin the fitted parameters of the illustrative

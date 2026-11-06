@@ -166,12 +166,13 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   saving tags by name. `GP(mean, kernel, noise_std, jitter=1e-6)` (keyword-only) is the prior
   GP; `FittedGP(gp, X, Y, x_scaler, y_scaler)` the fitted GP, its `gp` with no
   `Param` left (checked), scaled data and scalers. `covariance(kernel, X1, X2)` and
-  `prior_mean(mean, X)` match on the type; the formulas are the cases' bodies. A
-  hyperhyperparameter is a field whose type hint admits `Param`; `_hyperparameters(node, n_inputs)`
-  lists them as (dotted path, value, entries or None) in fit order, a node's own
-  before those of the kernels it holds (so `Scale(Matern52())` fits outputscale,
-  then the lengthscales, as `default_gp` did: the baselines depend on that order),
-  and `_with_hyperparameters` sets them by path. A fitted value is a float, or a tuple of
+  `prior_mean(mean, X)` match on the type; the formulas are the cases' bodies. The
+  hyperparameters are `Scale`'s output scale and a stationary kernel's lengthscale, and
+  two functions match on the kernel to walk them: `_params(kernel, n_inputs)` gives one
+  `Param` per search entry in fit order, an output scale before the kernel it scales
+  (so `Scale(Matern52())` fits outputscale, then the lengthscales, as `default_gp` did:
+  the baselines depend on that order), and `_with_values(kernel, values, n_inputs)` sets
+  them, to symbols or numbers alike. A fitted value is a float, or a tuple of
   one per input for an ARD lengthscale; a fixed number applies to every input.
   `fit_gp(gp, X, Y, rng, ...) -> FittedGP` fits every `Param` (log ones in log
   space) by `solve_with_multistart` from `lhs` starts over the bounds; with no `Param`
@@ -181,7 +182,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   which `fit_gp` maximizes. Kernel hyperparameters are in scaled units; `noise_std` is a
   known noise in **measured** units, scaled by the output scaler's slope:
   `K = k(X, X) + ((noise_std * slope)**2 + jitter) I`. Hyperparameters in the fit are SX
-  slices put in the dataclass fields. `Scaler` with `minmax`/`standard`/`scale`/
+  scalars put in the dataclass fields. `Scaler` with `minmax`/`standard`/`scale`/
   `unscale`. The jitter defaults to 1e-6, a nugget: much smaller and the fit stalls
   once the inputs cluster (#107, DESIGN.md). After fitting, `fit_gp` warns if the
   condition number of that `K` at the kept values (numpy, scaled data) exceeds

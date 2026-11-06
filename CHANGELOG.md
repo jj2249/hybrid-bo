@@ -17,6 +17,11 @@
 - **Breaking:** `hb.plots.regret` and `hb.plots.convergence` take incumbent curves per
   label, plain arrays, not runs, and `hb.plots.iteration` takes `oracle=` in place of
   `measure=` (#223).
+- A `FittedGP` with a `Param` left shows the kernel's repr in its error, a lengthscale of
+  the wrong length is reported as `lengthscale has 3 entries for 2 inputs`, and
+  `hb.gp.covariance` and `hb.gp.predict` raise `ValueError` for it and for inputs of
+  different widths, where they raised CasADi's error or broadcast a one-entry tuple.
+  Results of valid inputs don't change (#231).
 - **Breaking:** The artifact is gone, so nothing records how a run was produced: no
   `Run.artifact`, `hb.run.run_artifact` or `hb.run.problem_artifact`. `Run.method` is a
   string the method passes in, `hb.bo.optimization_loop` takes `method` in place of

@@ -201,7 +201,9 @@ uses for starts; `initial_points` is the `Var` front end for experiments.
 ### Evaluation (`evaluation.py`, `oracle.py`, `dataset.py`, `errors.py`)
 
 ```python
-Measure = Callable[[np.ndarray, np.random.Generator], np.ndarray]  # u (N,) -> measured (P,)
+Measure = Callable[
+    [np.ndarray, np.random.Generator], np.ndarray
+]  # u (N,) -> measured (P,)
 
 
 def measure_oracle(
@@ -428,11 +430,12 @@ builds `Scale(kernel, outputscale)`: the experiment shows the output scale where
 math has it, and the stored GP, its repr and its JSON hold the `Scale`. It is the
 only operator; `kernel * kernel` raises `TypeError` (the kernels share `_Scalable`).
 
-- **Hyperparameters.** A kernel's hyperparameters are its fields whose type admits a
-  `Param`; a number fixes one. They are fitted in a fixed order: a node's own
-  hyperparameters before those of the kernels it holds, so `Scale(Matern52())` fits the output scale, then the
-  lengthscales, as `default_gp` did. A lengthscale with `ard` (the default) has one
-  entry per input, the count taken from the training data at fit time; a fixed one
+- **Hyperparameters.** The hyperparameters are `Scale`'s output scale and a stationary
+  kernel's lengthscale; a number fixes one. The kernels are a closed set, so
+  `_params` and `_with_values` match on the kernel to walk them. They are fitted in a
+  fixed order: an output scale before the kernel it scales, so `Scale(Matern52())` fits
+  the output scale, then the lengthscales, as `default_gp` did. A lengthscale with
+  `ard` (the default) has one entry per input, the count taken from the training data at fit time; a fixed one
   given as one number applies to every input. A fitted GP holds the numbers: a float,
   or a tuple of one per input.
 - **Units.** Kernel hyperparameters are in scaled units, as the fit sees them
@@ -445,7 +448,7 @@ only operator; `kernel * kernel` raises `TypeError` (the kernels share `_Scalabl
   later be `noise_std=Param(...)`.
 - **Closed set.** `Scale`, `Matern12`, `Matern32`, `Matern52`, `SquaredExponential`
   and the `Zero` mean; no composition (`Sum`, a product of kernels) and no user kernels
-  until an experiment needs them. A new kernel is a dataclass and a case in `covariance`.
+  until an experiment needs them. A new kernel is a dataclass and a case in each of `covariance`, `_params` and `_with_values`.
 - **Jitter** is 1e-6 (#107), a nugget in the sense of Gramacy & Lee (2012), "Cases
   for the nugget in modeling computer experiments". Once a run converges its inputs
   cluster, and with legacy's 1e-10 the training covariance reached cond(K) of about
