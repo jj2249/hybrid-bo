@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **Breaking:** A `Dataset` holds only what a real system gives: `x_oracle`, `y_oracle`
+  and `f_oracle` are gone, and so is `OracleMeasurement`, so a measurement always returns
+  the measured variables as an array. Runs saved before this fail to load with
+  `RunFormatError` (#223).
+- **Breaking:** `hb.oracle_measure(system, ...)` is now `hb.measure_oracle(problem, ...)`,
+  and returns a plain function, so `OracleSimulation` is gone. `hb.check_oracle_optimum`
+  is gone too: pass `optimum=` to `hb.measure_oracle`, and the measurement warns at a
+  point below it (#223).
+- **Breaking:** `hb.oracle_incumbents` takes the oracle objective, `(dataset, f_oracle)`,
+  and moved to `hb.oracle`. `hb.oracle_values` gives the oracle values at any `u`, for
+  scoring afterwards. `ReconstructionWarning` no longer comes from `evaluate`:
+  `hb.check_reconstruction` checks a dataset against them (#223).
+- **Breaking:** `hb.plots.regret` and `hb.plots.convergence` take incumbent curves per
+  label, plain arrays, not runs, and `hb.plots.iteration` takes `oracle=` in place of
+  `measure=` (#223).
 - **Breaking:** The artifact is gone, so nothing records how a run was produced: no
   `Run.artifact`, `hb.run.run_artifact` or `hb.run.problem_artifact`. `Run.method` is a
   string the method passes in, `hb.bo.optimization_loop` takes `method` in place of

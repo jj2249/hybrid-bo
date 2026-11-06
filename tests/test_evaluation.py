@@ -25,21 +25,23 @@ from hybrid_bo import (
     RootFindingError,
     System,
     Var,
+    check_reconstruction,
     extend,
     incumbents,
+    measure_oracle,
     oracle_incumbents,
-    oracle_measure,
+    oracle_values,
 )
 from hybrid_bo.dataset import n_iterations
 from hybrid_bo.evaluation import evaluate, reconstruct_states
-from hybrid_bo.oracle import OracleMeasurement
+from hybrid_bo.oracle import OracleValues
 
 
 def illustrative_measure(problem: Problem, noise_std: float):
     """The oracle simulation of the illustrative example, with Gaussian noise of
     `noise_std` on the measurement."""
-    return oracle_measure(
-        problem.system,
+    return measure_oracle(
+        problem,
         oracle=lambda v: [cas.sin(v.u)],
         noise_std=noise_std,
     )
@@ -85,20 +87,24 @@ def test_noise_free_evaluation_matches_the_closed_form(illustrative_problem):
     dataset = evaluate(
         illustrative_problem, measure, u[:, np.newaxis], np.random.default_rng(0)
     )
+    oracle = oracle_values(
+        illustrative_problem,
+        lambda v: [cas.sin(v.u)],
+        u[:, np.newaxis],
+        np.random.default_rng(1),
+    )
 
     # Measured, reconstructed and oracle values all match the closed form
     x, y, f = closed_form(u)
-    assert dataset.x_oracle is not None and dataset.y_oracle is not None
-    assert dataset.f_oracle is not None
     for actual, expected in [
         (dataset.x, x),
         (dataset.y, y),
-        (dataset.x_oracle, x),
-        (dataset.y_oracle, y),
+        (oracle.x, x),
+        (oracle.y, y),
     ]:
         np.testing.assert_allclose(actual.ravel(), expected, rtol=1e-8, atol=1e-10)
     np.testing.assert_allclose(dataset.f, f, rtol=1e-8, atol=1e-10)
-    np.testing.assert_allclose(dataset.f_oracle, f, rtol=1e-8, atol=1e-10)
+    np.testing.assert_allclose(oracle.f, f, rtol=1e-8, atol=1e-10)
     assert dataset.n_initial == len(u)
 
 
@@ -107,14 +113,16 @@ def test_noise_is_the_first_stream_draw(illustrative_problem):
     # The root-finding starts come from lhs, which spawns instead of consuming the
     # stream
     measure = illustrative_measure(illustrative_problem, noise_std=0.1)
+    without_noise = illustrative_measure(illustrative_problem, noise_std=0.0)
+    u = np.array([-0.5])
 
     dataset = evaluate(
-        illustrative_problem, measure, np.array([[-0.5]]), np.random.default_rng(0)
+        illustrative_problem, measure, u[np.newaxis], np.random.default_rng(0)
     )
 
     noise = np.random.default_rng(0).normal(0.0, 0.1, size=1)
-    assert dataset.y_oracle is not None
-    np.testing.assert_allclose(dataset.y - dataset.y_oracle, [noise], rtol=1e-12)
+    exact = without_noise(u, np.random.default_rng(0))
+    np.testing.assert_allclose(dataset.y - exact, [noise], rtol=1e-12)
 
 
 def test_root_finding_starts_cover_the_unmeasured_variables(monkeypatch):
@@ -161,9 +169,9 @@ def test_root_finding_starts_cover_the_unmeasured_variables(monkeypatch):
     np.testing.assert_allclose(dataset.f, [0.75**2])
 
 
-def test_measure_without_an_oracle_gives_no_oracle_values():
-    """A measurement that returns only the measured variables gives reconstructed
-    values and no oracle values."""
+def test_a_measurement_gives_the_reconstructed_values():
+    """A measurement returns only the measured variables, and the rest are
+    reconstructed."""
     problem = two_branch_problem()
 
     dataset = evaluate(
@@ -176,36 +184,27 @@ def test_measure_without_an_oracle_gives_no_oracle_values():
     np.testing.assert_allclose(dataset.x, [[1.0], [np.sqrt(2.0)]])
     np.testing.assert_allclose(dataset.y, [[1.0], [2.0]])
     np.testing.assert_allclose(dataset.f, [0.0, np.sqrt(2.0)])
-    assert dataset.x_oracle is None
-    assert dataset.y_oracle is None
-    assert dataset.f_oracle is None
 
 
 def test_disagreement_with_the_oracle_warns():
-    """A reconstruction on a different branch from the oracle values warns, and both
-    are kept."""
-
+    """A reconstruction on a different branch from the oracle values warns."""
     # The oracle is on the negative branch; the reconstruction can only find the
     # positive one
-    def measure(u, rng):
-        return OracleMeasurement(
-            measured=np.array([1.0]), x=np.array([-1.0]), y=np.array([1.0])
-        )
+    problem = two_branch_problem()
+    dataset = evaluate(
+        problem,
+        lambda u, rng: np.array([1.0]),
+        np.array([[0.0]]),
+        np.random.default_rng(0),
+    )
+    oracle = OracleValues(np.array([[-1.0]]), np.array([[1.0]]), np.array([-1.0]))
 
     # `pytest.warns` fails the test unless the block warns with a message matching
     # `match`
     with pytest.warns(ReconstructionWarning, match="oracle"):
-        dataset = evaluate(
-            two_branch_problem(),
-            measure,
-            np.array([[0.0]]),
-            np.random.default_rng(0),
-        )
+        check_reconstruction(problem.system, dataset, oracle)
 
     np.testing.assert_allclose(dataset.x, [[1.0]])
-    assert dataset.x_oracle is not None and dataset.f_oracle is not None
-    np.testing.assert_allclose(dataset.x_oracle, [[-1.0]])
-    np.testing.assert_allclose(dataset.f_oracle, [-1.0])
 
 
 @pytest.mark.filterwarnings("error")
@@ -214,14 +213,16 @@ def test_noisy_reconstruction_on_the_oracle_branch_does_not_warn():
 
     # Noise moves the reconstruction away from the oracle values, but along the
     # same branch
-    def measure(u, rng):
-        return OracleMeasurement(
-            measured=np.array([1.1]), x=np.array([1.0]), y=np.array([1.0])
-        )
-
+    problem = two_branch_problem()
     dataset = evaluate(
-        two_branch_problem(), measure, np.array([[0.0]]), np.random.default_rng(0)
+        problem,
+        lambda u, rng: np.array([1.1]),
+        np.array([[0.0]]),
+        np.random.default_rng(0),
     )
+    oracle = OracleValues(np.array([[1.0]]), np.array([[1.0]]), np.array([1.0]))
+
+    check_reconstruction(problem.system, dataset, oracle)
 
     np.testing.assert_allclose(dataset.x, [[np.sqrt(1.1)]])
 
@@ -257,8 +258,8 @@ def test_failed_oracle_simulation_raises():
     dataset."""
     # y = -1 - x**2 and y = x**2 have no common real root
     problem = two_branch_problem()
-    measure = oracle_measure(
-        problem.system, oracle=lambda v: -1 - v.x**2, n_starts=5, noise_std=0.0
+    measure = measure_oracle(
+        problem, oracle=lambda v: -1 - v.x**2, n_starts=5, noise_std=0.0
     )
 
     with pytest.raises(RootFindingError) as info:
@@ -379,23 +380,20 @@ def test_measure_returning_the_wrong_shape_raises():
 def test_oracle_must_give_one_value_per_unknown_state():
     """An oracle with more expressions than unknown states is rejected."""
     with pytest.raises(ValueError, match="oracle"):
-        oracle_measure(
-            two_branch_problem().system, oracle=lambda v: [v.u, 2 * v.u], noise_std=0.0
+        measure_oracle(
+            two_branch_problem(), oracle=lambda v: [v.u, 2 * v.u], noise_std=0.0
         )
 
 
-def dataset_of(f: list[float], f_oracle: list[float] | None = None) -> Dataset:
-    """A dataset with the given measured and oracle objective values, the first two
-    of them initial points; the other fields are zero."""
+def dataset_of(f: list[float]) -> Dataset:
+    """A dataset with the given measured objective values, the first two of them
+    initial points; the other fields are zero."""
     n = len(f)
     return Dataset(
         u=np.zeros((n, 1)),
         x=np.zeros((n, 1)),
         y=np.zeros((n, 1)),
         f=np.array(f),
-        x_oracle=None if f_oracle is None else np.zeros((n, 1)),
-        y_oracle=None if f_oracle is None else np.zeros((n, 1)),
-        f_oracle=None if f_oracle is None else np.array(f_oracle),
         n_initial=2,
     )
 
@@ -404,8 +402,8 @@ def test_extend_joins_the_rows_in_order():
     """The rows of the first dataset come first, then those of the second, in every
     field, and the initial points stay those of the first."""
     # Two rows, then one row whose u tells it apart
-    first = dataset_of([3.0, 1.0], f_oracle=[3.5, 1.5])
-    new = replace(dataset_of([2.0], f_oracle=[2.5]), u=np.array([[7.0]]))
+    first = dataset_of([3.0, 1.0])
+    new = replace(dataset_of([2.0]), u=np.array([[7.0]]))
 
     extended = extend(first, new)
 
@@ -413,33 +411,17 @@ def test_extend_joins_the_rows_in_order():
     np.testing.assert_array_equal(extended.f, [3.0, 1.0, 2.0])
     np.testing.assert_array_equal(extended.u, [[0.0], [0.0], [7.0]])
     assert extended.x.shape == extended.y.shape == (3, 1)
-    assert extended.f_oracle is not None
-    np.testing.assert_array_equal(extended.f_oracle, [3.5, 1.5, 2.5])
     assert extended.n_initial == 2
-
-
-def test_extend_keeps_oracle_values_only_when_both_have_them():
-    """If either side lacks oracle values, left or right, the result has none, since
-    values for only some of the rows would not line up with the rows."""
-    with_oracle = dataset_of([3.0, 1.0], f_oracle=[3.0, 1.0])
-    without_oracle = dataset_of([2.0])
-
-    for first, new in ((with_oracle, without_oracle), (without_oracle, with_oracle)):
-        extended = extend(first, new)
-
-        assert extended.x_oracle is None
-        assert extended.y_oracle is None
-        assert extended.f_oracle is None
 
 
 def test_extend_leaves_its_inputs_alone():
     """The inputs keep their values, and the result shares no array with them, so
     writing to it can't reach them."""
     # Two datasets with every field, and copies to compare them with afterwards
-    first = dataset_of([3.0, 1.0], f_oracle=[3.0, 1.0])
-    new = dataset_of([2.0], f_oracle=[2.0])
+    first = dataset_of([3.0, 1.0])
+    new = dataset_of([2.0])
     first_before, new_before = deepcopy(first), deepcopy(new)
-    fields = ("u", "x", "y", "f", "x_oracle", "y_oracle", "f_oracle")
+    fields = ("u", "x", "y", "f")
 
     # Extend, then write to the result
     extended = extend(first, new)
@@ -470,16 +452,20 @@ def test_oracle_incumbents_are_the_oracle_f_at_the_measured_incumbent():
     not the best oracle f so far."""
     # The third point measures worse than the second but is better at the oracle;
     # the fourth measures best but is worse at the oracle
-    dataset = dataset_of(f=[3.0, 1.0, 2.0, 0.5], f_oracle=[3.0, 1.5, 0.5, 2.0])
+    dataset = dataset_of(f=[3.0, 1.0, 2.0, 0.5])
+    f_oracle = np.array([3.0, 1.5, 0.5, 2.0])
 
-    np.testing.assert_array_equal(oracle_incumbents(dataset), [3.0, 1.5, 1.5, 2.0])
+    np.testing.assert_array_equal(
+        oracle_incumbents(dataset, f_oracle), [3.0, 1.5, 1.5, 2.0]
+    )
 
 
 def test_oracle_incumbents_keep_the_earlier_point_on_a_tie():
     """A later point that only equals the incumbent's measured f doesn't replace it."""
-    dataset = dataset_of(f=[1.0, 1.0, 1.0], f_oracle=[2.0, 0.0, 3.0])
+    dataset = dataset_of(f=[1.0, 1.0, 1.0])
+    f_oracle = np.array([2.0, 0.0, 3.0])
 
-    np.testing.assert_array_equal(oracle_incumbents(dataset), [2.0, 2.0, 2.0])
+    np.testing.assert_array_equal(oracle_incumbents(dataset, f_oracle), [2.0, 2.0, 2.0])
 
 
 def test_oracle_incumbents_without_noise_are_the_running_minimum_of_oracle_f(
@@ -491,17 +477,16 @@ def test_oracle_incumbents_without_noise_are_the_running_minimum_of_oracle_f(
     measure = illustrative_measure(illustrative_problem, noise_std=0.0)
 
     dataset = evaluate(illustrative_problem, measure, u, np.random.default_rng(0))
+    f_oracle = oracle_values(
+        illustrative_problem,
+        lambda v: [cas.sin(v.u)],
+        u,
+        np.random.default_rng(1),
+    ).f
 
-    assert dataset.f_oracle is not None
     np.testing.assert_allclose(
-        oracle_incumbents(dataset), np.minimum.accumulate(dataset.f_oracle)
+        oracle_incumbents(dataset, f_oracle), np.minimum.accumulate(f_oracle)
     )
-
-
-def test_oracle_incumbents_need_oracle_values():
-    """A dataset from a measurement without an oracle has no benchmark metric."""
-    with pytest.raises(ValueError, match="oracle"):
-        oracle_incumbents(dataset_of([3.0, 1.0]))
 
 
 def test_oracle_optimum_solves_the_problem_with_the_oracle_in_place_of_h():
@@ -554,7 +539,6 @@ def test_reconstruct_states_solves_the_unmeasured_states_of_given_measurements(
     np.testing.assert_allclose(dataset.f, f, atol=1e-6)
 
     # Given points have no oracle values, and all are initial points
-    assert dataset.f_oracle is None
     assert dataset.n_initial == 3
 
 
@@ -629,7 +613,6 @@ def test_a_reconstruction_with_no_good_rows_has_an_empty_dataset():
     dataset = caught.value.dataset
     assert dataset is not None
     assert len(dataset.u) == 0
-    assert dataset.f_oracle is None
 
 
 def test_a_row_that_is_not_finite_is_a_bad_row_with_no_known_equations():

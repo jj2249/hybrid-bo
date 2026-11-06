@@ -6,7 +6,6 @@ pytest runs every function whose name starts with `test_`.
 import dataclasses
 import functools
 import json
-import warnings
 from pathlib import Path
 
 import illustrative_example as ex
@@ -55,15 +54,12 @@ def assert_same(actual, expected, where="run"):
 
 
 def dataset_of(n: int) -> hb.Dataset:
-    """A dataset of n zero points, two mechanistic states and no oracle values."""
+    """A dataset of n zero points and two mechanistic states."""
     return hb.Dataset(
         u=np.zeros((n, 1)),
         x=np.zeros((n, 2)),
         y=np.zeros((n, 1)),
         f=np.zeros(n),
-        x_oracle=None,
-        y_oracle=None,
-        f_oracle=None,
         n_initial=n,
     )
 
@@ -93,40 +89,17 @@ def test_a_larger_budget_passes_through_the_evaluations_of_a_smaller_one(method)
     points, states, objectives, fitted GPs and acquisition solutions alike. The
     measurement is noisy, so every evaluation draws from the run's generator too."""
     # Setup and act: one run of each budget, from the same seed
-    noisy = hb.oracle_measure(ex.system, ex.oracle, noise_std=0.01)
+    noisy = hb.measure_oracle(ex.problem, ex.oracle, noise_std=0.01)
     short = run_of(method, 3, noisy)
     long = run_of(method, 5, noisy)
 
     # Check: the first 5 evaluations and 3 iterations of the long run are the short run
-    for field in ("u", "x", "y", "f", "x_oracle", "y_oracle", "f_oracle"):
+    for field in ("u", "x", "y", "f"):
         expected = getattr(short.dataset, field)
         assert_same(getattr(long.dataset, field)[:5], expected, field)
     assert_same(long.surrogates[:3], short.surrogates, "surrogates")
     assert_same(long.acquisitions[:3], short.acquisitions, "acquisitions")
     assert_same(long.scenarios, short.scenarios, "scenarios")
-
-
-def test_an_optimum_beaten_by_an_evaluated_point_warns():
-    """A stated optimum above an evaluated point's oracle objective can't be the
-    optimum, so it warns; the true optimum gives no warning."""
-    # Two uniform points; the true optimum is about -50.46, and f is at most about 75
-    dataset = run_of(hb.uniform_sampling, 1).dataset
-
-    # `pytest.warns` fails unless the block warns with the category, matching `match`
-    with pytest.warns(hb.OracleOptimumWarning, match="below the stated"):
-        assert hb.check_oracle_optimum(dataset, 100.0)
-
-    # The warning turned into an error, so the test fails if it is raised
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", hb.OracleOptimumWarning)
-        assert not hb.check_oracle_optimum(dataset, ex.optimum)
-
-
-def test_a_dataset_without_an_oracle_has_no_optimum_to_beat():
-    """Without oracle values there is nothing to compare, so it doesn't warn."""
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", hb.OracleOptimumWarning)
-        assert not hb.check_oracle_optimum(dataset_of(2), 1e9)
 
 
 # `tmp_path` is a pytest fixture: a new, empty folder for this test
@@ -215,13 +188,13 @@ def test_save_and_load_keep_every_kind_of_gp_parameter(tmp_path):
 
 
 def test_an_empty_array_in_an_optional_field_loads_with_its_shape(tmp_path):
-    """An empty array where None is allowed too (here the oracle states of a system
-    without mechanistic states, shape (n, 0)) loads as an array of the saved shape,
+    """An empty array where None is allowed too (here the scenario states of a system
+    without mechanistic states, shape (S, 0)) loads as an array of the saved shape,
     not None."""
-    dataset = dataclasses.replace(
-        dataset_of(3), x=np.zeros((3, 0)), x_oracle=np.zeros((3, 0))
+    solution = hb.acquisition.AcquisitionSolution(
+        np.zeros(1), 0.0, x=np.zeros((5, 0)), y=np.zeros((5, 1))
     )
-    run = hb.Run(dataset, method="m")
+    run = hb.Run(dataset_of(3), method="m", acquisitions=[solution])
 
     assert_same(round_trip(run, tmp_path), run)
 

@@ -12,10 +12,8 @@ A :py:class:`~hybrid_bo.run.Run` holds:
 - ``run.method``: the method's name.
 - ``run.dataset`` (:py:class:`~hybrid_bo.dataset.Dataset`): every evaluated point in
   order, initial points first, as arrays ``u``, ``x``, ``y`` and ``f`` with one row
-  per evaluation, and their oracle values (``None`` without an oracle).
-  :py:func:`~hybrid_bo.dataset.incumbents` and
-  :py:func:`~hybrid_bo.dataset.oracle_incumbents` give the incumbents after each
-  evaluation.
+  per evaluation. It holds only what a real system gives.
+  :py:func:`~hybrid_bo.dataset.incumbents` gives the incumbents after each evaluation.
 - ``run.surrogates``: the fitted GPs (:py:class:`~hybrid_bo.gp.FittedGP`) of each
   iteration, a tuple of one per unknown state for hybrid BO and of one for standard BO;
   each is its prior GP with the fitted values in place of each ``Param``
@@ -46,12 +44,11 @@ Iteration figures
 :py:func:`~hybrid_bo.plots.iteration` draws the state before a trial point: the GP, the
 objective under the scenarios and the acquisition function, over one or two decision
 variables. It reads the run, so a saved run draws without running it again, but it
-needs the problem, from your script. Pass the measurement to draw the true curves
-too, which runs it over a grid, so only for an oracle:
+needs the problem, from your script. Pass the oracle to draw the true curves too:
 
 .. code-block:: python
 
-   figure = hb.plots.iteration(run, problem, 4, measure=measure)
+   figure = hb.plots.iteration(run, problem, 4, oracle=oracle)
    figure.savefig("iteration-4.png")
 
 It needs ``hybrid-bo[plots]``, and uses the repo's matplotlib style, ``hb.plots.STYLE``.
@@ -74,20 +71,35 @@ A list of runs per label is all the library needs:
    hb.save_runs(runs, "results/first-try")
    runs = hb.load_runs("results/first-try")
 
-:py:func:`~hybrid_bo.plots.regret` draws the median regret of each label over the
-evaluations, with its interquartile range, and
-:py:func:`~hybrid_bo.plots.convergence` the incumbent the same way. You make the figure,
-and each draws on the axes you give it, so one panel of a larger figure works the same:
+:py:func:`~hybrid_bo.plots.regret` draws the median regret of each label's incumbent
+curves over the evaluations, with its interquartile range, and
+:py:func:`~hybrid_bo.plots.convergence` the incumbent the same way. A curve is a plain
+array: :py:func:`~hybrid_bo.dataset.incumbents` for what was measured, or, for a benchmark,
+:py:func:`~hybrid_bo.oracle.oracle_incumbents` with the oracle objective from
+:py:func:`~hybrid_bo.oracle.oracle_values`. Pass that a generator of its own, so it
+doesn't disturb a run's. You make the figure, and each draws on the axes you give it, so
+one panel of a larger figure works the same:
 
 .. code-block:: python
 
    import matplotlib.pyplot as plt
 
+   rng = np.random.default_rng(0)
+   curves = {
+       label: [
+           hb.oracle_incumbents(
+               run.dataset, hb.oracle_values(problem, oracle, run.dataset.u, rng).f
+           )
+           for run in group
+       ]
+       for label, group in runs.items()
+   }
+
    figure, ax = plt.subplots()
-   hb.plots.regret(runs, -50.4608, ax)
+   hb.plots.regret(curves, -50.4608, ax)
    ax.set_title("Illustrative example")
    figure.savefig("regret.pdf")
 
-:py:func:`~hybrid_bo.dataset.check_oracle_optimum` warns with
-:py:class:`~hybrid_bo.errors.OracleOptimumWarning` if a run evaluated a point below the
-stated oracle optimum, which would make its regret wrong.
+Pass ``optimum=`` to :py:func:`~hybrid_bo.oracle.measure_oracle` and the measurement warns
+with :py:class:`~hybrid_bo.errors.OracleOptimumWarning` at a point below the stated oracle
+optimum, which would make its regret wrong.

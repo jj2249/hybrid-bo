@@ -93,9 +93,74 @@ def test_the_oracle_optimum_raises_when_every_start_fails():
 
 def test_the_oracle_simulation_of_an_oracle_that_reads_y():
     """The oracle simulation solves an oracle that reads y for y = 2 sin(u) too."""
-    measure = hb.oracle_measure(implicit_system(True), implicit_oracle, noise_std=0.0)
+    problem = hb.Problem(implicit_system(True), f=lambda v: v.y)
+    measure = hb.measure_oracle(problem, implicit_oracle, noise_std=0.0)
 
-    measurement = measure(np.array([0.5]), np.random.default_rng(0))
+    measured = measure(np.array([0.5]), np.random.default_rng(0))
 
-    np.testing.assert_allclose(measurement.y, [2 * np.sin(0.5)], atol=1e-8)
-    np.testing.assert_allclose(measurement.x, [2 * np.sin(0.5)], atol=1e-8)
+    np.testing.assert_allclose(measured, [2 * np.sin(0.5)], atol=1e-8)
+
+
+def test_a_measurement_below_the_stated_optimum_warns():
+    """A point whose oracle objective is below `optimum` can't leave it the optimum, so
+    the measurement warns."""
+    measure = hb.measure_oracle(ex.problem, ex.oracle, noise_std=0.0, optimum=100.0)
+
+    # `pytest.warns` fails unless the block warns with the category, matching `match`
+    with pytest.warns(hb.OracleOptimumWarning, match="below the stated"):
+        measure(np.array([0.5]), np.random.default_rng(0))
+
+
+# `filterwarnings("error")` turns every warning into a failure of this test
+@pytest.mark.filterwarnings("error")
+def test_a_measurement_at_the_stated_optimum_does_not_warn():
+    """The stated optimum is the lowest the oracle allows, so no point warns, the one
+    that reaches it included."""
+    measure = hb.measure_oracle(
+        ex.problem, ex.oracle, noise_std=0.0, optimum=ex.optimum
+    )
+
+    for u in (-0.45, 0.5, 1.5):
+        measure(np.array([u]), np.random.default_rng(0))
+
+
+def test_the_optimum_check_draws_nothing():
+    """A measurement draws the same with and without `optimum`, since the check only
+    reads the states it already solved."""
+    plain = hb.measure_oracle(ex.problem, ex.oracle, noise_std=0.1)
+    checked = hb.measure_oracle(
+        ex.problem, ex.oracle, noise_std=0.1, optimum=ex.optimum
+    )
+
+    first = plain(np.array([0.5]), np.random.default_rng(0))
+    second = checked(np.array([0.5]), np.random.default_rng(0))
+
+    np.testing.assert_array_equal(first, second)
+
+
+def test_oracle_values_solve_every_state_at_each_point():
+    """The oracle values at any u are the states and objective of the closed form, one
+    row per point."""
+    u = np.array([[0.5], [-0.25]])
+
+    values = hb.oracle_values(
+        hb.Problem(implicit_system(True), f=lambda v: v.y + 1.0),
+        implicit_oracle,
+        u,
+        np.random.default_rng(0),
+    )
+
+    np.testing.assert_allclose(values.y, 2 * np.sin(u), atol=1e-8)
+    np.testing.assert_allclose(values.x, 2 * np.sin(u), atol=1e-8)
+    np.testing.assert_allclose(values.f, 2 * np.sin(u[:, 0]) + 1.0, atol=1e-8)
+
+
+def test_oracle_values_draw_only_from_the_generator_they_are_given():
+    """They draw from the generator passed in and no other, so scoring afterwards
+    leaves a run's generator as it was."""
+    run_rng, own_rng = np.random.default_rng(0), np.random.default_rng(1)
+    state = run_rng.bit_generator.state
+
+    hb.oracle_values(ex.problem, ex.oracle, np.array([[0.5]]), own_rng)
+
+    assert run_rng.bit_generator.state == state

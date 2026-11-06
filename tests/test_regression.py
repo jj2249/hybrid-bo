@@ -11,18 +11,16 @@ have keys of their own.
 """
 
 import json
-from dataclasses import replace
 from functools import partial
 from pathlib import Path
 
 import illustrative_example as ex
 import numpy as np
 import pytest
-from plain_loop import Measure, evaluate_points, hybrid_loop, standard_loop
+from plain_loop import evaluate_points, hybrid_loop, standard_loop
 
 import hybrid_bo as hb
 from hybrid_bo.acquisition import AcquisitionSolution
-from hybrid_bo.oracle import OracleMeasurement
 
 BASELINE_DIR = Path(__file__).parent / "data" / "regression"
 RTOL, ATOL = 1e-6, 1e-8
@@ -36,7 +34,7 @@ Result = tuple[hb.Dataset, list[AcquisitionSolution]]
 
 def run_hybrid_bo(
     approximation: hb.SAA | hb.SoftSAA | hb.Linearization,
-    measure: Measure,
+    measure: hb.Measure,
     rng: np.random.Generator,
 ) -> Result:
     """Hybrid BO: the initial points, the scenarios once, then the loop."""
@@ -58,7 +56,7 @@ def run_hybrid_bo(
     )
 
 
-def run_standard_bo(measure: Measure, rng: np.random.Generator) -> Result:
+def run_standard_bo(measure: hb.Measure, rng: np.random.Generator) -> Result:
     """Standard BO: the initial points, then the loop."""
     points = hb.initial_points(ex.system.u, ex.N_INITIAL, rng)
     return standard_loop(
@@ -72,7 +70,9 @@ def run_standard_bo(measure: Measure, rng: np.random.Generator) -> Result:
     )
 
 
-def run_latin_hypercube_sampling(measure: Measure, rng: np.random.Generator) -> Result:
+def run_latin_hypercube_sampling(
+    measure: hb.Measure, rng: np.random.Generator
+) -> Result:
     """Latin hypercube sampling: the initial points and the design, then every point."""
     points = hb.initial_points(ex.system.u, ex.N_INITIAL, rng)
     design = hb.initial_points(ex.system.u, N_ITERATIONS, rng)
@@ -80,7 +80,7 @@ def run_latin_hypercube_sampling(measure: Measure, rng: np.random.Generator) -> 
     return evaluate_points(ex.problem, measure, all_points, rng), []
 
 
-def run_uniform_sampling(measure: Measure, rng: np.random.Generator) -> Result:
+def run_uniform_sampling(measure: hb.Measure, rng: np.random.Generator) -> Result:
     """Uniform sampling: the initial points and the design, then every point."""
     points = hb.initial_points(ex.system.u, ex.N_INITIAL, rng)
     lower, upper = (np.array([bound]) for bound in ex.u.start)
@@ -104,36 +104,21 @@ METHODS = {
 }
 
 
-def with_oracle_values(
-    dataset: hb.Dataset, measurements: list[OracleMeasurement]
-) -> hb.Dataset:
-    """The dataset with the oracle values the measurements gave, one per row."""
-    x_oracle = np.array([measurement.x for measurement in measurements])
-    y_oracle = np.array([measurement.y for measurement in measurements])
-    f_oracle = np.array(
-        [
-            ex.problem.f(*row).full().item()
-            for row in zip(x_oracle, y_oracle, dataset.u, strict=True)
-        ]
-    )
-    return replace(dataset, x_oracle=x_oracle, y_oracle=y_oracle, f_oracle=f_oracle)
-
-
 def as_baseline_columns(
-    dataset: hb.Dataset, solutions: list[AcquisitionSolution]
+    dataset: hb.Dataset,
+    oracle: hb.oracle.OracleValues,
+    solutions: list[AcquisitionSolution],
 ) -> dict[str, np.ndarray]:
     """The run under the `ResultsBO` keys: they store y inside x, f as a column, and
     split every array into the initial points and the rest."""
-    assert dataset.x_oracle is not None and dataset.y_oracle is not None
-    assert dataset.f_oracle is not None
     columns = {
         "u": dataset.u,
         "x": np.column_stack([dataset.x, dataset.y]),
         "f": dataset.f[:, np.newaxis],
         "incumbents": hb.incumbents(dataset)[:, np.newaxis],
-        "x_no_noise": np.column_stack([dataset.x_oracle, dataset.y_oracle]),
-        "f_no_noise": dataset.f_oracle[:, np.newaxis],
-        "incumbents_no_noise": hb.oracle_incumbents(dataset)[:, np.newaxis],
+        "x_no_noise": np.column_stack([oracle.x, oracle.y]),
+        "f_no_noise": oracle.f[:, np.newaxis],
+        "incumbents_no_noise": hb.oracle_incumbents(dataset, oracle.f)[:, np.newaxis],
     }
     n = ex.N_INITIAL
     baseline = {
@@ -157,20 +142,15 @@ def as_baseline_columns(
 def run_method(method: str) -> dict[str, np.ndarray]:
     """Runs one run of a method as the experiment does and returns it under the
     `ResultsBO` keys."""
-    # The loop sees the measured variables alone, as with a real system; the oracle
-    # values are kept here, for the columns that score the run
-    measurements = []
-
-    def measure(u: np.ndarray, rng: np.random.Generator) -> np.ndarray:
-        """The oracle simulation, noting what it gave."""
-        measurement = ex.measure(u, rng)
-        measurements.append(measurement)
-        return measurement.measured
-
     # As in the experiment: one generator per run, initial points drawn from it
     rng = np.random.default_rng(SEED).spawn(1)[0]
-    dataset, solutions = METHODS[method](measure, rng)
-    return as_baseline_columns(with_oracle_values(dataset, measurements), solutions)
+    dataset, solutions = METHODS[method](ex.measure, rng)
+
+    # The oracle values for the columns that score the run, from a generator of their own
+    oracle = hb.oracle_values(
+        ex.problem, ex.oracle, dataset.u, np.random.default_rng(SEED)
+    )
+    return as_baseline_columns(dataset, oracle, solutions)
 
 
 # `parametrize` runs the test once per method, each as its own test case. The other

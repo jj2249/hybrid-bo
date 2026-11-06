@@ -18,7 +18,7 @@ from hybrid_bo import (
     Run,
     initial_points,
     latin_hypercube_sampling,
-    oracle_measure,
+    measure_oracle,
     uniform_sampling,
 )
 
@@ -28,9 +28,7 @@ METHODS = [latin_hypercube_sampling, uniform_sampling]
 def illustrative_run(problem, method, rng=None) -> Run:
     """A run of `method` on the illustrative example: 2 initial points, then 3."""
     rng = np.random.default_rng(0) if rng is None else rng
-    measure = oracle_measure(
-        problem.system, oracle=lambda v: [cas.sin(v.u)], noise_std=0.0
-    )
+    measure = measure_oracle(problem, oracle=lambda v: [cas.sin(v.u)], noise_std=0.0)
     u = initial_points(problem.system.u, 2, rng)
     return method(problem, measure, initial_points=u, n_iterations=3, rng=rng)
 
@@ -55,8 +53,8 @@ def test_initial_points_come_first(illustrative_problem, method):
     points, all inside the bounds of u."""
     rng = np.random.default_rng(0)
     u = initial_points(illustrative_problem.system.u, 2, rng)
-    measure = oracle_measure(
-        illustrative_problem.system,
+    measure = measure_oracle(
+        illustrative_problem,
         oracle=lambda v: [cas.sin(v.u)],
         noise_std=0.0,
     )

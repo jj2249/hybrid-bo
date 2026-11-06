@@ -10,7 +10,7 @@ USER_FACING = {
     "System",
     "Problem",
     "Measure",
-    "oracle_measure",
+    "measure_oracle",
     # Run a method
     "initial_points",
     "hybrid_bo",
@@ -42,8 +42,9 @@ USER_FACING = {
     "Run",
     "Dataset",
     "incumbents",
+    "oracle_values",
     "oracle_incumbents",
-    "check_oracle_optimum",
+    "check_reconstruction",
     # Errors
     "HybridBOError",
     "NoSolutionError",

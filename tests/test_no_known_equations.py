@@ -9,6 +9,7 @@ a fixture below (here `runs_1d`) is filled in by pytest with that fixture's valu
 
 import dataclasses
 import functools
+from collections.abc import Callable
 
 import casadi as cas
 import illustrative_example as ex
@@ -62,6 +63,12 @@ def runs_of(methods: dict, problem: hb.Problem, measure: hb.Measure) -> list[hb.
     return runs
 
 
+def composite_oracle(n_u: int) -> Callable:
+    """The oracle of `composite_problem`: y = sin(u1) + u_last / 2."""
+    last = f"u{n_u}"
+    return lambda v: [cas.sin(v.u1) + getattr(v, last) / 2]
+
+
 def composite_problem(n_u: int) -> tuple[hb.Problem, hb.Measure]:
     """A test system with n_u decision variables in [-2, 2], no mechanistic states and
     one unknown state y = sin(u1) + u_last / 2, measured, with the composite objective
@@ -70,12 +77,7 @@ def composite_problem(n_u: int) -> tuple[hb.Problem, hb.Measure]:
     y = hb.Var("y", start=(-2.0, 2.0))
     system = hb.System(u=u, y=[y], h_inputs=u, measured=[y])
     problem = hb.Problem(system, f=lambda v: (v.y - 0.3) ** 2 + v.u1**2 / 10)
-    last = f"u{n_u}"
-    measure = hb.oracle_measure(
-        system,
-        oracle=lambda v: [cas.sin(v.u1) + getattr(v, last) / 2],
-        noise_std=0.0,
-    )
+    measure = hb.measure_oracle(problem, oracle=composite_oracle(n_u), noise_std=0.0)
     return problem, measure
 
 
@@ -169,24 +171,24 @@ def test_the_oracle_optimum_keeps_the_value_of_its_hand_built_nlp():
 
 def test_a_run_saves_and_loads_equal(runs_1d, tmp_path):
     """A run of a system without known equations loads back equal to the one saved,
-    its empty arrays (states, oracle states and scenario states of shape (., 0))
+    its empty arrays (states and scenario states of shape (., 0))
     included."""
     run = hb.load_run(hb.save_run(runs_1d[0], tmp_path / "run.json"))
 
     assert _encode(run) == _encode(runs_1d[0])
     solution = run.acquisitions[0]
-    assert run.dataset.x_oracle is not None and solution.x is not None
-    assert run.dataset.x.shape == run.dataset.x_oracle.shape == (4, 0)
+    assert solution.x is not None
+    assert run.dataset.x.shape == (4, 0)
     assert solution.x.shape == (5, 0)
 
 
 def test_iteration_figures_draw_without_known_equations(runs_1d):
     """Every BO method's iteration figure draws with one decision variable, its GP
     panel (y over u for hybrid BO), scenarios and acquisition function included."""
-    problem, measure = composite_problem(1)
+    problem, _ = composite_problem(1)
     bo_runs = (run for run in runs_1d if run.method in [*HYBRID, "standard"])
     for run in bo_runs:
-        figure = hb.plots.iteration(run, problem, 1, measure=measure)
+        figure = hb.plots.iteration(run, problem, 1, oracle=composite_oracle(1))
         assert len(figure.axes) == (3 if run.method in HYBRID else 2), run.method
     plt.close("all")
 
@@ -199,7 +201,7 @@ def test_2d_iteration_figure_draws_without_known_equations():
     methods = {"saa": METHODS["saa-False"]}
     (run,) = runs_of(methods, problem, measure)
 
-    figure = hb.plots.iteration(run, problem, 1, measure=measure)
+    figure = hb.plots.iteration(run, problem, 1, oracle=composite_oracle(2))
 
     # Check: both rows, and the replay through the stored value
     titles = [ax.get_title() for ax in figure.axes if ax.get_title()]
@@ -227,8 +229,8 @@ def test_with_f_y_hybrid_bo_is_standard_bo():
     y = hb.Var("y", start=(-2.0, 2.0))
     system = hb.System(u=[u], y=[y], h_inputs=[u], measured=[y])
     problem = hb.Problem(system, f=lambda v: v.y)
-    measure = hb.oracle_measure(
-        system, oracle=lambda v: [cas.sin(3 * v.u)], noise_std=0.0
+    measure = hb.measure_oracle(
+        problem, oracle=lambda v: [cas.sin(3 * v.u)], noise_std=0.0
     )
     initial = np.array([[-1.5], [-0.2], [0.4], [1.3]])
     runs = {

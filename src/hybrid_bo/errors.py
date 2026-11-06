@@ -37,7 +37,7 @@ class RunFormatError(ValueError):
 class ReconstructionWarning(UserWarning):
     """The root-finding problem found a different root from the oracle values.
 
-    Only raised with an oracle. Noise alone doesn't trigger it: the reconstruction is
+    Only raised by `check_reconstruction`. Noise alone doesn't trigger it: the reconstruction is
     compared with the root nearest the oracle values, for the same noisy measured
     variables. A warning means the measured variables don't determine the states
     uniquely, so the method may learn from states the system didn't settle at. Measure
@@ -57,7 +57,7 @@ class OutOfBoundsWarning(UserWarning):
 
 
 class OracleOptimumWarning(UserWarning):
-    """An evaluated point has an oracle objective below the stated oracle optimum.
+    """A measured point has an oracle objective below the stated oracle optimum.
 
     The stated value can't then be the optimum, so every regret measured from it is
     wrong. Find the optimum again, e.g. with `oracle_optimum` from more starts.

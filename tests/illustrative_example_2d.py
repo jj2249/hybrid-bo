@@ -47,7 +47,7 @@ def oracle(v):
     return [cas.sin(v.u1) * cas.cos(v.u2)]
 
 
-measure = hb.oracle_measure(system, oracle, noise_std=0.0)
+measure = hb.measure_oracle(problem, oracle, noise_std=0.0)
 
 # The oracle optimum: the study measures regret from it, the methods never see it.
 # Found once with
@@ -160,6 +160,18 @@ if __name__ == "__main__":
         for method in methods
     }
     hb.save_runs(runs, folder)
+
+    # Score each run at the oracle, with a generator of its own
+    rng = np.random.default_rng(0)
+    curves = {
+        label: [
+            hb.oracle_incumbents(
+                run.dataset, hb.oracle_values(problem, oracle, run.dataset.u, rng).f
+            )
+            for run in group
+        ]
+        for label, group in runs.items()
+    }
     figure, ax = plt.subplots()
-    hb.plots.regret(runs, optimum, ax)
+    hb.plots.regret(curves, optimum, ax)
     figure.savefig(folder / "regret.png")

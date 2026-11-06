@@ -38,10 +38,8 @@ from hybrid_bo.baselines import latin_hypercube_sampling, uniform_sampling
 from hybrid_bo.bo import hybrid_bo, standard_bo
 from hybrid_bo.dataset import (
     Dataset,
-    check_oracle_optimum,
     extend,
     incumbents,
-    oracle_incumbents,
 )
 from hybrid_bo.errors import (
     HybridBOError,
@@ -58,7 +56,13 @@ from hybrid_bo.hybrid_model import (
     nominal_scenario,
     optimize_hybrid_model,
 )
-from hybrid_bo.oracle import oracle_measure, oracle_optimum
+from hybrid_bo.oracle import (
+    check_reconstruction,
+    measure_oracle,
+    oracle_incumbents,
+    oracle_optimum,
+    oracle_values,
+)
 from hybrid_bo.problem import Problem, System, Var
 from hybrid_bo.run import Run
 from hybrid_bo.sampling import initial_points

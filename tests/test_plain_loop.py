@@ -16,20 +16,10 @@ def measure_sin(u: np.ndarray, rng: np.random.Generator) -> np.ndarray:
     return np.sin(u)
 
 
-def measure_without_oracle_values(
-    u: np.ndarray, rng: np.random.Generator
-) -> np.ndarray:
-    """The illustrative example's oracle simulation, reading only the measured
-    variables, so its draws are the methods'."""
-    return ex.measure(u, rng).measured
-
-
 def check_the_dataset_holds_what_was_measured(dataset: hb.Dataset) -> None:
-    """Every row holds the measured y, the x that solves g, and f there, and no oracle
-    values."""
+    """Every row holds the measured y, the x that solves g, and f there."""
     assert dataset.u.shape == (N_INITIAL + N_ITERATIONS, 1)
     assert hb.dataset.n_iterations(dataset) == N_ITERATIONS
-    assert dataset.x_oracle is None and dataset.f_oracle is None
     np.testing.assert_array_equal(dataset.y, np.sin(dataset.u))
     np.testing.assert_allclose(
         dataset.x + np.exp(dataset.x) - dataset.y, 0.0, atol=1e-9
@@ -136,10 +126,10 @@ def test_the_hybrid_loop_is_hybrid_bo(approximation):
         scenarios = hb.nominal_scenario(ex.system.n_y)
     else:
         scenarios = hb.saa_scenarios(approximation.n_scenarios, ex.system.n_y, rng)
-    initial = evaluate_points(ex.problem, measure_without_oracle_values, points, rng)
+    initial = evaluate_points(ex.problem, ex.measure, points, rng)
     dataset, solutions = hybrid_loop(
         ex.problem,
-        measure_without_oracle_values,
+        ex.measure,
         initial,
         scenarios,
         rng,
@@ -172,10 +162,10 @@ def test_the_standard_loop_is_standard_bo():
     # The loop, drawing what the method draws in the same order
     rng = np.random.default_rng(0)
     points = hb.initial_points(ex.system.u, N_INITIAL, rng)
-    initial = evaluate_points(ex.problem, measure_without_oracle_values, points, rng)
+    initial = evaluate_points(ex.problem, ex.measure, points, rng)
     dataset, solutions = standard_loop(
         ex.problem,
-        measure_without_oracle_values,
+        ex.measure,
         initial,
         rng,
         n_iterations=N_ITERATIONS,
@@ -212,9 +202,7 @@ def test_the_points_of_a_baseline_are_the_method(method, draw_design):
     rng = np.random.default_rng(0)
     points = hb.initial_points(ex.system.u, N_INITIAL, rng)
     all_points = np.concatenate([points, draw_design(rng)])
-    dataset = evaluate_points(
-        ex.problem, measure_without_oracle_values, all_points, rng
-    )
+    dataset = evaluate_points(ex.problem, ex.measure, all_points, rng)
 
     # Check
     np.testing.assert_array_equal(dataset.u, run.dataset.u)

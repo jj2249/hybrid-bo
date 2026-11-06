@@ -14,7 +14,7 @@ from hybrid_bo import (
     Linearization,
     SoftSAA,
     hybrid_trial_point,
-    oracle_measure,
+    measure_oracle,
     standard_trial_point,
 )
 from hybrid_bo.gp import GP, Matern52, Zero
@@ -43,8 +43,8 @@ REQUIRED = {
     "n_scenarios of SoftSAA": lambda: SoftSAA(temperature=1.0),  # ty: ignore[missing-argument]
     "std_factor of LCB": lambda: LCB(),  # ty: ignore[missing-argument]
     "noise_std of GP": lambda: GP(mean=Zero(), kernel=Matern52()),  # ty: ignore[missing-argument]
-    "noise_std of the oracle measurement": lambda: oracle_measure(  # ty: ignore[missing-argument]
-        ex.problem.system, oracle=lambda v: [cas.sin(v.u)]
+    "noise_std of the oracle measurement": lambda: measure_oracle(  # ty: ignore[missing-argument]
+        ex.problem, oracle=lambda v: [cas.sin(v.u)]
     ),
 }
 
