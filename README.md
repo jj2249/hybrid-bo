@@ -130,6 +130,8 @@ incumbent curves per label, `hb.plots.surrogate` draws a fitted GP of one input,
 `hb.plots.iteration` draws what an iteration minimized, from `hb.replay`, which evaluates
 an acquisition problem over a grid of `u` with the scenario states and `f` at each point.
 `examples/illustrative_example.py` compares hybrid and standard BO and draws both.
+`plt.style.use("hybrid_bo.default")` gives the library's look; change it as any matplotlib
+style, with `plt.rcParams` or a style of your own.
 
 ## License
 

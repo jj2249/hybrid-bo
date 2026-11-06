@@ -25,7 +25,7 @@ import numpy as np
 
 from hybrid_bo.problem import Symbolic
 from hybrid_bo.solvers import NLP, Ipopt, solve_with_multistart
-from hybrid_bo.utils import Scaler, lhs, minmax, scale, standard, unscale
+from hybrid_bo.utils import Scaler, _lhs, minmax, scale, standard, unscale
 
 _logger = logging.getLogger(__name__)
 
@@ -393,7 +393,7 @@ def fit_gp(
         )
 
         # Multistart from Latin hypercube starts over the bounds
-        starts = lhs(nlp.lower, nlp.upper, n_starts, rng)
+        starts = _lhs(nlp.lower, nlp.upper, n_starts, rng)
         w_best = solve_with_multistart(nlp, starts, solver).w
 
         # Back from the search space, to the numbers the fitted GP holds

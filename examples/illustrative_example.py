@@ -18,6 +18,8 @@ import hybrid_bo as hb
 logging.basicConfig()
 logging.getLogger("hybrid_bo").setLevel(logging.INFO)
 
+plt.style.use("hybrid_bo.default")
+
 N_INITIAL, N_ITERATIONS, N_RUNS = 2, 5, 10
 OPTIMUM = -50.4608044704652  # the lowest f, at u = -0.446
 

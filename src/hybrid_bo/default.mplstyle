@@ -1,0 +1,2 @@
+# The library's look: plt.style.use("hybrid_bo.default")
+axes.grid: True

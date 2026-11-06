@@ -27,7 +27,7 @@ from hybrid_bo.hybrid_model import (
 )
 from hybrid_bo.problem import Problem, Symbolic, start_bounds
 from hybrid_bo.solvers import NLP, Ipopt, solve_with_multistart
-from hybrid_bo.utils import lhs, log_softplus
+from hybrid_bo.utils import _lhs, log_softplus
 
 # Added to the standard deviation in EI, so a zero std doesn't divide by zero
 _EI_STD_EPSILON = 1e-10
@@ -187,7 +187,7 @@ def standard_trial_point(
     Raises `NoSolutionError` if every start fails.
     """
     acquisition_problem = standard_acquisition(problem, fitted, incumbent)
-    starts = lhs(*acquisition_problem.start_bounds, n_starts, rng)
+    starts = _lhs(*acquisition_problem.start_bounds, n_starts, rng)
     solution = solve_with_multistart(acquisition_problem.nlp, starts, solver)
     return AcquisitionSolution(solution.w, solution.f)
 
@@ -215,7 +215,7 @@ def hybrid_trial_point(
     acquisition_problem = hybrid_acquisition(
         problem, fitted, scenarios, incumbent, approximation
     )
-    starts = lhs(*acquisition_problem.start_bounds, n_starts, rng)
+    starts = _lhs(*acquisition_problem.start_bounds, n_starts, rng)
     solution = solve_with_multistart(acquisition_problem.nlp, starts, solver)
     u, x, y = _unpack_scenarios(acquisition_problem, solution.w)
     return AcquisitionSolution(u, solution.f, x, y)

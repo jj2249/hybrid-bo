@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 from scipy.stats import qmc
 
-from hybrid_bo.utils import lhs, uniform
+from hybrid_bo.utils import _lhs, _uniform
 
 LOWER = np.array([-2.0, 0.0, 10.0])
 UPPER = np.array([2.0, 1.0, 10.5])
@@ -22,7 +22,7 @@ def test_lhs_matches_scipy(n, d, seed):
     """lhs is scipy's Latin hypercube from the same seed, stretched to the bounds, for
     several numbers of points and dimensions."""
     lower, upper = LOWER[:d], UPPER[:d]
-    points = lhs(lower, upper, n, np.random.default_rng(seed))
+    points = _lhs(lower, upper, n, np.random.default_rng(seed))
 
     samples = qmc.LatinHypercube(d, rng=np.random.default_rng(seed)).random(n)
     np.testing.assert_array_equal(points, lower + (upper - lower) * samples)
@@ -30,13 +30,13 @@ def test_lhs_matches_scipy(n, d, seed):
 
 def test_uniform_matches_numpy():
     """uniform is numpy's uniform draw from the same seed, stretched to the bounds."""
-    points = uniform(LOWER, UPPER, 7, np.random.default_rng(0))
+    points = _uniform(LOWER, UPPER, 7, np.random.default_rng(0))
 
     samples = np.random.default_rng(0).uniform(size=(7, 3))
     np.testing.assert_array_equal(points, LOWER + (UPPER - LOWER) * samples)
 
 
-@pytest.mark.parametrize("sample", [lhs, uniform])
+@pytest.mark.parametrize("sample", [_lhs, _uniform])
 def test_shape_and_bounds(sample):
     """Both samplers return one row per point, inside the bounds."""
     points = sample(LOWER, UPPER, 50, np.random.default_rng(1))
@@ -50,14 +50,14 @@ def test_lhs_spawns_instead_of_consuming_the_stream():
     """lhs takes the generator's next spawned child and leaves its stream untouched,
     the scipy behavior the draw order relies on."""
     rng = np.random.default_rng(0)
-    lhs(np.zeros(1), np.ones(1), 3, rng)
-    second = lhs(np.zeros(1), np.ones(1), 3, rng)
+    _lhs(np.zeros(1), np.ones(1), 3, rng)
+    second = _lhs(np.zeros(1), np.ones(1), 3, rng)
 
     # Each call takes the next SeedSequence child, sharing the counter with spawn
     after_one_spawn = np.random.default_rng(0)
     after_one_spawn.spawn(1)
     np.testing.assert_array_equal(
-        second, lhs(np.zeros(1), np.ones(1), 3, after_one_spawn)
+        second, _lhs(np.zeros(1), np.ones(1), 3, after_one_spawn)
     )
 
     # ... and leaves the stream untouched
@@ -69,8 +69,8 @@ def test_lhs_does_not_import_scipy_stats():
     in a new process, as this one has imported it."""
     # A new process draws with lhs and reports whether scipy.stats got imported
     code = (
-        "import sys; import numpy as np; from hybrid_bo.utils import lhs; "
-        "lhs(np.zeros(2), np.ones(2), 3, np.random.default_rng(0)); "
+        "import sys; import numpy as np; from hybrid_bo.utils import _lhs; "
+        "_lhs(np.zeros(2), np.ones(2), 3, np.random.default_rng(0)); "
         "print('scipy.stats' in sys.modules)"
     )
 
