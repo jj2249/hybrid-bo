@@ -46,7 +46,7 @@ def measure(u):
 # The prior GP, and the approximation of EI
 gp = hb.gp.GP(
     mean=hb.gp.Zero(),
-    kernel=hb.gp.Param((0.1, 10.0)) * hb.gp.Matern52(),
+    kernel=hb.gp.Scale(hb.gp.Matern52(), hb.gp.Param((0.1, 10.0))),
     noise_std=0.0,
 )
 approximation = hb.SoftSAA(temperature=50e-3, unknown_states_as_variables=False)
@@ -91,7 +91,7 @@ for seed in range(N_RUNS):
     for _ in range(N_ITERATIONS):
         before = dataset
         incumbent = hb.incumbents(dataset)[-1]
-        fitted = hb.fit_gp(gp, dataset.u, dataset.f, rng)
+        fitted = gp.fit(dataset.u, dataset.f, rng)
         acquisition = hb.standard_acquisition(problem, fitted, incumbent)
         solution = acquisition.solve(rng)
         u_new = solution.u[None]

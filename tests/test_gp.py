@@ -17,12 +17,6 @@ from hybrid_bo.gp import (
     Param,
     Scale,
     Zero,
-    _params,
-    _with_values,
-    covariance,
-    fit_gp,
-    log_marginal_likelihood,
-    predict,
 )
 from hybrid_bo.solvers import Ipopt
 from hybrid_bo.utils import Scaler
@@ -71,7 +65,7 @@ def test_predict(fitted):
     cov_ref = matern52(X_test, X_test) - K_star.T @ np.linalg.solve(K, K_star)
 
     # Prediction: one mean and std per row of X_test
-    mean, std = predict(fitted, X_test)
+    mean, std = fitted.predict(X_test)
     assert mean.shape == std.shape == (len(X_test),)
     np.testing.assert_allclose(mean, mean_ref, rtol=RTOL, atol=ATOL)
     np.testing.assert_allclose(std, np.sqrt(np.diag(cov_ref)), rtol=RTOL, atol=ATOL)
@@ -84,9 +78,9 @@ def test_predict_symbolic_matches_numeric(fitted, symbol_type):
     numbers. The MX case checks only that a fitted GP can be evaluated at MX inputs:
     the library math itself is SX only."""
     X = symbol_type.sym("X", *X_test.shape)
-    function = cas.Function("predict", [X], list(predict(fitted, X)))
+    function = cas.Function("predict", [X], list(fitted.predict(X)))
     mean, std = function(X_test)
-    expected_mean, expected_std = predict(fitted, X_test)
+    expected_mean, expected_std = fitted.predict(X_test)
     np.testing.assert_allclose(mean.full().ravel(), expected_mean, rtol=RTOL, atol=ATOL)
     np.testing.assert_allclose(std.full().ravel(), expected_std, rtol=RTOL, atol=ATOL)
 
@@ -104,8 +98,8 @@ def test_predict_undoes_the_scalers(fitted):
     X_measured = (X_test - x_scaler.intercept) / x_scaler.slope
 
     # The same prediction as the unscaled GP, unscaled
-    mean, std = predict(scaled, X_measured)
-    expected_mean, expected_std = predict(fitted, X_test)
+    mean, std = scaled.predict(X_measured)
+    expected_mean, expected_std = fitted.predict(X_test)
     np.testing.assert_allclose(mean, (expected_mean - 1.0) / 4.0, rtol=RTOL, atol=ATOL)
     np.testing.assert_allclose(std, expected_std / 4.0, rtol=RTOL, atol=ATOL)
 
@@ -116,7 +110,7 @@ def test_log_marginal_likelihood(fitted):
     K = matern52(X_train, X_train) + (NOISE_STD**2 + JITTER) * np.eye(len(X_train))
     ref = multivariate_normal(np.zeros(len(X_train)), K).logpdf(Y_train)
     np.testing.assert_allclose(
-        log_marginal_likelihood(fitted), ref, rtol=RTOL, atol=ATOL
+        float(cas.evalf(fitted.log_marginal_likelihood())), ref, rtol=RTOL, atol=ATOL
     )
 
 
@@ -136,18 +130,12 @@ def test_gp_checks():
             scaler,
         )
     with pytest.raises(ValueError, match="lengthscale has 3 entries for 2 inputs"):
-        fit_gp(
-            GP(mean=Zero(), kernel=Matern52((0.1, 0.2, 0.3)), noise_std=0.0),
-            X_train,
-            Y_train,
-            rng,
+        GP(mean=Zero(), kernel=Matern52((0.1, 0.2, 0.3)), noise_std=0.0).fit(
+            X_train, Y_train, rng
         )
     with pytest.raises(ValueError, match="lengthscale has 1 entries for 2 inputs"):
-        fit_gp(
-            GP(mean=Zero(), kernel=Scale(Scale(Matern52((0.1,)))), noise_std=0.0),
-            X_train,
-            Y_train,
-            rng,
+        GP(mean=Zero(), kernel=Scale(Scale(Matern52((0.1,)))), noise_std=0.0).fit(
+            X_train, Y_train, rng
         )
 
 
@@ -170,13 +158,13 @@ def test_inputs_of_different_widths_raise():
     a width that is a multiple of the other's, and return numbers."""
     # Setup: a GP of two inputs with one fixed lengthscale
     gp = GP(mean=Zero(), kernel=Matern52(0.3, ard=False), noise_std=0.0)
-    fitted = fit_gp(gp, X_train, Y_train, np.random.default_rng(0))
+    fitted = gp.fit(X_train, Y_train, np.random.default_rng(0))
 
     # Check: twice the training columns, then half of them
     with pytest.raises(ValueError, match="X1 has 4 inputs and X2 has 2"):
-        predict(fitted, np.zeros((3, 4)))
+        fitted.predict(np.zeros((3, 4)))
     with pytest.raises(ValueError, match="X1 has 2 inputs and X2 has 1"):
-        covariance(Matern52(0.3), cas.DM.zeros(3, 2), cas.DM.zeros(5, 1))
+        Matern52(0.3).covariance(cas.DM.zeros(3, 2), cas.DM.zeros(5, 1))
 
 
 def test_hyperparameters_are_fitted_output_scales_first():
@@ -188,30 +176,30 @@ def test_hyperparameters_are_fitted_output_scales_first():
     lengthscale = Param((0.1, 1.0))
 
     # Check: with ARD, without it, and with a fixed lengthscale
-    assert _params(Scale(Scale(Matern52(lengthscale), inner), outer), 2) == [
+    assert Scale(Scale(Matern52(lengthscale), inner), outer).params(2) == [
         outer,
         inner,
         lengthscale,
         lengthscale,
     ]
-    assert _params(Scale(Matern52(lengthscale, ard=False), outer), 2) == [
+    assert Scale(Matern52(lengthscale, ard=False), outer).params(2) == [
         outer,
         lengthscale,
     ]
-    assert _params(Scale(Scale(Matern52(0.3), 2.0), outer), 2) == [outer]
+    assert Scale(Scale(Matern52(0.3), 2.0), outer).params(2) == [outer]
 
 
 def test_with_values_replaces_each_param_in_fit_order():
-    """Each `Param` takes its value in the order of `_params`, and fixed values stay."""
+    """Each `Param` takes its value in the order of `params`, and fixed values stay."""
     param = Param((0.1, 10.0))
 
     # An ARD lengthscale takes one value per input, a shared one a single value
     kernel = Scale(Scale(Matern52(param), 1.5), param)
-    assert _with_values(kernel, [2.0, 0.3, 0.4], 2) == Scale(
+    assert kernel.with_values([2.0, 0.3, 0.4], 2) == Scale(
         Scale(Matern52((0.3, 0.4)), 1.5), 2.0
     )
     shared = Scale(Matern52(param, ard=False), param)
-    assert _with_values(shared, [2.0, 0.3], 2) == Scale(Matern52(0.3, ard=False), 2.0)
+    assert shared.with_values([2.0, 0.3], 2) == Scale(Matern52(0.3, ard=False), 2.0)
 
 
 # Fitting: the regression baselines pin the fitted parameters of the illustrative
@@ -228,24 +216,26 @@ def test_fit_maximizes_the_log_marginal_likelihood():
     over the bounds of the default kernel."""
     X, Y = FIT_DATA["1d"]
 
-    fitted = fit_gp(DEFAULT, X, Y, np.random.default_rng(1))
+    fitted = DEFAULT.fit(X, Y, np.random.default_rng(1))
 
     # The likelihood at every grid point, on the same scaled training data
     grid = [
-        log_marginal_likelihood(
-            dataclasses.replace(
-                fitted,
-                gp=GP(
-                    mean=Zero(),
-                    kernel=Scale(Matern52((lengthscale,)), outputscale),
-                    noise_std=0.0,
-                ),
+        float(
+            cas.evalf(
+                dataclasses.replace(
+                    fitted,
+                    gp=GP(
+                        mean=Zero(),
+                        kernel=Scale(Matern52((lengthscale,)), outputscale),
+                        noise_std=0.0,
+                    ),
+                ).log_marginal_likelihood()
             )
         )
         for outputscale in np.geomspace(0.1, 10.0, 15)
         for lengthscale in np.geomspace(1e-3, 1e2, 15)
     ]
-    assert log_marginal_likelihood(fitted) >= max(grid) - 1e-8
+    assert float(cas.evalf(fitted.log_marginal_likelihood())) >= max(grid) - 1e-8
 
 
 def test_fit_fills_in_params_and_keeps_fixed_values():
@@ -259,7 +249,7 @@ def test_fit_fills_in_params_and_keeps_fixed_values():
         jitter=1e-7,
     )
 
-    fitted = fit_gp(gp, *FIT_DATA["2d"], np.random.default_rng(0))
+    fitted = gp.fit(*FIT_DATA["2d"], np.random.default_rng(0))
 
     kernel = fitted.gp.kernel
     assert isinstance(kernel, Scale) and isinstance(kernel.kernel, Matern52)
@@ -270,10 +260,8 @@ def test_fit_fills_in_params_and_keeps_fixed_values():
     assert (fitted.gp.noise_std, fitted.gp.jitter) == (0.05, 1e-7)
 
     # Without ARD, one lengthscale shared by both inputs
-    shared = fit_gp(
-        GP(mean=Zero(), kernel=Matern52(ard=False), noise_std=0.0),
-        *FIT_DATA["2d"],
-        np.random.default_rng(0),
+    shared = GP(mean=Zero(), kernel=Matern52(ard=False), noise_std=0.0).fit(
+        *FIT_DATA["2d"], np.random.default_rng(0)
     )
     assert isinstance(shared.gp.kernel, Matern52)
     assert isinstance(shared.gp.kernel.lengthscale, float)
@@ -286,11 +274,8 @@ def test_noise_is_in_measured_units():
     X, Y = FIT_DATA["2d"]
     noise_std = 0.3
 
-    fitted = fit_gp(
-        GP(mean=Zero(), kernel=Scale(Matern52()), noise_std=noise_std),
-        X,
-        Y,
-        np.random.default_rng(0),
+    fitted = GP(mean=Zero(), kernel=Scale(Matern52()), noise_std=noise_std).fit(
+        X, Y, np.random.default_rng(0)
     )
 
     # The reference: the fitted parameters, the noise scaled by hand into a GP on
@@ -299,8 +284,8 @@ def test_noise_is_in_measured_units():
     scaled_noise = dataclasses.replace(fitted.gp, noise_std=noise_std / Y.std())
     reference = FittedGP(scaled_noise, fitted.X, fitted.Y, fitted.x_scaler, identity)
     np.testing.assert_allclose(
-        log_marginal_likelihood(fitted),
-        log_marginal_likelihood(reference),
+        float(cas.evalf(fitted.log_marginal_likelihood())),
+        float(cas.evalf(reference.log_marginal_likelihood())),
         rtol=RTOL,
         atol=ATOL,
     )
@@ -313,7 +298,7 @@ def test_fit_draws_one_lhs_and_nothing_from_the_stream(data):
     X, Y = FIT_DATA[data]
     rng = np.random.default_rng(1)
 
-    fit_gp(DEFAULT, X, Y, rng)
+    DEFAULT.fit(X, Y, rng)
 
     # The stream is where a fresh generator's is, and the next child is the second
     reference = np.random.default_rng(1)
@@ -329,7 +314,7 @@ def test_fit_without_params_draws_nothing():
     gp = GP(mean=Zero(), kernel=Scale(Matern52(0.5), 1.5), noise_std=0.0)
     rng = np.random.default_rng(1)
 
-    fitted = fit_gp(gp, X, Y, rng)
+    fitted = gp.fit(X, Y, rng)
 
     assert fitted.gp == gp
     assert rng.spawn(1)[0].random() == np.random.default_rng(1).spawn(1)[0].random()
@@ -341,7 +326,7 @@ def test_failed_fit_raises():
     no_iterations = Ipopt(solver_options={"print_level": 0, "max_iter": 0})
 
     with pytest.raises(NoSolutionError):
-        fit_gp(DEFAULT, X, Y, np.random.default_rng(0), solver=no_iterations)
+        DEFAULT.fit(X, Y, np.random.default_rng(0), solver=no_iterations)
 
 
 def test_fit_converges_on_clustered_inputs(caplog):
@@ -357,7 +342,7 @@ def test_fit_converges_on_clustered_inputs(caplog):
     """
     X = np.array([-1.8859, 1.3673, -1.9739, -1.591, -1.5762, -1.57])[:, None]
 
-    fit_gp(DEFAULT, X, np.sin(X[:, 0]), np.random.default_rng(0))
+    DEFAULT.fit(X, np.sin(X[:, 0]), np.random.default_rng(0))
 
     assert "iteration limit" not in caplog.text
 
@@ -369,7 +354,7 @@ def test_nearly_singular_covariance_is_warned_about(caplog):
     X = np.array([0.0, 0.5, 0.5 + 1e-9, 1.0])[:, None]
     gp = GP(mean=Zero(), kernel=Matern52(0.3), noise_std=0.0, jitter=1e-14)
 
-    fit_gp(gp, X, np.sin(X[:, 0]), np.random.default_rng(0))
+    gp.fit(X, np.sin(X[:, 0]), np.random.default_rng(0))
 
     # One warning about the conditioning, whose arguments are the condition number
     # (above the threshold) and the jitter
@@ -386,7 +371,7 @@ def test_well_conditioned_fit_is_not_warned_about(caplog):
     condition number."""
     X, Y = FIT_DATA["1d"]
 
-    fit_gp(DEFAULT, X, Y, np.random.default_rng(0))
+    DEFAULT.fit(X, Y, np.random.default_rng(0))
 
     assert "condition number" not in caplog.text
 
@@ -395,9 +380,52 @@ def test_param_is_fitted_within_its_bounds():
     """A `Param` with narrow bounds is fitted inside them."""
     gp = GP(mean=Zero(), kernel=Matern52(Param((0.4, 0.6))), noise_std=0.0)
 
-    fitted = fit_gp(gp, *FIT_DATA["2d"], np.random.default_rng(0))
+    fitted = gp.fit(*FIT_DATA["2d"], np.random.default_rng(0))
 
     assert isinstance(fitted.gp.kernel, Matern52)
     lengthscale = fitted.gp.kernel.lengthscale
     assert isinstance(lengthscale, tuple)
     assert all(0.4 - 1e-8 <= value <= 0.6 + 1e-8 for value in lengthscale)
+
+
+@pytest.mark.parametrize(
+    ("X", "Y"),
+    [
+        (X_train[:, 0], Y_train),
+        (X_train, Y_train[:, np.newaxis]),
+        (X_train, Y_train[:-1]),
+    ],
+    ids=["X is 1-D", "Y is a column", "Y is short"],
+)
+def test_a_fit_rejects_shapes_that_do_not_match(X, Y):
+    """A fit names the shapes it needs, rather than failing inside CasADi."""
+    with pytest.raises(ValueError, match=r"X of shape \(n, d\) and Y of shape \(n,\)"):
+        DEFAULT.fit(X, Y, np.random.default_rng(0))
+
+
+@pytest.mark.parametrize("bad", [np.nan, np.inf])
+def test_a_fit_rejects_values_that_are_not_finite(bad):
+    """NaN or infinity in the data would give NaN predictions, so a fit refuses them."""
+    Y = Y_train.copy()
+    Y[2] = bad
+
+    with pytest.raises(ValueError, match="finite data"):
+        DEFAULT.fit(X_train, Y, np.random.default_rng(0))
+
+
+@pytest.mark.parametrize(
+    "X", [X_test[0], X_test.tolist()], ids=["one point, 1-D", "a list"]
+)
+def test_predict_needs_a_2d_array(fitted, X):
+    """A numeric X must be a 2-D array, and the message names the shape."""
+    with pytest.raises(ValueError, match=r"\(n_points, d\)"):
+        fitted.predict(X)
+
+
+def test_fit_returns_a_new_fitted_gp_and_leaves_the_gp_alone():
+    """`fit` returns the fitted GP: the prior still has its `Param`s."""
+    gp = GP(mean=Zero(), kernel=Matern52(), noise_std=0.0)
+
+    gp.fit(X_train, Y_train, np.random.default_rng(0))
+
+    assert gp.kernel == Matern52()

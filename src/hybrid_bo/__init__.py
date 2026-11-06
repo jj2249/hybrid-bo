@@ -15,5 +15,5 @@ from hybrid_bo.acquisition import (
 from hybrid_bo.dataset import Dataset, extend, incumbents, load_dataset, save_dataset
 from hybrid_bo.errors import NoSolutionError, RootFindingError
 from hybrid_bo.evaluation import Measure, reconstruct_states
-from hybrid_bo.gp import fit_gp, fit_surrogate
+from hybrid_bo.gp import fit_surrogate
 from hybrid_bo.problem import Problem, System, Var, lhs_points, uniform_points

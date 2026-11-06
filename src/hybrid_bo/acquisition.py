@@ -16,7 +16,7 @@ from typing import Any
 import casadi as cas
 import numpy as np
 
-from hybrid_bo.gp import FittedGP, predict
+from hybrid_bo.gp import FittedGP
 from hybrid_bo.hybrid_model import (
     DeterministicEquivalent,
     Solution,
@@ -111,7 +111,7 @@ def standard_acquisition(
     """
     u_vars = problem.system.u
     u = Symbolic.sym("u", len(u_vars))
-    mean, std = predict(fitted, u.T)
+    mean, std = fitted.predict(u.T)
     objective = -expected_improvement(mean, std, incumbent)
     nlp = NLP(
         cas.Function("acquisition", [u], [objective]),

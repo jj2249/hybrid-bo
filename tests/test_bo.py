@@ -14,7 +14,6 @@ from plain_loop import evaluate_points, hybrid_loop, standard_loop
 from scipy.stats import norm
 
 import hybrid_bo as hb
-from hybrid_bo.gp import predict
 from hybrid_bo.hybrid_model import _pack
 
 N_SCENARIOS = 4
@@ -94,8 +93,8 @@ def two_unknown_states_problem() -> hb.Problem:
 )
 def test_scenarios_reject_inconsistent_draws_or_weights(z, w):
     """The draws must be (S, P), with S weights that are >= 0 and sum to 1."""
-    fitted = hb.fit_gp(
-        ex.gp, np.array([[0.0], [1.0]]), np.array([0.0, 1.0]), np.random.default_rng(0)
+    fitted = ex.gp.fit(
+        np.array([[0.0], [1.0]]), np.array([0.0, 1.0]), np.random.default_rng(0)
     )
 
     # `raises` passes only if the block raises that exception
@@ -144,7 +143,7 @@ def test_solving_standard_acquisition_minimizes_analytic_ei():
     # Setup: a GP of the objective
     rng = np.random.default_rng(2)
     dataset = training_data()
-    fitted = hb.fit_gp(ex.gp, dataset.u, dataset.f, rng)
+    fitted = ex.gp.fit(dataset.u, dataset.f, rng)
     incumbent = float(hb.incumbents(dataset)[-1])
 
     # Act
@@ -152,7 +151,7 @@ def test_solving_standard_acquisition_minimizes_analytic_ei():
     solution = built.solve(rng)
 
     # Check against EI in closed form
-    mean, std = predict(fitted, solution.u[np.newaxis])
+    mean, std = fitted.predict(solution.u[np.newaxis])
     gamma = (incumbent - mean[0]) / std[0]
     expected_ei = (incumbent - mean[0]) * norm.cdf(gamma) + std[0] * norm.pdf(gamma)
     assert solution.value == pytest.approx(-expected_ei, rel=1e-6)
@@ -168,13 +167,11 @@ def ei_problems(incumbent: float, temperature: float):
     GP substituted, and the decision vector and f_s (S,) at u = 0.3 and x = (-1, 0, 0.5)."""
     problem = h_of_x_problem()
     X = np.array([[-1.5, -1.0], [-0.5, 0.2], [0.4, -0.3], [1.7, 0.6]])
-    fitted = hb.fit_gp(
-        ex.gp, X, np.array([0.3, -1.2, 0.9, 0.8]), np.random.default_rng(0)
-    )
+    fitted = ex.gp.fit(X, np.array([0.3, -1.2, 0.9, 0.8]), np.random.default_rng(0))
     u, x = 0.3, np.array([-1.0, 0.0, 0.5])
 
     # The reference values: y_s = mean + std * z_s at each scenario's arguments of h
-    mean, std = predict(fitted, np.column_stack([np.full_like(x, u), x]))
+    mean, std = fitted.predict(np.column_stack([np.full_like(x, u), x]))
     f = x**2 + mean + std * Z[:, 0]
 
     soft, saa = (
@@ -259,8 +256,8 @@ def test_soft_saa_ei_is_finite_far_from_the_incumbent(incumbent):
 
 def test_the_acquisition_problem_needs_one_gp_and_column_per_unknown_state():
     """Scenarios or a surrogate model of the wrong size are refused."""
-    fitted = hb.fit_gp(
-        ex.gp, np.array([[0.0], [1.0]]), np.array([0.0, 1.0]), np.random.default_rng(0)
+    fitted = ex.gp.fit(
+        np.array([[0.0], [1.0]]), np.array([0.0, 1.0]), np.random.default_rng(0)
     )
     z, w = draw_scenarios(3, 2, np.random.default_rng(0))
 
@@ -397,9 +394,9 @@ def test_regret_and_convergence_draw_the_median_of_each_label():
 
 
 def test_surrogate_draws_the_gp_and_its_points_in_measured_units():
-    """The mean is `predict`'s, and the points are the training data as measured."""
+    """The mean is the fitted GP's prediction, and the points are the training data as measured."""
     dataset = training_data()
-    fitted = hb.fit_gp(ex.gp, dataset.u, dataset.y[:, 0], np.random.default_rng(0))
+    fitted = ex.gp.fit(dataset.u, dataset.y[:, 0], np.random.default_rng(0))
     ax = matplotlib.figure.Figure().subplots()
 
     hb.plots.surrogate(fitted, -2.0, 2.0, ax)
@@ -407,7 +404,7 @@ def test_surrogate_draws_the_gp_and_its_points_in_measured_units():
     (line,) = ax.get_lines()
     x = np.asarray(line.get_xdata())
     np.testing.assert_allclose(
-        np.asarray(line.get_ydata()), predict(fitted, x[:, np.newaxis])[0]
+        np.asarray(line.get_ydata()), fitted.predict(x[:, np.newaxis])[0]
     )
     drawn = np.asarray(ax.collections[-1].get_offsets())
     np.testing.assert_allclose(drawn, np.column_stack([dataset.u, dataset.y]))
@@ -457,7 +454,7 @@ def test_replay_of_standard_bo_is_the_analytic_objective():
     """Standard BO has no states, so its replay is -EI at each point."""
     rng = np.random.default_rng(2)
     dataset = training_data()
-    fitted = hb.fit_gp(ex.gp, dataset.u, dataset.f, rng)
+    fitted = ex.gp.fit(dataset.u, dataset.f, rng)
     incumbent = float(hb.incumbents(dataset)[-1])
     built = hb.standard_acquisition(ex.problem, fitted, incumbent)
     solution = built.solve(rng)
@@ -529,7 +526,7 @@ def test_iteration_draws_standard_bos_panels():
     """The GP of f and EI, on two axes."""
     rng = np.random.default_rng(2)
     dataset = training_data()
-    fitted = hb.fit_gp(ex.gp, dataset.u, dataset.f, rng)
+    fitted = ex.gp.fit(dataset.u, dataset.f, rng)
     incumbent = float(hb.incumbents(dataset)[-1])
     built = hb.standard_acquisition(ex.problem, fitted, incumbent)
     solution = built.solve(rng)

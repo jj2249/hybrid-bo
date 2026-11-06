@@ -13,7 +13,7 @@ from typing import Any
 import casadi as cas
 import numpy as np
 
-from hybrid_bo.gp import FittedGP, predict
+from hybrid_bo.gp import FittedGP
 from hybrid_bo.problem import Problem, Symbolic, System, Var, start_bounds
 from hybrid_bo.solvers import NLP, Ipopt, solve_with_multistart
 from hybrid_bo.utils import lhs
@@ -131,7 +131,7 @@ def _scenario_unknown_states(
     """
     # One column of mean and std per unknown state, matching the columns of z
     inputs = cas.horzcat(*system.h_arguments(cas.repmat(u.T, len(z), 1), x))
-    mean, std = zip(*(predict(gp, inputs) for gp in fitted), strict=True)
+    mean, std = zip(*(gp.predict(inputs) for gp in fitted), strict=True)
     return cas.horzcat(*mean) + cas.horzcat(*std) * Symbolic(z)
 
 

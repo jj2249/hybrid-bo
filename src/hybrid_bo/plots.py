@@ -11,7 +11,7 @@ import numpy as np
 
 from hybrid_bo.acquisition import replay
 from hybrid_bo.dataset import Dataset
-from hybrid_bo.gp import FittedGP, predict
+from hybrid_bo.gp import FittedGP
 from hybrid_bo.hybrid_model import DeterministicEquivalent, Solution
 from hybrid_bo.utils import unscale
 
@@ -55,7 +55,7 @@ def surrogate(fitted: FittedGP, lower: float, upper: float, ax: "Axes") -> "Axes
     """Draws a fitted GP of one input between `lower` and `upper`: its mean, its band of
     two standard deviations and its training points, in measured units."""
     x = np.linspace(lower, upper, 201)
-    mean, std = predict(fitted, x[:, np.newaxis])
+    mean, std = fitted.predict(x[:, np.newaxis])
     (drawn,) = ax.plot(x, mean, label="GP mean")
     ax.fill_between(
         x, mean - 2 * std, mean + 2 * std, color=drawn.get_color(), alpha=0.2

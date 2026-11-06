@@ -50,7 +50,7 @@ outputscale = hb.gp.Param((0.1, 10.0))
 lengthscale = hb.gp.Param((1e-3, 1e2))
 gp = hb.gp.GP(
     mean=hb.gp.Zero(),
-    kernel=outputscale * hb.gp.Matern52(lengthscale=lengthscale),
+    kernel=hb.gp.Scale(hb.gp.Matern52(lengthscale=lengthscale), outputscale),
     noise_std=0.0,
 )
 

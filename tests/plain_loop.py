@@ -75,7 +75,7 @@ def standard_loop(
     """
     solutions = []
     for _ in range(n_iterations):
-        fitted = hb.fit_gp(gp, dataset.u, dataset.f, rng)
+        fitted = gp.fit(dataset.u, dataset.f, rng)
         incumbent = hb.incumbents(dataset)[-1]
         solution = hb.standard_acquisition(problem, fitted, incumbent).solve(rng)
         dataset = hb.extend(dataset, evaluate_point(problem, measure, solution.u, rng))

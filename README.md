@@ -98,7 +98,7 @@ for _ in range(10):
 dataset = initial
 
 for _ in range(10):
-    fitted = hb.fit_gp(gp, dataset.u, dataset.f, rng)
+    fitted = gp.fit(dataset.u, dataset.f, rng)
     acquisition = hb.standard_acquisition(problem, fitted, hb.incumbents(dataset)[-1])
     solution = acquisition.solve(rng)
     dataset = hb.extend(dataset, evaluate(solution.u, rng))

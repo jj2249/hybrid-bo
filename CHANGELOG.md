@@ -8,6 +8,13 @@
 - **Breaking:** `hb.saa_scenarios` and `Scenarios` are gone: pass draws `z` and weights `w`.
   `approximation` is keyword-only, and `AcquisitionSolution` is `Solution`.
 - `hb.expected_improvement` is public.
+- **Breaking:** `hb.fit_gp(gp, X, Y, rng)` is `gp.fit(X, Y, rng)`, `predict(fitted, X)` is
+  `fitted.predict(X)`, and `log_marginal_likelihood` is a method of `FittedGP` that gives a
+  CasADi scalar.
+- **Breaking:** `2.0 * kernel` is gone: write `Scale(kernel, 2.0)`. `covariance` and
+  `prior_mean` are the methods `kernel.covariance(X1, X2)` and `mean.at(X)`.
+- **Breaking:** A fit raises `ValueError` for shapes that don't match and for NaN or
+  infinity, and `predict` for a numeric X that isn't a 2-D array.
 - **Breaking:** `HybridBOError` is gone; catch `NoSolutionError` or `RootFindingError`.
 - **Breaking:** The scalers `hb.gp.minmax`, `standard`, `scale` and `unscale` are in
   `hybrid_bo.utils`, and `minmax` maps onto [0, 1] only. `hybrid_bo.sampling` is gone.
