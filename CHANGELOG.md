@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.8.1 (2026-11-06)
+
+The solvers and the hybrid problem hold their own behavior, and `solve` returns plain
+values. The regression results don't change.
+
+- **Breaking:** `hb.hybrid_deterministic_equivalent(...)` is `hb.DeterministicEquivalent(...)`,
+  with the same arguments. It holds an `NLP` as `.nlp` rather than being one, so `.f`, `.g`
+  and the bounds are on `.nlp`.
+- **Breaking:** `solve` returns values: `u, x, y, value` from a `DeterministicEquivalent`, and
+  `w, value` from an `NLP`, so the trial point of `hb.standard_acquisition` is the first of
+  them. `Solution` and `ScenarioSolution` are gone, and the plots take what `solve` returned.
+- **Breaking:** `find_root(problem, p, starts, tol)` is `problem.solve(p, starts, tol)`, and
+  `RootProblem.newton` is private.
+- `NLP.solve_from(starts)` solves from given starts, replacing the private
+  `_solve_with_multistart`.
+- `minmax`, `standard`, `scale` and `unscale` are `Scaler.minmax`, `Scaler.standard`,
+  `Scaler.scale` and `Scaler.unscale`.
+
 ## 0.8.0 (2026-11-06)
 
 The library is rewritten to read like the math, for a scientist reading the code: methods
