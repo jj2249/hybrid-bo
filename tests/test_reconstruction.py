@@ -21,7 +21,7 @@ from hybrid_bo import (
     extend,
     incumbents,
 )
-from hybrid_bo.evaluation import reconstruct_states
+from hybrid_bo.reconstruction import reconstruct_states
 
 
 def two_branch_problem() -> Problem:

@@ -7,16 +7,22 @@ The library's look is the matplotlib style `default.mplstyle`: call
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING
 
+import casadi as cas
 import numpy as np
 
-from hybrid_bo.acquisition import replay
 from hybrid_bo.dataset import Dataset
+from hybrid_bo.errors import RootFindingError
 from hybrid_bo.gp import FittedGP
 from hybrid_bo.hybrid_model import DeterministicEquivalent, Solution
+from hybrid_bo.problem import Symbolic
+from hybrid_bo.solvers import RootProblem, find_root
 from hybrid_bo.utils import unscale
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
+
+# `acquisition_on_grid` solves the equations at each grid point to this
+_GRID_TOLERANCE = 1e-8
 
 
 def convergence(curves: Mapping[str, Sequence[np.ndarray]], ax: "Axes") -> "Axes":
@@ -70,6 +76,62 @@ def surrogate(fitted: FittedGP, lower: float, upper: float, ax: "Axes") -> "Axes
     return ax
 
 
+def acquisition_on_grid(
+    problem: DeterministicEquivalent, solution: Solution, u: np.ndarray
+) -> tuple[np.ndarray, tuple[Dataset, ...]]:
+    """The acquisition problem over a grid of points nobody measured, to draw what the
+    solver minimized: EI at each row of u (n, N) and, for hybrid BO, one `Dataset` per
+    scenario, of the states and f under that scenario at each row of u.
+
+    A `Dataset` of the system can't give this: it holds only the points that were measured,
+    and the real system's states, not the GPs' prediction of them.
+
+    Standard BO's EI is analytic, so it has no scenarios. With u fixed, hybrid BO's
+    constraints are a square system in the scenario states, which `find_root` solves point
+    by point outwards from `solution`, each from the nearest point solved, to stay on the
+    branch the optimizer chose. A point fails if the residual norm is above
+    `_GRID_TOLERANCE` or a state is outside its bounds, and is NaN.
+    """
+    if problem.n_scenarios == 0:
+        return problem.ei(problem.nlp.f.map(len(u))(u.T).full().ravel()), ()
+
+    # The constraints as a root problem: the states are unknowns and u a parameter
+    nlp, n_u = problem.nlp, problem.n_u
+    assert nlp.g is not None and problem.scenario_values is not None
+    assert solution.x is not None and solution.y is not None
+    stored = problem.pack(solution)[n_u:]
+    states, u_fixed = Symbolic.sym("v", len(stored)), Symbolic.sym("u", n_u)
+    equations = cas.Function(
+        "scenario_states", [states, u_fixed], [nlp.g(cas.vertcat(u_fixed, states))]
+    )
+    root_problem = RootProblem(equations, nlp.lower[n_u:], nlp.upper[n_u:])
+
+    # Outwards from the stored solution, each point from the nearest one solved
+    solved_u, solved_states = [solution.u], [stored]
+    values = np.full(len(u), np.nan)
+    f = np.full((len(u), problem.n_scenarios), np.nan)
+    x = np.full((len(u), *solution.x.shape), np.nan)
+    y = np.full((len(u), *solution.y.shape), np.nan)
+    for i in np.argsort(np.linalg.norm(u - solution.u, axis=1)):
+        nearest = np.argmin(np.linalg.norm(np.array(solved_u) - u[i], axis=1))
+        start = solved_states[nearest][np.newaxis]
+        try:
+            root = find_root(root_problem, u[i], start, _GRID_TOLERANCE)
+        except RootFindingError:
+            continue
+        w = np.concatenate([u[i], root])
+        values[i] = float(nlp.f(w))
+        f_i, y_i = problem.scenario_values(w)
+        f[i], y[i], x[i] = f_i.full().ravel(), y_i.full(), problem.unpack(w)[1]
+        solved_u.append(u[i])
+        solved_states.append(root)
+
+    scenarios = range(problem.n_scenarios)
+    return problem.ei(values), tuple(
+        Dataset(u, x[:, s], y[:, s], f[:, s]) for s in scenarios
+    )
+
+
 def iteration(
     problem: DeterministicEquivalent,
     solution: Solution,
@@ -78,11 +140,11 @@ def iteration(
     axes: "Sequence[Axes]",
 ) -> None:
     """Draws one iteration of one decision variable on `axes`: the state before the trial
-    point `solution`, over the start bounds of u, as `replay` gives it, so the panels show
-    the function the solver minimized. `dataset` holds the points before the trial point.
+    point `solution`, over the start bounds of u, as `acquisition_on_grid` gives it, so the
+    panels show the function the solver minimized. `dataset` holds the points before the trial point.
 
     Standard BO has two panels, its GP of f and EI. Hybrid BO has three: `fitted`, the GP of an unknown state of u alone, then f under the scenarios,
-    their weighted mean and std, and EI. A point the replay didn't solve is a gap.
+    their weighted mean and std, and EI. A point that wasn't solved is a gap.
 
     Raises `ValueError` if there isn't one decision variable, or one axes per panel.
     """
@@ -96,25 +158,25 @@ def iteration(
         msg = f"Standard BO draws 2 panels and hybrid BO 3, got {len(panels)} axes"
         raise ValueError(msg)
 
-    # The GP, in its panel's color, and the replay over the start bounds of u
+    # The GP, in its panel's color, and the acquisition over the start bounds of u
     lower, upper = (float(bound[0]) for bound in problem.start_bounds)
     surrogate(fitted, lower, upper, panels[0])
     color = panels[0].get_lines()[0].get_color()
     u = np.linspace(lower, upper, 201)
-    replayed = replay(problem, solution, u[:, np.newaxis])
+    ei, scenarios = acquisition_on_grid(problem, solution, u[:, np.newaxis])
 
     # f under the scenarios, with the points so far
     if is_hybrid:
-        assert replayed.f is not None
-        mean = replayed.f @ problem.weights
-        std = np.sqrt((replayed.f - mean[:, np.newaxis]) ** 2 @ problem.weights)
+        f = np.column_stack([scenario.f for scenario in scenarios])
+        mean = f @ problem.weights
+        std = np.sqrt((f - mean[:, np.newaxis]) ** 2 @ problem.weights)
         panels[1].plot(u, mean, color=color, label="mean over scenarios")
         panels[1].fill_between(u, mean - std, mean + std, color=color, alpha=0.2)
         panels[1].scatter(dataset.u[:, 0], dataset.f, color="k", label="points")
         panels[1].set_ylabel("f")
 
     # EI, and the trial point on every panel
-    panels[-1].plot(u, replayed.ei, color=color, label="EI")
+    panels[-1].plot(u, ei, color=color, label="EI")
     panels[-1].set(xlabel="u", ylabel="EI")
     for ax in panels:
         ax.axvline(solution.u[0], color=color, linestyle=":", label="trial point")

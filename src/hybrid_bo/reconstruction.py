@@ -41,28 +41,6 @@ def _root_finding_problem(system: System) -> RootProblem:
     )
 
 
-def _dataset(problem: Problem, u: np.ndarray, states: list[np.ndarray]) -> Dataset:
-    """The Dataset of the points u (n, N) with their states, all initial points."""
-    system = problem.system
-    array = np.reshape(states, (len(states), system.n_x + system.n_y))
-    x, y = array[:, : system.n_x], array[:, system.n_x :]
-    f = np.array([problem.f(*point).full().item() for point in zip(x, y, u)])
-    return Dataset(u, x, y, f)
-
-
-def _check_measurements(system: System, u: np.ndarray, measured: np.ndarray) -> None:
-    """Raises `ValueError` unless u is (n, N) and measured (n, P)."""
-    if u.ndim != 2 or u.shape[1] != system.n_u:
-        msg = f"The decision variables u need shape (n, {system.n_u}), got {u.shape}"
-        raise ValueError(msg)
-    if measured.shape != (len(u), system.n_y):
-        msg = (
-            f"The measured variables need shape ({len(u)}, {system.n_y}), a row per "
-            f"point of u and a column per variable, got {measured.shape}"
-        )
-        raise ValueError(msg)
-
-
 def reconstruct_states(
     problem: Problem,
     *,
@@ -90,7 +68,15 @@ def reconstruct_states(
     system = problem.system
     u = np.asarray(u, dtype=float)
     measured = np.asarray(measured, dtype=float)
-    _check_measurements(system, u, measured)
+    if u.ndim != 2 or u.shape[1] != system.n_u:
+        msg = f"The decision variables u need shape (n, {system.n_u}), got {u.shape}"
+        raise ValueError(msg)
+    if measured.shape != (len(u), system.n_y):
+        msg = (
+            f"The measured variables need shape ({len(u)}, {system.n_y}), a row per "
+            f"point of u and a column per variable, got {measured.shape}"
+        )
+        raise ValueError(msg)
 
     # The root-finding problem at each row, noting the rows that fail. A value that
     # isn't finite fails too: with no unmeasured states nothing would be solved
@@ -112,7 +98,11 @@ def reconstruct_states(
             failed.append(row)
 
     # The rows that worked, as the result or on the error
-    dataset = _dataset(problem, np.delete(u, failed, axis=0), states)
+    u = np.delete(u, failed, axis=0)
+    array = np.reshape(states, (len(states), system.n_x + system.n_y))
+    x, y = array[:, : system.n_x], array[:, system.n_x :]
+    f = np.array([problem.f(*point).full().item() for point in zip(x, y, u)])
+    dataset = Dataset(u, x, y, f)
     if failed:
         msg = f"No root, or a value that isn't finite, at rows {failed}"
         error = RootFindingError(msg)

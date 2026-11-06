@@ -36,5 +36,5 @@ Decisions to keep, so they aren't undone:
 - A default may set how hard we search, never what we search for: `approximation`,
   `temperature` and `noise_std` are required.
 - The library has no loop or runner. The user writes the loop and the measurement.
-- Figures replay the acquisition problem from the stored solution, so they show what was
-  minimized, on the solver's branch.
+- Figures evaluate the acquisition problem over a grid from the stored solution, so they
+  show what was minimized, on the solver's branch.
