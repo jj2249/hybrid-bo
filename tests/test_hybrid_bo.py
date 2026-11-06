@@ -812,9 +812,9 @@ def test_both_settings_solve_the_illustrative_example(
     run = illustrative_run(illustrative_problem, settings)
 
     # The points: 2 initial points, then 2 trial points
-    assert run.history.n_initial == 2
-    assert run.history.u.shape == (4, 1)
-    assert np.all((-2.0 <= run.history.u) & (run.history.u <= 2.0))
+    assert run.dataset.n_initial == 2
+    assert run.dataset.u.shape == (4, 1)
+    assert np.all((-2.0 <= run.dataset.u) & (run.dataset.u <= 2.0))
 
     # The surrogates: one per iteration, fitted on the points before its trial point,
     # each one GP for the one unknown state
@@ -846,8 +846,8 @@ def test_soft_saa_solves_the_illustrative_example(
     run = illustrative_run(illustrative_problem, settings)
 
     # The points and the acquisition values
-    assert run.history.u.shape == (4, 1)
-    assert np.all((-2.0 <= run.history.u) & (run.history.u <= 2.0))
+    assert run.dataset.u.shape == (4, 1)
+    assert np.all((-2.0 <= run.dataset.u) & (run.dataset.u <= 2.0))
     assert all(np.isfinite(solution.value) for solution in run.acquisitions)
 
     # The scenarios: the same draws as SAA's
@@ -874,7 +874,7 @@ def test_stored_acquisition_solution_solves_the_acquisition_problem(
     run = illustrative_run(illustrative_problem, settings)
 
     # One solution per iteration, with every scenario's states
-    history = run.history
+    dataset = run.dataset
     assert run.scenarios is not None
     assert len(run.acquisitions) == 2
     for i, (solution, (fitted,)) in enumerate(
@@ -884,9 +884,9 @@ def test_stored_acquisition_solution_solves_the_acquisition_problem(
         assert solution.x.shape == (5, 1) and solution.y.shape == (5, 1)
 
         # The value is the acquisition problem's objective at the stored solution
-        point = history.n_initial + i
-        u = history.u[point, 0]
-        incumbent = float(incumbents(history)[point - 1])
+        point = dataset.n_initial + i
+        u = dataset.u[point, 0]
+        incumbent = float(incumbents(dataset)[point - 1])
         nlp = hybrid_acquisition(
             illustrative_problem,
             (fitted,),
@@ -924,7 +924,7 @@ def test_linearization_runs_over_the_nominal_scenario(
     run = illustrative_run(illustrative_problem, settings)
 
     # The nominal scenario: zero draws, weight 1
-    history = run.history
+    dataset = run.dataset
     assert run.scenarios is not None
     np.testing.assert_array_equal(run.scenarios.z, np.zeros((1, 1)))
     np.testing.assert_array_equal(run.scenarios.w, np.ones(1))
@@ -935,13 +935,13 @@ def test_linearization_runs_over_the_nominal_scenario(
     ):
         assert solution.x is not None and solution.y is not None
         assert solution.x.shape == (1, 1) and solution.y.shape == (1, 1)
-        point = history.n_initial + i
-        u, x, y = history.u[point, 0], solution.x[0, 0], solution.y[0, 0]
+        point = dataset.n_initial + i
+        u, x, y = dataset.u[point, 0], solution.x[0, 0], solution.y[0, 0]
         mean, _ = predict(fitted, np.array([[u]]))
         assert x + np.exp(x) == pytest.approx(y, abs=1e-6)
         assert y == pytest.approx(mean[0], abs=1e-6)
 
-        incumbent = float(incumbents(history)[point - 1])
+        incumbent = float(incumbents(dataset)[point - 1])
         nlp = hybrid_acquisition(
             illustrative_problem,
             (fitted,),
@@ -1007,8 +1007,8 @@ def test_gp_inputs_are_the_arguments_of_h():
     # The fitted GP's inputs, unscaled, are the (u, x) of the points before it
     (fitted,) = run.surrogates[-1]
     inputs = (fitted.X - fitted.x_scaler.intercept) / fitted.x_scaler.slope
-    history = run.history
-    np.testing.assert_allclose(inputs, np.column_stack([history.u, history.x])[:3])
+    dataset = run.dataset
+    np.testing.assert_allclose(inputs, np.column_stack([dataset.u, dataset.x])[:3])
     kernel = fitted.gp.kernel
     assert isinstance(kernel, Scale) and isinstance(kernel.kernel, Matern52)
     assert isinstance(kernel.kernel.lengthscale, tuple)
@@ -1094,7 +1094,7 @@ def test_failed_initial_point_carries_the_partial_run_with_its_scenarios(
     # The partial run: the first initial point, no iteration, and the scenarios
     run = info.value.run
     assert run is not None
-    assert run.history.u.shape == (1, 1)
+    assert run.dataset.u.shape == (1, 1)
     assert run.surrogates == []
     assert run.scenarios is not None and run.scenarios.z.shape == (5, 1)
 
@@ -1128,7 +1128,7 @@ def test_failed_evaluation_carries_the_partial_run_with_its_scenarios(
 
     run = info.value.run
     assert run is not None
-    assert run.history.u.shape == (2, 1)
+    assert run.dataset.u.shape == (2, 1)
     assert run.surrogates == []
     assert run.scenarios is not None and run.scenarios.z.shape == (5, 1)
     assert run.artifact["method"] == "hybrid_bo"

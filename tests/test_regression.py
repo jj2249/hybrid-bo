@@ -66,19 +66,19 @@ METHODS = {
 def as_baseline_columns(run: Run) -> dict[str, np.ndarray]:
     """The run under the `ResultsBO` keys: they store y inside x, f as a column, and
     split every array into the initial points and the rest."""
-    history = run.history
-    assert history.x_oracle is not None and history.y_oracle is not None
-    assert history.f_oracle is not None
+    dataset = run.dataset
+    assert dataset.x_oracle is not None and dataset.y_oracle is not None
+    assert dataset.f_oracle is not None
     columns = {
-        "u": history.u,
-        "x": np.column_stack([history.x, history.y]),
-        "f": history.f[:, np.newaxis],
-        "incumbents": incumbents(history)[:, np.newaxis],
-        "x_no_noise": np.column_stack([history.x_oracle, history.y_oracle]),
-        "f_no_noise": history.f_oracle[:, np.newaxis],
-        "incumbents_no_noise": oracle_incumbents(history)[:, np.newaxis],
+        "u": dataset.u,
+        "x": np.column_stack([dataset.x, dataset.y]),
+        "f": dataset.f[:, np.newaxis],
+        "incumbents": incumbents(dataset)[:, np.newaxis],
+        "x_no_noise": np.column_stack([dataset.x_oracle, dataset.y_oracle]),
+        "f_no_noise": dataset.f_oracle[:, np.newaxis],
+        "incumbents_no_noise": oracle_incumbents(dataset)[:, np.newaxis],
     }
-    n = history.n_initial
+    n = dataset.n_initial
     baseline = {
         f"{name}_{part}": value[:n] if part == "initial" else value[n:]
         for part in ("initial", "bo")

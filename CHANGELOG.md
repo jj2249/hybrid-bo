@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Breaking:** `hb.History` is now `hb.Dataset`, and the module `hb.history` is
+  `hb.dataset`. `error.history` is `error.dataset`, `run.history` is `run.dataset`, and
+  the `history` argument of `hb.incumbents`, `hb.oracle_incumbents`,
+  `hb.check_oracle_optimum` and `hb.dataset.n_iterations` is `dataset`. Runs saved
+  before this fail to load with `RunFormatError`, since a saved run names its fields
+  (#220).
+- `hb.extend(dataset, new)` returns a new dataset with the rows of `new` after those of
+  `dataset`; a point is a one-row dataset, so it appends too (#220).
 - **Breaking:** The oracle has a module of its own: `oracle_measure`, `oracle_optimum`,
   `OracleMeasurement` and `OracleSimulation` moved from `hb.evaluation` to `hb.oracle`.
   `hb.oracle_measure` and `hb.oracle_optimum` stay at the top level (#211).
@@ -16,15 +24,15 @@
   `v0.6.0` tag.
 - The install commands name a release, so a script's library can't change under it (#204).
 - `hb.optimize_hybrid_model` optimizes the hybrid model with the GPs replaced by their mean,
-  with no Bayesian optimization, `hb.fit_surrogate` fits the GPs to a history, and
-  `hb.reconstruct` makes a history of measurements of your own, solving the known equations
-  for the unmeasured states (#197).
+  with no Bayesian optimization, `hb.fit_surrogate` fits the GPs to a dataset, and
+  `hb.reconstruct_states` makes a dataset of measurements of your own, solving the known
+  equations for the unmeasured states (#197).
 - **Breaking:** Hybrid BO is built on a new core, `hb.hybrid_model` (#197):
   `hb.acquisition.nominal_scenario` moved there, with `Scenarios`. Results don't change.
 - **Changes results:** A measurement that returns NaN or an infinity fails the evaluation
   with `RootFindingError`, and `error.run` keeps the points before it (#214). With no
   known equations or a measured variable outside `g`, the baselines and BO at its last
-  trial point used to complete with it in their history, and earlier BO failures raised
+  trial point used to complete with it in their dataset, and earlier BO failures raised
   `NoSolutionError` with it in `error.run`. Runs with finite measurements don't change.
 - **Breaking:** `hb.bo.optimization_loop` requires `scenarios`, which the run keeps,
   complete or partial: pass None for a method without them (#210).

@@ -83,7 +83,7 @@ def replay_grid(problem: Problem, run: Run, i: int) -> np.ndarray:
     """The rows of u to replay at, as the iteration figure orders them: in 1D its 101
     points over the start bounds with the trial point inserted, in 2D the trial
     point, then a 10 x 10 grid over the start bounds."""
-    trial = run.history.u[run.history.n_initial + i]
+    trial = run.dataset.u[run.dataset.n_initial + i]
     lower, upper = _start_bounds(problem.system.u)
     if problem.system.n_u == 1:
         grid = np.linspace(lower[0], upper[0], _N_GRID)
@@ -96,7 +96,7 @@ def replay_grid(problem: Problem, run: Run, i: int) -> np.ndarray:
 def replay_at(run: Run, problem: Problem, i: int, u: np.ndarray) -> Replay:
     """Iteration i's acquisition problem replayed at the rows of u, which hold the
     trial point."""
-    trial = run.history.u[run.history.n_initial + i]
+    trial = run.dataset.u[run.dataset.n_initial + i]
     at_trial = int(np.flatnonzero(np.all(u == trial, axis=1))[0])
     return replay(iteration_problem(run, problem, i), run.acquisitions[i], u, at_trial)
 
@@ -209,7 +209,7 @@ def test_a_root_outside_the_bounds_leaves_a_gap():
     # Setup: x bounded just above its largest root at the trial point, so the trial
     # point is solved and some grid points aren't
     run, i = hybrid_run("1d", "saa"), 1
-    trial = run.history.u[run.history.n_initial + i]
+    trial = run.dataset.u[run.dataset.n_initial + i]
     x_upper = float(scenario_x(run, i, trial[np.newaxis]).max()) + 0.05
     problem = bounded_problem(x_upper)
 
@@ -249,7 +249,7 @@ def test_a_trial_point_without_a_root_in_the_bounds_warns():
     `ReplayWarning` and is still drawn, with a gap there."""
     # Setup: x bounded below its largest root at the trial point
     run, i = hybrid_run("1d", "saa"), 1
-    trial = run.history.u[run.history.n_initial + i]
+    trial = run.dataset.u[run.dataset.n_initial + i]
     problem = bounded_problem(float(scenario_x(run, i, trial[np.newaxis]).max()) - 0.01)
 
     # Act and check

@@ -10,10 +10,10 @@ from hybrid_bo import (
     acquisition,
     baselines,
     bo,
+    dataset,
     errors,
     evaluation,
     gp,
-    history,
     hybrid_model,
     oracle,
     plots,
@@ -27,6 +27,13 @@ from hybrid_bo import (
 from hybrid_bo.acquisition import EI, LCB, SAA, Linearization, SoftSAA
 from hybrid_bo.baselines import latin_hypercube_sampling, uniform_sampling
 from hybrid_bo.bo import hybrid_bo, standard_bo
+from hybrid_bo.dataset import (
+    Dataset,
+    check_oracle_optimum,
+    extend,
+    incumbents,
+    oracle_incumbents,
+)
 from hybrid_bo.errors import (
     HybridBOError,
     NoSolutionError,
@@ -36,13 +43,7 @@ from hybrid_bo.errors import (
     ReplayWarning,
     RootFindingError,
 )
-from hybrid_bo.evaluation import Measure, reconstruct
-from hybrid_bo.history import (
-    History,
-    check_oracle_optimum,
-    incumbents,
-    oracle_incumbents,
-)
+from hybrid_bo.evaluation import Measure, reconstruct_states
 from hybrid_bo.hybrid_model import fit_surrogate, optimize_hybrid_model
 from hybrid_bo.oracle import oracle_measure, oracle_optimum
 from hybrid_bo.problem import Problem, System, Var

@@ -23,7 +23,8 @@ USER_FACING = {
     "latin_hypercube_sampling",
     "uniform_sampling",
     # Optimize the hybrid model from data of your own
-    "reconstruct",
+    "reconstruct_states",
+    "extend",
     "fit_surrogate",
     "optimize_hybrid_model",
     # Save and load a run
@@ -34,7 +35,7 @@ USER_FACING = {
     "load_runs",
     # Look at the results
     "Run",
-    "History",
+    "Dataset",
     "incumbents",
     "oracle_incumbents",
     "check_oracle_optimum",

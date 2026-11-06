@@ -4,19 +4,19 @@ from typing import TYPE_CHECKING
 
 # Annotations only: run.py imports gp.py, which imports this module
 if TYPE_CHECKING:
-    from hybrid_bo.history import History
+    from hybrid_bo.dataset import Dataset
     from hybrid_bo.run import Run
 
 
 class HybridBOError(Exception):
     """Base of the library's errors.
 
-    `history` holds the points evaluated before the error, when it was raised while
+    `dataset` holds the points evaluated before the error, when it was raised while
     evaluating; `run` holds the partial run, when it was raised during a method. The
     caller can save either.
     """
 
-    history: "History | None" = None
+    dataset: "Dataset | None" = None
     run: "Run | None" = None
 
 

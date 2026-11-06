@@ -118,9 +118,9 @@ def test_a_nan_measurement_fails_the_run_and_keeps_the_points_before(
     # The partial run: the points before the failing one, all of them finite
     run = info.value.run
     assert run is not None
-    assert len(run.history.u) == failing_call - 1
-    assert np.isfinite(run.history.y).all()
-    assert np.isfinite(run.history.f).all()
+    assert len(run.dataset.u) == failing_call - 1
+    assert np.isfinite(run.dataset.y).all()
+    assert np.isfinite(run.dataset.f).all()
 
     # Only a trial point that was evaluated keeps its surrogate
     n_surrogates = 0 if label == "lhs" else failing_call - 3
@@ -129,12 +129,12 @@ def test_a_nan_measurement_fails_the_run_and_keeps_the_points_before(
 
 def test_every_method_runs_without_known_equations(runs_1d):
     """Every method finishes its 2 iterations (design points, for the baselines),
-    with no mechanistic states in its history and, for hybrid BO, none in its
+    with no mechanistic states in its dataset and, for hybrid BO, none in its
     scenario states; the artifact says there are no known equations."""
     assert [run.method for run in runs_1d] == list(METHODS)
     for run in runs_1d:
-        assert len(run.history.f) == 4, run.method
-        assert run.history.x.shape == (4, 0)
+        assert len(run.dataset.f) == 4, run.method
+        assert run.dataset.x.shape == (4, 0)
         assert run.artifact["g"] == "none"
     for run in (run for run in runs_1d if run.method in HYBRID):
         assert len(run.surrogates) == 2
@@ -176,8 +176,8 @@ def test_a_run_saves_and_loads_equal(runs_1d, tmp_path):
 
     assert _encode(run) == _encode(runs_1d[0])
     solution = run.acquisitions[0]
-    assert run.history.x_oracle is not None and solution.x is not None
-    assert run.history.x.shape == run.history.x_oracle.shape == (4, 0)
+    assert run.dataset.x_oracle is not None and solution.x is not None
+    assert run.dataset.x.shape == run.dataset.x_oracle.shape == (4, 0)
     assert solution.x.shape == (5, 0)
 
 
@@ -256,7 +256,7 @@ def test_with_f_y_hybrid_bo_is_standard_bo():
     np.testing.assert_allclose(hybrid_std, standard_std, rtol=1e-12, atol=1e-12)
 
     # SAA-EI over 500 scenarios at a fixed u, against the analytic EI there
-    incumbent, point = float(runs["standard"].history.f[:4].min()), np.array([0.9])
+    incumbent, point = float(runs["standard"].dataset.f[:4].min()), np.array([0.9])
     scenarios = saa_scenarios(500, 1, np.random.default_rng(1))
     saa = hybrid_acquisition(
         problem,

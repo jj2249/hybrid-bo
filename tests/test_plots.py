@@ -24,7 +24,7 @@ from hybrid_bo import (
     EI,
     LCB,
     SAA,
-    History,
+    Dataset,
     Linearization,
     Problem,
     ReplayWarning,
@@ -173,7 +173,7 @@ def fake_run(
     """A run of one decision variable, after `n_initial` initial points, with these
     measured and oracle objective values."""
     n = len(f)
-    history = History(
+    dataset = Dataset(
         u=np.zeros((n, 1)),
         x=np.zeros((n, 1)),
         y=np.zeros((n, 1)),
@@ -183,7 +183,7 @@ def fake_run(
         f_oracle=None if f_oracle is None else np.array(f_oracle),
         n_initial=n_initial,
     )
-    return Run(history, artifact={"method": method}, method=method)
+    return Run(dataset, artifact={"method": method}, method=method)
 
 
 def band(ax: Axes) -> np.ndarray:
@@ -239,7 +239,7 @@ def test_replayed_acquisition_at_the_trial_point_is_the_stored_value(
     # Check: the curve at the trial point
     (ax,) = figure.axes
     curve = drawn_line(ax, "LCB" if run_name == "hybrid_lcb_run" else "-EI")
-    trial = run.history.u[run.history.n_initial + i, 0]
+    trial = run.dataset.u[run.dataset.n_initial + i, 0]
     (at_trial,) = np.flatnonzero(np.asarray(curve.get_xdata()) == trial)
     stored = run.acquisitions[i].value
     if run_name == "hybrid_soft_run":
@@ -292,7 +292,7 @@ def test_hybrid_bo_figure_from_a_pickled_run(hybrid_run):
 
     # The acquisition function: the acquisition problem's objective at (u, x_s)
     assert hybrid_run.scenarios is not None
-    incumbent = hybrid_run.history.f[:3].min()
+    incumbent = hybrid_run.dataset.f[:3].min()
     nlp = hybrid_acquisition(
         ex.problem,
         hybrid_run.surrogates[1],
@@ -351,7 +351,7 @@ def test_standard_bo_figure_from_a_pickled_run(standard_run):
     np.testing.assert_allclose(line(gp_ax, "GP mean"), mean, rtol=1e-12)
 
     # The acquisition panel is the acquisition problem's objective
-    incumbent = standard_run.history.f[:3].min()
+    incumbent = standard_run.dataset.f[:3].min()
     nlp = standard_acquisition(ex.problem, surrogate, incumbent, EI()).nlp
     expected = [nlp.f(_pack(np.array([u_k]))).full().item() for u_k in u]
     np.testing.assert_allclose(line(acquisition_ax, "-EI"), expected, rtol=1e-12)
@@ -368,12 +368,12 @@ def test_baseline_figure_shows_only_the_points_so_far(lhs_run):
     (ax,) = figure.axes
     assert figure.get_suptitle() == "latin_hypercube_sampling, iteration 1"
     assert ax.get_lines() == []
-    history, n = lhs_run.history, lhs_run.history.n_initial + 1
-    points = np.column_stack([history.u[:, 0], history.f])
+    dataset, n = lhs_run.dataset, lhs_run.dataset.n_initial + 1
+    points = np.column_stack([dataset.u[:, 0], dataset.f])
     initial, so_far, incumbent, trial_point = ax.collections
     np.testing.assert_array_equal(initial.get_offsets(), points[:2])
     np.testing.assert_array_equal(so_far.get_offsets(), points[2:n])
-    best = np.argmin(history.f[:n])
+    best = np.argmin(dataset.f[:n])
     np.testing.assert_array_equal(incumbent.get_offsets(), points[[best]])
     np.testing.assert_array_equal(trial_point.get_offsets(), points[[n]])
     plt.close("all")
@@ -570,7 +570,7 @@ def test_2d_figure_has_a_panel_per_quantity(request, run_name, expected, tmp_pat
     assert titles(figure) == expected
     assert figure.get_suptitle() == f"{run.method}, iteration 1"
     panels = [ax for ax in figure.axes if ax.get_title()]
-    n_points = run.history.n_initial + 1
+    n_points = run.dataset.n_initial + 1
     for ax in panels:
         # The last four collections are the markers: initial points, points so far,
         # incumbent, trial point
@@ -630,7 +630,7 @@ def test_2d_ei_mask_covers_the_points_where_saa_ei_is_zero(hybrid_2d_run):
     mean, std = predict(run.surrogates[i][0], grid)
     y = mean[:, np.newaxis] + std[:, np.newaxis] * run.scenarios.z[:, 0]
     f = 100 * y**2 + (grid[:, [0]] - 1) ** 2
-    incumbent = run.history.f[: run.history.n_initial + i].min()
+    incumbent = run.dataset.f[: run.dataset.n_initial + i].min()
     best_improvement = (incumbent - f).max(axis=1)
 
     # Check: gray exactly where no scenario improves, away from the boundary of that

@@ -83,7 +83,7 @@ method:
 
    # Results: a run is plain data
    for run in (hybrid, standard):
-       print(f"{run.method}: best f = {hb.incumbents(run.history)[-1]:.4f}")
+       print(f"{run.method}: best f = {hb.incumbents(run.dataset)[-1]:.4f}")
 
    # A figure of the last iteration
    figure = hb.plots.iteration(hybrid, problem, 4, measure=measure)

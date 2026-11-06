@@ -26,10 +26,10 @@ from hybrid_bo.acquisition import (
     saa_scenarios,
     standard_acquisition,
 )
+from hybrid_bo.dataset import Dataset, extend, incumbents
 from hybrid_bo.errors import HybridBOError
 from hybrid_bo.evaluation import Measure, evaluate
 from hybrid_bo.gp import GP, FittedGP, fit_gp
-from hybrid_bo.history import History, _concatenate, incumbents
 from hybrid_bo.hybrid_model import (
     Scenarios,
     _unpack_scenarios,
@@ -49,7 +49,7 @@ _logger = logging.getLogger(__name__)
 # fitted GP per unknown state, or the one GP of f) and the solution of the
 # acquisition problem it came from
 TrialPoint = Callable[
-    [Problem, History, np.random.Generator],
+    [Problem, Dataset, np.random.Generator],
     tuple[np.ndarray, tuple[FittedGP, ...], AcquisitionSolution],
 ]
 
@@ -78,20 +78,20 @@ def optimization_loop(
     without them).
 
     Raises what `evaluate` and `trial_point` raise; a `HybridBOError` carries the
-    partial run as `error.run`, and its history (every point evaluated before the
-    error) as `error.history`. If evaluating a trial point fails, its surrogate and
+    partial run as `error.run`, and its dataset (every point evaluated before the
+    error) as `error.dataset`. If evaluating a trial point fails, its surrogate and
     acquisition solution are dropped with it, so the run keeps one of each per
     evaluated trial point.
 
     Logs the time taken by the initial points, and each iteration's time and
     incumbent, at info level.
     """
-    history: History | None = None
+    dataset: Dataset | None = None
     surrogates: list[tuple[FittedGP, ...]] = []
     acquisitions: list[AcquisitionSolution] = []
     method = artifact["method"]
 
-    def run_of(evaluated: History) -> Run:
+    def run_of(evaluated: Dataset) -> Run:
         """The run of the points evaluated so far, complete or partial."""
         return Run(
             evaluated,
@@ -105,7 +105,7 @@ def optimization_loop(
 
     try:
         start = time.perf_counter()
-        history = evaluate(problem, measure, initial_points, rng)
+        dataset = evaluate(problem, measure, initial_points, rng)
         _logger.info(
             "%s: evaluated %d initial points in %.2fs",
             method,
@@ -114,9 +114,9 @@ def optimization_loop(
         )
         for i in range(n_iterations):
             start = time.perf_counter()
-            u, surrogate, acquisition = trial_point(problem, history, rng)
+            u, surrogate, acquisition = trial_point(problem, dataset, rng)
             later = evaluate(problem, measure, u[np.newaxis], rng)
-            history = _concatenate(history, later)
+            dataset = extend(dataset, later)
             surrogates.append(surrogate)
             acquisitions.append(acquisition)
             _logger.info(
@@ -125,16 +125,16 @@ def optimization_loop(
                 i + 1,
                 n_iterations,
                 time.perf_counter() - start,
-                incumbents(history)[-1],
+                incumbents(dataset)[-1],
             )
     except HybridBOError as error:
         # Before the loop, the initial points evaluated so far are the partial run
-        partial = error.history if history is None else history
+        partial = error.dataset if dataset is None else dataset
         if partial is not None:
-            error.history = partial
+            error.dataset = partial
             error.run = run_of(partial)
         raise
-    return run_of(history)
+    return run_of(dataset)
 
 
 def _method_artifact(
@@ -161,21 +161,21 @@ def _method_artifact(
 
 def _acquisition_problem(
     problem: Problem,
-    history: History,
+    dataset: Dataset,
     *,
     n_evaluated: int,
     surrogate: tuple[FittedGP, ...],
     scenarios: Scenarios | None,
     settings: MethodSettings,
 ) -> AcquisitionProblem:
-    """The acquisition problem that follows the first `n_evaluated` points of `history`:
+    """The acquisition problem that follows the first `n_evaluated` points of `dataset`:
     the method's, as `settings` says, from its surrogate, its scenarios (None for
     standard BO) and the incumbent after those points.
 
     The loop and `iteration_problem` both build it here, so the iteration figures show
     the function the method minimized (ADR 0005).
     """
-    incumbent = float(incumbents(history)[n_evaluated - 1])
+    incumbent = float(incumbents(dataset)[n_evaluated - 1])
     match settings:
         case StandardBOSettings(acquisition=acquisition):
             return standard_acquisition(problem, surrogate[0], incumbent, acquisition)
@@ -230,14 +230,14 @@ def standard_bo(
     start = _starting_points(problem.system.u, n_initial, initial_points, rng)
 
     def trial_point(
-        problem: Problem, history: History, rng: np.random.Generator
+        problem: Problem, dataset: Dataset, rng: np.random.Generator
     ) -> tuple[np.ndarray, tuple[FittedGP, ...], AcquisitionSolution]:
         """Fits the GP to the points so far and solves the acquisition problem."""
-        fitted = (fit_gp(gp, history.u, history.f, rng, n_starts_gp, solver),)
+        fitted = (fit_gp(gp, dataset.u, dataset.f, rng, n_starts_gp, solver),)
         acquisition_problem = _acquisition_problem(
             problem,
-            history,
-            n_evaluated=len(history.u),
+            dataset,
+            n_evaluated=len(dataset.u),
             surrogate=fitted,
             scenarios=None,
             settings=settings,
@@ -320,16 +320,16 @@ def hybrid_bo(
             assert_never(approximation)
 
     def trial_point(
-        problem: Problem, history: History, rng: np.random.Generator
+        problem: Problem, dataset: Dataset, rng: np.random.Generator
     ) -> tuple[np.ndarray, tuple[FittedGP, ...], AcquisitionSolution]:
         """Fits the GPs to the points so far and solves the acquisition problem."""
         fitted = fit_surrogate(
-            system, history, gp=gp, rng=rng, n_starts=n_starts_gp, solver=solver
+            system, dataset, gp=gp, rng=rng, n_starts=n_starts_gp, solver=solver
         )
         acquisition_problem = _acquisition_problem(
             problem,
-            history,
-            n_evaluated=len(history.u),
+            dataset,
+            n_evaluated=len(dataset.u),
             surrogate=fitted,
             scenarios=scenarios,
             settings=settings,
@@ -365,8 +365,8 @@ def iteration_problem(run: Run, problem: Problem, i: int) -> AcquisitionProblem:
         raise ValueError(msg)
     return _acquisition_problem(
         problem,
-        run.history,
-        n_evaluated=run.history.n_initial + i,
+        run.dataset,
+        n_evaluated=run.dataset.n_initial + i,
         surrogate=surrogate,
         scenarios=run.scenarios,
         settings=run.settings,

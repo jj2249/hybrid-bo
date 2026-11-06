@@ -79,9 +79,9 @@ The original code was hard to change for three reasons:
   ([ADR 0005](docs/adr/0005-iteration-plots-replay-the-acquisition-problem.md)).
 - **A slim top level** (#52). `hb.*` holds what a typical script uses: `Var`, `System`,
   `Problem`, `Measure`, `oracle_measure`, `initial_points`, the methods,
-  `reconstruct`, `fit_surrogate`, `optimize_hybrid_model`,
-  `EI`, `LCB`, `oracle_optimum`, `save_run`, `load_run`, `save_runs`, `load_runs`, `Run`, `History`,
-  `incumbents`, `oracle_incumbents`, `check_oracle_optimum`, the errors and `plots`. Everything else is reached through its module (`hb.gp.fit_gp`,
+  `reconstruct_states`, `fit_surrogate`, `optimize_hybrid_model`,
+  `EI`, `LCB`, `oracle_optimum`, `save_run`, `load_run`, `save_runs`, `load_runs`, `Run`, `Dataset`,
+  `extend`, `incumbents`, `oracle_incumbents`, `check_oracle_optimum`, the errors and `plots`. Everything else is reached through its module (`hb.gp.fit_gp`,
   `hb.solvers.solve_with_multistart`). A new name joins the top level only if the
   example or a typical analysis script would use it.
 
@@ -199,7 +199,7 @@ frozen dataclass, so membership checks use its equality; no CasADi `==` is invol
 `lhs(lower, upper, n, rng)` and `uniform(...)` stay the array primitives the library
 uses for starts; `initial_points` is the `Var` front end for experiments.
 
-### Evaluation (`evaluation.py`, `oracle.py`, `history.py`, `errors.py`)
+### Evaluation (`evaluation.py`, `oracle.py`, `dataset.py`, `errors.py`)
 
 ```python
 @dataclass(frozen=True)
@@ -225,7 +225,7 @@ def oracle_measure(
 
 def evaluate(
     problem, measure, u: np.ndarray, rng, n_starts=100, tol=1e-10
-) -> History: ...  # u (n, N); the points are the History's initial points
+) -> Dataset: ...  # u (n, N); the points are the Dataset's initial points
 ```
 
 - A **measurement** returns the measured variables for one trial point. A real
@@ -264,10 +264,10 @@ def evaluate(
   reconstruction, because a real system would give nothing else. The fix is in the
   problem: measure other variables, or narrow the unmeasured start bounds to the right
   branch.
-- **Measurements from elsewhere.** `reconstruct(problem, *, u, measured, rng)` is
+- **Measurements from elsewhere.** `reconstruct_states(problem, *, u, measured, rng)` is
   `evaluate` without the measurement: no oracle values, and every row is tried, since
   plant data can have several bad rows, a missing value among them. `RootFindingError`
-  names them and keeps the others as `error.history`, so the caller decides whether to
+  names them and keeps the others as `error.dataset`, so the caller decides whether to
   carry on. A `u` or a
   measured variable outside its bounds is still a measurement, so it is kept, with
   `OutOfBoundsWarning`. An unmeasured root outside its bounds is a failed row, because
@@ -276,11 +276,11 @@ def evaluate(
   expected failure (Principle 6), so fsolve's convergence warnings are caught and
   nothing is printed; only `RootFindingError` reports that every start failed.
 
-### History and Run (`run.py`)
+### Dataset and Run (`dataset.py`, `run.py`)
 
 ```python
 @dataclass(frozen=True)
-class History:  # every evaluated point of one run, in order
+class Dataset:  # one row per point, in the order the points were taken
     u: np.ndarray  # (n, N)
     x: np.ndarray  # (n, M)  measured and reconstructed
     y: np.ndarray  # (n, P)
@@ -291,9 +291,10 @@ class History:  # every evaluated point of one run, in order
     n_initial: int
 
 
-def incumbents(history) -> np.ndarray: ...  # np.minimum.accumulate(history.f)
+def extend(dataset, new) -> Dataset: ...  # a new dataset; a point is a one-row dataset
+def incumbents(dataset) -> np.ndarray: ...  # np.minimum.accumulate(dataset.f)
 def oracle_incumbents(
-    history,
+    dataset,
 ) -> np.ndarray: ...  # f_oracle at each incumbent's point (#32)
 
 
@@ -306,7 +307,7 @@ class AcquisitionSolution:  # acquisition.py (#53)
 
 @dataclass(frozen=True)
 class Run:
-    history: History
+    dataset: Dataset
     artifact: dict[str, str]  # how the run was produced, as text (#123)
     method: str  # the method's name (#53)
     surrogates: list[tuple[FittedGP, ...]]  # one per iteration; P GPs (hybrid BO) or
@@ -534,7 +535,7 @@ def gp_deterministic_equivalent(
     objective_name,
 ) -> DeterministicEquivalent: ...
 def fit_surrogate(
-    system, history, *, gp, rng, n_starts=10, solver=Ipopt()
+    system, dataset, *, gp, rng, n_starts=10, solver=Ipopt()
 ) -> tuple[FittedGP, ...]: ...
 def optimize_hybrid_model(
     problem, fitted, rng, *, n_starts=10, solver=Ipopt()
@@ -580,10 +581,10 @@ def optimize_hybrid_model(
   acquisition problem is a deterministic equivalent whose objective is an acquisition
   function. Standard BO's is no deterministic equivalent, having no hybrid model, but
   needs the same fields with no scenarios (`w` is `u`), so it shares the type.
-- **`fit_surrogate` takes a `History`.** A history is every state at every point, which
+- **`fit_surrogate` takes a `Dataset`.** A dataset is every state at every point, which
   is what the fit needs and what a caller's sensors don't give. Measurements from
-  elsewhere become one through `reconstruct`, so there is one way in, and a finished
-  run's history fits as it is.
+  elsewhere become one through `reconstruct_states`, so there is one way in, and a
+  finished run's dataset fits as it is.
 - **`hybrid_bo` doesn't call `optimize_hybrid_model`.** They solve the same problem with
   a different objective: an acquisition function of `f`, or `f` itself.
   `gp_deterministic_equivalent` requires the objective (ADR 0009), and
@@ -808,7 +809,7 @@ class StandardBOSettings:
 
 
 TrialPoint = Callable[
-    [Problem, History, np.random.Generator],
+    [Problem, Dataset, np.random.Generator],
     tuple[np.ndarray, FittedGP, AcquisitionSolution],
 ]
 
@@ -866,7 +867,7 @@ The baselines are named `*_sampling` because `hb.sampling.uniform` and
   baseline.
 - `optimization_loop` takes the artifact and returns the `Run`, so a `HybridBOError` in
   the loop (an evaluation, or the trial-point function) carries the partial run as
-  `error.run` for every method: the points evaluated so far (also `error.history`) and
+  `error.run` for every method: the points evaluated so far (also `error.dataset`) and
   one surrogate per evaluated trial point (a failed evaluation drops its surrogate). It
   holds hybrid BO's scenarios too and builds the `Run` in one place, so a complete and
   a partial run have the same fields. The baselines don't use the loop: they have no
@@ -880,7 +881,7 @@ The baselines are named `*_sampling` because `hb.sampling.uniform` and
 ### Errors
 
 `HybridBOError` and subclasses (`RootFindingError` from #25, `NoSolutionError`, ...). An
-error raised in `evaluate` carries the points evaluated before it (`error.history`); an
+error raised in `evaluate` carries the points evaluated before it (`error.dataset`); an
 error raised during a run carries the partial `Run` (`error.run`, from #26), so the
 caller can save it. The loop does not catch errors. Warnings are `UserWarning`
 subclasses (`ReconstructionWarning`) so they can be filtered.
@@ -912,7 +913,7 @@ Every draw in a run comes from that run's generator, in this order:
 
 Root-finding starts are drawn even without noise, because the reconstruction always
 runs. Each consumer draws only what it uses, when it uses it. Outside a run,
-`reconstruct` draws one set of `lhs` starts per row, and `fit_surrogate` and
+`reconstruct_states` draws one set of `lhs` starts per row, and `fit_surrogate` and
 `optimize_hybrid_model` draw only their `lhs` starts, in that order.
 
 **A generator has two independent sequences.** `lhs` does not consume `rng`'s stream:

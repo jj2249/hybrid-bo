@@ -129,6 +129,13 @@ _Avoid_: experiment, query, black box, trial
 Running the system at given decision variables and obtaining its states and objective.
 _Avoid_: simulation (except the oracle simulation), query
 
+**Dataset** (`Dataset`):
+The decision variables, states and objective of a set of points, one row each: what a
+surrogate model is fitted to and what the plots draw. Rows are in the order the points
+were taken, which the incumbents rely on. A run's evaluations make one, and so do
+measurements from elsewhere (`reconstruct_states`).
+_Avoid_: history
+
 **Measured variables**:
 The states the system's sensors read at each evaluation, as many as there are unknown
 states. Part of the system's description.
