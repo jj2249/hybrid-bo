@@ -12,7 +12,6 @@ from hybrid_bo.gp import (
     Param,
     Scale,
     SquaredExponential,
-    covariance,
 )
 
 RTOL, ATOL = 1e-8, 1e-10
@@ -24,7 +23,7 @@ X2 = rng.normal(size=(4, 2))
 
 def evaluate(kernel):
     """The kernel's covariance between the numeric points X1 and X2, as numpy."""
-    return cas.evalf(covariance(kernel, cas.DM(X1), cas.DM(X2))).full()
+    return cas.evalf(kernel.covariance(cas.DM(X1), cas.DM(X2))).full()
 
 
 def scaled_distance(lengthscale):
@@ -70,28 +69,6 @@ def test_scale_multiplies_unsquared():
         rtol=RTOL,
         atol=ATOL,
     )
-
-
-def test_a_number_or_param_times_a_kernel_is_scale():
-    """`*` with a number or a `Param` is shorthand for `Scale`, on either side; it
-    builds the same data, so the covariance is the scaled one."""
-    outputscale = Param((0.1, 10.0))
-    kernel = Matern52(lengthscale=0.8)
-
-    assert outputscale * kernel == Scale(kernel, outputscale)
-    assert kernel * outputscale == Scale(kernel, outputscale)
-    assert 2.5 * kernel == Scale(kernel, 2.5)
-    assert 2 * kernel == Scale(kernel, 2.0)
-    np.testing.assert_allclose(
-        evaluate(2.5 * kernel), 2.5 * evaluate(kernel), rtol=RTOL, atol=ATOL
-    )
-
-
-def test_a_kernel_times_a_kernel_is_not_supported():
-    """There is no product of kernels: `*` between two kernels raises `TypeError`
-    saying what it takes."""
-    with pytest.raises(TypeError, match="number or a Param"):
-        Matern52() * Matern32()  # ty: ignore[unsupported-operator]
 
 
 def test_param_checks():

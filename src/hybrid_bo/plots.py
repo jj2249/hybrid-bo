@@ -1,17 +1,28 @@
-"""Static figures, each drawn on the axes you give it. Needs matplotlib."""
+"""Static figures, each drawn on the axes you give it. Needs matplotlib.
+
+The library's look is the matplotlib style `default.mplstyle`: call
+`plt.style.use("hybrid_bo.default")` before making your axes.
+"""
 
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING
 
+import casadi as cas
 import numpy as np
 
-from hybrid_bo.acquisition import AcquisitionProblem, AcquisitionSolution, replay
 from hybrid_bo.dataset import Dataset
-from hybrid_bo.gp import FittedGP, predict, unscale
-from hybrid_bo.hybrid_model import Scenarios
+from hybrid_bo.errors import RootFindingError
+from hybrid_bo.gp import FittedGP
+from hybrid_bo.hybrid_model import DeterministicEquivalent
+from hybrid_bo.problem import Symbolic
+from hybrid_bo.solvers import NLP, RootProblem, Solution, find_root
+from hybrid_bo.utils import unscale
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
+
+# `acquisition_on_grid` solves the equations at each grid point to this
+_GRID_TOLERANCE = 1e-8
 
 
 def convergence(curves: Mapping[str, Sequence[np.ndarray]], ax: "Axes") -> "Axes":
@@ -50,7 +61,7 @@ def surrogate(fitted: FittedGP, lower: float, upper: float, ax: "Axes") -> "Axes
     """Draws a fitted GP of one input between `lower` and `upper`: its mean, its band of
     two standard deviations and its training points, in measured units."""
     x = np.linspace(lower, upper, 201)
-    mean, std = predict(fitted, x[:, np.newaxis])
+    mean, std = fitted.predict(x[:, np.newaxis])
     (drawn,) = ax.plot(x, mean, label="GP mean")
     ax.fill_between(
         x, mean - 2 * std, mean + 2 * std, color=drawn.get_color(), alpha=0.2
@@ -65,53 +76,113 @@ def surrogate(fitted: FittedGP, lower: float, upper: float, ax: "Axes") -> "Axes
     return ax
 
 
+def acquisition_on_grid(
+    problem: NLP,
+    solution: Solution,
+    u: np.ndarray,
+) -> tuple[np.ndarray, tuple[Dataset, ...]]:
+    """The acquisition problem over a grid of points nobody measured, to draw what the
+    solver minimized: the acquisition value at each row of u (n, N) and, for hybrid BO, one
+    `Dataset` per scenario, of the states and f under that scenario at each row of u.
+
+    A `Dataset` of the system can't give this: it holds only the points that were
+    measured, and the real system's states, not the GPs' prediction of them.
+
+    Standard BO's acquisition is analytic, so it has no scenarios. With u fixed, hybrid
+    BO's constraints are a square system in the scenario states, which `find_root` solves point
+    by point outwards from `solution`, each from the nearest point solved, to stay on the
+    branch the optimizer chose. A point fails if the residual norm is above
+    `_GRID_TOLERANCE` or a state is outside its bounds, and is NaN.
+    """
+    if not isinstance(problem, DeterministicEquivalent):
+        return -problem.f.map(len(u))(u.T).full().ravel(), ()
+
+    # The constraints as a root problem: the states are unknowns and u a parameter
+    n_u = problem.n_u
+    assert problem.g is not None
+    stored = solution.w[n_u:]
+    states, u_fixed = Symbolic.sym("v", len(stored)), Symbolic.sym("u", n_u)
+    equations = cas.Function(
+        "scenario_states", [states, u_fixed], [problem.g(cas.vertcat(u_fixed, states))]
+    )
+    root_problem = RootProblem(equations, problem.lower[n_u:], problem.upper[n_u:])
+
+    # Outwards from the stored solution, each point from the nearest one solved
+    solved_u, solved_states = [solution.w[:n_u]], [stored]
+    values = np.full(len(u), np.nan)
+    f = np.full((len(u), problem.n_scenarios), np.nan)
+    x = np.full((len(u), problem.n_scenarios, problem.n_x), np.nan)
+    y = np.full((len(u), *problem.scenario_values(solution.w)[1].shape), np.nan)
+    for i in np.argsort(np.linalg.norm(u - solved_u[0], axis=1)):
+        nearest = np.argmin(np.linalg.norm(np.array(solved_u) - u[i], axis=1))
+        start = solved_states[nearest][np.newaxis]
+        try:
+            root = find_root(root_problem, u[i], start, _GRID_TOLERANCE)
+        except RootFindingError:
+            continue
+        w = np.concatenate([u[i], root])
+        values[i] = float(problem.f(w))
+        f_i, y_i = problem.scenario_values(w)
+        f[i], y[i], x[i] = f_i.full().ravel(), y_i.full(), problem.unpack(w)[1]
+        solved_u.append(u[i])
+        solved_states.append(root)
+
+    scenarios = range(problem.n_scenarios)
+    return problem.acquisition.from_objective(values), tuple(
+        Dataset(u, x[:, s], y[:, s], f[:, s]) for s in scenarios
+    )
+
+
 def iteration(
-    problem: AcquisitionProblem,
-    solution: AcquisitionSolution,
+    problem: NLP,
+    solution: Solution,
     fitted: FittedGP,
     dataset: Dataset,
     axes: "Sequence[Axes]",
-    scenarios: Scenarios | None = None,
 ) -> None:
     """Draws one iteration of one decision variable on `axes`: the state before the trial
-    point `solution`, over the start bounds of u, as `replay` gives it, so the panels show
-    the function the solver minimized. `dataset` holds the points before the trial point.
+    point `solution`, over the start bounds of u, as `acquisition_on_grid` gives it, so the
+    panels show the function the solver minimized. `dataset` holds the points before the
+    trial point.
 
-    Standard BO has two panels, its GP of f and EI. Hybrid BO, with its `scenarios`, has
-    three: `fitted`, the GP of an unknown state of u alone, then f under the scenarios,
-    their weighted mean and std, and EI. A point the replay didn't solve is a gap.
+    Standard BO has two panels, its GP of f and the acquisition. Hybrid BO has three:
+    `fitted`, the GP of an unknown state of u alone, then f under the scenarios, their
+    weighted mean and std, and the acquisition. A point that wasn't solved is a gap.
 
     Raises `ValueError` if there isn't one decision variable, or one axes per panel.
     """
     # The checks
     panels = list(axes)
-    if problem.n_u != 1:
-        msg = f"The panels draw one decision variable, got {problem.n_u}"
+    is_hybrid = isinstance(problem, DeterministicEquivalent)
+    n_u = problem.n_u if is_hybrid else len(problem.lower)
+    if n_u != 1:
+        msg = f"The panels draw one decision variable, got {n_u}"
         raise ValueError(msg)
-    if len(panels) != (2 if scenarios is None else 3):
+    if len(panels) != (3 if is_hybrid else 2):
         msg = f"Standard BO draws 2 panels and hybrid BO 3, got {len(panels)} axes"
         raise ValueError(msg)
 
-    # The GP, in its panel's color, and the replay over the start bounds of u
+    # The GP, in its panel's color, and the acquisition over the start bounds of u
+    assert problem.start_bounds is not None
     lower, upper = (float(bound[0]) for bound in problem.start_bounds)
     surrogate(fitted, lower, upper, panels[0])
     color = panels[0].get_lines()[0].get_color()
     u = np.linspace(lower, upper, 201)
-    replayed = replay(problem, solution, u[:, np.newaxis])
+    acquisition, scenarios = acquisition_on_grid(problem, solution, u[:, np.newaxis])
 
     # f under the scenarios, with the points so far
-    if scenarios is not None:
-        assert replayed.f is not None
-        mean = replayed.f @ scenarios.w
-        std = np.sqrt((replayed.f - mean[:, np.newaxis]) ** 2 @ scenarios.w)
+    if is_hybrid:
+        f = np.column_stack([scenario.f for scenario in scenarios])
+        mean = f @ problem.weights
+        std = np.sqrt((f - mean[:, np.newaxis]) ** 2 @ problem.weights)
         panels[1].plot(u, mean, color=color, label="mean over scenarios")
         panels[1].fill_between(u, mean - std, mean + std, color=color, alpha=0.2)
         panels[1].scatter(dataset.u[:, 0], dataset.f, color="k", label="points")
         panels[1].set_ylabel("f")
 
-    # EI, and the trial point on every panel
-    panels[-1].plot(u, replayed.ei, color=color, label="EI")
-    panels[-1].set(xlabel="u", ylabel="EI")
+    # The acquisition, and the trial point on every panel
+    panels[-1].plot(u, acquisition, color=color, label="acquisition")
+    panels[-1].set(xlabel="u", ylabel="acquisition")
     for ax in panels:
-        ax.axvline(solution.u[0], color=color, linestyle=":", label="trial point")
+        ax.axvline(solution.w[0], color=color, linestyle=":", label="trial point")
         ax.legend(fontsize="small")

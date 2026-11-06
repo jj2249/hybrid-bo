@@ -4,13 +4,11 @@ These lock in the *current* behavior. If a PR intentionally changes behavior,
 regenerate with `pixi run -e dev test --update-baselines` and review the JSON diff.
 
 Each method runs as the plain loop a script writes (`plain_loop.py`), one point at a
-time. The baselines were
-recorded by the pre-refactor code, so each result is mapped to the keys of its result
-files (`ResultsBO`) to compare. The acquisition problems' solutions (#53) came later and
-have keys of their own.
+time, and each result is mapped to the keys of the stored JSON to compare.
 """
 
 import json
+from collections.abc import Sequence
 from functools import partial
 from pathlib import Path
 
@@ -21,7 +19,8 @@ from oracle_helper import oracle_incumbents, oracle_states
 from plain_loop import evaluate_points, hybrid_loop, standard_loop
 
 import hybrid_bo as hb
-from hybrid_bo.acquisition import AcquisitionSolution
+from hybrid_bo.hybrid_model import ScenarioSolution
+from hybrid_bo.solvers import Solution
 
 BASELINE_DIR = Path(__file__).parent / "data" / "regression"
 RTOL, ATOL = 1e-6, 1e-8
@@ -30,24 +29,26 @@ RTOL, ATOL = 1e-6, 1e-8
 SEED, N_ITERATIONS = 0, 2
 
 # What a run of a method gives: the dataset, and each iteration's solution
-Result = tuple[hb.Dataset, list[AcquisitionSolution]]
+Result = tuple[hb.Dataset, Sequence[Solution]]
 
 
 def run_hybrid_bo(
-    approximation: hb.SAA | hb.SoftSAA, measure: hb.Measure, rng: np.random.Generator
+    acquisition: hb.EI | hb.SoftEI, measure: hb.Measure, rng: np.random.Generator
 ) -> Result:
     """Hybrid BO: the initial points, the scenarios once, then the loop."""
     points = hb.lhs_points(ex.system.u, ex.N_INITIAL, rng)
-    scenarios = hb.saa_scenarios(25, ex.system.n_y, rng)
+    z = rng.standard_normal((25, ex.system.n_y))
     return hybrid_loop(
         ex.problem,
         measure,
         evaluate_points(ex.problem, measure, points, rng),
-        scenarios,
+        z,
+        np.full(25, 1 / 25),
         rng,
         n_iterations=N_ITERATIONS,
         gp=ex.gp,
-        approximation=approximation,
+        acquisition=acquisition,
+        unknown_states_as_variables=False,
     )
 
 
@@ -84,10 +85,10 @@ def run_uniform_sampling(measure: hb.Measure, rng: np.random.Generator) -> Resul
 
 # The illustrative example's methods, with their labels in the stored results
 METHODS = {
-    "hybrid_bo": partial(run_hybrid_bo, hb.SAA(unknown_states_as_variables=False)),
+    "hybrid_bo": partial(run_hybrid_bo, hb.EI()),
     "hybrid_bo_soft": partial(
         run_hybrid_bo,
-        hb.SoftSAA(temperature=50e-3, unknown_states_as_variables=False),
+        hb.SoftEI(temperature=50e-3),
     ),
     "standard_bo": run_standard_bo,
     "latin_hypercube_sampling": run_latin_hypercube_sampling,
@@ -98,7 +99,7 @@ METHODS = {
 def as_baseline_columns(
     dataset: hb.Dataset,
     states: np.ndarray,
-    solutions: list[AcquisitionSolution],
+    solutions: Sequence[Solution],
 ) -> dict[str, np.ndarray]:
     """The run under the `ResultsBO` keys: they store y inside x, f as a column, and
     split every array into the initial points and the rest."""
@@ -128,11 +129,10 @@ def as_baseline_columns(
     # scenario states (iteration, scenario, state)
     if solutions:
         baseline["acquisition_values"] = np.array([s.value for s in solutions])
-    x = [s.x for s in solutions if s.x is not None]
-    y = [s.y for s in solutions if s.y is not None]
-    if x and y:
-        baseline["acquisition_x"] = np.stack(x)
-        baseline["acquisition_y"] = np.stack(y)
+    scenario_solutions = [s for s in solutions if isinstance(s, ScenarioSolution)]
+    if scenario_solutions:
+        baseline["acquisition_x"] = np.stack([s.x for s in scenario_solutions])
+        baseline["acquisition_y"] = np.stack([s.y for s in scenario_solutions])
     return baseline
 
 

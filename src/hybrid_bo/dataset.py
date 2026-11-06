@@ -11,7 +11,8 @@ class Dataset:
     """The decision variables, states and objective of a set of points, one row each, in
     the order the points were taken, which `incumbents` relies on.
 
-    `x` and `y` are measured (the measured variables) and reconstructed (the rest).
+    `x` and `y` are measured (the measured variables) and reconstructed (the rest), except
+    that `hb.plots.acquisition_on_grid` fills a dataset per scenario with predicted ones.
     """
 
     u: np.ndarray  # (n, N)

@@ -6,7 +6,7 @@ authors = [
     { name = "Alexander Mitsos", email = "alexander.Mitsos@avt.rwth-aachen.de" },
     { name = "Joseph Johnson", email = "joseph.johnson.26@ucl.ac.uk" },
 ]
-dependencies = ["casadi>=3.8.1,<4", "numpy>=2.5.3,<3", "scipy>=1.18.1,<2"]
+dependencies = ["casadi>=3.8.1,<4", "numpy>=2.5.3,<3"]
 name = "hybrid-bo"
 requires-python = ">= 3.12"
 version = "0.7.0"
@@ -42,6 +42,7 @@ pre-commit = ">=4.6.2,<5"
 pytest = ">=9.1.1,<10"
 pytest-cov = ">=7.1.0,<8"
 matplotlib = ">=3.11.2,<4"
+scipy = ">=1.18.1,<2"
 sphinx = ">=9.1.0,<10"
 sphinx-autoapi = ">=3.8.1,<4"
 furo = ">=2025.12.19,<2026"
@@ -51,8 +52,6 @@ lint = "ruff check --fix"
 format = "ruff format"
 typecheck = "ty check"
 test = "pytest"
-# Coverage starts before pytest: pytest imports hybrid_bo while reading
-# `filterwarnings`, which pytest-cov would miss
 coverage = "coverage run -m pytest && coverage report --show-missing && coverage html"
 check = { depends-on = ["lint", "format", "typecheck"] }
 setup-hooks = "pre-commit install"

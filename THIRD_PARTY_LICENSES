@@ -6,7 +6,6 @@ Runtime dependencies:
 CasADi: LGPL-3.0 license (<https://github.com/casadi/casadi/blob/main/LICENSE.txt>)
 
 - NumPy: BSD-3-Clause license (<https://github.com/numpy/numpy/blob/main/LICENSE.txt>)
-- SciPy: BSD-3-Clause license (<https://github.com/scipy/scipy/blob/main/LICENSE.txt>)
 
 Optional dependencies:
 

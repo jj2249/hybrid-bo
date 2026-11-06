@@ -17,8 +17,11 @@ pixi run -e dev docs                      # intro page and API docs
 
 `tests/test_regression.py` compares a plain loop with `tests/data/regression/*.json`.
 
-- Frozen dataclasses for data, plain functions for behavior. Functions take what they use
-  and return new values. Randomness is an explicit `rng`.
+- Write for a scientist reading the code: names from the paper, and long functions that
+  read like the math rather than helpers that hide it.
+- Frozen dataclasses for data. Methods are welcome when they read like a property or return
+  a new value (`system.states`, `fitted.predict(X)`). Nothing mutates: no void `gp.fit()`.
+  Randomness is an explicit `rng`.
 - Rows are points: a point is `(n,)`, a set is `(n_points, n)`, `f` is `(n_points,)`.
 - Every function gets a docstring. American spelling.
 
@@ -28,10 +31,10 @@ Decisions to keep, so they aren't undone:
   always solves `g` for the unmeasured states.
 - Equations are callables traced once by CasADi, for exact derivatives. No finite
   differences.
-- GPs are data: frozen dataclasses from a closed set of kernels, with functions that match
-  on the type. No custom kernels.
-- A default may set how hard we search, never what we search for: `approximation`,
+- GPs are data: frozen dataclasses from a closed set of kernels, each holding its own math
+  as methods. No custom kernels.
+- A default may set how hard we search, never what we search for: `acquisition`,
   `temperature` and `noise_std` are required.
 - The library has no loop or runner. The user writes the loop and the measurement.
-- Figures replay the acquisition problem from the stored solution, so they show what was
-  minimized, on the solver's branch.
+- Figures evaluate the acquisition problem over a grid from the stored solution, so they
+  show what was minimized, on the solver's branch.

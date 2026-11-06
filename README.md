@@ -70,35 +70,39 @@ initial = hb.reconstruct_states(
 )
 ```
 
-**Hybrid BO** fits a GP to each unknown state. Draw the scenarios once, before the loop,
-and keep them: nothing checks that they stay the same.
+**Hybrid BO** fits a GP to each unknown state. The scenarios are draws `z` and weights `w`.
+Draw them once, before the loop, and keep them: nothing checks that they stay the same.
 
 ```python
 dataset = initial
-scenarios = hb.saa_scenarios(25, system.n_y, rng)
+z = rng.standard_normal((25, system.n_y))
+w = np.full(25, 1 / 25)
 
 for _ in range(10):
     fitted = hb.fit_surrogate(system, dataset, gp=gp, rng=rng)
-    solution = hb.hybrid_trial_point(
+    equivalent = hb.hybrid_deterministic_equivalent(
         problem,
         fitted,
-        scenarios,
+        z,
+        w,
         hb.incumbents(dataset)[-1],
-        rng,
-        approximation=hb.SAA(),  # or hb.SoftSAA(temperature=...)
+        acquisition=hb.EI(),  # or hb.SoftEI(temperature=...)
     )
+    solution = equivalent.solve(rng)
     dataset = hb.extend(dataset, evaluate(solution.u, rng))
 ```
 
-**Standard BO** fits one GP to the objective:
+**Standard BO** fits one GP to the objective, so EI is exact and needs no scenarios.
+Its variables are just `u`, so `solution.w` is the trial point:
 
 ```python
 dataset = initial
 
 for _ in range(10):
-    fitted = hb.fit_gp(gp, dataset.u, dataset.f, rng)
-    solution = hb.standard_trial_point(problem, fitted, hb.incumbents(dataset)[-1], rng)
-    dataset = hb.extend(dataset, evaluate(solution.u, rng))
+    fitted = gp.fit(dataset.u, dataset.f, rng)
+    standard = hb.standard_acquisition(problem, fitted, hb.incumbents(dataset)[-1])
+    solution = standard.solve(rng)
+    dataset = hb.extend(dataset, evaluate(solution.w, rng))
 ```
 
 **A baseline** is points through the same steps, from `hb.lhs_points` or
@@ -111,7 +115,7 @@ for point in hb.uniform_points(system.u, 10, rng):
     dataset = hb.extend(dataset, evaluate(point, rng))
 ```
 
-A fit or a trial point raises `hb.NoSolutionError` if every start fails, and
+A fit or a `solve` raises `hb.NoSolutionError` if every start fails, and
 `hb.reconstruct_states` raises `hb.RootFindingError` if the known equations have no root
 or a value isn't finite. Your loop decides what to do: nothing is caught for you.
 
@@ -127,9 +131,12 @@ dataset = hb.load_dataset("dataset.npz")
 
 Plots draw on the axes you give them: `hb.plots.convergence` and `hb.plots.regret` take
 incumbent curves per label, `hb.plots.surrogate` draws a fitted GP of one input, and
-`hb.plots.iteration` draws what an iteration minimized, from `hb.replay`, which evaluates
-an acquisition problem over a grid of `u` with the scenario states and `f` at each point.
+`hb.plots.iteration` draws what an iteration minimized, from
+`hb.plots.acquisition_on_grid`, which gives the acquisition over a grid
+of `u` and a `Dataset` per scenario.
 `examples/illustrative_example.py` compares hybrid and standard BO and draws both.
+`plt.style.use("hybrid_bo.default")` gives the library's look; change it as any matplotlib
+style, with `plt.rcParams` or a style of your own.
 
 ## License
 
