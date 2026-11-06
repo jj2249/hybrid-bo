@@ -23,24 +23,21 @@ from hybrid_bo.acquisition import (
     Linearization,
     SoftSAA,
     hybrid_acquisition,
+    hybrid_trial_point,
     saa_scenarios,
     standard_acquisition,
+    standard_trial_point,
 )
 from hybrid_bo.dataset import Dataset, extend, incumbents
 from hybrid_bo.errors import HybridBOError
 from hybrid_bo.evaluation import Measure, evaluate
 from hybrid_bo.gp import GP, FittedGP, fit_gp
-from hybrid_bo.hybrid_model import (
-    Scenarios,
-    _unpack_scenarios,
-    fit_surrogate,
-    nominal_scenario,
-)
+from hybrid_bo.hybrid_model import Scenarios, fit_surrogate, nominal_scenario
 from hybrid_bo.problem import Problem
 from hybrid_bo.run import Run, run_artifact
-from hybrid_bo.sampling import _starting_points, lhs
+from hybrid_bo.sampling import _starting_points
 from hybrid_bo.settings import HybridBOSettings, MethodSettings, StandardBOSettings
-from hybrid_bo.solvers import Ipopt, solve_with_multistart
+from hybrid_bo.solvers import Ipopt
 
 _logger = logging.getLogger(__name__)
 
@@ -172,8 +169,9 @@ def _acquisition_problem(
     the method's, as `settings` says, from its surrogate, its scenarios (None for
     standard BO) and the incumbent after those points.
 
-    The loop and `iteration_problem` both build it here, so the iteration figures show
-    the function the method minimized (ADR 0005).
+    This picks the builder for `iteration_problem` from a run's settings. The builders
+    are the ones the trial point functions call, so the iteration figures show the
+    function the method minimized (ADR 0005).
     """
     incumbent = float(incumbents(dataset)[n_evaluated - 1])
     match settings:
@@ -233,18 +231,17 @@ def standard_bo(
         problem: Problem, dataset: Dataset, rng: np.random.Generator
     ) -> tuple[np.ndarray, tuple[FittedGP, ...], AcquisitionSolution]:
         """Fits the GP to the points so far and solves the acquisition problem."""
-        fitted = (fit_gp(gp, dataset.u, dataset.f, rng, n_starts_gp, solver),)
-        acquisition_problem = _acquisition_problem(
+        fitted = fit_gp(gp, dataset.u, dataset.f, rng, n_starts_gp, solver)
+        solution = standard_trial_point(
             problem,
-            dataset,
-            n_evaluated=len(dataset.u),
-            surrogate=fitted,
-            scenarios=None,
-            settings=settings,
+            fitted,
+            float(incumbents(dataset)[-1]),
+            rng,
+            acquisition=acquisition,
+            n_starts=n_starts,
+            solver=solver,
         )
-        starts = lhs(*acquisition_problem.start_bounds, n_starts, rng)
-        solution = solve_with_multistart(acquisition_problem.nlp, starts, solver)
-        return solution.w, fitted, AcquisitionSolution(solution.f)
+        return solution.u, (fitted,), solution
 
     return optimization_loop(
         problem,
@@ -326,18 +323,18 @@ def hybrid_bo(
         fitted = fit_surrogate(
             system, dataset, gp=gp, rng=rng, n_starts=n_starts_gp, solver=solver
         )
-        acquisition_problem = _acquisition_problem(
+        solution = hybrid_trial_point(
             problem,
-            dataset,
-            n_evaluated=len(dataset.u),
-            surrogate=fitted,
-            scenarios=scenarios,
-            settings=settings,
+            fitted,
+            scenarios,
+            float(incumbents(dataset)[-1]),
+            rng,
+            acquisition=acquisition,
+            approximation=approximation,
+            n_starts=n_starts,
+            solver=solver,
         )
-        starts = lhs(*acquisition_problem.start_bounds, n_starts, rng)
-        solution = solve_with_multistart(acquisition_problem.nlp, starts, solver)
-        u, x, y = _unpack_scenarios(acquisition_problem, solution.w)
-        return u, fitted, AcquisitionSolution(solution.f, x, y)
+        return solution.u, fitted, solution
 
     return optimization_loop(
         problem,

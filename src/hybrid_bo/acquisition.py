@@ -7,6 +7,10 @@ Standard BO computes it analytically from the GP's mean and standard deviation
 prediction of the unknown states (paper, Problems 8 and 9), or `Linearization`, EI of
 the objective expanded to first order around the nominal states (Lin-EI).
 
+`hybrid_trial_point` and `standard_trial_point` solve one acquisition problem from fitted
+GPs, as `optimize_hybrid_model` solves the nominal one. They live here, not beside it in
+`hybrid_model.py`, because this module imports that one, never the reverse.
+
 `replay` evaluates an acquisition problem again after the run, with u fixed at given
 points, for the iteration figures (ADR 0005).
 """
@@ -28,8 +32,8 @@ from hybrid_bo.hybrid_model import (
     gp_deterministic_equivalent,
 )
 from hybrid_bo.problem import Problem, Symbolic, _h_inputs
-from hybrid_bo.sampling import _start_bounds
-from hybrid_bo.solvers import NLP
+from hybrid_bo.sampling import _start_bounds, lhs
+from hybrid_bo.solvers import NLP, Ipopt, solve_with_multistart
 
 # Added to the standard deviation in EI, so a zero std doesn't divide by zero
 _EI_STD_EPSILON = 1e-10
@@ -220,12 +224,13 @@ def standard_acquisition(
 
 @dataclass(frozen=True)
 class AcquisitionSolution:
-    """The solution of one iteration's acquisition problem: the acquisition
-    function's value at the trial point, as the objective the problem minimizes
+    """The solution of one iteration's acquisition problem: the trial point u (N,), the
+    acquisition function's value there, as the objective the problem minimizes
     (-EI for EI, so lower is better for both EI and LCB), and,
     for hybrid BO, the scenario states there, x (S, M) and y (S, P), one row per
     scenario. Standard BO has no scenario states, so they are None."""
 
+    u: np.ndarray
     value: float
     x: np.ndarray | None = None
     y: np.ndarray | None = None
@@ -345,6 +350,63 @@ def hybrid_acquisition(
     )
 
 
+def standard_trial_point(
+    problem: Problem,
+    fitted: FittedGP,
+    incumbent: float,
+    rng: np.random.Generator,
+    *,
+    acquisition: EI | LCB,
+    n_starts: int = 10,
+    solver: Ipopt = Ipopt(),  # noqa: B008  (frozen, never mutated)
+) -> AcquisitionSolution:
+    """The next trial point of standard BO: solves `standard_acquisition` for the GP of
+    the objective `fitted` by `solve_with_multistart`, from `n_starts` Latin hypercube
+    starts over the start bounds of `u`. The solution holds no scenario states.
+
+    Raises `TypeError` unless `acquisition` is an `EI` or an `LCB`, and
+    `NoSolutionError` if every start fails.
+    """
+    acquisition_problem = standard_acquisition(problem, fitted, incumbent, acquisition)
+    starts = lhs(*acquisition_problem.start_bounds, n_starts, rng)
+    solution = solve_with_multistart(acquisition_problem.nlp, starts, solver)
+    return AcquisitionSolution(solution.w, solution.f)
+
+
+def hybrid_trial_point(
+    problem: Problem,
+    fitted: tuple[FittedGP, ...],
+    scenarios: Scenarios,
+    incumbent: float,
+    rng: np.random.Generator,
+    *,
+    acquisition: EI | LCB,
+    approximation: SAA | SoftSAA | Linearization,
+    n_starts: int = 10,
+    solver: Ipopt = Ipopt(),  # noqa: B008  (frozen, never mutated)
+) -> AcquisitionSolution:
+    """The next trial point of hybrid BO: solves `hybrid_acquisition` for the surrogate
+    model `fitted` (`fit_surrogate`) by `solve_with_multistart`, from `n_starts` Latin
+    hypercube starts over the start bounds of its variables. The solution holds the
+    scenario states at the trial point.
+
+    The caller draws `scenarios` once, before the first iteration (`saa_scenarios`, or
+    `nominal_scenario` for linearization), and passes the same ones every time: nothing
+    here checks that. The problem runs over `scenarios`, however many they are:
+    `approximation.n_scenarios` isn't read.
+
+    Raises `TypeError`, `NotImplementedError` or `ValueError` for the choices and
+    scenarios `hybrid_acquisition` refuses, and `NoSolutionError` if every start fails.
+    """
+    acquisition_problem = hybrid_acquisition(
+        problem, fitted, scenarios, incumbent, acquisition, approximation
+    )
+    starts = lhs(*acquisition_problem.start_bounds, n_starts, rng)
+    solution = solve_with_multistart(acquisition_problem.nlp, starts, solver)
+    u, x, y = _unpack_scenarios(acquisition_problem, solution.w)
+    return AcquisitionSolution(u, solution.f, x, y)
+
+
 @dataclass(frozen=True)
 class Replay:
     """An acquisition problem replayed at the rows of u (n_points, N): the minimized
@@ -397,7 +459,7 @@ def replay(
     if solved[at_trial]:
         w_trial = np.concatenate([u[at_trial], states[at_trial]])
         _, x, y = _unpack_scenarios(problem, w_trial)
-        replayed = AcquisitionSolution(float(values[at_trial]), x, y)
+        replayed = AcquisitionSolution(u[at_trial], float(values[at_trial]), x, y)
     _check_trial_point(replayed, solution)
     return Replay(values, f, f_std)
 

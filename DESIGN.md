@@ -80,6 +80,7 @@ The original code was hard to change for three reasons:
 - **A slim top level** (#52). `hb.*` holds what a typical script uses: `Var`, `System`,
   `Problem`, `Measure`, `oracle_measure`, `initial_points`, the methods,
   `reconstruct_states`, `fit_surrogate`, `optimize_hybrid_model`,
+  `hybrid_trial_point`, `standard_trial_point`, `saa_scenarios`, `nominal_scenario`,
   `EI`, `LCB`, `oracle_optimum`, `save_run`, `load_run`, `save_runs`, `load_runs`, `Run`, `Dataset`,
   `extend`, `incumbents`, `oracle_incumbents`, `check_oracle_optimum`, the errors and `plots`. Everything else is reached through its module (`hb.gp.fit_gp`,
   `hb.solvers.solve_with_multistart`). A new name joins the top level only if the
@@ -300,6 +301,7 @@ def oracle_incumbents(
 
 @dataclass(frozen=True)
 class AcquisitionSolution:  # acquisition.py (#53)
+    u: np.ndarray  # (N,) the trial point (#221)
     value: float  # the acquisition problem's objective at the trial point
     x: np.ndarray | None = None  # (S, M) scenario states; hybrid BO only
     y: np.ndarray | None = None  # (S, P)
@@ -588,9 +590,9 @@ def optimize_hybrid_model(
 - **`hybrid_bo` doesn't call `optimize_hybrid_model`.** They solve the same problem with
   a different objective: an acquisition function of `f`, or `f` itself.
   `gp_deterministic_equivalent` requires the objective (ADR 0009), and
-  `optimize_hybrid_model` fixes it to `f` by name. `hybrid_bo` calls
-  `gp_deterministic_equivalent` through `hybrid_acquisition` because it needs the
-  problem unsolved for the replay.
+  `optimize_hybrid_model` fixes it to `f` by name. `hybrid_bo` reaches
+  `gp_deterministic_equivalent` through `hybrid_trial_point` and `hybrid_acquisition`,
+  which the replay also calls, because it needs the problem unsolved.
 - **`optimize_hybrid_model` is not a method.** It measures nothing, so it has no run, no
   artifact and no settings, only a solution. It has no uncertainty in it, so it trusts
   the GP's mean even far from the data. Its unknown states are always variables, since
@@ -661,13 +663,13 @@ decision vector `w`.
   constraints, hybrid BO's problem carries `scenario_values(w)`: f under each
   scenario, the scenarios' unknown states and the std of f (linearization's s, else
   the weighted std over the scenarios), built from the same expressions as the
-  objective. The loop reads the stored scenario states from it, and `replay`
+  objective. The trial point functions read the scenario states from it, and `replay`
   (ADR 0005) solves the problem's own constraints with u fixed and evaluates the
   objective and `scenario_values`, so the figures can't drift from what the method
   minimized. `bo.iteration_problem(run, problem, i)` rebuilds an iteration's problem
-  from a run, through the function the loop builds it with (`bo._acquisition_problem`,
-  which reads the incumbent after the evaluations it is told to count), so the two
-  can't drift apart. `_pack` needs no
+  from a run, through the builders the trial point functions call
+  (`bo._acquisition_problem` picks one from the settings, and reads the incumbent after
+  the evaluations it is told to count), so the two can't drift apart. `_pack` needs no
   layout, so the builders use it for the symbols, the bounds and the start bounds
   alike.
 
@@ -808,6 +810,33 @@ class StandardBOSettings:
     solver: Ipopt = Ipopt()
 
 
+# One acquisition problem from fitted GPs, as `optimize_hybrid_model` solves the nominal
+# one; the methods' trial points call these. In acquisition.py, which imports
+# hybrid_model.py, never the reverse (#221)
+def standard_trial_point(
+    problem,
+    fitted: FittedGP,
+    incumbent: float,
+    rng,
+    *,
+    acquisition: EI | LCB,  # required
+    n_starts: int = 10,
+    solver: Ipopt = Ipopt(),
+) -> AcquisitionSolution: ...
+def hybrid_trial_point(
+    problem,
+    fitted: tuple[FittedGP, ...],
+    scenarios: Scenarios,  # the caller draws them once, before the loop
+    incumbent: float,
+    rng,
+    *,
+    acquisition: EI | LCB,  # required
+    approximation: SAA | SoftSAA | Linearization,  # required
+    n_starts: int = 10,
+    solver: Ipopt = Ipopt(),
+) -> AcquisitionSolution: ...
+
+
 TrialPoint = Callable[
     [Problem, Dataset, np.random.Generator],
     tuple[np.ndarray, FittedGP, AcquisitionSolution],
@@ -913,8 +942,10 @@ Every draw in a run comes from that run's generator, in this order:
 
 Root-finding starts are drawn even without noise, because the reconstruction always
 runs. Each consumer draws only what it uses, when it uses it. Outside a run,
-`reconstruct_states` draws one set of `lhs` starts per row, and `fit_surrogate` and
-`optimize_hybrid_model` draw only their `lhs` starts, in that order.
+`reconstruct_states` draws one set of `lhs` starts per row, and `fit_surrogate`,
+`optimize_hybrid_model` and the trial point functions draw only their `lhs` starts, in
+that order. A plain loop that goes point by point (measure, reconstruct, next) therefore
+draws what a method draws (`tests/plain_loop.py`, #221).
 
 **A generator has two independent sequences.** `lhs` does not consume `rng`'s stream:
 it draws from the next spawned child of `rng`'s `SeedSequence` (`rng.spawn(1)[0]`),
