@@ -1015,24 +1015,6 @@ def test_gp_inputs_are_the_arguments_of_h():
     assert len(kernel.kernel.lengthscale) == 2
 
 
-def test_artifact_holds_the_settings_and_the_gp_over_the_arguments_of_h(
-    illustrative_problem,
-):
-    """The artifact names the method and its settings, and the prior GP as its repr."""
-    approximation = SAA(n_scenarios=5, unknown_states_as_variables=False)
-    settings = HybridBOSettings(gp=ex.gp, acquisition=EI(), approximation=approximation)
-
-    artifact = illustrative_run(illustrative_problem, settings).artifact
-
-    assert artifact["method"] == "hybrid_bo"
-    assert (
-        "approximation=SAA(n_scenarios=5, unknown_states_as_variables=False)"
-        in artifact["settings"]
-    )
-    assert "GP(" not in artifact["settings"]
-    assert artifact["gp"] == repr(ex.gp)
-
-
 def test_what_chooses_the_method_is_required_and_keyword_only(illustrative_problem):
     """Hybrid BO has no default GP, acquisition function or approximation, and every
     argument after the measurement is keyword-only."""
@@ -1131,4 +1113,4 @@ def test_failed_evaluation_carries_the_partial_run_with_its_scenarios(
     assert run.dataset.u.shape == (2, 1)
     assert run.surrogates == []
     assert run.scenarios is not None and run.scenarios.z.shape == (5, 1)
-    assert run.artifact["method"] == "hybrid_bo"
+    assert run.method == "hybrid_bo"

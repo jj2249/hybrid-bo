@@ -22,7 +22,7 @@ import casadi as cas
 import numpy as np
 
 from hybrid_bo.hybrid_model import _minimize_f, build_deterministic_equivalent
-from hybrid_bo.problem import Problem, Symbolic, System, _as_text, _states, _trace
+from hybrid_bo.problem import Problem, Symbolic, System, _states, _trace
 from hybrid_bo.sampling import _start_bounds, lhs
 from hybrid_bo.solvers import Ipopt, _find_root, solve_with_multistart
 
@@ -38,12 +38,12 @@ class OracleMeasurement:
     y: np.ndarray  # (P,)
 
 
-@dataclass(frozen=True, repr=False)
+@dataclass(frozen=True)
 class OracleSimulation:
     """The oracle simulation as a measurement, built by `oracle_measure`.
 
-    Called as `measure(u, rng)`. It is data (the system, the traced oracle and the
-    settings), and its repr describes it in the run's artifact.
+    Called as `measure(u, rng)`. It is data: the system, the traced oracle and the
+    settings.
     """
 
     system: System
@@ -74,15 +74,6 @@ class OracleSimulation:
             measured=root[measured_columns] + noise,
             x=root[: system.n_x],
             y=root[system.n_x :],
-        )
-
-    def __repr__(self) -> str:
-        """The oracle as text in the variable names, and the settings."""
-        system = self.system
-        oracle_text = _as_text(self.oracle, system.x, system.y, system.u)
-        return (
-            f"OracleSimulation(y = {oracle_text}, noise_std={self.noise_std}, "
-            f"n_starts={self.n_starts}, tol={self.tol})"
         )
 
 

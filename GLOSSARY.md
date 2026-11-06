@@ -182,12 +182,6 @@ method starts from the same initial points. A script's list of runs per label; t
 library has no object for it.
 _Avoid_: benchmark, experiment, results, batch
 
-**Artifact**:
-What a run leaves to say what it ran and how, as text for people: the problem, the
-measurement, its method with its settings, its generator's seed and state, and the
-versions of the packages.
-_Avoid_: record, metadata, manifest, provenance
-
 **Reproducible**:
 A run is reproducible when running it again with the same code, settings and seed gives
 the same run within a tolerance. It covers the computation only: a measurement of a real

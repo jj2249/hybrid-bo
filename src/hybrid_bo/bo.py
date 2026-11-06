@@ -9,7 +9,6 @@ iteration asks the trial-point function for the next trial point and evaluates i
 import logging
 import time
 from collections.abc import Callable
-from dataclasses import fields
 from typing import assert_never
 
 import numpy as np
@@ -34,7 +33,7 @@ from hybrid_bo.evaluation import Measure, evaluate
 from hybrid_bo.gp import GP, FittedGP, fit_gp
 from hybrid_bo.hybrid_model import Scenarios, fit_surrogate, nominal_scenario
 from hybrid_bo.problem import Problem
-from hybrid_bo.run import Run, run_artifact
+from hybrid_bo.run import Run
 from hybrid_bo.sampling import _starting_points
 from hybrid_bo.settings import HybridBOSettings, MethodSettings, StandardBOSettings
 from hybrid_bo.solvers import Ipopt
@@ -58,7 +57,7 @@ def optimization_loop(
     n_iterations: int,
     trial_point: TrialPoint,
     rng: np.random.Generator,
-    artifact: dict[str, str],
+    method: str,
     *,
     settings: MethodSettings | None,
     scenarios: Scenarios | None,
@@ -66,13 +65,11 @@ def optimization_loop(
     """Evaluates the initial points (n, N), then runs `n_iterations` iterations: each
     calls `trial_point` and evaluates the trial point it returns.
 
-    Returns the run with `artifact`, `settings` and `scenarios`, labeled with the method
-    the artifact names, and per iteration the surrogate and the acquisition problem's
-    solution behind that iteration's trial point. For writing new methods: `artifact`
-    comes from `run_artifact`, built before the method draws anything, `settings` are
-    the method's, which the iteration plots replay (None for a method they can't
-    replay), and `scenarios` are the ones its trial points use (None for a method
-    without them).
+    Returns the run with `method`, `settings` and `scenarios`, and per iteration the
+    surrogate and the acquisition problem's solution behind that iteration's trial
+    point. For writing new methods: `method` is its name, `settings` are the method's,
+    which the iteration plots replay (None for a method they can't replay), and
+    `scenarios` are the ones its trial points use (None for a method without them).
 
     Raises what `evaluate` and `trial_point` raise; a `HybridBOError` carries the
     partial run as `error.run`, and its dataset (every point evaluated before the
@@ -86,13 +83,11 @@ def optimization_loop(
     dataset: Dataset | None = None
     surrogates: list[tuple[FittedGP, ...]] = []
     acquisitions: list[AcquisitionSolution] = []
-    method = artifact["method"]
 
     def run_of(evaluated: Dataset) -> Run:
         """The run of the points evaluated so far, complete or partial."""
         return Run(
             evaluated,
-            artifact,
             method,
             surrogates=surrogates,
             acquisitions=acquisitions,
@@ -132,28 +127,6 @@ def optimization_loop(
             error.run = run_of(partial)
         raise
     return run_of(dataset)
-
-
-def _method_artifact(
-    problem: Problem,
-    measure: Measure,
-    rng: np.random.Generator,
-    method: str,
-    n_iterations: int,
-    settings: MethodSettings,
-) -> dict[str, str]:
-    """The artifact of a BO run: `run_artifact` with the settings except the prior GP,
-    whose repr is its own entry, `gp`."""
-    settings_text = ", ".join(
-        [f"n_iterations={n_iterations}"]
-        + [
-            f"{f.name}={getattr(settings, f.name)!r}"
-            for f in fields(settings)
-            if f.name != "gp"
-        ]
-    )
-    artifact = run_artifact(problem, measure, rng, method, settings_text)
-    return artifact | {"gp": repr(settings.gp)}
 
 
 def _acquisition_problem(
@@ -214,16 +187,13 @@ def standard_bo(
     `evaluate` and `solve_with_multistart` raise; a `HybridBOError` carries the partial
     run as `error.run`.
     """
-    # The settings the run keeps, the artifact, then the initial points
+    # The settings the run keeps, then the initial points
     settings = StandardBOSettings(
         gp=gp,
         acquisition=acquisition,
         n_starts=n_starts,
         n_starts_gp=n_starts_gp,
         solver=solver,
-    )
-    artifact = _method_artifact(
-        problem, measure, rng, "standard_bo", n_iterations, settings
     )
     start = _starting_points(problem.system.u, n_initial, initial_points, rng)
 
@@ -250,7 +220,7 @@ def standard_bo(
         n_iterations,
         trial_point,
         rng,
-        artifact,
+        "standard_bo",
         settings=settings,
         scenarios=None,
     )
@@ -291,7 +261,7 @@ def hybrid_bo(
     approximation, and what `evaluate` and `solve_with_multistart` raise; a
     `HybridBOError` carries the partial run, with the scenarios, as `error.run`.
     """
-    # The settings the run keeps, the artifact, then the initial points
+    # The settings the run keeps, then the initial points
     system = problem.system
     settings = HybridBOSettings(
         gp=gp,
@@ -300,9 +270,6 @@ def hybrid_bo(
         n_starts=n_starts,
         n_starts_gp=n_starts_gp,
         solver=solver,
-    )
-    artifact = _method_artifact(
-        problem, measure, rng, "hybrid_bo", n_iterations, settings
     )
     start = _starting_points(system.u, n_initial, initial_points, rng)
 
@@ -343,7 +310,7 @@ def hybrid_bo(
         n_iterations,
         trial_point,
         rng,
-        artifact,
+        "hybrid_bo",
         settings=settings,
         scenarios=scenarios,
     )

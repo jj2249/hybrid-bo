@@ -67,14 +67,14 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 
 - `problem.py`: `Var` (name, bounds, start bounds), `System` (keyword-only `u`, `x`,
   `y`, `g`, `h_inputs`, `measured`; `x` and `g` optional and together: without them
-  M = 0 and `g` is traced from no equations, a `cas.Function` with output (0, 1),
-  whose artifact text is `none`) and `Problem` (`system`, `f`). `g` and `f` are user
+  M = 0 and `g` is traced from no equations, a `cas.Function` with output (0, 1))
+  and `Problem` (`system`, `f`). `g` and `f` are user
   callables over a namespace `v` of symbols (`v.x`), traced once in `_trace` into
   `cas.Function`s with column-vector inputs in the paper's order `(x, y, u)`. All
   input checks live in the constructors and raise `ValueError`; any number P >= 1 of
   unknown states is allowed. `Symbolic` (`cas.SX`) is the symbol type of all library
-  math. It is SX only: switching it to MX breaks the GP (`cas.chol` has no MX overload) and the
-  artifact's equation text (DESIGN.md, Decisions). `_h_inputs(system, u, x)` gives the `h_inputs`
+  math. It is SX only: switching it to MX breaks the GP (`cas.chol` has no MX overload; DESIGN.md,
+  Decisions). `_h_inputs(system, u, x)` gives the `h_inputs`
   columns of numeric or symbolic `u`, `x` (hybrid BO's GP training data and
   acquisition problem).
 - `sampling.py`: `lhs(lower, upper, n, rng)` and `uniform(...)` over a box, shape
@@ -84,8 +84,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   plus oracle `x`, `y`). `oracle_measure(system, oracle, noise_std, ...)` (`noise_std`
   required) traces the oracle like `g` (`_trace_oracle`) and returns an
   `OracleSimulation`, a frozen, callable dataclass holding the system, the traced oracle
-  and the settings (#141); its repr is the artifact's text, so it must not depend on the
-  process (no addresses).
+  and the settings (#141).
   An oracle may read `y`: the unknown equations are `0 = h(x, y, u)`, and `y = h(x, u)`
   is only the form the GP learns. `oracle_optimum(problem, oracle, rng)` solves min f
   s.t. g = 0, y = oracle: `build_deterministic_equivalent` of one scenario, with its own
@@ -105,8 +104,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   variables), and returns a `Dataset` whose points are all initial points. With an
   oracle, one extra solve from the
   oracle values (no draws) checks the reconstruction is on the same root, else
-  `ReconstructionWarning`. `_start_bounds` (in `sampling.py`) and `_as_text` (in
-  `problem.py`, an equation as text in the variable names) are shared helpers.
+  `ReconstructionWarning`. `_start_bounds` (in `sampling.py`) is a shared helper.
   `reconstruct_states(problem, *, u, measured, rng, n_starts, tol)` is `evaluate`
   without the measurement, for data from elsewhere: no oracle values, `ValueError` on a
   wrong shape, one `OutOfBoundsWarning` for a `u` or measured variable outside its
@@ -118,17 +116,12 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   is below the stated optimum, and returns whether it did; `extend(dataset, new)`
   (`hb.extend`) returns a new dataset, the rows of one followed by the other's; a point
   is a one-row dataset, so it appends too.
-- `run.py`: `Run` (`dataset`, `artifact`, `method`: the method's name; `surrogates`: per
+- `run.py`: `Run` (`dataset`, `method`: the method's name; `surrogates`: per
   iteration a `tuple[FittedGP, ...]`, the surrogate behind its trial point (hybrid BO:
   one GP per unknown state in the order of `system.y`; standard BO: a 1-tuple, the GP of
   f), and `acquisitions`: one `AcquisitionSolution` per iteration, both empty for the
   baselines; `scenarios`, hybrid BO only, else None; `settings`, the BO method's
   settings in full, else None), pure data that loads without user code (ADR 0003).
-  `run_artifact(problem, measure, rng, method, settings)` builds the run's artifact,
-  text, from `problem_artifact`, `_generator_artifact` and `_versions_artifact`; call it
-  before the method draws. The artifact holds no git commit: from an installed package
-  git answers for the user's repository (#198). A measurement is recorded by its
-  docstring, else its name; a dataclass measurement (`OracleSimulation`) by its repr.
 - `saving.py`: `save_run(run, path)` (new file only, `FileExistsError`) and
   `load_run(path)`, one run as JSON; `save_runs(runs, folder)` (new or empty folder only) and
   `load_runs(folder)`, a list of runs per label, as `<label>/run-000.json`. `_encode`/`_decode` convert any dataclass by its
@@ -233,7 +226,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `optimize_hybrid_model(problem, fitted, rng, *, n_starts, solver)` is the nominal
   scenario minimizing `f`, solved once, with the
   unknown states as variables so their bounds hold, a `NominalOptimum(u, x, y, f)` of
-  points `(N,)`, `(M,)`, `(P,)`; no run, no artifact.
+  points `(N,)`, `(M,)`, `(P,)`; no run.
 - `acquisition.py`: `EI`, `LCB(std_factor)` and `standard_acquisition` (analytic EI
   or LCB over `u`). Both builders return an `AcquisitionProblem`, an alias of
   `DeterministicEquivalent` (standard BO's has `w = u`; in hybrid BO's
@@ -294,19 +287,18 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   union (`Run.settings`, the loop and the plots use it); `TYPES`, the types saving
   tags.
 - `bo.py`: `optimization_loop(problem, measure, initial_points, n_iterations,
-  trial_point, rng, artifact, *, settings, scenarios) -> Run` (evaluate initial points, then per
+  trial_point, rng, method, *, settings, scenarios) -> Run` (evaluate initial points, then per
   iteration `trial_point(problem, dataset, rng) -> (u, surrogate, acquisition
   solution)`, the surrogate a tuple of fitted GPs, and evaluate u; the run keeps
   `settings` and `scenarios`; one local function builds the run, complete or partial,
   and a `HybridBOError` gets the partial run as `error.run`). `standard_bo` and
   `hybrid_bo` take `problem` and `measure`, then only keywords: `n_iterations`, `rng`,
   `gp`, `acquisition`, either `n_initial` or `initial_points`
-  (`sampling._starting_points`, drawn after the artifact) and search effort. `StandardBOSettings` and
+  (`sampling._starting_points`) and search effort. `StandardBOSettings` and
   `standard_bo` (fit `u -> f`, `standard_trial_point`; its solution has `x=None`),
-  `HybridBOSettings` and `hybrid_bo` (artifact, then
-  `saa_scenarios` or `nominal_scenario`, then the loop; `fit_surrogate`,
-  `hybrid_trial_point`; passes the scenarios to the loop). `_method_artifact` builds both methods'
-  artifacts: the settings without the GP, and `gp`, the prior GP's repr.
+  `HybridBOSettings` and `hybrid_bo`
+  (`saa_scenarios` or `nominal_scenario`, then the loop; `fit_surrogate`,
+  `hybrid_trial_point`; passes the scenarios to the loop).
   `_acquisition_problem(problem, dataset, *, n_evaluated, surrogate, scenarios,
   settings)` reads the incumbent after the first `n_evaluated` points of `dataset` and
   matches on the settings, to pick the builder the trial point functions call. Only
@@ -330,7 +322,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   panel notes the stored and replayed value at the trial point. The GP is
   iteration i's stored fitted GP, for the GP panel and the replay alike; the rest of the replay comes from
   `run.settings` (its type says hybrid or standard BO; None draws the points only).
-  The artifact's settings text is never read back. The panels replay the iteration
+  The panels replay the iteration
   with `acquisition.replay(bo.iteration_problem(run, problem, i), ...)` and only
   draw: plots imports no private name of `acquisition`. With linearization the
   scenarios panel draws nominal f ± s (`_nominal_band`), else the scenarios' mean
@@ -367,7 +359,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   Start bounds are finite and set the ranges of initial points, multistart starts and
   `fsolve` starts.
 - **Runs are pure data.** A `Run` holds arrays, numbers and strings only, so it
-  saves as JSON (and pickles) without user code; the artifact is text. Figures are
+  saves as JSON (and pickles) without user code. Figures are
   functions of a finished run.
 - **Runtime aliases** (e.g. `Symbolic`) are used at runtime. Keep them as plain
   assignments, never `type X = ...`.

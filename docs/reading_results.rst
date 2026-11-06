@@ -23,7 +23,6 @@ A :py:class:`~hybrid_bo.run.Run` holds:
   acquisition problem's solution at each trial point. Both are empty for the baselines.
 - ``run.scenarios``: hybrid BO's scenario draws and weights.
 - ``run.settings``: the BO method's settings in full.
-- ``run.artifact``: how the run was produced, as text, including its seed.
 
 A method that fails raises a :py:class:`~hybrid_bo.errors.HybridBOError`, whose ``run``
 holds the run up to the point where it stopped.

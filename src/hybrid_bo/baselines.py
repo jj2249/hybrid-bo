@@ -11,7 +11,7 @@ import numpy as np
 from hybrid_bo.errors import HybridBOError
 from hybrid_bo.evaluation import Measure, evaluate
 from hybrid_bo.problem import Problem
-from hybrid_bo.run import Run, run_artifact
+from hybrid_bo.run import Run
 from hybrid_bo.sampling import _start_bounds, _starting_points, lhs, uniform
 
 
@@ -21,7 +21,7 @@ def _run_design(
     initial_points: np.ndarray,
     design: np.ndarray,
     rng: np.random.Generator,
-    artifact: dict[str, str],
+    method: str,
 ) -> Run:
     """Evaluates the initial points (n_initial, N), then the design (n_points, N).
 
@@ -37,9 +37,9 @@ def _run_design(
         if error.dataset is not None:
             n_evaluated = len(error.dataset.u)
             partial = replace(error.dataset, n_initial=min(n_initial, n_evaluated))
-            error.run = Run(partial, artifact, artifact["method"])
+            error.run = Run(partial, method)
         raise
-    return Run(replace(dataset, n_initial=n_initial), artifact, artifact["method"])
+    return Run(replace(dataset, n_initial=n_initial), method)
 
 
 def latin_hypercube_sampling(
@@ -59,12 +59,9 @@ def latin_hypercube_sampling(
     given, and what `evaluate` raises; a `HybridBOError` carries the partial run as
     `error.run`.
     """
-    artifact = run_artifact(
-        problem, measure, rng, "latin_hypercube_sampling", f"n_points={n_iterations}"
-    )
     start = _starting_points(problem.system.u, n_initial, initial_points, rng)
     design = lhs(*_start_bounds(problem.system.u), n_iterations, rng)
-    return _run_design(problem, measure, start, design, rng, artifact)
+    return _run_design(problem, measure, start, design, rng, "latin_hypercube_sampling")
 
 
 def uniform_sampling(
@@ -84,9 +81,6 @@ def uniform_sampling(
     given, and what `evaluate` raises; a `HybridBOError` carries the partial run as
     `error.run`.
     """
-    artifact = run_artifact(
-        problem, measure, rng, "uniform_sampling", f"n_points={n_iterations}"
-    )
     start = _starting_points(problem.system.u, n_initial, initial_points, rng)
     design = uniform(*_start_bounds(problem.system.u), n_iterations, rng)
-    return _run_design(problem, measure, start, design, rng, artifact)
+    return _run_design(problem, measure, start, design, rng, "uniform_sampling")

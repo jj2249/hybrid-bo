@@ -130,12 +130,11 @@ def test_a_nan_measurement_fails_the_run_and_keeps_the_points_before(
 def test_every_method_runs_without_known_equations(runs_1d):
     """Every method finishes its 2 iterations (design points, for the baselines),
     with no mechanistic states in its dataset and, for hybrid BO, none in its
-    scenario states; the artifact says there are no known equations."""
+    scenario states."""
     assert [run.method for run in runs_1d] == list(METHODS)
     for run in runs_1d:
         assert len(run.dataset.f) == 4, run.method
         assert run.dataset.x.shape == (4, 0)
-        assert run.artifact["g"] == "none"
     for run in (run for run in runs_1d if run.method in HYBRID):
         assert len(run.surrogates) == 2
         assert all(solution.x.shape[1] == 0 for solution in run.acquisitions)

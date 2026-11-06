@@ -183,7 +183,7 @@ def fake_run(
         f_oracle=None if f_oracle is None else np.array(f_oracle),
         n_initial=n_initial,
     )
-    return Run(dataset, artifact={"method": method}, method=method)
+    return Run(dataset, method=method)
 
 
 def band(ax: Axes) -> np.ndarray:

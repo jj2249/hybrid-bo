@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Breaking:** The artifact is gone, so nothing records how a run was produced: no
+  `Run.artifact`, `hb.run.run_artifact` or `hb.run.problem_artifact`. `Run.method` is a
+  string the method passes in, `hb.bo.optimization_loop` takes `method` in place of
+  `artifact`, and `OracleSimulation` has a dataclass repr. Runs saved before this fail to
+  load with `RunFormatError` (#222).
 - `hb.hybrid_trial_point` and `hb.standard_trial_point` solve one acquisition problem
   from fitted GPs, from `lhs` starts, and return an `AcquisitionSolution`. The caller
   draws the scenarios once, with `hb.saa_scenarios` or `hb.nominal_scenario`, which

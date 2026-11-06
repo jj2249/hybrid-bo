@@ -56,11 +56,9 @@ The original code was hard to change for three reasons:
 - **Equations are callables traced by CasADi** ([ADR 0002](docs/adr/0002-equations-are-casadi-callables.md)).
 - **Runs are pure data** ([ADR 0003](docs/adr/0003-runs-are-pure-data.md)).
 - **SX only.** Library math is built from `SX` symbols, set by the `Symbolic` alias.
-  MX does not work, for three reasons:
+  MX does not work, for two reasons:
   - `cas.chol` has no MX overload, so with `Symbolic` set to MX, GP fitting,
     prediction and the log marginal likelihood fail.
-  - A run's artifact prints the known equations and the objective as text. Under MX
-    that text becomes an opaque `g(x, y, u){0}`.
   - The AMPL route to a global solver (#87) accepts only SX expressions.
 
   MX for the GP (or precomputing its terms) is #89, and MX for large systems is #90.
@@ -221,7 +219,7 @@ def oracle_measure(
     noise_std: float = 0.0,
     n_starts: int = 100,
     tol: float = 1e-10,
-) -> OracleSimulation: ...  # a frozen, callable dataclass, described by its repr
+) -> OracleSimulation: ...  # a frozen, callable dataclass
 
 
 def evaluate(
@@ -310,7 +308,6 @@ class AcquisitionSolution:  # acquisition.py (#53)
 @dataclass(frozen=True)
 class Run:
     dataset: Dataset
-    artifact: dict[str, str]  # how the run was produced, as text (#123)
     method: str  # the method's name (#53)
     surrogates: list[tuple[FittedGP, ...]]  # one per iteration; P GPs (hybrid BO) or
     # 1 (standard BO) each (#114); empty for baselines (default)
@@ -320,28 +317,13 @@ class Run:
 ```
 
 A BO run holds its method's **settings** in full (#120), the data the iteration plots
-replay; the artifact holds them as text, for people, and nothing reads that text back.
+replay.
 The settings dataclasses live in `settings.py`, not with their methods in `bo.py`,
 because `run.py` needs them and `bo.py` imports `run.py`. `MethodSettings` is their
 union, the one place a new method's settings join.
 
-The run's **artifact** is built by the library (`run_artifact`, before the method draws
-anything), not the example: the variables with their bounds, `h_inputs`, `measured`,
-`g` and `f` as expression text, the measurement, the method and its settings, the
-prior GP's repr (#119), the seed, spawn key and generator state, and the
-versions of `hybrid_bo`, Python, CasADi, NumPy and SciPy. The
-measurement is recorded by its docstring, else its name, so a custom measurement adds
-a description by writing a docstring. A measurement that is a dataclass is recorded
-by its repr instead: the oracle simulation (`OracleSimulation`) gives the oracle as
-text with its noise and solver settings.
-
 The oracle simulation is a frozen, callable dataclass, not a closure (#141): it is
-data (the system, the oracle traced like `g`, a `cas.Function`, and the settings),
-and its repr is the measurement's text in the artifact, so it mustn't depend on the
-process. A closure would need its `__doc__` set to describe it.
-
-A run's artifact is text for people; the settings beside it are data for the plots. A
-partial run in `error.run` carries one too, so it still says how it was made.
+data (the system, the oracle traced like `g`, a `cas.Function`, and the settings).
 
 A column is found by name with `system.column("x1")`.
 
@@ -593,8 +575,8 @@ def optimize_hybrid_model(
   `optimize_hybrid_model` fixes it to `f` by name. `hybrid_bo` reaches
   `gp_deterministic_equivalent` through `hybrid_trial_point` and `hybrid_acquisition`,
   which the replay also calls, because it needs the problem unsolved.
-- **`optimize_hybrid_model` is not a method.** It measures nothing, so it has no run, no
-  artifact and no settings, only a solution. It has no uncertainty in it, so it trusts
+- **`optimize_hybrid_model` is not a method.** It measures nothing, so it has no run and
+  no settings, only a solution. It has no uncertainty in it, so it trusts
   the GP's mean even far from the data. Its unknown states are always variables, since
   substituting them would drop their bounds.
 
@@ -850,7 +832,7 @@ def optimization_loop(
     n_iterations,
     trial_point: TrialPoint,
     rng,
-    artifact,  # from run_artifact, before the method draws
+    method: str,  # its name, kept in the run
     *,
     settings,  # the method's, kept in the run (#120); None if not replayable
     scenarios,  # the method's, kept in the run; None if it has none
@@ -894,15 +876,13 @@ The baselines are named `*_sampling` because `hb.sampling.uniform` and
   and solves `standard_acquisition` by `solve_with_multistart` from `lhs` starts over
   the `u` start bounds. With the defaults it reproduces the legacy illustrative
   baseline.
-- `optimization_loop` takes the artifact and returns the `Run`, so a `HybridBOError` in
+- `optimization_loop` returns the `Run`, so a `HybridBOError` in
   the loop (an evaluation, or the trial-point function) carries the partial run as
   `error.run` for every method: the points evaluated so far (also `error.dataset`) and
   one surrogate per evaluated trial point (a failed evaluation drops its surrogate). It
   holds hybrid BO's scenarios too and builds the `Run` in one place, so a complete and
   a partial run have the same fields. The baselines don't use the loop: they have no
   surrogates, and build their own `Run`.
-- The artifact holds the settings without the GP, plus `gp`, the prior GP's repr; the
-  fitted GPs stay in the run. The GP is required, so `settings` is too.
 - The baselines are not sequential: they draw their whole design and `evaluate` it after
   the initial points.
 - `optimization_loop` is public, for new methods.

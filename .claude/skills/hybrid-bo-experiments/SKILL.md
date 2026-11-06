@@ -27,9 +27,7 @@ draws on it with `hb.plots.regret(runs, optimum, ax)`.
   `tests/conftest.py`'s `illustrative_problem` fixture is its `problem`. Changing the
   illustrative experiment's problem, measurement or settings moves the regression
   baselines: that is a *logic* change.
-- A custom measurement is `(u (N,), rng) -> measured (P,)`; its docstring (else its
-  name) describes it in each run's artifact; a dataclass measurement is described by
-  its repr.
+- A custom measurement is `(u (N,), rng) -> measured (P,)`.
 - Defaults never choose the method (ADR 0009): a default may set how hard or how
   precisely we search, never what we search for. So these are required and spelled
   out in every experiment: `gp` and `acquisition` (`hb.EI()` or
