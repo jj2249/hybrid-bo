@@ -17,6 +17,8 @@ from hybrid_bo.gp import (
     Scale,
     Scaler,
     Zero,
+    _params,
+    _with_values,
     fit_gp,
     log_marginal_likelihood,
     predict,
@@ -123,7 +125,7 @@ def test_gp_checks():
     with pytest.raises(ValueError, match="noise_std"):
         GP(mean=Zero(), kernel=Matern52(), noise_std=-0.1)
     scaler = Scaler(np.ones(1), np.zeros(1))
-    with pytest.raises(ValueError, match=r"kernel\.lengthscale"):
+    with pytest.raises(ValueError, match=r"got Matern52\(lengthscale=Param"):
         FittedGP(
             GP(mean=Zero(), kernel=Matern52(), noise_std=0.0),
             X_train,
@@ -131,13 +133,53 @@ def test_gp_checks():
             scaler,
             scaler,
         )
-    with pytest.raises(ValueError, match="3 entries for 2 inputs"):
+    with pytest.raises(ValueError, match="lengthscale has 3 entries for 2 inputs"):
         fit_gp(
             GP(mean=Zero(), kernel=Matern52((0.1, 0.2, 0.3)), noise_std=0.0),
             X_train,
             Y_train,
             rng,
         )
+    with pytest.raises(ValueError, match="lengthscale has 1 entries for 2 inputs"):
+        fit_gp(
+            GP(mean=Zero(), kernel=Scale(Scale(Matern52((0.1,)))), noise_std=0.0),
+            X_train,
+            Y_train,
+            rng,
+        )
+
+
+def test_hyperparameters_are_fitted_output_scales_first():
+    """The search entries are each output scale, outermost first, then the lengthscale:
+    one per input with ARD, one without, and none for a fixed value."""
+    outer = Param(2.0, (1.0, 3.0))
+    inner = Param(1.0, (0.1, 10.0))
+    lengthscale = Param(0.5, (0.1, 1.0))
+
+    assert _params(Scale(Scale(Matern52(lengthscale), inner), outer), 2) == [
+        outer,
+        inner,
+        lengthscale,
+        lengthscale,
+    ]
+    assert _params(Scale(Matern52(lengthscale, ard=False), outer), 2) == [
+        outer,
+        lengthscale,
+    ]
+    assert _params(Scale(Scale(Matern52(0.3), 2.0), outer), 2) == [outer]
+
+
+def test_with_values_replaces_each_param_in_fit_order():
+    """Each `Param` takes its value in the order of `_params`, and fixed values stay."""
+    param = Param(1.0, (0.1, 10.0))
+
+    # An ARD lengthscale takes one value per input, a shared one a single value
+    kernel = Scale(Scale(Matern52(param), 1.5), param)
+    assert _with_values(kernel, [2.0, 0.3, 0.4], 2) == Scale(
+        Scale(Matern52((0.3, 0.4)), 1.5), 2.0
+    )
+    shared = Scale(Matern52(param, ard=False), param)
+    assert _with_values(shared, [2.0, 0.3], 2) == Scale(Matern52(0.3, ard=False), 2.0)
 
 
 # Fitting: the regression baselines pin the fitted parameters of the illustrative
