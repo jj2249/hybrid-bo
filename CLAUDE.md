@@ -12,6 +12,7 @@ deleting code to adding it, and report the net lines of a change.
 pixi run -e dev test                      # pytest, seconds
 pixi run -e dev test --update-baselines   # only when results are meant to change
 pixi run -e dev check                     # ruff lint (--fix), format, ty
+pixi run -e dev docs                      # intro page and API docs
 ```
 
 `tests/test_regression.py` compares a plain loop with `tests/data/regression/*.json`.

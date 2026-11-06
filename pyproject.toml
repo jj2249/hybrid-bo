@@ -42,6 +42,9 @@ pre-commit = ">=4.6.2,<5"
 pytest = ">=9.1.1,<10"
 pytest-cov = ">=7.1.0,<8"
 matplotlib = ">=3.11.2,<4"
+sphinx = ">=9.1.0,<10"
+sphinx-autoapi = ">=3.8.1,<4"
+furo = ">=2025.12.19,<2026"
 
 [tool.pixi.feature.dev.tasks]
 lint = "ruff check --fix"
@@ -54,11 +57,12 @@ coverage = "coverage run -m pytest && coverage report --show-missing && coverage
 check = { depends-on = ["lint", "format", "typecheck"] }
 setup-hooks = "pre-commit install"
 setup = { depends-on = ["setup-hooks"] }
+docs = "sphinx-build -W -b html docs docs/_build/html"
 
 [tool.pixi.environments]
 # The library only
 default = { solve-group = "default" }
-# Working on the library: adds tests, lint, type check and matplotlib
+# Working on the library: adds tests, lint, type check, matplotlib and the docs
 dev = { features = ["dev"], solve-group = "default" }
 
 [tool.ruff]

@@ -14,7 +14,8 @@ The library fits GPs and solves one iteration of BO. You write the loop.
 pip install "hybrid-bo[plots] @ git+https://github.com/jj2249/hybrid-bo.git@<tag>"
 ```
 
-`plots` adds matplotlib. To work on the library, install [pixi](https://pixi.sh).
+`plots` adds matplotlib. To work on the library, install [pixi](https://pixi.sh);
+`pixi run -e dev docs` builds the API docs into `docs/_build/html`.
 
 ## Use
 
