@@ -137,9 +137,7 @@ a call to another program):
        result = simulate_reactor(temperature=u[0], residence_time=u[1])
        return np.array([result.outlet_concentration])
 
-The docstring (else the function's name) is how the measurement is recorded with every
-run, so say what it measures. A measurement written as a dataclass is recorded by its
-repr instead, as the oracle simulation is. Without an oracle the library knows only what was measured: there is no oracle
+Without an oracle the library knows only what was measured: there is no oracle
 optimum, so no regret. Use :py:func:`~hybrid_bo.plots.convergence` instead, which draws
 the incumbent, the lowest ``f`` a run measured.
 

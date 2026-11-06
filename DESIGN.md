@@ -219,7 +219,7 @@ def oracle_measure(
     noise_std: float = 0.0,
     n_starts: int = 100,
     tol: float = 1e-10,
-) -> OracleSimulation: ...  # a frozen, callable dataclass, described by its repr
+) -> OracleSimulation: ...  # a frozen, callable dataclass
 
 
 def evaluate(
@@ -883,7 +883,6 @@ The baselines are named `*_sampling` because `hb.sampling.uniform` and
   holds hybrid BO's scenarios too and builds the `Run` in one place, so a complete and
   a partial run have the same fields. The baselines don't use the loop: they have no
   surrogates, and build their own `Run`.
-- The GP is required, so `settings` is too.
 - The baselines are not sequential: they draw their whole design and `evaluate` it after
   the initial points.
 - `optimization_loop` is public, for new methods.

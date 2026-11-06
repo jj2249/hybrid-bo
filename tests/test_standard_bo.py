@@ -174,6 +174,17 @@ def test_run_pickles_without_the_code_that_produced_it(
     assert loaded.settings == run.settings
 
 
+def test_standard_bo_runs_with_lcb(illustrative_problem):
+    """LCB goes through the whole of standard BO, and the run keeps it in its
+    settings."""
+    settings = StandardBOSettings(gp=ex.gp, acquisition=LCB(std_factor=2.0))
+
+    run = illustrative_run(illustrative_problem, settings)
+
+    assert len(run.acquisitions) == 2
+    assert run.settings == settings
+
+
 def test_what_chooses_the_method_is_required_and_keyword_only(illustrative_problem):
     """Standard BO has no default GP or acquisition function, and every argument after
     the measurement is keyword-only."""
