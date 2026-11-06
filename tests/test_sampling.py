@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 from scipy.stats import qmc
 
-from hybrid_bo.sampling import lhs, uniform
+from hybrid_bo.utils import lhs, uniform
 
 LOWER = np.array([-2.0, 0.0, 10.0])
 UPPER = np.array([2.0, 1.0, 10.5])
@@ -69,7 +69,7 @@ def test_lhs_does_not_import_scipy_stats():
     in a new process, as this one has imported it."""
     # A new process draws with lhs and reports whether scipy.stats got imported
     code = (
-        "import sys; import numpy as np; from hybrid_bo.sampling import lhs; "
+        "import sys; import numpy as np; from hybrid_bo.utils import lhs; "
         "lhs(np.zeros(2), np.ones(2), 3, np.random.default_rng(0)); "
         "print('scipy.stats' in sys.modules)"
     )

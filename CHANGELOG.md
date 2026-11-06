@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **Breaking:** `HybridBOError` is gone; catch `NoSolutionError` or `RootFindingError`.
+- **Breaking:** The scalers `hb.gp.minmax`, `standard`, `scale` and `unscale` are in
+  `hybrid_bo.utils`, and `minmax` maps onto [0, 1] only. `hybrid_bo.sampling` is gone: `lhs`
+  and `uniform` are in `hybrid_bo.utils`.
+- New: the figures have a grid, which `hb.plots.Style` turns off.
+
 ## 0.7.0 (2026-11-06)
 
 The library is stripped down: it fits GPs with CasADi and solves one iteration of hybrid

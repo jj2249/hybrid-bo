@@ -5,8 +5,8 @@ a fixture in `conftest.py` (here `illustrative_problem`) is filled in by pytest 
 that fixture's value.
 """
 
+import dataclasses
 from copy import deepcopy
-from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -86,7 +86,7 @@ def test_extend_joins_the_rows_in_order():
     field."""
     # Two rows, then one row whose u tells it apart
     first = dataset_of([3.0, 1.0])
-    new = replace(dataset_of([2.0]), u=np.array([[7.0]]))
+    new = dataclasses.replace(dataset_of([2.0]), u=np.array([[7.0]]))
 
     extended = extend(first, new)
 

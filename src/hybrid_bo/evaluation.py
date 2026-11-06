@@ -14,8 +14,7 @@ import numpy as np
 
 from hybrid_bo.dataset import Dataset
 from hybrid_bo.errors import RootFindingError
-from hybrid_bo.problem import Problem, Symbolic, System, start_bounds
-from hybrid_bo.sampling import lhs
+from hybrid_bo.problem import Problem, Symbolic, System, lhs_points
 from hybrid_bo.solvers import _find_root
 
 # Runs the system at u (N,) and returns the measured variables (P,) in the order of
@@ -80,8 +79,7 @@ def reconstruct_states(
     n_starts: int = 100,
     tol: float = 1e-10,
 ) -> Dataset:
-    """The Dataset of measurements the caller already has, as initial points: `evaluate`
-    without the measurement.
+    """The Dataset of measurements: the states and objective at each row of u.
 
     `u` (n, N) holds the decision variables and `measured` (n, P) the measured variables
     at them, in the order of `system.measured`. Each row solves the root-finding problem
@@ -106,7 +104,7 @@ def reconstruct_states(
     states: list[np.ndarray] = []
     failed: list[int] = []
     for row, (u_point, measured_point) in enumerate(zip(u, measured, strict=True)):
-        starts = lhs(*start_bounds(system.unmeasured), n_starts, rng)
+        starts = lhs_points(system.unmeasured, n_starts, rng)
         try:
             if not np.isfinite(np.concatenate([u_point, measured_point])).all():
                 msg = f"Row {row} holds a value that isn't finite"

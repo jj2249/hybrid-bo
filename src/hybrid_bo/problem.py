@@ -13,6 +13,8 @@ from typing import Any
 import casadi as cas
 import numpy as np
 
+from hybrid_bo.utils import lhs, uniform
+
 # The symbol type of all library math: `cas.chol` has no MX overload, so SX only
 Symbolic = cas.SX
 
@@ -92,6 +94,20 @@ def start_bounds(variables: Sequence[Var]) -> tuple[np.ndarray, np.ndarray]:
         np.array([var.start[0] for var in variables]),
         np.array([var.start[1] for var in variables]),
     )
+
+
+def lhs_points(
+    variables: Sequence[Var], n: int, rng: np.random.Generator
+) -> np.ndarray:
+    """n points from a Latin hypercube over the variables' start bounds, shape (n, d)."""
+    return lhs(*start_bounds(variables), n, rng)
+
+
+def uniform_points(
+    variables: Sequence[Var], n: int, rng: np.random.Generator
+) -> np.ndarray:
+    """n points drawn uniformly from the variables' start bounds, shape (n, d)."""
+    return uniform(*start_bounds(variables), n, rng)
 
 
 class _Variables:

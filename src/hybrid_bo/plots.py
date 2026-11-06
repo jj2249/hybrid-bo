@@ -1,20 +1,36 @@
 """Static figures, each drawn on the axes you give it. Needs matplotlib."""
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
 
 from hybrid_bo.acquisition import AcquisitionProblem, AcquisitionSolution, replay
 from hybrid_bo.dataset import Dataset
-from hybrid_bo.gp import FittedGP, predict, unscale
+from hybrid_bo.gp import FittedGP, predict
 from hybrid_bo.hybrid_model import Scenarios
+from hybrid_bo.utils import unscale
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
 
 
-def convergence(curves: Mapping[str, Sequence[np.ndarray]], ax: "Axes") -> "Axes":
+@dataclass(frozen=True)
+class Style:
+    """How the figures look. Make one and pass it as `style=` to change a figure."""
+
+    grid: bool = True
+
+
+DEFAULT_STYLE = Style()
+
+
+def convergence(
+    curves: Mapping[str, Sequence[np.ndarray]],
+    ax: "Axes",
+    style: Style = DEFAULT_STYLE,
+) -> "Axes":
     """Draws each label's incumbent curves (`hb.incumbents`) over the evaluations: the
     median, with the interquartile range shaded. A shorter curve counts up to its end."""
     for label, group in curves.items():
@@ -28,25 +44,35 @@ def convergence(curves: Mapping[str, Sequence[np.ndarray]], ax: "Axes") -> "Axes
         ax.fill_between(n, lower, upper, color=drawn.get_color(), alpha=0.2)
     ax.set_xlabel("evaluations")
     ax.set_ylabel("incumbent")
+    ax.grid(style.grid)
     ax.legend()
     return ax
 
 
 def regret(
-    curves: Mapping[str, Sequence[np.ndarray]], optimum: float, ax: "Axes"
+    curves: Mapping[str, Sequence[np.ndarray]],
+    optimum: float,
+    ax: "Axes",
+    style: Style = DEFAULT_STYLE,
 ) -> "Axes":
     """Draws the regret from `optimum` of each label's incumbent curves, as
     `convergence` does, on a log y-axis."""
     regrets = {
         label: [curve - optimum for curve in group] for label, group in curves.items()
     }
-    convergence(regrets, ax)
+    convergence(regrets, ax, style)
     ax.set_ylabel("regret")
     ax.set_yscale("log")
     return ax
 
 
-def surrogate(fitted: FittedGP, lower: float, upper: float, ax: "Axes") -> "Axes":
+def surrogate(
+    fitted: FittedGP,
+    lower: float,
+    upper: float,
+    ax: "Axes",
+    style: Style = DEFAULT_STYLE,
+) -> "Axes":
     """Draws a fitted GP of one input between `lower` and `upper`: its mean, its band of
     two standard deviations and its training points, in measured units."""
     x = np.linspace(lower, upper, 201)
@@ -61,6 +87,7 @@ def surrogate(fitted: FittedGP, lower: float, upper: float, ax: "Axes") -> "Axes
         color="k",
         label="points",
     )
+    ax.grid(style.grid)
     ax.legend()
     return ax
 
@@ -72,6 +99,7 @@ def iteration(
     dataset: Dataset,
     axes: "Sequence[Axes]",
     scenarios: Scenarios | None = None,
+    style: Style = DEFAULT_STYLE,
 ) -> None:
     """Draws one iteration of one decision variable on `axes`: the state before the trial
     point `solution`, over the start bounds of u, as `replay` gives it, so the panels show
@@ -94,7 +122,7 @@ def iteration(
 
     # The GP, in its panel's color, and the replay over the start bounds of u
     lower, upper = (float(bound[0]) for bound in problem.start_bounds)
-    surrogate(fitted, lower, upper, panels[0])
+    surrogate(fitted, lower, upper, panels[0], style)
     color = panels[0].get_lines()[0].get_color()
     u = np.linspace(lower, upper, 201)
     replayed = replay(problem, solution, u[:, np.newaxis])
@@ -114,4 +142,5 @@ def iteration(
     panels[-1].set(xlabel="u", ylabel="EI")
     for ax in panels:
         ax.axvline(solution.u[0], color=color, linestyle=":", label="trial point")
+        ax.grid(style.grid)
         ax.legend(fontsize="small")

@@ -4,8 +4,7 @@
 import casadi as cas
 import numpy as np
 
-from hybrid_bo.problem import Problem, Symbolic, _to_casadi_function, start_bounds
-from hybrid_bo.sampling import lhs
+from hybrid_bo.problem import Problem, Symbolic, _to_casadi_function, lhs_points
 from hybrid_bo.solvers import _find_root
 
 
@@ -19,7 +18,7 @@ def _root(problem: Problem, oracle, u: np.ndarray, rng) -> np.ndarray:
     w = Symbolic.sym("w", len(states))
     x, y = w[: system.n_x], w[system.n_x :]
     residuals = cas.vertcat(system.g(x, y, u), oracle_function(x, y, u) - y)
-    starts = lhs(*start_bounds(states), 100, rng)
+    starts = lhs_points(states, 100, rng)
     return _find_root(w, residuals, states, starts, 1e-10)
 
 

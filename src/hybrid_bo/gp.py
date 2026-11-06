@@ -24,8 +24,8 @@ import casadi as cas
 import numpy as np
 
 from hybrid_bo.problem import Symbolic
-from hybrid_bo.sampling import lhs
 from hybrid_bo.solvers import NLP, Ipopt, solve_with_multistart
+from hybrid_bo.utils import Scaler, lhs, minmax, scale, standard, unscale
 
 _logger = logging.getLogger(__name__)
 
@@ -183,14 +183,6 @@ class GP:
 
 
 @dataclass(frozen=True)
-class Scaler:
-    """An affine map per column: scaled = slope * value + intercept."""
-
-    slope: np.ndarray  # (d,)
-    intercept: np.ndarray  # (d,)
-
-
-@dataclass(frozen=True)
 class FittedGP:
     """A fitted GP: a prior GP with every hyperparameter fitted to its training data, held
     with that data (scaled) and the scalers that produced it. It describes itself, so
@@ -314,42 +306,6 @@ def prior_mean(mean: Mean, X: Any) -> Any:
             assert_never(mean)
 
 
-def minmax(values: np.ndarray, lower: float = 0.0, upper: float = 1.0) -> Scaler:
-    """The scaler that maps each column of `values` (n, d) onto [lower, upper].
-
-    A constant column is shifted to `lower` instead.
-    """
-    low, high = values.min(0), values.max(0)
-    is_constant = low == high
-    span = np.where(is_constant, 1.0, high - low)
-
-    # Evaluated in this order so that [0, 1] gives the pre-refactor values bit for
-    # bit, which the regression baselines depend on
-    slope = np.where(is_constant, 1.0, (upper - lower) / span)
-    intercept = np.where(is_constant, lower - low, lower - low * (upper - lower) / span)
-    return Scaler(slope, intercept)
-
-
-def standard(values: np.ndarray) -> Scaler:
-    """The scaler that gives each column of `values` (n, d) zero mean and unit standard
-    deviation (`ddof=0`). A constant column is only shifted."""
-    mean, std = values.mean(0), values.std(0)
-    std = np.where(std == 0.0, 1.0, std)
-    return Scaler(1 / std, -mean / std)
-
-
-def scale(scaler: Scaler, values: Any) -> Any:
-    """Scales the rows of `values` (n, d), numeric or CasADi."""
-    n = values.shape[0]
-    return values * np.tile(scaler.slope, (n, 1)) + np.tile(scaler.intercept, (n, 1))
-
-
-def unscale(scaler: Scaler, scaled: Any) -> Any:
-    """Undoes `scale` on the rows of `scaled` (n, d), numeric or CasADi."""
-    n = scaled.shape[0]
-    return (scaled - np.tile(scaler.intercept, (n, 1))) / np.tile(scaler.slope, (n, 1))
-
-
 def _training_covariance(gp: GP, X: Any, y_scaler: Scaler) -> Any:
     """The scaled training covariance: kernel plus noise variance (`noise_std` in
     scaled units) plus jitter on the diagonal."""
@@ -402,11 +358,10 @@ def fit_gp(
     hypercube starts over their bounds; a lengthscale with ARD has one entry per column
     of X. A GP without a `Param` is only conditioned on the data, with no draws. It warns if
     the training covariance at the kept values has a condition number above
-    `CONDITION_THRESHOLD`. Logs the time taken at debug level.
+    `CONDITION_THRESHOLD`.
 
     Raises `NoSolutionError` if every start fails, and `ValueError` if a fixed lengthscale
-    per input doesn't have one entry per
-    column of X.
+    per input doesn't have one entry per column of X.
     """
     # Scale the data, and list what there is to fit
     x_scaler, y_scaler = minmax(X), standard(Y[:, np.newaxis])

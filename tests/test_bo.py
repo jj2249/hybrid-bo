@@ -553,3 +553,15 @@ def test_fits_and_solves_are_logged(caplog):
     assert "Fitting the GP of y" in caplog.text
     assert "to 5 points" in caplog.text
     assert "negative_log_marginal_likelihood: 10 of 10 starts solved" in caplog.text
+
+
+def test_plots_have_a_grid_unless_the_style_turns_it_off():
+    """A figure's grid is on by default, and `Style` turns it off."""
+    curves = {"a": [np.array([3.0, 2.0, 1.0])]}
+    on, off = matplotlib.figure.Figure().subplots(2)
+
+    hb.plots.convergence(curves, on)
+    hb.plots.convergence(curves, off, hb.plots.Style(grid=False))
+
+    assert all(line.get_visible() for line in on.get_xgridlines())
+    assert not any(line.get_visible() for line in off.get_xgridlines())

@@ -14,8 +14,6 @@ import numpy as np
 
 import hybrid_bo as hb
 
-logging.basicConfig(level=logging.INFO)
-
 # Show what is being fitted, and whether it succeeds
 logging.basicConfig()
 logging.getLogger("hybrid_bo").setLevel(logging.INFO)

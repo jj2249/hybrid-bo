@@ -9,7 +9,8 @@ Problems 8 and 9), or `SoftSAA`, its smooth version.
 GPs: one iteration of BO. `replay` evaluates a problem at given points, to draw it.
 """
 
-from dataclasses import dataclass, replace
+import dataclasses
+from dataclasses import dataclass
 from typing import Any, assert_never
 
 import casadi as cas
@@ -25,14 +26,11 @@ from hybrid_bo.hybrid_model import (
     gp_deterministic_equivalent,
 )
 from hybrid_bo.problem import Problem, Symbolic, start_bounds
-from hybrid_bo.sampling import lhs
 from hybrid_bo.solvers import NLP, Ipopt, solve_with_multistart
+from hybrid_bo.utils import lhs, log_softplus
 
 # Added to the standard deviation in EI, so a zero std doesn't divide by zero
 _EI_STD_EPSILON = 1e-10
-
-# Below this a / tau, log log(1 + exp(a / tau)) is a / tau within about 1e-13
-_LOG_SOFTPLUS_LINEAR_BELOW = -30.0
 
 # A replay's root solves each equation to this
 _REPLAY_TOLERANCE = 1e-8
@@ -80,19 +78,6 @@ def _expected_improvement(mean: Any, std: Any, incumbent: float) -> Any:
     cdf = 0.5 * (1 + cas.erf(gamma / np.sqrt(2)))
     pdf = cas.exp(-0.5 * gamma**2) / np.sqrt(2 * np.pi)
     return improvement * cdf + std * pdf
-
-
-def _log_softplus(t: Any) -> Any:
-    """log log(1 + exp(t)), elementwise for CasADi expressions, finite with a
-    finite gradient for any finite t.
-
-    Far below zero, log(1 + exp(t)) underflows, so its log is taken as t; above
-    zero, it is t + log(1 + exp(-t)), so exp doesn't overflow.
-    """
-    below = cas.log(cas.log1p(cas.exp(t)))
-    above = cas.log(t + cas.log1p(cas.exp(-t)))
-    exact = cas.if_else(t > 0, above, below)
-    return cas.if_else(t < _LOG_SOFTPLUS_LINEAR_BELOW, t, exact)
 
 
 # An acquisition problem is a deterministic equivalent whose objective is an acquisition
@@ -156,7 +141,7 @@ def hybrid_acquisition(
     With f_s = f(x_s, y_s, u), `SAA` minimizes -SAA-EI, the weighted average of
     min(f_s - incumbent, 0). `SoftSAA` minimizes -log SoftSAA-EI, -log of the weighted
     average of tau log(1 + exp(a_s / tau)) with a_s = incumbent - f_s, as a logsumexp
-    over the scenarios (`_log_softplus`).
+    over the scenarios (`log_softplus`).
 
     Raises `ValueError` for scenarios or fitted GPs without one column or one GP per
     unknown state.
@@ -166,7 +151,7 @@ def hybrid_acquisition(
         """EI of f (S, 1) under the scenarios, as the approximation gives it."""
         match approximation:
             case SoftSAA(temperature=temperature):
-                log_smooth = np.log(temperature) + _log_softplus(
+                log_smooth = np.log(temperature) + log_softplus(
                     (incumbent - f) / temperature
                 )
                 log_weights = Symbolic(np.log(scenarios.w))
@@ -183,7 +168,7 @@ def hybrid_acquisition(
         objective,
         approximation.unknown_states_as_variables,
     )
-    return replace(built, log_ei=isinstance(approximation, SoftSAA))
+    return dataclasses.replace(built, log_ei=isinstance(approximation, SoftSAA))
 
 
 def standard_trial_point(

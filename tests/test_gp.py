@@ -1,8 +1,8 @@
 """Fitted GP prediction and log marginal likelihood vs numpy/scipy references, and
 what a fit finds and draws."""
 
+import dataclasses
 import logging
-from dataclasses import replace
 
 import casadi as cas
 import numpy as np
@@ -16,7 +16,6 @@ from hybrid_bo.gp import (
     Matern52,
     Param,
     Scale,
-    Scaler,
     Zero,
     _params,
     _with_values,
@@ -26,6 +25,7 @@ from hybrid_bo.gp import (
     predict,
 )
 from hybrid_bo.solvers import Ipopt
+from hybrid_bo.utils import Scaler
 
 RTOL, ATOL = 1e-8, 1e-10
 NOISE_STD = 0.1  # in measured units
@@ -99,7 +99,7 @@ def test_predict_undoes_the_scalers(fitted):
     # measured units
     x_scaler = Scaler(np.array([2.0, 0.5]), np.array([0.1, -0.3]))
     y_scaler = Scaler(np.array([4.0]), np.array([1.0]))
-    measured = replace(fitted.gp, noise_std=NOISE_STD / 4.0)
+    measured = dataclasses.replace(fitted.gp, noise_std=NOISE_STD / 4.0)
     scaled = FittedGP(measured, fitted.X, fitted.Y, x_scaler, y_scaler)
     X_measured = (X_test - x_scaler.intercept) / x_scaler.slope
 
@@ -233,7 +233,7 @@ def test_fit_maximizes_the_log_marginal_likelihood():
     # The likelihood at every grid point, on the same scaled training data
     grid = [
         log_marginal_likelihood(
-            replace(
+            dataclasses.replace(
                 fitted,
                 gp=GP(
                     mean=Zero(),
@@ -296,7 +296,7 @@ def test_noise_is_in_measured_units():
     # The reference: the fitted parameters, the noise scaled by hand into a GP on
     # data that is already scaled (identity scalers), as the log likelihood sees it
     identity = Scaler(np.ones(1), np.zeros(1))
-    scaled_noise = replace(fitted.gp, noise_std=noise_std / Y.std())
+    scaled_noise = dataclasses.replace(fitted.gp, noise_std=noise_std / Y.std())
     reference = FittedGP(scaled_noise, fitted.X, fitted.Y, fitted.x_scaler, identity)
     np.testing.assert_allclose(
         log_marginal_likelihood(fitted),

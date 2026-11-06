@@ -2,8 +2,7 @@
 
 An `NLP` describes the problem, `Ipopt` the solver settings, and `solve_with_multistart`
 builds the CasADi `Opti` problem once, solves it from several starts and keeps the best
-solution. `_find_root` is every fsolve, of the root-finding problem and of the oracle
-simulation. The caller draws the starts (with `lhs`), so the draw order stays visible
+solution. `_find_root` solves the root-finding problem. The caller draws the starts (with `lhs`), so the draw order stays visible
 where the generator is used.
 """
 
