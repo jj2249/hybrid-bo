@@ -131,7 +131,8 @@ dataset = hb.load_dataset("dataset.npz")
 Plots draw on the axes you give them: `hb.plots.convergence` and `hb.plots.regret` take
 incumbent curves per label, `hb.plots.surrogate` draws a fitted GP of one input, and
 `hb.plots.iteration` draws what an iteration minimized, from
-`hb.plots.acquisition_on_grid`, which gives EI over a grid of `u` and a `Dataset` per scenario.
+`hb.plots.acquisition_on_grid`, which gives the acquisition over a grid
+of `u` and a `Dataset` per scenario.
 `examples/illustrative_example.py` compares hybrid and standard BO and draws both.
 `plt.style.use("hybrid_bo.default")` gives the library's look; change it as any matplotlib
 style, with `plt.rcParams` or a style of your own.

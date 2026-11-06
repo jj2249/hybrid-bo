@@ -2,8 +2,9 @@
 model embedded, over scenarios of the GPs' prediction of the unknown states.
 
 A `DeterministicEquivalent` is that problem: `solve` it for the next trial point, and pass
-it to the plots to see what was minimized. `gp_deterministic_equivalent` builds it for a
-given objective, and hybrid BO's acquisition problem (`hybrid_acquisition`) is its one use.
+it to the plots to see what was minimized. `hybrid_deterministic_equivalent` builds it for
+a given objective, and hybrid BO's acquisition problem (`hybrid_acquisition`) is its one
+use.
 """
 
 from collections.abc import Callable, Sequence
@@ -44,13 +45,14 @@ class DeterministicEquivalent:
 
     `weights` (S,) are the scenario weights. `scenario_values` maps the decision vector to
     f under each scenario (S, 1) and the scenarios' unknown states y (S, P), read from the
-    vector or predicted by the GPs. `ei` gives EI from values of the objective.
+    vector or predicted by the GPs. `acquisition_from_objective` turns values of the
+    objective, which is minimized, into values of the acquisition function.
     """
 
     nlp: NLP
     start_bounds: tuple[np.ndarray, np.ndarray]
     n_u: int
-    ei: Callable[[np.ndarray], np.ndarray]
+    acquisition_from_objective: Callable[[np.ndarray], np.ndarray]
     n_x: int = 0
     weights: np.ndarray = field(default_factory=lambda: np.zeros(0))
     unknown_states_as_variables: bool = False
@@ -109,13 +111,13 @@ def _pack(u: Any, x: Any = None, y: Any = None) -> Any:
     return cas.vertcat(u, *(cas.vec(block) for block in states))
 
 
-def gp_deterministic_equivalent(
+def hybrid_deterministic_equivalent(
     problem: Problem,
     fitted: tuple[FittedGP, ...],
     z: np.ndarray,
     w: np.ndarray,
     objective: Callable[[Any], Any],
-    ei: Callable[[np.ndarray], np.ndarray],
+    acquisition_from_objective: Callable[[np.ndarray], np.ndarray],
     unknown_states_as_variables: bool,
 ) -> DeterministicEquivalent:
     """The hybrid model over the scenarios of the surrogate model, minimizing `objective`
@@ -125,9 +127,10 @@ def gp_deterministic_equivalent(
     `fitted` is the surrogate model: one fitted GP per unknown state, in the order of
     `problem.system.y`. Each scenario s has its own copies x_s and y_s of the states, and
     the known equations g(x_s, y_s, u) = 0 are constraints. The unknown states y_s are
-    the GPs' prediction at the scenario's arguments of h, mean + std * z_s. With `unknown_states_as_variables` the y_s are variables
-    too, tied by y_s - prediction = 0 (paper, Problem 8), which helps IPOPT. Otherwise the
-    prediction is substituted for them, so they add no variables and have no bounds.
+    the GPs' prediction at the scenario's arguments of h, mean + std * z_s. With
+    `unknown_states_as_variables` the y_s are variables too, tied by y_s - prediction = 0
+    (paper, Problem 8), which helps IPOPT. Otherwise the prediction is substituted for
+    them, so they add no variables and have no bounds.
 
     The variables are u, the x_s and, if variables, the y_s, in `_pack`'s order, each
     boxed by its bounds and started within its start bounds.
@@ -203,7 +206,7 @@ def gp_deterministic_equivalent(
         nlp,
         start_bounds(variables),
         system.n_u,
-        ei,
+        acquisition_from_objective,
         system.n_x,
         w,
         unknown_states_as_variables,

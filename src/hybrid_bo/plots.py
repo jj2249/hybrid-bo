@@ -80,20 +80,22 @@ def acquisition_on_grid(
     problem: DeterministicEquivalent, solution: Solution, u: np.ndarray
 ) -> tuple[np.ndarray, tuple[Dataset, ...]]:
     """The acquisition problem over a grid of points nobody measured, to draw what the
-    solver minimized: EI at each row of u (n, N) and, for hybrid BO, one `Dataset` per
-    scenario, of the states and f under that scenario at each row of u.
+    solver minimized: the acquisition value at each row of u (n, N) and, for hybrid BO, one
+    `Dataset` per scenario, of the states and f under that scenario at each row of u.
 
-    A `Dataset` of the system can't give this: it holds only the points that were measured,
-    and the real system's states, not the GPs' prediction of them.
+    A `Dataset` of the system can't give this: it holds only the points that were
+    measured, and the real system's states, not the GPs' prediction of them.
 
-    Standard BO's EI is analytic, so it has no scenarios. With u fixed, hybrid BO's
-    constraints are a square system in the scenario states, which `find_root` solves point
+    Standard BO's acquisition is analytic, so it has no scenarios. With u fixed, hybrid
+    BO's constraints are a square system in the scenario states, which `find_root` solves point
     by point outwards from `solution`, each from the nearest point solved, to stay on the
     branch the optimizer chose. A point fails if the residual norm is above
     `_GRID_TOLERANCE` or a state is outside its bounds, and is NaN.
     """
     if problem.n_scenarios == 0:
-        return problem.ei(problem.nlp.f.map(len(u))(u.T).full().ravel()), ()
+        return problem.acquisition_from_objective(
+            problem.nlp.f.map(len(u))(u.T).full().ravel()
+        ), ()
 
     # The constraints as a root problem: the states are unknowns and u a parameter
     nlp, n_u = problem.nlp, problem.n_u
@@ -127,7 +129,7 @@ def acquisition_on_grid(
         solved_states.append(root)
 
     scenarios = range(problem.n_scenarios)
-    return problem.ei(values), tuple(
+    return problem.acquisition_from_objective(values), tuple(
         Dataset(u, x[:, s], y[:, s], f[:, s]) for s in scenarios
     )
 
@@ -144,9 +146,9 @@ def iteration(
     panels show the function the solver minimized. `dataset` holds the points before the
     trial point.
 
-    Standard BO has two panels, its GP of f and EI. Hybrid BO has three: `fitted`, the GP
-    of an unknown state of u alone, then f under the scenarios, their weighted mean and
-    std, and EI. A point that wasn't solved is a gap.
+    Standard BO has two panels, its GP of f and the acquisition. Hybrid BO has three:
+    `fitted`, the GP of an unknown state of u alone, then f under the scenarios, their
+    weighted mean and std, and the acquisition. A point that wasn't solved is a gap.
 
     Raises `ValueError` if there isn't one decision variable, or one axes per panel.
     """
@@ -165,7 +167,7 @@ def iteration(
     surrogate(fitted, lower, upper, panels[0])
     color = panels[0].get_lines()[0].get_color()
     u = np.linspace(lower, upper, 201)
-    ei, scenarios = acquisition_on_grid(problem, solution, u[:, np.newaxis])
+    acquisition, scenarios = acquisition_on_grid(problem, solution, u[:, np.newaxis])
 
     # f under the scenarios, with the points so far
     if is_hybrid:
@@ -177,9 +179,9 @@ def iteration(
         panels[1].scatter(dataset.u[:, 0], dataset.f, color="k", label="points")
         panels[1].set_ylabel("f")
 
-    # EI, and the trial point on every panel
-    panels[-1].plot(u, ei, color=color, label="EI")
-    panels[-1].set(xlabel="u", ylabel="EI")
+    # The acquisition, and the trial point on every panel
+    panels[-1].plot(u, acquisition, color=color, label="acquisition")
+    panels[-1].set(xlabel="u", ylabel="acquisition")
     for ax in panels:
         ax.axvline(solution.u[0], color=color, linestyle=":", label="trial point")
         ax.legend(fontsize="small")

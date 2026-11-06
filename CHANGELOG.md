@@ -8,8 +8,8 @@
 - **Breaking:** `hb.saa_scenarios` and `Scenarios` are gone: pass draws `z` and weights `w`.
   `approximation` is keyword-only, and `AcquisitionSolution` is `Solution`.
 - `hb.expected_improvement` is public.
-- **Breaking:** `hb.replay` and `Replay` are gone: `hb.plots.acquisition_on_grid` gives EI
-  and a `Dataset` per scenario. `hybrid_bo.evaluation` is now `hybrid_bo.reconstruction`.
+- **Breaking:** `hb.replay` and `Replay` are gone: `hb.plots.acquisition_on_grid` gives the
+  acquisition and a `Dataset` per scenario. `hybrid_bo.evaluation` is now `hybrid_bo.reconstruction`.
 - **Breaking:** `reconstruct_states` solves with CasADi's Newton method instead of scipy's
   `fsolve`, which is no longer a dependency. With several roots in the bounds, it may find
   a different one. Known equations that can't determine the unmeasured states now raise

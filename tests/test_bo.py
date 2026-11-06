@@ -440,7 +440,7 @@ def test_acquisition_on_grid_gives_the_solution_and_solves_the_equations(approxi
     # Check: the stored solution at the trial point
     assert solution.x is not None
     assert ei[0] == pytest.approx(
-        built.ei(np.array(solution.value)), rel=1e-6, abs=1e-8
+        built.acquisition_from_objective(np.array(solution.value)), rel=1e-6, abs=1e-8
     )
     x_at_trial_point = np.array([scenario.x[0] for scenario in scenarios])
     np.testing.assert_allclose(x_at_trial_point, solution.x, atol=1e-6)
@@ -560,7 +560,7 @@ def test_iteration_draws_standard_bos_panels():
 
     hb.plots.iteration(built, solution, fitted, dataset, axes)
 
-    assert axes[1].get_ylabel() == "EI"
+    assert axes[1].get_ylabel() == "acquisition"
 
 
 def test_iteration_needs_one_axes_per_panel():

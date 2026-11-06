@@ -15,7 +15,10 @@ import casadi as cas
 import numpy as np
 
 from hybrid_bo.gp import FittedGP
-from hybrid_bo.hybrid_model import DeterministicEquivalent, gp_deterministic_equivalent
+from hybrid_bo.hybrid_model import (
+    DeterministicEquivalent,
+    hybrid_deterministic_equivalent,
+)
 from hybrid_bo.problem import Problem, Symbolic, start_bounds
 from hybrid_bo.solvers import NLP
 from hybrid_bo.utils import log_softplus
@@ -41,8 +44,8 @@ class SAA:
         min(f_s - incumbent, 0)."""
         return Symbolic(w).T @ cas.fmin(f - incumbent, 0)
 
-    def ei(self, value: np.ndarray) -> np.ndarray:
-        """EI from values of the objective."""
+    def acquisition_from_objective(self, value: np.ndarray) -> np.ndarray:
+        """The acquisition value, EI, from values of the objective."""
         return -value
 
 
@@ -74,8 +77,8 @@ class SoftSAA:
         log_smooth = np.log(tau) + log_softplus((incumbent - f) / tau)
         return -cas.logsumexp(Symbolic(np.log(w)) + log_smooth)
 
-    def ei(self, value: np.ndarray) -> np.ndarray:
-        """EI from values of the objective, which is -log EI."""
+    def acquisition_from_objective(self, value: np.ndarray) -> np.ndarray:
+        """The acquisition value, EI, from values of the objective, which is -log EI."""
         return np.exp(-value)
 
 
@@ -122,23 +125,23 @@ def hybrid_acquisition(
     approximation: SAA | SoftSAA,
 ) -> DeterministicEquivalent:
     """The acquisition problem of hybrid BO (paper, Problems 8 and 9): the deterministic
-    equivalent (`gp_deterministic_equivalent`) of the scenarios, whose objective is EI as
-    `approximation` gives it. `fitted` is the surrogate model.
+    equivalent (`hybrid_deterministic_equivalent`) of the scenarios, whose objective is EI
+    as `approximation` gives it. `fitted` is the surrogate model.
 
     The scenarios are the draws z (S, P) and the weights w (S,). For a sample average,
     `z = rng.standard_normal((S, P))` and `w = np.full(S, 1 / S)`. Draw z once, before the
     first iteration, and pass the same one every time: nothing here checks that.
 
-    Raises `ValueError` if z and w don't match, the weights aren't a distribution, or there
-    isn't one column of z and one fitted GP per unknown state.
+    Raises `ValueError` if z and w don't match, the weights aren't a distribution, or
+    there isn't one column of z and one fitted GP per unknown state.
     """
     z, w = np.asarray(z, dtype=float), np.asarray(w, dtype=float)
-    return gp_deterministic_equivalent(
+    return hybrid_deterministic_equivalent(
         problem,
         fitted,
         z,
         w,
         lambda f: approximation.objective(f, w, incumbent),
-        approximation.ei,
+        approximation.acquisition_from_objective,
         approximation.unknown_states_as_variables,
     )
