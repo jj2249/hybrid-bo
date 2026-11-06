@@ -105,8 +105,9 @@ To test a method you write the unknown equations in closed form, the *oracle*, a
 :py:func:`~hybrid_bo.oracle.measure_oracle` simulates the system from ``g`` and
 the oracle together. The methods only see the measured variables, with normal noise
 of the standard deviation you state (``noise_std``, 0 for none). To score them,
-:py:func:`~hybrid_bo.oracle.oracle_values` gives the true (*oracle*) values at any ``u``
-afterwards.
+:py:func:`~hybrid_bo.oracle.oracle_values` gives the *oracle values* at any ``u``
+afterwards. With several roots it can find a different one from the measurement, so
+narrow the start bounds to one branch to score such a system.
 
 .. literalinclude:: ../tests/illustrative_example.py
    :language: python

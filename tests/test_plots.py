@@ -242,7 +242,7 @@ def test_hybrid_bo_figure_from_a_pickled_run(hybrid_run):
     gridded panels: the GP of y with its true curve, f under the scenarios, and the
     acquisition function, the objective of the acquisition problem at each u with
     each scenario's states solving g, all with one legend for the figure."""
-    # Act: iteration 1, with the oracle for the true curves
+    # Act: iteration 1, with the oracle for the oracle curves
     figure = plots.iteration(hybrid_run, ex.problem, 1, oracle=ex.oracle)
 
     # The title, three gridded panels, the figure's legend
@@ -563,8 +563,8 @@ def test_2d_figure_has_a_panel_per_quantity(request, run_name, expected, tmp_pat
     plt.close("all")
 
 
-def test_2d_figure_without_measure_drops_the_oracle_column(hybrid_2d_run):
-    """Without a measurement there are no oracle values, so the oracle panels go."""
+def test_2d_figure_without_an_oracle_drops_the_oracle_column(hybrid_2d_run):
+    """Without an oracle there are no oracle values, so the oracle panels go."""
     figure = plots.iteration(hybrid_2d_run, ROSENBROCK, 0)
 
     assert titles(figure) == [

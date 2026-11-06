@@ -106,7 +106,7 @@ METHODS = {
 
 def as_baseline_columns(
     dataset: hb.Dataset,
-    oracle: hb.oracle.OracleValues,
+    values: hb.oracle.OracleValues,
     solutions: list[AcquisitionSolution],
 ) -> dict[str, np.ndarray]:
     """The run under the `ResultsBO` keys: they store y inside x, f as a column, and
@@ -116,9 +116,9 @@ def as_baseline_columns(
         "x": np.column_stack([dataset.x, dataset.y]),
         "f": dataset.f[:, np.newaxis],
         "incumbents": hb.incumbents(dataset)[:, np.newaxis],
-        "x_no_noise": np.column_stack([oracle.x, oracle.y]),
-        "f_no_noise": oracle.f[:, np.newaxis],
-        "incumbents_no_noise": hb.oracle_incumbents(dataset, oracle.f)[:, np.newaxis],
+        "x_no_noise": np.column_stack([values.x, values.y]),
+        "f_no_noise": values.f[:, np.newaxis],
+        "incumbents_no_noise": hb.oracle_incumbents(dataset, values.f)[:, np.newaxis],
     }
     n = ex.N_INITIAL
     baseline = {
@@ -147,10 +147,10 @@ def run_method(method: str) -> dict[str, np.ndarray]:
     dataset, solutions = METHODS[method](ex.measure, rng)
 
     # The oracle values for the columns that score the run, from a generator of their own
-    oracle = hb.oracle_values(
+    values = hb.oracle_values(
         ex.problem, ex.oracle, dataset.u, np.random.default_rng(SEED)
     )
-    return as_baseline_columns(dataset, oracle, solutions)
+    return as_baseline_columns(dataset, values, solutions)
 
 
 # `parametrize` runs the test once per method, each as its own test case. The other

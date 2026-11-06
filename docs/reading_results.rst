@@ -44,7 +44,7 @@ Iteration figures
 :py:func:`~hybrid_bo.plots.iteration` draws the state before a trial point: the GP, the
 objective under the scenarios and the acquisition function, over one or two decision
 variables. It reads the run, so a saved run draws without running it again, but it
-needs the problem, from your script. Pass the oracle to draw the true curves too:
+needs the problem, from your script. Pass the oracle to draw the oracle values too:
 
 .. code-block:: python
 

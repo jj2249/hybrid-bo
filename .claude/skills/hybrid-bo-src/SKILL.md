@@ -86,7 +86,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   the root of `g` and the oracle (`_oracle_root`), then noise, in that order. With
   `optimum` it warns with `OracleOptimumWarning` at a point below it, beyond a relative
   1e-6 (`_check_optimum`; no draws). `oracle_values(problem, oracle, u, rng, ...)` gives an
-  `OracleValues` (`x`, `y`, `f`) at any `u`, from a generator of its own.
+  `OracleValues` (`x`, `y`, `f`) at any `u`, from a generator of its own; with several
+  roots it can find a different one from the measurement, as its starts differ.
   `oracle_incumbents(dataset, f_oracle)` is the benchmark metric.
   `check_reconstruction(system, dataset, values)` warns with `ReconstructionWarning` for a
   row not on the oracle's root: one extra solve from the oracle values, no draws.
@@ -304,8 +305,8 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   replay, with the `n_initial + i` points before trial point i, from the stored
   surrogate, the run's scenarios and `run.settings` (`ValueError` for a baseline).
 - `plots.py`: static figures, no widgets and no `rng`. `regret(curves, optimum, ax)` and
-  `convergence(curves, ax)` draw a list of runs per label on the caller's required axes (median and IQR over evaluations,
-  `_over_evaluations`, in numpy). `iteration(run, problem, i, *, measure, gp,
+  `convergence(curves, ax)` draw a list of incumbent curves per label on the caller's required axes (median and IQR over evaluations,
+  `_over_evaluations`, in numpy). `iteration(run, problem, i, *, oracle, gp,
   scenarios, acquisition) -> Figure` draws the state before trial point i over the
   `u` start bounds, with one figure legend (`_figure_legend`); it dispatches on
   `n_u` (`ValueError` above 2, and for hybrid BO's GP panels with P > 1: they draw

@@ -6,9 +6,7 @@ for the unmeasured states, and computes the objective. The measurement can be:
 
 - **A real system**: the plant itself, or an in silico simulation that stands in for it
   (e.g. a flowsheet simulator). You write the measurement as a function that runs it and
-  returns only the measured variables as an array. The library sees nothing else, so
-  there are no oracle values and no check against them. This is all a real system
-  supplies.
+  returns only the measured variables as an array. This is all a real system supplies.
 - **The oracle simulation** (`measure_oracle`, in `oracle.py`), for benchmark
   experiments, which returns the measured variables too: the oracle values stay in
   `oracle.py`, for scoring afterwards.
@@ -185,7 +183,7 @@ def reconstruct_states(
     `u` (n, N) holds the decision variables and `measured` (n, P) the measured variables
     at them, in the order of `system.measured`. Each row solves the root-finding problem
     for the unmeasured states from `n_starts` Latin hypercube starts over their start
-    bounds, then computes `f`. The dataset has no oracle values.
+    bounds, then computes `f`.
 
     A `u` or a measured variable outside its bounds is still a measurement, so it is kept,
     with one `OutOfBoundsWarning`. An unmeasured state must lie within its bounds, which

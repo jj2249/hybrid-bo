@@ -249,7 +249,10 @@ def evaluate(
   remember a separate check.
 - The **oracle values** are the states and objective the oracle gives at a point.
   `oracle_values` computes them at any `u` afterwards, for scoring, from a generator of
-  its own so a run's draws don't change.
+  its own so a run's draws don't change. Its starts aren't the measurement's, so with
+  several roots it can find a different one, and the score is then of another branch:
+  the accepted cost of a `Dataset` that holds no oracle values. Narrow the start bounds to
+  one branch to score such a system.
 - **Oracle vs real system.** Being simulated doesn't make a system an oracle. An in
   silico simulation of a plant (a flowsheet simulator, say) is a real system to the
   library: a custom measurement that returns only the measured variables. An oracle is
@@ -324,9 +327,6 @@ replay.
 The settings dataclasses live in `settings.py`, not with their methods in `bo.py`,
 because `run.py` needs them and `bo.py` imports `run.py`. `MethodSettings` is their
 union, the one place a new method's settings join.
-
-The oracle simulation is a frozen, callable dataclass, not a closure (#141): it is
-data (the system, the oracle traced like `g`, a `cas.Function`, and the settings).
 
 A column is found by name with `system.column("x1")`.
 

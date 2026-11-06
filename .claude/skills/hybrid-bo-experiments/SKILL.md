@@ -90,7 +90,7 @@ check the solution. `hb.extend(dataset, new)` returns a new dataset with the row
   is in measured units; kernel hyperparameters (`Param` bounds, fixed lengthscales) are in
   scaled units (inputs onto [0, 1], outputs standardized). Don't convert the noise by
   hand.
-- Passing `measure` to `plots.iteration` runs it over the plot grid: only for an oracle.
+- Passing `oracle` to `plots.iteration` draws the oracle values over the plot grid.
 - The iteration figures need one or two decision variables. They replay each run from
   what it stored (its fitted GPs and its settings), so nothing from the experiment's
   methods is passed and a saved run plots after the methods change.

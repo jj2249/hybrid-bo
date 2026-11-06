@@ -12,6 +12,9 @@ import pytest
 
 import hybrid_bo as hb
 
+# The illustrative example's minimizer, found by a bounded search of the closed form
+U_AT_THE_OPTIMUM = np.array([-0.44633082071941])
+
 
 def implicit_system(known_equations: bool) -> hb.System:
     """A test system over u in [-1, 1] with one unknown state y, measured, and with
@@ -102,26 +105,36 @@ def test_the_oracle_simulation_of_an_oracle_that_reads_y():
 
 
 def test_a_measurement_below_the_stated_optimum_warns():
-    """A point whose oracle objective is below `optimum` can't leave it the optimum, so
-    the measurement warns."""
-    measure = hb.measure_oracle(ex.problem, ex.oracle, noise_std=0.0, optimum=100.0)
+    """A point whose oracle objective is below `optimum`, beyond the tolerance, can't
+    leave it the optimum, so the measurement warns."""
+    measure = hb.measure_oracle(
+        ex.problem, ex.oracle, noise_std=0.0, optimum=ex.optimum + 1e-3
+    )
 
     # `pytest.warns` fails unless the block warns with the category, matching `match`
     with pytest.warns(hb.OracleOptimumWarning, match="below the stated"):
-        measure(np.array([0.5]), np.random.default_rng(0))
+        measure(U_AT_THE_OPTIMUM, np.random.default_rng(0))
 
 
 # `filterwarnings("error")` turns every warning into a failure of this test
 @pytest.mark.filterwarnings("error")
 def test_a_measurement_at_the_stated_optimum_does_not_warn():
-    """The stated optimum is the lowest the oracle allows, so no point warns, the one
-    that reaches it included."""
+    """The point that reaches the stated optimum doesn't warn, nor does one above it."""
+    # Setup: check that the point does reach the optimum
+    values = hb.oracle_values(
+        ex.problem,
+        ex.oracle,
+        U_AT_THE_OPTIMUM[np.newaxis],
+        np.random.default_rng(0),
+    )
+    assert values.f[0] == pytest.approx(ex.optimum, abs=1e-8)
+
+    # Act and check: warnings are failures here
     measure = hb.measure_oracle(
         ex.problem, ex.oracle, noise_std=0.0, optimum=ex.optimum
     )
-
-    for u in (-0.45, 0.5, 1.5):
-        measure(np.array([u]), np.random.default_rng(0))
+    for u in (U_AT_THE_OPTIMUM, np.array([1.5])):
+        measure(u, np.random.default_rng(0))
 
 
 def test_the_optimum_check_draws_nothing():
@@ -155,12 +168,14 @@ def test_oracle_values_solve_every_state_at_each_point():
     np.testing.assert_allclose(values.f, 2 * np.sin(u[:, 0]) + 1.0, atol=1e-8)
 
 
-def test_oracle_values_draw_only_from_the_generator_they_are_given():
-    """They draw from the generator passed in and no other, so scoring afterwards
-    leaves a run's generator as it was."""
-    run_rng, own_rng = np.random.default_rng(0), np.random.default_rng(1)
-    state = run_rng.bit_generator.state
+@pytest.mark.filterwarnings("error")
+def test_a_reconstruction_agrees_with_the_values_of_the_oracle():
+    """With one root, the states reconstructed from noise-free measurements are the ones
+    `oracle_values` gives, so `check_reconstruction` doesn't warn."""
+    rng = np.random.default_rng(0)
+    u = np.array([[-1.0], [0.5], [1.5]])
+    dataset = hb.reconstruct_states(ex.problem, u=u, measured=np.sin(u), rng=rng)
 
-    hb.oracle_values(ex.problem, ex.oracle, np.array([[0.5]]), own_rng)
+    values = hb.oracle_values(ex.problem, ex.oracle, u, np.random.default_rng(1))
 
-    assert run_rng.bit_generator.state == state
+    hb.check_reconstruction(ex.system, dataset, values)

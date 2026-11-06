@@ -135,10 +135,16 @@ def oracle_values(
 
     `oracle` is written as for `measure_oracle`, and each point solves `g` and the oracle
     together from `n_starts` Latin hypercube starts over the start bounds. Pass a
-    generator of its own, so this doesn't disturb a run's draws. Raises `ValueError` if
-    the oracle doesn't give one value per unknown state, and `RootFindingError` if no
-    start gives a root.
+    generator of its own, so this doesn't disturb a run's draws.
+
+    With several roots, this can find a different one from a measurement at the same u,
+    since their starts differ. To score such a system, narrow the start bounds to one
+    branch.
+
+    Raises `ValueError` if the oracle doesn't give one value per unknown state, and
+    `RootFindingError` if no start gives a root.
     """
+    # The root at each point, from starts of its own
     system = problem.system
     oracle_function = _trace_oracle(system, oracle)
     states = _states(system)
@@ -152,6 +158,8 @@ def oracle_values(
         )
         for point in u
     ]
+
+    # The states as rows, and the objective at each
     array = np.reshape(rows, (len(u), len(states)))
     x, y = array[:, : system.n_x], array[:, system.n_x :]
     f = np.array([problem.f(*row).full().item() for row in zip(x, y, u, strict=True)])
@@ -187,7 +195,14 @@ def check_reconstruction(
     the root-finding problem started at the oracle values (no random draws). If that
     solve gives a different root, or none, the measured variables don't determine the
     states uniquely: a method would learn from states the system didn't settle at.
+
+    `values` from `oracle_values` are one root of `g` and the oracle, which with several
+    roots needn't be the one a measurement found (see there), so this can then miss a
+    disagreement or report one that isn't there.
+
+    Raises numpy's `ValueError` if `values` hasn't one row per row of `dataset`.
     """
+    # The columns of the measured and unmeasured states, and the rows to compare
     states, unmeasured = _states(system), _unmeasured(system)
     is_unmeasured = np.array([var in unmeasured for var in states])
     measured_columns = [states.index(var) for var in system.measured]

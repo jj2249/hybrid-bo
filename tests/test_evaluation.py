@@ -87,7 +87,7 @@ def test_noise_free_evaluation_matches_the_closed_form(illustrative_problem):
     dataset = evaluate(
         illustrative_problem, measure, u[:, np.newaxis], np.random.default_rng(0)
     )
-    oracle = oracle_values(
+    values = oracle_values(
         illustrative_problem,
         lambda v: [cas.sin(v.u)],
         u[:, np.newaxis],
@@ -99,12 +99,12 @@ def test_noise_free_evaluation_matches_the_closed_form(illustrative_problem):
     for actual, expected in [
         (dataset.x, x),
         (dataset.y, y),
-        (oracle.x, x),
-        (oracle.y, y),
+        (values.x, x),
+        (values.y, y),
     ]:
         np.testing.assert_allclose(actual.ravel(), expected, rtol=1e-8, atol=1e-10)
     np.testing.assert_allclose(dataset.f, f, rtol=1e-8, atol=1e-10)
-    np.testing.assert_allclose(oracle.f, f, rtol=1e-8, atol=1e-10)
+    np.testing.assert_allclose(values.f, f, rtol=1e-8, atol=1e-10)
     assert dataset.n_initial == len(u)
 
 
@@ -197,12 +197,12 @@ def test_disagreement_with_the_oracle_warns():
         np.array([[0.0]]),
         np.random.default_rng(0),
     )
-    oracle = OracleValues(np.array([[-1.0]]), np.array([[1.0]]), np.array([-1.0]))
+    values = OracleValues(np.array([[-1.0]]), np.array([[1.0]]), np.array([-1.0]))
 
     # `pytest.warns` fails the test unless the block warns with a message matching
     # `match`
     with pytest.warns(ReconstructionWarning, match="oracle"):
-        check_reconstruction(problem.system, dataset, oracle)
+        check_reconstruction(problem.system, dataset, values)
 
     np.testing.assert_allclose(dataset.x, [[1.0]])
 
@@ -220,9 +220,9 @@ def test_noisy_reconstruction_on_the_oracle_branch_does_not_warn():
         np.array([[0.0]]),
         np.random.default_rng(0),
     )
-    oracle = OracleValues(np.array([[1.0]]), np.array([[1.0]]), np.array([1.0]))
+    values = OracleValues(np.array([[1.0]]), np.array([[1.0]]), np.array([1.0]))
 
-    check_reconstruction(problem.system, dataset, oracle)
+    check_reconstruction(problem.system, dataset, values)
 
     np.testing.assert_allclose(dataset.x, [[np.sqrt(1.1)]])
 
@@ -460,6 +460,30 @@ def test_oracle_incumbents_are_the_oracle_f_at_the_measured_incumbent():
     )
 
 
+def test_oracle_incumbents_under_noise_score_the_point_the_measured_f_ranks_best(
+    illustrative_problem,
+):
+    """Regret from `oracle_values` under noise: the closed-form oracle f at the point
+    the noisy measured f ranks best, after each evaluation."""
+    # Noisy evaluations, and the oracle objective from a generator of its own
+    u = np.linspace(-1.5, 1.5, 30)
+    measure = illustrative_measure(illustrative_problem, noise_std=0.1)
+    dataset = evaluate(
+        illustrative_problem, measure, u[:, np.newaxis], np.random.default_rng(0)
+    )
+    f_oracle = oracle_values(
+        illustrative_problem,
+        lambda v: [cas.sin(v.u)],
+        u[:, np.newaxis],
+        np.random.default_rng(1),
+    ).f
+
+    # Check: the first point that reaches each running minimum, in the closed form
+    _, _, f = closed_form(u)
+    best = [int(np.argmin(dataset.f[: i + 1])) for i in range(len(u))]
+    np.testing.assert_allclose(oracle_incumbents(dataset, f_oracle), f[best], rtol=1e-8)
+
+
 def test_oracle_incumbents_keep_the_earlier_point_on_a_tie():
     """A later point that only equals the incumbent's measured f doesn't replace it."""
     dataset = dataset_of(f=[1.0, 1.0, 1.0])
@@ -538,7 +562,7 @@ def test_reconstruct_states_solves_the_unmeasured_states_of_given_measurements(
     np.testing.assert_array_equal(dataset.u, u)
     np.testing.assert_allclose(dataset.f, f, atol=1e-6)
 
-    # Given points have no oracle values, and all are initial points
+    # Given points are all initial points
     assert dataset.n_initial == 3
 
 
@@ -601,7 +625,7 @@ def test_reconstruct_states_names_every_bad_row_and_keeps_the_others():
 
 
 def test_a_reconstruction_with_no_good_rows_has_an_empty_dataset():
-    """When every row fails, `error.dataset` has no points and no oracle values."""
+    """When every row fails, `error.dataset` has no points."""
     problem = square_root_problem()
     measured = np.array([[-1.0], [-2.0]])
 
