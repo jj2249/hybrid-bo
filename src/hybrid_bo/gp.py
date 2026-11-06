@@ -381,12 +381,6 @@ def _training_covariance(gp: GP, X: Any, y_scaler: Scaler) -> Any:
     )
 
 
-def _training_cholesky(gp: GP, X: Any, y_scaler: Scaler) -> Any:
-    """The lower Cholesky factor of the training covariance."""
-    # CasADi returns the upper factor
-    return cas.chol(_training_covariance(gp, X, y_scaler)).T
-
-
 def _log_marginal_likelihood(
     gp: GP, X: np.ndarray, Y: np.ndarray, y_scaler: Scaler
 ) -> Any:
@@ -394,7 +388,8 @@ def _log_marginal_likelihood(
     scalar in the GP's hyperparameters (numbers or symbols)."""
     X_c, Y_c = Symbolic(X), Symbolic(Y)
     residual = Y_c - prior_mean(gp.mean, X_c)
-    L = _training_cholesky(gp, X_c, y_scaler)
+    # CasADi's `chol` gives the upper factor
+    L = cas.chol(_training_covariance(gp, X_c, y_scaler)).T
     alpha = cas.solve(L.T, cas.solve(L, residual))
     return -0.5 * (
         residual.T @ alpha
@@ -537,13 +532,14 @@ def predict(fitted: FittedGP, X: Any) -> tuple[Any, Any]:
     """
     # The conditional mean and variance at symbols for X, with the hyperparameters and
     # data as constants. A numpy X is predicted one row at a time, mapped over its rows:
-    # predicting all rows at once builds their whole covariance matrix
+    # predicting all rows at once builds their whole covariance matrix. CasADi's `chol`
+    # gives the upper factor
     gp = fitted.gp
     X_train, Y_train = Symbolic(fitted.X), Symbolic(fitted.Y)
     is_numeric = isinstance(X, np.ndarray)
     X_symbols = Symbolic.sym("X", 1 if is_numeric else X.shape[0], X.shape[1])
     X_scaled = scale(fitted.x_scaler, X_symbols)
-    L = _training_cholesky(gp, X_train, fitted.y_scaler)
+    L = cas.chol(_training_covariance(gp, X_train, fitted.y_scaler)).T
     alpha = cas.solve(L, Y_train - prior_mean(gp.mean, X_train))
     beta = cas.solve(L, covariance(gp.kernel, X_scaled, X_train).T)
     mean = prior_mean(gp.mean, X_scaled) + beta.T @ alpha
