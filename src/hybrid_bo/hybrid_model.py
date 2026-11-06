@@ -16,8 +16,7 @@ import numpy as np
 
 from hybrid_bo.dataset import Dataset
 from hybrid_bo.gp import GP, FittedGP, fit_gp, predict
-from hybrid_bo.problem import Problem, Symbolic, System, Var, _h_inputs
-from hybrid_bo.sampling import _start_bounds
+from hybrid_bo.problem import Problem, Symbolic, System, Var, start_bounds
 from hybrid_bo.solvers import NLP, Ipopt
 
 _logger = logging.getLogger(__name__)
@@ -137,7 +136,7 @@ def _scenario_unknown_states(
     """
     # One column of mean and std per unknown state, matching the columns of z
     n_scenarios = len(scenarios.w)
-    inputs = cas.horzcat(*_h_inputs(system, cas.repmat(u.T, n_scenarios, 1), x))
+    inputs = cas.horzcat(*system.h_arguments(cas.repmat(u.T, n_scenarios, 1), x))
     mean, std = zip(*(predict(gp, inputs) for gp in fitted), strict=True)
     return cas.horzcat(*mean) + cas.horzcat(*std) * Symbolic(scenarios.z)
 
@@ -218,7 +217,7 @@ def gp_deterministic_equivalent(
     )
     return DeterministicEquivalent(
         nlp,
-        _start_bounds(variables),
+        start_bounds(variables),
         system.n_u,
         system.n_x,
         n_scenarios,
@@ -242,7 +241,7 @@ def fit_surrogate(
 
     Each GP is fitted by `fit_gp` from `n_starts` starts.
     """
-    X = np.column_stack(_h_inputs(system, dataset.u, dataset.x))
+    X = np.column_stack(system.h_arguments(dataset.u, dataset.x))
     fitted = []
     for var, y in zip(system.y, dataset.y.T, strict=True):
         _logger.info("Fitting the GP of %s", var.name)

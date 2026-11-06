@@ -180,3 +180,30 @@ def test_lhs_points_is_lhs_over_the_start_bounds():
         np.array([-2.0, 0.0]), np.array([2.0, 5.0]), 4, np.random.default_rng(0)
     )
     np.testing.assert_array_equal(points, expected)
+
+
+def test_a_system_lists_its_states():
+    """States are x then y, and the unmeasured ones are the rest, in the same order."""
+    u, x1, x2, y = Var("u", 0, 1), Var("x1", 0, 1), Var("x2", 0, 1), Var("y", 0, 1)
+    system = System(
+        u=[u],
+        x=[x1, x2],
+        y=[y],
+        g=lambda v: [v.x1 - v.y, v.x2 - v.u],
+        h_inputs=[u],
+        measured=[x1],
+    )
+    assert system.states == (x1, x2, y)
+    assert system.unmeasured == (x2, y)
+
+
+def test_h_arguments_follow_h_inputs():
+    """The arguments of h are columns of u and x, in the order of `h_inputs`."""
+    u, x, y = Var("u", 0, 1), Var("x", 0, 1), Var("y", 0, 1)
+    system = System(
+        u=[u], x=[x], y=[y], g=lambda v: [v.x - v.y], h_inputs=[x, u], measured=[y]
+    )
+    u_rows, x_rows = np.array([[1.0], [2.0]]), np.array([[3.0], [4.0]])
+    first, second = system.h_arguments(u_rows, x_rows)
+    np.testing.assert_array_equal(first, [3.0, 4.0])
+    np.testing.assert_array_equal(second, [1.0, 2.0])

@@ -86,6 +86,14 @@ class Var:
         object.__setattr__(self, "start", (start_lower, start_upper))
 
 
+def start_bounds(variables: Sequence[Var]) -> tuple[np.ndarray, np.ndarray]:
+    """The lower and upper start bounds of the variables, each of shape (d,)."""
+    return (
+        np.array([var.start[0] for var in variables]),
+        np.array([var.start[1] for var in variables]),
+    )
+
+
 class _Variables:
     """The `v` passed to the user's `g` and `f`: one CasADi symbol per variable.
 
@@ -112,42 +120,47 @@ class _Variables:
         raise AttributeError(msg)
 
 
-def _trace(
+def _to_casadi_function(
     name: str,
-    expression: Callable[[Any], Any],
+    equations: Callable[[Any], Any],
     x: Sequence[Var],
     y: Sequence[Var],
     u: Sequence[Var],
 ) -> cas.Function:
-    """Turns a user callable (`g` or `f`) into a `cas.Function` named `name`.
+    """Turns the user's `equations` (`g` or `f`) into `name(x, y, u) -> column`, a
+    `cas.Function` that the solvers can evaluate and differentiate exactly.
 
-    1. Creates one symbol per variable in x, y and u.
-    2. Calls `expression(v)` once with those symbols.
-    3. Stacks the result (one expression, or a list of them) into a column.
-    4. Returns `name(x, y, u) -> column`, with x, y, u as column vectors in
-       declaration order (the paper's argument order).
+    `equations` is called once, with a CasADi symbol in place of each variable. Arithmetic
+    on symbols records the expression instead of computing a number, so the result is the
+    equations themselves. The inputs x, y and u are columns in declaration order, the
+    paper's argument order.
 
-    Raises `TypeError` if the callable returns anything that isn't CasADi
-    expressions, e.g. `None` or a nested list. Checking the output's size is left
-    to the caller, which knows what size it expects.
+    Raises `TypeError` if `equations` returns anything that isn't CasADi expressions, e.g.
+    `None` or a nested list. Checking the output's size is left to the caller, which knows
+    what size it expects.
     """
+    # Call the equations once, on symbols
     symbols = {var.name: Symbolic.sym(var.name) for var in (*x, *y, *u)}
-    result = expression(_Variables(symbols))
+    expressions = equations(_Variables(symbols))
 
-    # Accept one expression or a list of them; stack into a column either way
-    parts = result if isinstance(result, list | tuple) else [result]
+    # They may give one expression or a list: stack them into a column either way
+    parts = expressions if isinstance(expressions, list | tuple) else [expressions]
     try:
-        outputs = cas.vertcat(*parts)
+        column = cas.vertcat(*parts)
     except NotImplementedError:  # CasADi's error for arguments it can't stack
         msg = (
             f"{name} must return a CasADi expression or a list of scalar expressions "
-            f"built from v; got {result!r}"
+            f"built from v; got {expressions!r}"
         )
         raise TypeError(msg) from None
 
-    # One column-vector input per block, in declaration order
-    inputs = [cas.vertcat(*(symbols[var.name] for var in block)) for block in (x, y, u)]
-    return cas.Function(name, inputs, [outputs], ["x", "y", "u"], [name])
+    # The function of x, y and u, each a column of its variables' symbols
+    x_column, y_column, u_column = (
+        cas.vertcat(*(symbols[var.name] for var in block)) for block in (x, y, u)
+    )
+    return cas.Function(
+        name, [x_column, y_column, u_column], [column], ["x", "y", "u"], [name]
+    )
 
 
 def _check_unique(names: Sequence[str], label: str) -> None:
@@ -245,7 +258,7 @@ class System:
             raise ValueError(msg)
 
         # The known equations: one per mechanistic state, none without them
-        g_function = _trace("g", g or (lambda v: []), x, y, u)
+        g_function = _to_casadi_function("g", g or (lambda v: []), x, y, u)
         if g_function.size_out(0) != (len(x), 1):
             msg = (
                 f"g must give one equation per mechanistic state ({len(x)}) as a "
@@ -273,19 +286,23 @@ class System:
     def n_y(self) -> int:
         return len(self.y)
 
+    @property
+    def states(self) -> tuple[Var, ...]:
+        """The states in the order used for arrays of states: x, then y."""
+        return (*self.x, *self.y)
 
-def _states(system: System) -> tuple[Var, ...]:
-    """The states in the order used for arrays of states: x, then y."""
-    return (*system.x, *system.y)
+    @property
+    def unmeasured(self) -> tuple[Var, ...]:
+        """The states the root-finding problem solves for, in state order."""
+        return tuple(var for var in self.states if var not in self.measured)
 
-
-def _h_inputs(system: System, u: Any, x: Any) -> list[Any]:
-    """The arguments of h at each row of u (n, N) and x (n, M), numeric or CasADi, as
-    a list of columns in the order of `system.h_inputs`."""
-    columns = {var: u[:, i] for i, var in enumerate(system.u)} | {
-        var: x[:, j] for j, var in enumerate(system.x)
-    }
-    return [columns[var] for var in system.h_inputs]
+    def h_arguments(self, u: Any, x: Any) -> list[Any]:
+        """The arguments of h at each row of u (n, N) and x (n, M), numeric or CasADi, as
+        a list of columns in the order of `h_inputs`."""
+        columns = {var: u[:, i] for i, var in enumerate(self.u)} | {
+            var: x[:, j] for j, var in enumerate(self.x)
+        }
+        return [columns[var] for var in self.h_inputs]
 
 
 @dataclass(frozen=True, init=False)
@@ -299,7 +316,7 @@ class Problem:
     f: cas.Function
 
     def __init__(self, system: System, f: Callable[[Any], Any]) -> None:
-        f_function = _trace("f", f, system.x, system.y, system.u)
+        f_function = _to_casadi_function("f", f, system.x, system.y, system.u)
         if f_function.size_out(0) != (1, 1):
             msg = f"f must be a scalar, got shape {f_function.size_out(0)}"
             raise ValueError(msg)

@@ -14,18 +14,13 @@ import numpy as np
 
 from hybrid_bo.dataset import Dataset
 from hybrid_bo.errors import RootFindingError
-from hybrid_bo.problem import Problem, Symbolic, System, Var, _states
-from hybrid_bo.sampling import _start_bounds, lhs
+from hybrid_bo.problem import Problem, Symbolic, System, start_bounds
+from hybrid_bo.sampling import lhs
 from hybrid_bo.solvers import _find_root
 
 # Runs the system at u (N,) and returns the measured variables (P,) in the order of
 # `system.measured`
 Measure = Callable[[np.ndarray, np.random.Generator], np.ndarray]
-
-
-def _unmeasured(system: System) -> list[Var]:
-    """The states the root-finding problem solves for, in state order."""
-    return [var for var in _states(system) if var not in system.measured]
 
 
 def _reconstruct(
@@ -42,17 +37,16 @@ def _reconstruct(
     root.
     """
     # Every state as an expression: the measured ones are numbers, the rest symbols
-    states, unmeasured = _states(system), _unmeasured(system)
-    w = Symbolic.sym("w", len(unmeasured))
+    w = Symbolic.sym("w", len(system.unmeasured))
     values = dict(zip(system.measured, measured, strict=True))
-    symbols = dict(zip(unmeasured, cas.vertsplit(w), strict=True))
-    column = cas.vertcat(*((values | symbols)[var] for var in states))
+    symbols = dict(zip(system.unmeasured, cas.vertsplit(w), strict=True))
+    column = cas.vertcat(*((values | symbols)[var] for var in system.states))
     residuals = system.g(column[: system.n_x], column[system.n_x :], u)
 
     # Solve, then put the states back together in state order
-    root = _find_root(w, residuals, unmeasured, starts, tol)
-    values |= dict(zip(unmeasured, root, strict=True))
-    return np.array([values[var] for var in states])
+    root = _find_root(w, residuals, system.unmeasured, starts, tol)
+    values |= dict(zip(system.unmeasured, root, strict=True))
+    return np.array([values[var] for var in system.states])
 
 
 def _dataset(problem: Problem, u: np.ndarray, states: list[np.ndarray]) -> Dataset:
@@ -109,11 +103,10 @@ def reconstruct_states(
 
     # The root-finding problem of each row, noting the rows that fail. A value that
     # isn't finite fails too: with no unmeasured states nothing would be solved
-    unmeasured = _unmeasured(system)
     states: list[np.ndarray] = []
     failed: list[int] = []
     for row, (u_point, measured_point) in enumerate(zip(u, measured, strict=True)):
-        starts = lhs(*_start_bounds(unmeasured), n_starts, rng)
+        starts = lhs(*start_bounds(system.unmeasured), n_starts, rng)
         try:
             if not np.isfinite(np.concatenate([u_point, measured_point])).all():
                 msg = f"Row {row} holds a value that isn't finite"

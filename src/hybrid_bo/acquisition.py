@@ -24,8 +24,8 @@ from hybrid_bo.hybrid_model import (
     _unpack_scenarios,
     gp_deterministic_equivalent,
 )
-from hybrid_bo.problem import Problem, Symbolic
-from hybrid_bo.sampling import _start_bounds, lhs
+from hybrid_bo.problem import Problem, Symbolic, start_bounds
+from hybrid_bo.sampling import lhs
 from hybrid_bo.solvers import NLP, Ipopt, solve_with_multistart
 
 # Added to the standard deviation in EI, so a zero std doesn't divide by zero
@@ -120,7 +120,7 @@ def standard_acquisition(
         np.array([var.lower for var in u_vars]),
         np.array([var.upper for var in u_vars]),
     )
-    return AcquisitionProblem(nlp, _start_bounds(u_vars), len(u_vars))
+    return AcquisitionProblem(nlp, start_bounds(u_vars), len(u_vars))
 
 
 @dataclass(frozen=True)
