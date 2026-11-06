@@ -12,7 +12,7 @@ import casadi as cas
 import numpy as np
 import pytest
 
-from hybrid_bo import Problem, System, Var, initial_points
+from hybrid_bo import Problem, System, Var, lhs_points
 from hybrid_bo.sampling import lhs
 
 
@@ -170,11 +170,11 @@ def test_problem_rejects_a_non_scalar_objective():
         Problem(system(), f=lambda v: [v.x, v.y])
 
 
-def test_initial_points_is_lhs_over_the_start_bounds():
-    """initial_points is a Latin hypercube over the start bounds of the variables."""
+def test_lhs_points_is_lhs_over_the_start_bounds():
+    """lhs_points is a Latin hypercube over the start bounds of the variables."""
     variables = [Var("a", -2.0, 2.0), Var("b", start=(0.0, 5.0))]
 
-    points = initial_points(variables, 4, np.random.default_rng(0))
+    points = lhs_points(variables, 4, np.random.default_rng(0))
 
     expected = lhs(
         np.array([-2.0, 0.0]), np.array([2.0, 5.0]), 4, np.random.default_rng(0)

@@ -2,7 +2,7 @@
 
 Variables are named `Var`s. The known equations `g` and the objective `f` are callables
 over those variables by name (`lambda v: [v.x + cas.exp(v.x) - v.y]`); each is called
-once with CasADi symbols and turned into a `cas.Function` (ADR 0002).
+once with CasADi symbols and turned into a `cas.Function`.
 """
 
 import keyword
@@ -13,7 +13,7 @@ from typing import Any
 import casadi as cas
 import numpy as np
 
-# The symbol type of all library math: SX only (see DESIGN.md, Decisions).
+# The symbol type of all library math: `cas.chol` has no MX overload, so SX only
 Symbolic = cas.SX
 
 
@@ -150,20 +150,6 @@ def _trace(
     return cas.Function(name, inputs, [outputs], ["x", "y", "u"], [name])
 
 
-def _as_text(
-    function: cas.Function, x: Sequence[Var], y: Sequence[Var], u: Sequence[Var]
-) -> str:
-    """The expression of a function built by `_trace`, as text in the variable names
-    (e.g. `((x+exp(x))-y)`), or `none` for a function of no equations (g with M = 0).
-    """
-    if function.numel_out(0) == 0:
-        return "none"
-    symbols = [
-        cas.vertcat(*(Symbolic.sym(var.name) for var in block)) for block in (x, y, u)
-    ]
-    return str(function(*symbols))
-
-
 def _check_unique(names: Sequence[str], label: str) -> None:
     """Raises `ValueError` naming every name that appears more than once.
 
@@ -201,7 +187,7 @@ class System:
       a composite function f(y, u) with y = h(u) (Astudillo & Frazier, arXiv
       1906.01537);
     - y: the P unknown states, determined by the unknown equations y = h(x, u),
-      whose form is not part of the system (ADR 0001);
+      whose form is not part of the system;
     - h_inputs: the arguments of h, drawn from u and x;
     - measured: the states the sensors read, drawn from x and y. There are P of them,
       so the root-finding problem for the other states is square.
@@ -286,6 +272,11 @@ class System:
     @property
     def n_y(self) -> int:
         return len(self.y)
+
+
+def _states(system: System) -> tuple[Var, ...]:
+    """The states in the order used for arrays of states: x, then y."""
+    return (*system.x, *system.y)
 
 
 def _h_inputs(system: System, u: Any, x: Any) -> list[Any]:

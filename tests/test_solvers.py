@@ -84,12 +84,8 @@ def test_an_empty_constraint_is_no_constraint():
     np.testing.assert_allclose(solution.w, reference.w, atol=1e-8)
 
 
-def test_every_start_failing_raises_without_tracebacks(caplog):
-    """When no start converges, `solve_with_multistart` raises NoSolutionError and logs
-    each failure without a traceback.
-
-    `caplog` is a pytest fixture that captures log records during the test.
-    """
+def test_every_start_failing_raises():
+    """When no start converges, `solve_with_multistart` raises NoSolutionError."""
     # w**2 + 1 = 0 has no real solution
     infeasible = NLP(
         DOUBLE_WELL.f,
@@ -99,11 +95,8 @@ def test_every_start_failing_raises_without_tracebacks(caplog):
     )
 
     # `pytest.raises` fails the test unless the block raises that exception
-    with caplog.at_level(logging.DEBUG), pytest.raises(NoSolutionError):
+    with pytest.raises(NoSolutionError):
         solve_with_multistart(infeasible, np.array([[0.5], [-0.5]]), Ipopt())
-
-    assert caplog.records
-    assert all(record.exc_info is None for record in caplog.records)
 
 
 def test_starts_at_the_iteration_limit_are_warned_about(caplog):
@@ -138,7 +131,7 @@ def test_starts_at_the_iteration_limit_are_warned_about(caplog):
 
 def test_other_failures_are_not_warned_about(caplog):
     """A start that fails for a reason other than the iteration limit (here an
-    infeasible constraint) is logged at debug level only."""
+    infeasible constraint) logs nothing."""
     infeasible = NLP(
         DOUBLE_WELL.f,
         DOUBLE_WELL.lower,
@@ -146,11 +139,10 @@ def test_other_failures_are_not_warned_about(caplog):
         g=cas.Function("g", [w], [w**2 + 1]),
     )
 
-    with caplog.at_level(logging.DEBUG), pytest.raises(NoSolutionError):
+    with pytest.raises(NoSolutionError):
         solve_with_multistart(infeasible, np.array([[0.5], [-0.5]]), Ipopt())
 
-    assert caplog.records
-    assert all(record.levelno == logging.DEBUG for record in caplog.records)
+    assert not caplog.records
 
 
 class InterruptingObjective(cas.Callback):

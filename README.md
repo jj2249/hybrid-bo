@@ -6,27 +6,22 @@ It optimizes a system whose equations are partly known: the known equations are 
 as they are, and a Gaussian process learns the unknown ones from measurements. It is
 built on [CasADi](https://web.casadi.org/).
 
+The library fits GPs and solves one iteration of BO. You write the loop.
+
 ## Install
 
-Not on PyPI yet, so install a release from the repository, with Python 3.12 or later and
-git:
-
 ```bash
-pip install "hybrid-bo[plots] @ git+https://github.com/jj2249/hybrid-bo.git@v0.6.0"
+pip install "hybrid-bo[plots] @ git+https://github.com/jj2249/hybrid-bo.git@<tag>"
 ```
 
-`plots` adds matplotlib, for the figures. The tag at the end fixes the version, so the
-library can't change under your work: the
-[releases](https://github.com/jj2249/hybrid-bo/releases) list the newer ones, and
-changing the tag upgrades. Write your scripts anywhere, in a repository of your own.
-
-To work on the library itself, install
-[pixi](https://pixi.sh), then fork and clone it: the first `pixi run` installs
-everything the project needs.
+`plots` adds matplotlib. To work on the library, install [pixi](https://pixi.sh);
+`pixi run -e dev docs` builds the API docs into `docs/_build/html`.
 
 ## Use
 
-A script states the problem and how it is measured, then calls a method:
+State the problem, and how to measure the system. `measure(u, rng)` returns the measured
+variables as an array, and can run anything: a plant, an external simulator, or an oracle
+of your own.
 
 ```python
 import casadi as cas
@@ -46,62 +41,73 @@ system = hb.System(
     measured=[y],
 )
 problem = hb.Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x - 4))
-measure = hb.oracle_measure(system, lambda v: [cas.sin(v.u)], noise_std=0.0)
 
-run = hb.hybrid_bo(
-    problem,
-    measure,
-    n_initial=2,
-    n_iterations=5,
-    rng=np.random.default_rng(0),
-    gp=hb.gp.GP(mean=hb.gp.Zero(), kernel=hb.gp.Matern52(), noise_std=0.0),
-    acquisition=hb.EI(),
-    approximation=hb.SAA(n_scenarios=25),
-)
-print(hb.incumbents(run.history)[-1])
-```
 
-`hb.standard_bo` and the baselines are called the same way. Pass `initial_points=`
-instead of `n_initial=` to start from points of your own.
+def measure(u, rng):
+    return np.sin(u)
 
-To compare methods, loop over seeds, then save and plot what you got:
 
-```python
-runs = {"hybrid_bo": [...], "standard_bo": [...]}  # a list of runs per label
-hb.save_runs(runs, "results/first-try")
+def evaluate(u, rng):
+    """A one-row dataset: measure the system at u, and solve for the other states."""
+    return hb.reconstruct_states(
+        problem, u=u[None], measured=measure(u, rng)[None], rng=rng
+    )
 
-figure, ax = plt.subplots()
-hb.plots.regret(runs, optimum, ax)
-figure.savefig("regret.png")
-```
 
-`tests/illustrative_example.py` is a complete script.
-
-With measurements you already have, you need no `measure` and no loop: solve the known
-equations for the unmeasured states, fit the GPs, then solve the hybrid model once with
-each GP replaced by its mean:
-
-```python
-gp = hb.gp.GP(mean=hb.gp.Zero(), kernel=hb.gp.Matern52(), noise_std=0.0)
 rng = np.random.default_rng(0)
-history = hb.reconstruct(problem, u=u, measured=measured, rng=rng)  # a row per point
-fitted = hb.fit_surrogate(system, history, gp=gp, rng=rng)
-solution = hb.optimize_hybrid_model(problem, fitted, rng, n_starts=30)
-print(solution.u, solution.f)
+gp = hb.gp.GP(mean=hb.gp.Zero(), kernel=hb.gp.Matern52(), noise_std=0.0)
 ```
 
-There is no uncertainty in this problem, so it trusts the GP's mean even far from the
-data, and the optimum can sit where the model is only extrapolating.
+**Hybrid BO** fits a GP to each unknown state. Draw the scenarios once, before the loop,
+and keep them: nothing checks that they stay the same.
 
-## Docs
+```python
+points = hb.lhs_points(system.u, 5, rng)
+dataset = hb.reconstruct_states(problem, u=points, measured=np.sin(points), rng=rng)
+scenarios = hb.saa_scenarios(25, system.n_y, rng)
 
-```bash
-pixi run docs
+for _ in range(10):
+    fitted = hb.fit_surrogate(system, dataset, gp=gp, rng=rng)
+    solution = hb.hybrid_trial_point(
+        problem,
+        fitted,
+        scenarios,
+        hb.incumbents(dataset)[-1],
+        rng,
+        approximation=hb.SAA(),  # or hb.SoftSAA(temperature=...)
+    )
+    dataset = hb.extend(dataset, evaluate(solution.u, rng))
 ```
 
-then open `docs/_build/html/index.html`. Getting started runs a first example,
-Writing an experiment explains how to set up your own problem, and Reading results what
-the results mean.
+**Standard BO** fits one GP to the objective:
+
+```python
+for _ in range(10):
+    fitted = hb.fit_gp(gp, dataset.u, dataset.f, rng)
+    solution = hb.standard_trial_point(problem, fitted, hb.incumbents(dataset)[-1], rng)
+    dataset = hb.extend(dataset, evaluate(solution.u, rng))
+```
+
+**A baseline** is points through the same steps, from `hb.lhs_points` or
+`hb.uniform_points`:
+
+```python
+for point in hb.uniform_points(system.u, 10, rng):
+    dataset = hb.extend(dataset, evaluate(point, rng))
+```
+
+A dataset can be saved, and extended later. Nothing records how it was produced.
+
+```python
+hb.save_dataset(dataset, "dataset.npz")
+dataset = hb.load_dataset("dataset.npz")
+```
+
+Plots draw on the axes you give them: `hb.plots.convergence` and `hb.plots.regret` take
+incumbent curves per label, `hb.plots.surrogate` draws a fitted GP of one input, and
+`hb.plots.iteration` draws what an iteration minimized, from `hb.replay`, which evaluates
+an acquisition problem over a grid of `u` with the scenario states and `f` at each point.
+`examples/illustrative_example.py` compares hybrid and standard BO and draws both.
 
 ## License
 

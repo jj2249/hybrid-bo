@@ -1,6 +1,6 @@
 """Gaussian processes: the prior GP, fitting it to data, and predicting.
 
-A prior GP is data (ADR 0008): `GP(mean=..., kernel=..., noise_std=...)`, with the
+A prior GP is data: `GP(mean=..., kernel=..., noise_std=...)`, with the
 mean and the kernel from a closed set of frozen dataclasses (`Zero`; `Scale`, `Matern12`,
 `Matern32`, `Matern52`, `SquaredExponential`). Each kernel declares its hyperparameters as
 fields: a number fixes the value, a `Param` is fitted within its bounds. Kernel
@@ -16,16 +16,13 @@ points.
 
 import dataclasses
 import logging
-import time
 import typing
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, assert_never
 
 import casadi as cas
 import numpy as np
 
-from hybrid_bo.errors import NoSolutionError
 from hybrid_bo.problem import Symbolic
 from hybrid_bo.sampling import lhs
 from hybrid_bo.solvers import NLP, Ipopt, solve_with_multistart
@@ -38,24 +35,18 @@ CONDITION_THRESHOLD = 1e10
 
 @dataclass(frozen=True)
 class Param:
-    """A hyperparameter to fit: its initial value and its bounds, the hard limits of the
-    fit and where its multistart draws the starts.
+    """A hyperparameter to fit: its bounds, the hard limits of the fit and where its
+    multistart draws the starts.
 
     With `log`, fitting searches over its logarithm, so the bounds must be positive.
-    Raises `ValueError` if the initial value is outside the bounds, or `log` is set
-    with a bound that isn't positive.
+    Raises `ValueError` if `log` is set with a bound that isn't positive.
     """
 
-    init: float
     bounds: tuple[float, float]
     log: bool = True
 
     def __post_init__(self) -> None:
-        lower, upper = self.bounds
-        if not lower <= self.init <= upper:
-            msg = f"Param init ({self.init}) must be inside the bounds {self.bounds}"
-            raise ValueError(msg)
-        if self.log and lower <= 0:
+        if self.log and self.bounds[0] <= 0:
             msg = (
                 f"A Param fitted in log space needs positive bounds, got "
                 f"{self.bounds}; use log=False otherwise"
@@ -69,8 +60,8 @@ Lengthscale = float | tuple[float, ...] | Param
 
 class _Scalable:
     """Gives a kernel `*` with a number or a `Param`, on either side: shorthand for
-    `Scale`, which it builds (`Param(1.0, (0.1, 10.0)) * Matern52()` is
-    `Scale(Matern52(), Param(1.0, (0.1, 10.0)))`). There is no product of kernels."""
+    `Scale`, which it builds (`Param((0.1, 10.0)) * Matern52()` is
+    `Scale(Matern52(), Param((0.1, 10.0)))`). There is no product of kernels."""
 
     def __mul__(self, outputscale: "float | Param") -> "Scale":
         """The kernel times an output scale, as a `Scale`.
@@ -109,7 +100,7 @@ class Matern12(_Scalable):
     every input. Raises `ValueError` for a lengthscale per input without `ard`.
     """
 
-    lengthscale: Lengthscale = Param(1.0, (1e-3, 1e2))
+    lengthscale: Lengthscale = Param((1e-3, 1e2))
     ard: bool = True
 
     def __post_init__(self) -> None:
@@ -120,7 +111,7 @@ class Matern12(_Scalable):
 class Matern32(_Scalable):
     """The Matern-3/2 kernel. Its lengthscale is as `Matern12`'s."""
 
-    lengthscale: Lengthscale = Param(1.0, (1e-3, 1e2))
+    lengthscale: Lengthscale = Param((1e-3, 1e2))
     ard: bool = True
 
     def __post_init__(self) -> None:
@@ -131,7 +122,7 @@ class Matern32(_Scalable):
 class Matern52(_Scalable):
     """The Matern-5/2 kernel. Its lengthscale is as `Matern12`'s."""
 
-    lengthscale: Lengthscale = Param(1.0, (1e-3, 1e2))
+    lengthscale: Lengthscale = Param((1e-3, 1e2))
     ard: bool = True
 
     def __post_init__(self) -> None:
@@ -143,7 +134,7 @@ class SquaredExponential(_Scalable):
     """The squared exponential (RBF, Gaussian) kernel. Its lengthscale is as
     `Matern12`'s."""
 
-    lengthscale: Lengthscale = Param(1.0, (1e-3, 1e2))
+    lengthscale: Lengthscale = Param((1e-3, 1e2))
     ard: bool = True
 
     def __post_init__(self) -> None:
@@ -155,7 +146,7 @@ class Scale(_Scalable):
     """A kernel times an output scale, unsquared; `outputscale * kernel` builds it."""
 
     kernel: "Kernel"
-    outputscale: float | Param = Param(1.0, (0.1, 10.0))
+    outputscale: float | Param = Param((0.1, 10.0))
 
 
 @dataclass(frozen=True)
@@ -166,8 +157,6 @@ class Zero:
 Stationary = Matern12 | Matern32 | Matern52 | SquaredExponential
 Kernel = Stationary | Scale
 Mean = Zero
-# The closed set, by name, for saving and loading
-TYPES = (Param, Matern12, Matern32, Matern52, SquaredExponential, Scale, Zero)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -179,7 +168,7 @@ class GP:
     measured units (those of the training outputs); 0 is noise-free, and the fitted
     GP then nearly interpolates its data. `jitter` is added to the diagonal of the
     scaled training covariance, a nugget that keeps it well conditioned when inputs
-    cluster (DESIGN.md). Raises `ValueError` if `noise_std` is negative.
+    cluster. Raises `ValueError` if `noise_std` is negative.
     """
 
     mean: Mean
@@ -205,7 +194,7 @@ class Scaler:
 class FittedGP:
     """A fitted GP: a prior GP with every hyperparameter fitted to its training data, held
     with that data (scaled) and the scalers that produced it. It describes itself, so
-    `predict` takes nothing else and a run saves it whole (ADR 0008).
+    `predict` takes nothing else.
 
     Raises `ValueError` if the GP has a `Param` left.
     """
@@ -217,85 +206,70 @@ class FittedGP:
     y_scaler: Scaler
 
     def __post_init__(self) -> None:
-        unfitted = [
-            path for path, value, _ in _hyperparameters(self.gp, 1) if _is(value)
-        ]
-        if unfitted:
-            msg = f"A fitted GP has no Param left; unfitted: {unfitted}"
+        if _params(self.gp.kernel, 1):
+            msg = f"A fitted GP has no Param left, got {self.gp.kernel!r}"
             raise ValueError(msg)
 
 
-def _is(value: Any) -> bool:
-    """Whether a hyperparameter's value is a `Param`, still to be fitted."""
-    return isinstance(value, Param)
+def _params(kernel: Kernel, n_inputs: int) -> list[Param]:
+    """One `Param` per search entry of the kernel, in the order they are fitted: an
+    output scale before the kernel it scales, and a lengthscale with ARD once per input."""
+    match kernel:
+        case Scale(kernel=inner, outputscale=outputscale):
+            own = [outputscale] if isinstance(outputscale, Param) else []
+            return own + _params(inner, n_inputs)
+        case Matern12() | Matern32() | Matern52() | SquaredExponential():
+            if not isinstance(kernel.lengthscale, Param):
+                return []
+            return [kernel.lengthscale] * (n_inputs if kernel.ard else 1)
+        case _:
+            assert_never(kernel)
 
 
-def _hyperparameters(node: Any, n_inputs: int) -> list[tuple[str, Any, int | None]]:
-    """The hyperparameters of a GP, mean or kernel, in the order they are fitted: each as
-    its dotted path from `node`, its value (a `Param`, a number, a tuple or a
-    symbol) and its number of entries, None for one number (a lengthscale with ARD
-    has `n_inputs`).
-
-    A hyperparameter is a field whose type admits a `Param`. A node's own hyperparameters come
-    before those of the means and kernels it holds.
-    """
-    hints = typing.get_type_hints(type(node))
-    own, held = [], []
-    for field in dataclasses.fields(node):
-        value = getattr(node, field.name)
-        if Param in typing.get_args(hints[field.name]):
-            is_per_input = isinstance(node, Stationary) and node.ard
-            own.append((field.name, value, n_inputs if is_per_input else None))
-        elif isinstance(value, TYPES):
-            held += [
-                (f"{field.name}.{path}", inner, size)
-                for path, inner, size in _hyperparameters(value, n_inputs)
-            ]
-    return own + held
-
-
-def _with_hyperparameters(node: Any, values: dict[str, Any]) -> Any:
-    """`node` with the hyperparameters at the given dotted paths set to the given values."""
-    changes = {}
-    for field in dataclasses.fields(node):
-        if field.name in values:
-            changes[field.name] = values[field.name]
-            continue
-        prefix = f"{field.name}."
-        inner = {
-            path.removeprefix(prefix): value
-            for path, value in values.items()
-            if path.startswith(prefix)
-        }
-        if inner:
-            changes[field.name] = _with_hyperparameters(
-                getattr(node, field.name), inner
-            )
-    return dataclasses.replace(node, **changes)
-
-
-def _symbolic(value: Any) -> Any:
-    """A hyperparameter's value as a CasADi constant or column (a tuple as a column)."""
-    return Symbolic(np.array(value)) if isinstance(value, tuple) else Symbolic(value)
-
-
-def _per_column(values: Any, n_rows: int) -> Any:
-    """`values` as a (n_rows, d) matrix with one row per point, for elementwise use
-    with X (n_rows, d). A scalar is returned unchanged."""
-    if values.numel() == 1:
-        return values
-    return cas.repmat(values.T, n_rows, 1)
+def _with_values(kernel: Kernel, values: list[Any], n_inputs: int) -> Kernel:
+    """The kernel with each `Param` replaced by its value. `values` has a number or a
+    CasADi scalar per entry of `_params`, in that order; a lengthscale with ARD becomes
+    a tuple of one per input."""
+    match kernel:
+        case Scale(kernel=inner, outputscale=Param()):
+            return Scale(_with_values(inner, values[1:], n_inputs), values[0])
+        case Scale(kernel=inner, outputscale=outputscale):
+            return Scale(_with_values(inner, values, n_inputs), outputscale)
+        case Matern12() | Matern32() | Matern52() | SquaredExponential():
+            if not isinstance(kernel.lengthscale, Param):
+                return kernel
+            value = tuple(values[:n_inputs]) if kernel.ard else values[0]
+            return dataclasses.replace(kernel, lengthscale=value)
+        case _:
+            assert_never(kernel)
 
 
 def _squared_distance(X1: Any, X2: Any, lengthscale: Any) -> Any:
     """Squared distances between the rows of X1 and X2, each input divided by its
-    lengthscale, shape (n1, n2).
+    lengthscale, shape (n1, n2). `lengthscale` is one value for every input, or a tuple
+    of one per input; a value is a number or a CasADi scalar.
 
     Clamped below at 1e-30, as gpytorch does, so the square root in the Matern kernels
     has a finite derivative at zero distance.
+
+    Raises `ValueError` if X1 and X2 have different columns, or a tuple doesn't have one
+    entry per column.
     """
-    Z1 = X1 / _per_column(lengthscale, X1.shape[0])
-    Z2 = X2 / _per_column(lengthscale, X2.shape[0])
+    # One lengthscale per input, as a row repeated for every point
+    n_inputs = X1.shape[1]
+    if X2.shape[1] != n_inputs:
+        msg = f"X1 has {n_inputs} inputs and X2 has {X2.shape[1]}"
+        raise ValueError(msg)
+    lengthscales = (
+        lengthscale if isinstance(lengthscale, tuple) else (lengthscale,) * n_inputs
+    )
+    if len(lengthscales) != n_inputs:
+        msg = f"lengthscale has {len(lengthscales)} entries for {n_inputs} inputs"
+        raise ValueError(msg)
+    row = cas.horzcat(*lengthscales)
+
+    Z1 = X1 / cas.repmat(row, X1.shape[0], 1)
+    Z2 = X2 / cas.repmat(row, X2.shape[0], 1)
     squared_norms = cas.repmat(cas.sum2(Z1**2), 1, Z2.shape[0]) + cas.repmat(
         cas.sum2(Z2**2).T, Z1.shape[0], 1
     )
@@ -304,24 +278,28 @@ def _squared_distance(X1: Any, X2: Any, lengthscale: Any) -> Any:
 
 def covariance(kernel: Kernel, X1: Any, X2: Any) -> Any:
     """The kernel's covariance between the rows of the CasADi matrices X1 (n1, d) and
-    X2 (n2, d), shape (n1, n2). Each hyperparameter must be a number or a CasADi symbol, not
-    a `Param`."""
+    X2 (n2, d), shape (n1, n2). Each hyperparameter must be a number or a CasADi scalar, not
+    a `Param`; a lengthscale may be a tuple of them, one per input.
+
+    Raises `ValueError` if X1 and X2 have different columns, or that tuple doesn't have
+    one entry per input.
+    """
     match kernel:
         case Scale(kernel=inner, outputscale=outputscale):
-            return _symbolic(outputscale) * covariance(inner, X1, X2)
+            return outputscale * covariance(inner, X1, X2)
         case Matern12(lengthscale=lengthscale):
-            r2 = _squared_distance(X1, X2, _symbolic(lengthscale))
+            r2 = _squared_distance(X1, X2, lengthscale)
             return cas.exp(-cas.sqrt(r2))
         case Matern32(lengthscale=lengthscale):
-            r2 = _squared_distance(X1, X2, _symbolic(lengthscale))
+            r2 = _squared_distance(X1, X2, lengthscale)
             return (1.0 + np.sqrt(3.0) * cas.sqrt(r2)) * cas.exp(-cas.sqrt(3.0 * r2))
         case Matern52(lengthscale=lengthscale):
-            r2 = _squared_distance(X1, X2, _symbolic(lengthscale))
+            r2 = _squared_distance(X1, X2, lengthscale)
             return (1.0 + np.sqrt(5.0) * cas.sqrt(r2) + 5.0 / 3.0 * r2) * cas.exp(
                 -cas.sqrt(5.0 * r2)
             )
         case SquaredExponential(lengthscale=lengthscale):
-            r2 = _squared_distance(X1, X2, _symbolic(lengthscale))
+            r2 = _squared_distance(X1, X2, lengthscale)
             return cas.exp(-0.5 * r2)
         case _:
             assert_never(kernel)
@@ -381,12 +359,6 @@ def _training_covariance(gp: GP, X: Any, y_scaler: Scaler) -> Any:
     )
 
 
-def _training_cholesky(gp: GP, X: Any, y_scaler: Scaler) -> Any:
-    """The lower Cholesky factor of the training covariance."""
-    # CasADi returns the upper factor
-    return cas.chol(_training_covariance(gp, X, y_scaler)).T
-
-
 def _log_marginal_likelihood(
     gp: GP, X: np.ndarray, Y: np.ndarray, y_scaler: Scaler
 ) -> Any:
@@ -394,7 +366,8 @@ def _log_marginal_likelihood(
     scalar in the GP's hyperparameters (numbers or symbols)."""
     X_c, Y_c = Symbolic(X), Symbolic(Y)
     residual = Y_c - prior_mean(gp.mean, X_c)
-    L = _training_cholesky(gp, X_c, y_scaler)
+    # CasADi's `chol` gives the upper factor
+    L = cas.chol(_training_covariance(gp, X_c, y_scaler)).T
     alpha = cas.solve(L.T, cas.solve(L, residual))
     return -0.5 * (
         residual.T @ alpha
@@ -427,27 +400,52 @@ def fit_gp(
     variance (`standard`), then maximizes the log marginal likelihood over every
     `Param` (log ones in log space) with `solve_with_multistart`, from `n_starts` Latin
     hypercube starts over their bounds; a lengthscale with ARD has one entry per column
-    of X. A GP without a `Param` is only conditioned on the data, with no draws. If
-    every start fails, it keeps the initial values and logs a warning. It also warns if
+    of X. A GP without a `Param` is only conditioned on the data, with no draws. It warns if
     the training covariance at the kept values has a condition number above
     `CONDITION_THRESHOLD`. Logs the time taken at debug level.
 
-    Raises `ValueError` if a fixed lengthscale per input doesn't have one entry per
+    Raises `NoSolutionError` if every start fails, and `ValueError` if a fixed lengthscale
+    per input doesn't have one entry per
     column of X.
     """
-    # Scale the data, and find the hyperparameters to fit
-    start = time.perf_counter()
+    # Scale the data, and list what there is to fit
     x_scaler, y_scaler = minmax(X), standard(Y[:, np.newaxis])
     X_scaled, Y_scaled = scale(x_scaler, X), scale(y_scaler, Y[:, np.newaxis]).ravel()
-    hyperparameters = _hyperparameters(gp, X.shape[1])
-    for path, value, _ in hyperparameters:
-        if isinstance(value, tuple) and len(value) != X.shape[1]:
-            msg = f"{path} has {len(value)} entries for {X.shape[1]} inputs"
-            raise ValueError(msg)
-    free = [(path, param, size) for path, param, size in hyperparameters if _is(param)]
+    n_inputs = X.shape[1]
+    params = _params(gp.kernel, n_inputs)
     fitted_gp = gp
-    if free:
-        fitted_gp = _fit(gp, free, X_scaled, Y_scaled, y_scaler, rng, n_starts, solver)
+    if params:
+        # The search space: one entry per entry of `params`, log ones as logarithms
+        is_log = np.array([param.log for param in params])
+        lower = np.array([param.bounds[0] for param in params])
+        upper = np.array([param.bounds[1] for param in params])
+
+        def to_search_space(values: np.ndarray) -> np.ndarray:
+            """Hyperparameter entries as search-space entries: logarithms for log ones."""
+            return np.where(is_log, np.log(np.where(is_log, values, 1.0)), values)
+
+        # The negative log marginal likelihood over the search space
+        w = Symbolic.sym("w", len(params))
+        symbols = [cas.exp(w[i]) if is_log[i] else w[i] for i in range(len(params))]
+        symbolic_gp = dataclasses.replace(
+            gp, kernel=_with_values(gp.kernel, symbols, n_inputs)
+        )
+        objective = -_log_marginal_likelihood(symbolic_gp, X_scaled, Y_scaled, y_scaler)
+        nlp = NLP(
+            cas.Function("negative_log_marginal_likelihood", [w], [objective]),
+            to_search_space(lower),
+            to_search_space(upper),
+        )
+
+        # Multistart from Latin hypercube starts over the bounds
+        starts = lhs(nlp.lower, nlp.upper, n_starts, rng)
+        w_best = solve_with_multistart(nlp, starts, solver).w
+
+        # Back from the search space, to the numbers the fitted GP holds
+        values = np.where(is_log, np.exp(w_best), w_best).tolist()
+        fitted_gp = dataclasses.replace(
+            gp, kernel=_with_values(gp.kernel, values, n_inputs)
+        )
 
     # Warn if the training covariance is nearly singular at those values (a
     # non-finite one counts as singular; the SVD behind `cond` would fail on it)
@@ -461,69 +459,7 @@ def fit_gp(
             condition_number,
             gp.jitter,
         )
-    _logger.debug("Fitted the GP in %.2fs", time.perf_counter() - start)
     return FittedGP(fitted_gp, X_scaled, Y_scaled, x_scaler, y_scaler)
-
-
-def _fit(
-    gp: GP,
-    free: list[tuple[str, Param, int | None]],
-    X: np.ndarray,
-    Y: np.ndarray,
-    y_scaler: Scaler,
-    rng: np.random.Generator,
-    n_starts: int,
-    solver: Ipopt,
-) -> GP:
-    """The prior GP with each `Param` (`free`, from `_hyperparameters`) set to the value
-    that maximizes the log marginal likelihood of the scaled data; see `fit_gp`."""
-    # The search space: one entry per hyperparameter entry, log ones as logarithms
-    sizes = [1 if size is None else size for _, _, size in free]
-    ends = np.cumsum(sizes)
-    is_log = np.repeat([param.log for _, param, _ in free], sizes)
-    lower = np.repeat([param.bounds[0] for _, param, _ in free], sizes)
-    upper = np.repeat([param.bounds[1] for _, param, _ in free], sizes)
-    init = np.repeat([param.init for _, param, _ in free], sizes)
-
-    def to_search_space(values: np.ndarray) -> np.ndarray:
-        """Hyperparameter entries as search-space entries: logarithms for log ones."""
-        return np.where(is_log, np.log(np.where(is_log, values, 1.0)), values)
-
-    def with_entries(entries: Any, as_value: Callable[[Any, int | None], Any]) -> GP:
-        """The GP with each free hyperparameter set to its slice of `entries`."""
-        return _with_hyperparameters(
-            gp,
-            {
-                path: as_value(entries[end - n : end], size)
-                for (path, _, size), n, end in zip(free, sizes, ends, strict=True)
-            },
-        )
-
-    # The negative log marginal likelihood over the search space
-    w = Symbolic.sym("w", len(is_log))
-    entries = [cas.exp(w[i]) if is_log[i] else w[i] for i in range(len(is_log))]
-    symbolic_gp = with_entries(cas.vertcat(*entries), lambda value, _: value)
-    objective = -_log_marginal_likelihood(symbolic_gp, X, Y, y_scaler)
-    nlp = NLP(
-        cas.Function("negative_log_marginal_likelihood", [w], [objective]),
-        to_search_space(lower),
-        to_search_space(upper),
-    )
-
-    # Multistart from Latin hypercube starts over the bounds
-    starts = lhs(nlp.lower, nlp.upper, n_starts, rng)
-    try:
-        w_best = solve_with_multistart(nlp, starts, solver).w
-    except NoSolutionError:
-        _logger.warning("Every GP fit failed; keeping the initial values")
-        w_best = to_search_space(init)
-
-    # Numbers: one per input as a tuple, else one float
-    def as_number(value: np.ndarray, size: int | None) -> float | tuple[float, ...]:
-        """A fitted hyperparameter's entries as its value."""
-        return float(value[0]) if size is None else tuple(map(float, value))
-
-    return with_entries(np.where(is_log, np.exp(w_best), w_best), as_number)
 
 
 def predict(fitted: FittedGP, X: Any) -> tuple[Any, Any]:
@@ -534,6 +470,8 @@ def predict(fitted: FittedGP, X: Any) -> tuple[Any, Any]:
     For a numpy X, returns two arrays (n,). For a symbolic X (SX or MX; the conditional
     mean and variance themselves are built in SX), returns two (n, 1) CasADi columns,
     for building acquisition problems.
+
+    Raises `ValueError` if X doesn't have the columns of the training inputs.
     """
     # The conditional mean and variance at symbols for X, with the hyperparameters and
     # data as constants. A numpy X is predicted one row at a time, mapped over its rows:
@@ -543,7 +481,8 @@ def predict(fitted: FittedGP, X: Any) -> tuple[Any, Any]:
     is_numeric = isinstance(X, np.ndarray)
     X_symbols = Symbolic.sym("X", 1 if is_numeric else X.shape[0], X.shape[1])
     X_scaled = scale(fitted.x_scaler, X_symbols)
-    L = _training_cholesky(gp, X_train, fitted.y_scaler)
+    # CasADi's `chol` gives the upper factor
+    L = cas.chol(_training_covariance(gp, X_train, fitted.y_scaler)).T
     alpha = cas.solve(L, Y_train - prior_mean(gp.mean, X_train))
     beta = cas.solve(L, covariance(gp.kernel, X_scaled, X_train).T)
     mean = prior_mean(gp.mean, X_scaled) + beta.T @ alpha

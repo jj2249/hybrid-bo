@@ -8,12 +8,8 @@ The tests share it, and the docs quote it. Run it with
 `pixi run -e experiments python tests/illustrative_example.py NAME`.
 """
 
-import sys
-from pathlib import Path
-
 import casadi as cas
-import matplotlib.pyplot as plt
-import numpy as np
+from oracle_helper import measure_oracle
 
 import hybrid_bo as hb
 
@@ -35,13 +31,13 @@ problem = hb.Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x -
 
 # Measurement: an oracle plays the real system
 def oracle(v):
-    """The unknown equation y = h(u), hidden from the methods."""
+    """The unknown equation y = h(u), hidden from the library."""
     return [cas.sin(v.u)]
 
 
-measure = hb.oracle_measure(system, oracle, noise_std=0.0)
+measure = measure_oracle(problem, oracle, noise_std=0.0)
 
-# The oracle optimum, at u = -0.45: the study measures regret from it, the methods
+# The oracle optimum, at u = -0.45: regret is measured from it, the library
 # never see it. Found once with
 # hb.oracle_optimum(problem, oracle, np.random.default_rng(0), n_starts=200), and
 # checked: hybrid BO runs reach it, and none evaluates a point below it
@@ -50,116 +46,13 @@ optimum = -50.4608044704652
 # The prior GP of every BO method, which each fits to its own data: a zero mean and an
 # output scale times a Matern-5/2 kernel, both fitted within these bounds (in scaled
 # units), and no noise, as the measurement has none
-outputscale = hb.gp.Param(1.0, bounds=(0.1, 10.0))
-lengthscale = hb.gp.Param(1.0, bounds=(1e-3, 1e2))
+outputscale = hb.gp.Param((0.1, 10.0))
+lengthscale = hb.gp.Param((1e-3, 1e2))
 gp = hb.gp.GP(
     mean=hb.gp.Zero(),
     kernel=outputscale * hb.gp.Matern52(lengthscale=lengthscale),
     noise_std=0.0,
 )
 
-# Every method's budget: 2 initial points, then 5 iterations
+# The initial points of every run
 N_INITIAL = 2
-N_ITERATIONS = 5
-N_RUNS = 10
-
-# Methods: each is one run from the generator `rng`. Hybrid BO substitutes the GP
-# prediction for the unknown states, as this experiment always has, with SAA-EI, with
-# Lin-EI and with SoftSAA-EI at a temperature of 50e-3, about 1e-3 times the optimum's
-# magnitude (about 50)
-
-
-def hybrid_bo(rng: np.random.Generator) -> hb.Run:
-    """Hybrid BO with SAA-EI."""
-    return hb.hybrid_bo(
-        problem,
-        measure,
-        n_initial=N_INITIAL,
-        n_iterations=N_ITERATIONS,
-        rng=rng,
-        gp=gp,
-        acquisition=hb.EI(),
-        approximation=hb.SAA(n_scenarios=25, unknown_states_as_variables=False),
-    )
-
-
-def hybrid_bo_lin(rng: np.random.Generator) -> hb.Run:
-    """Hybrid BO with Lin-EI."""
-    return hb.hybrid_bo(
-        problem,
-        measure,
-        n_initial=N_INITIAL,
-        n_iterations=N_ITERATIONS,
-        rng=rng,
-        gp=gp,
-        acquisition=hb.EI(),
-        approximation=hb.Linearization(unknown_states_as_variables=False),
-    )
-
-
-def hybrid_bo_soft(rng: np.random.Generator) -> hb.Run:
-    """Hybrid BO with SoftSAA-EI."""
-    return hb.hybrid_bo(
-        problem,
-        measure,
-        n_initial=N_INITIAL,
-        n_iterations=N_ITERATIONS,
-        rng=rng,
-        gp=gp,
-        acquisition=hb.EI(),
-        approximation=hb.SoftSAA(
-            temperature=50e-3, n_scenarios=25, unknown_states_as_variables=False
-        ),
-    )
-
-
-def standard_bo(rng: np.random.Generator) -> hb.Run:
-    """Standard BO with EI."""
-    return hb.standard_bo(
-        problem,
-        measure,
-        n_initial=N_INITIAL,
-        n_iterations=N_ITERATIONS,
-        rng=rng,
-        gp=gp,
-        acquisition=hb.EI(),
-    )
-
-
-def latin_hypercube_sampling(rng: np.random.Generator) -> hb.Run:
-    """Latin hypercube sampling."""
-    return hb.latin_hypercube_sampling(
-        problem, measure, n_initial=N_INITIAL, n_iterations=N_ITERATIONS, rng=rng
-    )
-
-
-def uniform_sampling(rng: np.random.Generator) -> hb.Run:
-    """Uniform sampling."""
-    return hb.uniform_sampling(
-        problem, measure, n_initial=N_INITIAL, n_iterations=N_ITERATIONS, rng=rng
-    )
-
-
-# Every method's runs from the same seeds, so run i of each starts from the same initial
-# points, then the results and their figure
-if __name__ == "__main__":
-    # The study's name, its folder made first so a name in use fails before the runs
-    folder = Path("results/illustrative_example", sys.argv[1])
-    folder.mkdir(parents=True)
-
-    methods = (
-        hybrid_bo,
-        hybrid_bo_lin,
-        hybrid_bo_soft,
-        standard_bo,
-        latin_hypercube_sampling,
-        uniform_sampling,
-    )
-    runs = {
-        method.__name__: [method(np.random.default_rng(seed)) for seed in range(N_RUNS)]
-        for method in methods
-    }
-    hb.save_runs(runs, folder)
-    figure, ax = plt.subplots()
-    hb.plots.regret(runs, optimum, ax)
-    figure.savefig(folder / "regret.png")

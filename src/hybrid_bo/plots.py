@@ -1,83 +1,24 @@
-"""Static figures: runs compared over their evaluations, and one iteration of a run.
-
-Plots read finished runs, so a saved run is plotted without running it again (ADR
-0003); an iteration's acquisition panels replay the method's acquisition problem (ADR
-0005). matplotlib is imported on first use. Figures are drawn in the repo's style,
-`STYLE`; use it elsewhere with `plt.style.use(hb.plots.STYLE)`.
-"""
+"""Static figures, each drawn on the axes you give it. Needs matplotlib."""
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
-from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import numpy as np
-import scipy
 
-from hybrid_bo.acquisition import LCB, Linearization, SoftSAA, replay
-from hybrid_bo.bo import iteration_problem
-from hybrid_bo.evaluation import Measure, evaluate
-from hybrid_bo.gp import predict
-from hybrid_bo.history import incumbents, n_iterations, oracle_incumbents
-from hybrid_bo.problem import Problem
-from hybrid_bo.run import Run
-from hybrid_bo.sampling import _start_bounds
-from hybrid_bo.settings import HybridBOSettings, MethodSettings, StandardBOSettings
+from hybrid_bo.acquisition import AcquisitionProblem, AcquisitionSolution, replay
+from hybrid_bo.dataset import Dataset
+from hybrid_bo.gp import FittedGP, predict, unscale
+from hybrid_bo.hybrid_model import Scenarios
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
-    from matplotlib.figure import Figure
-
-# The repo's matplotlib style: its rcParams for every figure
-STYLE = Path(__file__).with_name("hybrid_bo.mplstyle")
-
-_N_GRID = 101  # grid points over u
-_N_GRID_2D = 30  # grid points over each of two decision variables
-_N_LEVELS = 21  # levels of a filled contour
-_DECADES = 2  # a panel of f spanning more decades than this has a log color scale
-_ZERO_EI_COLOR = "lightgray"
-_EI_DECADES = 10  # the EI color scale stops this many decades below the largest EI
-_CONFIDENCE = 0.9  # probability inside the confidence bands
 
 
-def convergence(runs: Mapping[str, Sequence[Run]], ax: "Axes") -> "Axes":
-    """Draws the incumbent of each label's runs over the evaluations on `ax`, and
-    returns it: the oracle incumbent if the runs have an oracle, else the measured one,
-    as the median with the interquartile range shaded."""
-    curves = {
-        label: [_incumbents(run) for run in group] for label, group in runs.items()
-    }
-    ax = _over_evaluations(curves, ax)
-    ax.set_ylabel("incumbent")
-    return ax
-
-
-def regret(runs: Mapping[str, Sequence[Run]], optimum: float, ax: "Axes") -> "Axes":
-    """Draws the regret of each label's runs over the evaluations on `ax`, and returns
-    it: measured from the oracle optimum `optimum`, as in `convergence`, on a log y-axis
-    (the paper's figure)."""
-    curves = {
-        label: [_incumbents(run) - optimum for run in group]
-        for label, group in runs.items()
-    }
-    ax = _over_evaluations(curves, ax)
-    ax.set_ylabel("regret")
-    ax.set_yscale("log")
-    return ax
-
-
-def _incumbents(run: Run) -> np.ndarray:
-    """The run's oracle incumbents if it has an oracle, else its incumbents."""
-    if run.history.f_oracle is None:
-        return incumbents(run.history)
-    return oracle_incumbents(run.history)
-
-
-def _over_evaluations(curves: Mapping[str, Sequence[np.ndarray]], ax: "Axes") -> "Axes":
-    """Draws the median and the interquartile range of each label's curves at each
-    evaluation on `ax`. A shorter run counts up to its last evaluation."""
-    # Per label: runs as rows, NaN past a run's last evaluation
+def convergence(curves: Mapping[str, Sequence[np.ndarray]], ax: "Axes") -> "Axes":
+    """Draws each label's incumbent curves (`hb.incumbents`) over the evaluations: the
+    median, with the interquartile range shaded. A shorter curve counts up to its end."""
     for label, group in curves.items():
+        # Curves as rows, NaN past a curve's last evaluation
         rows = np.full((len(group), max(len(curve) for curve in group)), np.nan)
         for row, curve in zip(rows, group, strict=True):
             row[: len(curve)] = curve
@@ -85,491 +26,92 @@ def _over_evaluations(curves: Mapping[str, Sequence[np.ndarray]], ax: "Axes") ->
         n = np.arange(1, rows.shape[1] + 1)
         (drawn,) = ax.plot(n, median, label=label)
         ax.fill_between(n, lower, upper, color=drawn.get_color(), alpha=0.2)
-
     ax.set_xlabel("evaluations")
+    ax.set_ylabel("incumbent")
+    ax.legend()
+    return ax
+
+
+def regret(
+    curves: Mapping[str, Sequence[np.ndarray]], optimum: float, ax: "Axes"
+) -> "Axes":
+    """Draws the regret from `optimum` of each label's incumbent curves, as
+    `convergence` does, on a log y-axis."""
+    regrets = {
+        label: [curve - optimum for curve in group] for label, group in curves.items()
+    }
+    convergence(regrets, ax)
+    ax.set_ylabel("regret")
+    ax.set_yscale("log")
+    return ax
+
+
+def surrogate(fitted: FittedGP, lower: float, upper: float, ax: "Axes") -> "Axes":
+    """Draws a fitted GP of one input between `lower` and `upper`: its mean, its band of
+    two standard deviations and its training points, in measured units."""
+    x = np.linspace(lower, upper, 201)
+    mean, std = predict(fitted, x[:, np.newaxis])
+    (drawn,) = ax.plot(x, mean, label="GP mean")
+    ax.fill_between(
+        x, mean - 2 * std, mean + 2 * std, color=drawn.get_color(), alpha=0.2
+    )
+    ax.scatter(
+        unscale(fitted.x_scaler, fitted.X),
+        unscale(fitted.y_scaler, fitted.Y[:, np.newaxis]),
+        color="k",
+        label="points",
+    )
     ax.legend()
     return ax
 
 
 def iteration(
-    run: Run,
-    problem: Problem,
-    i: int,
-    *,
-    measure: Measure | None = None,
-    gp: bool = True,
-    scenarios: bool = True,
-    acquisition: bool = True,
-) -> "Figure":
-    """The figure of iteration i of a run (from 0; negative counts from the end): the
-    state before its i-th trial point (design point, for the baselines), over a grid
-    of the start bounds of one or two decision variables.
+    problem: AcquisitionProblem,
+    solution: AcquisitionSolution,
+    fitted: FittedGP,
+    dataset: Dataset,
+    axes: "Sequence[Axes]",
+    scenarios: Scenarios | None = None,
+) -> None:
+    """Draws one iteration of one decision variable on `axes`: the state before the trial
+    point `solution`, over the start bounds of u, as `replay` gives it, so the panels show
+    the function the solver minimized. `dataset` holds the points before the trial point.
 
-    The panels, each turned off by its flag:
+    Standard BO has two panels, its GP of f and EI. Hybrid BO, with its `scenarios`, has
+    three: `fitted`, the GP of an unknown state of u alone, then f under the scenarios,
+    their weighted mean and std, and EI. A point the replay didn't solve is a gap.
 
-    - `gp`: the stored surrogate's mean and band; of y for hybrid BO (one unknown
-      state only), of f for standard BO.
-    - `scenarios` (hybrid BO): f under the scenarios, their weighted mean and band;
-      with linearization, f at the nominal states and the band f +- s, with s
-      recomputed from the stored surrogate.
-    - `acquisition`: the minimized acquisition function (-EI or LCB) and the stored
-      value at the trial point. Standard BO's is analytic. Hybrid BO's replays the
-      acquisition problem (ADR 0005) from the stored surrogate, scenarios and
-      incumbent: with u fixed at each grid point, each scenario's states solve its
-      equations by Newton's method, outwards from the stored solution, each grid
-      point from the nearest one solved, and the problem's objective is evaluated
-      there. A grid point where a scenario has no root within the bounds is a gap.
-      If the replay at the trial point isn't the stored solution, it warns with
-      `ReplayWarning`. SoftSAA's -log EI is drawn as -EI.
-
-    With one decision variable the panels are stacked curves over a grid of 101
-    points, each with the points so far, the incumbent and the trial point; the
-    baselines (or every panel off) show the points with f. With two, they are filled
-    contours over a 30 x 30 grid in rows, of y (oracle, GP mean, GP std) and of f
-    (oracle, the scenarios' weighted mean or the nominal f, their weighted std or s,
-    and EI), or for standard BO one row of f with its GP; each shows the points so
-    far, the incumbent and the trial point in the plane of u. An oracle panel shares
-    the color scale of the mean beside it. Panels of f are on a log color scale when
-    their values are positive and span more than two decades. EI is drawn as log10
-    EI, with the grid points where it is 0 (SAA-EI's flat regions) in gray, over at
-    most 10 decades below the largest EI (smaller EI in the lowest color; SoftSAA's
-    is computed from its -log EI, so it never underflows to 0); LCB is drawn as it
-    is. The acquisition panel notes the stored and the replayed
-    value at the trial point, which check the replay.
-
-    `measure` adds the oracle values (curves, or the oracle panels in 2D); it runs at
-    every grid point (generator seeded with 0), so pass an oracle measurement, never
-    a real system.
-
-    The GPs are the run's stored fitted GPs; the rest of the replay (the acquisition
-    function, the approximation, the solver) comes from the run's stored settings.
-
-    Raises `ValueError` unless the problem has one or two decision variables (and,
-    for hybrid BO's GP panels, one unknown state and h of u only), or if `measure`
-    has no oracle; and `IndexError` if the run has no iteration `i`.
+    Raises `ValueError` if there isn't one decision variable, or one axes per panel.
     """
-    # The checks: one or two decision variables, one GP of y over u, the iteration
-    system, history, settings = problem.system, run.history, run.settings
-    if system.n_u not in (1, 2):
-        msg = f"The plots need one or two decision variables, got {system.n_u}"
+    # The checks
+    panels = list(axes)
+    if problem.n_u != 1:
+        msg = f"The panels draw one decision variable, got {problem.n_u}"
         raise ValueError(msg)
-    is_hybrid = isinstance(settings, HybridBOSettings)
-    if is_hybrid and gp and system.n_y > 1:
-        msg = (
-            f"The GP panels draw one unknown state, got {system.n_y}: pass gp=False "
-            "to draw the other panels"
-        )
+    if len(panels) != (2 if scenarios is None else 3):
+        msg = f"Standard BO draws 2 panels and hybrid BO 3, got {len(panels)} axes"
         raise ValueError(msg)
-    if is_hybrid and gp and list(system.h_inputs) != list(system.u):
-        msg = "The GP of y is drawn over u, so h_inputs must be the decision variables"
-        raise ValueError(msg)
-    n_later = n_iterations(history)
-    if not -n_later <= i < n_later:
-        msg = f"The run has {n_later} iterations, so no iteration {i}"
-        raise IndexError(msg)
-    i %= n_later
 
-    # The panels this method has
-    shown = {
-        "gp": gp and settings is not None,
-        "scenarios": scenarios and is_hybrid,
-        "acquisition": acquisition and settings is not None,
-    }
-    if system.n_u == 1:
-        return _iteration_1d(run, problem, i, measure, shown)
-    return _iteration_2d(run, problem, i, measure, shown)
+    # The GP, in its panel's color, and the replay over the start bounds of u
+    lower, upper = (float(bound[0]) for bound in problem.start_bounds)
+    surrogate(fitted, lower, upper, panels[0])
+    color = panels[0].get_lines()[0].get_color()
+    u = np.linspace(lower, upper, 201)
+    replayed = replay(problem, solution, u[:, np.newaxis])
 
+    # f under the scenarios, with the points so far
+    if scenarios is not None:
+        assert replayed.f is not None
+        mean = replayed.f @ scenarios.w
+        std = np.sqrt((replayed.f - mean[:, np.newaxis]) ** 2 @ scenarios.w)
+        panels[1].plot(u, mean, color=color, label="mean over scenarios")
+        panels[1].fill_between(u, mean - std, mean + std, color=color, alpha=0.2)
+        panels[1].scatter(dataset.u[:, 0], dataset.f, color="k", label="points")
+        panels[1].set_ylabel("f")
 
-def _truth(
-    problem: Problem, measure: Measure | None, u: np.ndarray
-) -> tuple[np.ndarray | None, np.ndarray | None]:
-    """The oracle first unknown state and f at the rows of u, or None without a
-    measurement.
-
-    Raises `ValueError` if the measurement has no oracle.
-    """
-    if measure is None:
-        return None, None
-    truth = evaluate(problem, measure, u, np.random.default_rng(0))
-    if truth.f_oracle is None or truth.y_oracle is None:
-        msg = "The true curves need an oracle measurement"
-        raise ValueError(msg)
-    return truth.y_oracle[:, 0], truth.f_oracle
-
-
-def _iteration_1d(
-    run: Run,
-    problem: Problem,
-    i: int,
-    measure: Measure | None,
-    shown: dict[str, bool],
-) -> "Figure":
-    """`iteration`'s figure for one decision variable: a panel per entry of `shown`
-    that is on, stacked."""
-    system, history, settings = problem.system, run.history, run.settings
-    is_hybrid = isinstance(settings, HybridBOSettings)
-
-    # The grid, with the trial point in it so the replay starts there
-    n = history.n_initial + i
-    trial = history.u[n, 0]
-    u = np.sort(np.append(np.linspace(*_start_bounds(system.u), _N_GRID), trial))
-    y_true, f_true = _truth(problem, measure, u[:, None])
-
-    # The replay the panels need
-    panels = [panel for panel, on in shown.items() if on] or ["points"]
-    replayed = None
-    if settings is not None and (shown["scenarios"] or shown["acquisition"]):
-        acquisition_problem = iteration_problem(run, problem, i)
-        at_trial = int(np.searchsorted(u, trial))
-        replayed = replay(
-            acquisition_problem, run.acquisitions[i], u[:, np.newaxis], at_trial
-        )
-
-    import matplotlib.pyplot as plt
-
-    with plt.style.context(STYLE):
-        figure, axes = plt.subplots(
-            len(panels),
-            squeeze=False,
-            sharex=True,
-            figsize=(8, 2 + 2 * len(panels)),
-            layout="constrained",
-        )
-        figure.suptitle(f"{run.method}, iteration {i}")
-        for panel, ax in zip(panels, axes[:, 0], strict=True):
-            # The acquisition function, and the stored value at the trial point.
-            # SoftSAA minimizes -log EI, which is steep far from the incumbent and
-            # squashes the rest, so it is drawn as -EI like the other EI approximations
-            if panel == "acquisition":
-                assert settings is not None and replayed is not None
-                curve, value = replayed.values, run.acquisitions[i].value
-                if _is_soft(settings):
-                    curve, value = -np.exp(-curve), -np.exp(-value)
-                label = "LCB" if isinstance(settings.acquisition, LCB) else "-EI"
-                ax.plot(u, curve, color="k", label=label)
-                ax.scatter(
-                    trial, value, facecolors="none", edgecolors="r", label="trial point"
-                )
-                ax.set_ylabel(label)
-                continue
-
-            # A panel of values: its curves, the true curve and the points
-            values, true, label = history.f, f_true, "f"
-            if panel == "gp" and is_hybrid:
-                values, true, label = history.y[:, 0], y_true, system.y[0].name
-            if panel == "gp":
-                _band(ax, u, *predict(run.surrogates[i][0], u[:, None]))
-            elif panel == "scenarios":
-                assert run.scenarios is not None and replayed is not None
-                assert replayed.f is not None and replayed.f_std is not None
-                if _is_linearized(settings):
-                    _nominal_band(ax, u, replayed.f[:, 0], replayed.f_std)
-                else:
-                    _scenario_band(ax, u, replayed.f, run.scenarios.w)
-            if true is not None:
-                ax.plot(u, true, color="k", linestyle="--", label="true")
-            _points(ax, history.u[:, 0], values, history.f, history.n_initial, n)
-            ax.set_ylabel(label)
-        axes[-1, 0].set_xlabel(system.u[0].name)
-        _figure_legend(figure, list(axes[:, 0]))
-    return figure
-
-
-@dataclass(frozen=True)
-class _Panel:
-    """A panel of the 2D figure: its title and its values over the grid (n_grid,);
-    `in_f_units` panels may get a log color scale, `ei` is EI, drawn as log10 EI
-    with its zeros in gray, and `note` is drawn in a corner."""
-
-    title: str
-    values: np.ndarray
-    in_f_units: bool = False
-    ei: bool = False
-    note: str = ""
-
-
-def _iteration_2d(
-    run: Run,
-    problem: Problem,
-    i: int,
-    measure: Measure | None,
-    shown: dict[str, bool],
-) -> "Figure":
-    """`iteration`'s figure for two decision variables: filled contours in rows, a
-    column each for the oracle, the mean, the std and the acquisition function."""
-    system, history, settings = problem.system, run.history, run.settings
-    n = history.n_initial + i
-
-    # The grid over the start bounds, as a list of points in u's plane
-    lower, upper = _start_bounds(system.u)
-    u1, u2 = (np.linspace(lower[j], upper[j], _N_GRID_2D) for j in range(2))
-    U1, U2 = np.meshgrid(u1, u2)
-    grid = np.column_stack([U1.ravel(), U2.ravel()])
-    y_true, f_true = _truth(problem, measure, grid)
-
-    # The replay, from the trial point (the first row, split off after) over the grid
-    replayed = None
-    if settings is not None and (shown["scenarios"] or shown["acquisition"]):
-        u = np.vstack([history.u[n], grid])
-        replayed = replay(iteration_problem(run, problem, i), run.acquisitions[i], u, 0)
-
-    # The row of y (hybrid BO's GP), oracle | GP mean | GP std
-    rows: list[list[_Panel | None]] = []
-    if isinstance(settings, HybridBOSettings) and shown["gp"]:
-        name = system.y[0].name
-        mean, std = predict(run.surrogates[i][0], grid)
-        oracle = None if y_true is None else _Panel(f"oracle {name}", y_true)
-        rows.append(
-            [
-                oracle,
-                _Panel(f"GP mean of {name}", mean),
-                _Panel(f"GP std of {name}", std),
-            ]
-            + [None]
-        )
-
-    # The row of f: oracle | GP or scenario mean | its std | acquisition function
-    row: list[_Panel | None] = [None] * 4
-    if f_true is not None:
-        row[0] = _Panel("oracle f", f_true, in_f_units=True)
-    if isinstance(settings, StandardBOSettings) and shown["gp"]:
-        mean, std = predict(run.surrogates[i][0], grid)
-        row[1] = _Panel("GP mean of f", mean, in_f_units=True)
-        row[2] = _Panel("GP std of f", std, in_f_units=True)
-    if shown["scenarios"]:
-        assert run.scenarios is not None and replayed is not None
-        assert replayed.f is not None and replayed.f_std is not None
-        f, f_std = replayed.f[1:], replayed.f_std[1:]
-        if _is_linearized(settings):
-            row[1] = _Panel("nominal f", f[:, 0], in_f_units=True)
-            row[2] = _Panel("s, the std of f", f_std, in_f_units=True)
-        else:
-            mean = f @ run.scenarios.w
-            row[1] = _Panel("mean f over scenarios", mean, in_f_units=True)
-            row[2] = _Panel("std f over scenarios", f_std, in_f_units=True)
-    if shown["acquisition"]:
-        assert settings is not None and replayed is not None
-        stored, at_trial = run.acquisitions[i].value, replayed.values[0]
-        row[3] = _acquisition_panel(settings, replayed.values[1:], stored, at_trial)
-    rows.append(row)
-
-    # Drop the empty rows and columns
-    rows = [row for row in rows if any(row)]
-    columns = [c for c in range(4) if any(row[c] for row in rows)]
-
-    # Every panel shows the points so far, the incumbent and the trial point
-    points = (history.u[:, 0], history.u[:, 1], history.f, history.n_initial, n)
-    import matplotlib.pyplot as plt
-
-    with plt.style.context(STYLE):
-        figure, axes = plt.subplots(
-            max(len(rows), 1),
-            max(len(columns), 1),
-            squeeze=False,
-            figsize=(2 + 4 * max(len(columns), 1), 1 + 3.4 * max(len(rows), 1)),
-            layout="constrained",
-        )
-        figure.suptitle(f"{run.method}, iteration {i}")
-
-        # Without panels: the points alone
-        if not rows:
-            ax = axes[0, 0]
-            ax.set_title("points")
-            ax.set_box_aspect(1)
-            ax.set_xlim(lower[0], upper[0])
-            ax.set_ylim(lower[1], upper[1])
-            _points(ax, *points)
-            ax.set_xlabel(system.u[0].name)
-            ax.set_ylabel(system.u[1].name)
-
-        # Each panel; an oracle panel and the mean beside it share a color scale
-        for r, row in enumerate(rows):
-            shared = [panel.values for panel in row[:2] if panel is not None]
-            for a, c in enumerate(columns):
-                ax, panel = axes[r, a], row[c]
-                if panel is None:
-                    ax.remove()
-                    continue
-                scale = np.concatenate(shared) if c < 2 else panel.values
-                if panel.ei:
-                    _ei_contours(ax, U1, U2, panel.values)
-                else:
-                    _contours(ax, U1, U2, panel.values, scale, panel.in_f_units)
-                ax.set_title(panel.title)
-                if panel.note:
-                    ax.text(
-                        0.02,
-                        0.02,
-                        panel.note,
-                        transform=ax.transAxes,
-                        fontsize="small",
-                        bbox={"facecolor": "white", "alpha": 0.8},
-                    )
-                _points(ax, *points)
-
-                # Axis labels on the outer side of the panels
-                below = rows[r + 1][c] if r + 1 < len(rows) else None
-                if below is None:
-                    ax.set_xlabel(system.u[0].name)
-                if a == 0 or row[columns[a - 1]] is None:
-                    ax.set_ylabel(system.u[1].name)
-        _figure_legend(figure, [ax for ax in figure.axes if ax.get_title()])
-    return figure
-
-
-def _acquisition_panel(
-    settings: MethodSettings, curve: np.ndarray, stored: float, replayed: float
-) -> _Panel:
-    """The acquisition panel of the 2D figure from the replayed acquisition values
-    over the grid: LCB as it is (linear), else log10 EI (`_log10_ei`). Its note gives
-    the stored and the replayed value at the trial point in the panel's units."""
-    if isinstance(settings.acquisition, LCB):
-        title, values, at_trial = "LCB", curve, np.array([stored, replayed])
-    else:
-        title = "log10 EI"
-        values = _log10_ei(settings, curve)
-        at_trial = _log10_ei(settings, np.array([stored, replayed]))
-    note = f"trial point: stored {at_trial[0]:.4g}, replayed {at_trial[1]:.4g}"
-    return _Panel(title, values, ei=title != "LCB", note=note)
-
-
-def _contours(
-    ax: "Axes",
-    U1: np.ndarray,
-    U2: np.ndarray,
-    values: np.ndarray,
-    scale: np.ndarray,
-    in_f_units: bool,
-    extend: str = "neither",
-) -> None:
-    """Filled contours of values (n_grid,) over the grid (U1, U2), with a colorbar.
-    The color scale spans the finite values of `scale`; it is log if `in_f_units`
-    and they are positive and span more than `_DECADES` decades. NaN leaves gaps.
-    `extend` is matplotlib's: "min" colors values below the scale with its lowest
-    color and puts an arrow on the colorbar."""
-    from matplotlib.colors import LogNorm, Normalize
-    from matplotlib.ticker import LogLocator, MaxNLocator
-
-    ax.set_box_aspect(1)
-    finite = scale[np.isfinite(scale)]
-    if finite.size == 0:
-        return
-    low, high = float(finite.min()), float(finite.max())
-    if in_f_units and low > 0 and high > low * 10**_DECADES:
-        levels, norm = np.geomspace(low, high, _N_LEVELS), LogNorm(low, high)
-        ticks = LogLocator()
-    else:
-        if high == low:
-            low, high = low - 0.5, high + 0.5
-        levels, norm = np.linspace(low, high, _N_LEVELS), Normalize(low, high)
-        ticks = MaxNLocator()
-    Z = np.ma.masked_invalid(values.reshape(U1.shape))
-    contours = ax.contourf(U1, U2, Z, levels=levels, norm=norm, extend=extend)
-    ax.figure.colorbar(contours, ax=ax, ticks=ticks)
-
-
-def _log10_ei(settings: MethodSettings, values: np.ndarray) -> np.ndarray:
-    """log10 EI from acquisition values: SoftSAA stores -log EI, so -value / ln 10,
-    finite even where EI underflows in float64; the other EI approximations store
-    -EI, so log10(-value), -inf where EI <= 0. NaN (a failed replay) stays NaN."""
-    if _is_soft(settings):
-        return -values / np.log(10)
-    with np.errstate(divide="ignore"):
-        return np.log10(np.maximum(-values, 0))
-
-
-def _ei_contours(
-    ax: "Axes", U1: np.ndarray, U2: np.ndarray, log_ei: np.ndarray
-) -> None:
-    """log10 EI (n_grid,) over the grid as filled contours, with the grid points where
-    it is -inf (EI = 0) in gray cells; NaN leaves gaps. SAA-EI is exactly 0 where no
-    scenario improves; analytic EI rounds to just below 0 far from the data, which
-    counts as 0. SoftSAA-EI is never 0, so it has no gray cells. The color scale
-    stops `_EI_DECADES` decades below the largest EI, with the smaller EI in the
-    lowest color."""
-    from matplotlib.colors import ListedColormap
-
-    # Gray cells where EI is 0, with a legend entry
-    zero = np.isneginf(log_ei)
-    if zero.any():
-        gray = np.ma.masked_array(np.ones(U1.shape), mask=~zero.reshape(U1.shape))
-        cmap = ListedColormap([_ZERO_EI_COLOR])
-        ax.pcolormesh(U1, U2, gray, cmap=cmap, shading="nearest")
-        ax.fill([], [], color=_ZERO_EI_COLOR, label="EI = 0")
-
-    # The color scale: at most `_EI_DECADES` decades, an arrow if values fall below
-    finite = log_ei[np.isfinite(log_ei)]
-    floor = finite.max() - _EI_DECADES if finite.size else -np.inf
-    below = finite.size > 0 and finite.min() < floor
-    scale = np.where(np.isfinite(log_ei), np.maximum(log_ei, floor), np.nan)
-    extend = "min" if below else "neither"
-    _contours(ax, U1, U2, log_ei, scale, in_f_units=False, extend=extend)
-
-
-def _is_soft(settings: MethodSettings) -> bool:
-    """Whether the settings are hybrid BO's with SoftSAA."""
-    return isinstance(settings, HybridBOSettings) and isinstance(
-        settings.approximation, SoftSAA
-    )
-
-
-def _is_linearized(settings: MethodSettings | None) -> bool:
-    """Whether the settings are hybrid BO's with linearization."""
-    return isinstance(settings, HybridBOSettings) and isinstance(
-        settings.approximation, Linearization
-    )
-
-
-def _figure_legend(figure: "Figure", axes: list["Axes"]) -> None:
-    """One legend for the figure, an entry per label across the axes, outside them on
-    the right."""
-    handles: dict[str, Any] = {}
-    for ax in axes:
-        for handle, label in zip(*ax.get_legend_handles_labels(), strict=True):
-            handles.setdefault(label, handle)
-    figure.legend(list(handles.values()), list(handles), loc="outside right upper")
-
-
-def _points(
-    ax: "Axes", u: np.ndarray, values: np.ndarray, f: np.ndarray, n_initial: int, n: int
-) -> None:
-    """The first n points (initial points black, the rest red), the incumbent's point
-    among them (by the measured f) as a star, and point n, the trial point (design
-    point, for the baselines), as a red ring."""
-    ax.scatter(u[:n_initial], values[:n_initial], c="k", label="initial points")
-    ax.scatter(u[n_initial:n], values[n_initial:n], c="r", label="points so far")
-    best = int(np.argmin(f[:n]))
-    ax.scatter(u[best], values[best], marker="*", s=150, c="gold", label="incumbent")
-    ax.scatter(u[n], values[n], facecolors="none", edgecolors="r", label="trial point")
-
-
-def _band(ax: "Axes", u: np.ndarray, mean: np.ndarray, std: np.ndarray) -> None:
-    """A GP's mean and the band holding `_CONFIDENCE` of its probability over u."""
-    ax.plot(u, mean, color="b", label="GP mean")
-    half_width = scipy.stats.norm.ppf(0.5 + _CONFIDENCE / 2) * std
-    label = f"{_CONFIDENCE:.0%} band"
-    ax.fill_between(
-        u, mean - half_width, mean + half_width, alpha=0.2, color="b", label=label
-    )
-
-
-def _nominal_band(ax: "Axes", u: np.ndarray, f: np.ndarray, s: np.ndarray) -> None:
-    """Linearization's f at the nominal states over u and the band f +- s, its std;
-    NaN leaves gaps."""
-    ax.plot(u, f, color="b", label="nominal f")
-    ax.fill_between(u, f - s, f + s, alpha=0.2, color="b", label="nominal f ± s")
-
-
-def _scenario_band(ax: "Axes", u: np.ndarray, f: np.ndarray, w: np.ndarray) -> None:
-    """f under the scenarios (n_u, S) over u: the weighted mean and the band holding
-    the central `_CONFIDENCE` of the scenario weight; NaN rows leave gaps."""
-    ax.plot(u, f @ w, color="b", label="scenario mean")
-    tail = (1 - _CONFIDENCE) / 2
-    band = np.full((len(u), 2), np.nan)
-    for row, f_row in enumerate(f):
-        if not np.isnan(f_row).any():
-            band[row] = np.quantile(
-                f_row, [tail, 1 - tail], weights=w, method="inverted_cdf"
-            )
-    label = f"{_CONFIDENCE:.0%} band"
-    ax.fill_between(u, band[:, 0], band[:, 1], alpha=0.2, color="b", label=label)
+    # EI, and the trial point on every panel
+    panels[-1].plot(u, replayed.ei, color=color, label="EI")
+    panels[-1].set(xlabel="u", ylabel="EI")
+    for ax in panels:
+        ax.axvline(solution.u[0], color=color, linestyle=":", label="trial point")
+        ax.legend(fontsize="small")

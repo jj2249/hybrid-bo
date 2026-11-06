@@ -75,7 +75,7 @@ def test_scale_multiplies_unsquared():
 def test_a_number_or_param_times_a_kernel_is_scale():
     """`*` with a number or a `Param` is shorthand for `Scale`, on either side; it
     builds the same data, so the covariance is the scaled one."""
-    outputscale = Param(1.0, (0.1, 10.0))
+    outputscale = Param((0.1, 10.0))
     kernel = Matern52(lengthscale=0.8)
 
     assert outputscale * kernel == Scale(kernel, outputscale)
@@ -99,8 +99,6 @@ def test_param_checks():
     # `pytest.raises` fails the test unless the block raises that exception, with a
     # message matching `match`
     with pytest.raises(ValueError, match="positive"):
-        Param(0.0, (-1.0, 1.0))
-    with pytest.raises(ValueError, match="inside"):
-        Param(20.0, (0.1, 10.0))
+        Param((-1.0, 1.0))
     with pytest.raises(ValueError, match="ard"):
         Matern52(lengthscale=(0.5, 0.5), ard=False)
