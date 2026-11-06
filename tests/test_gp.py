@@ -19,6 +19,7 @@ from hybrid_bo.gp import (
     Zero,
     _params,
     _with_values,
+    covariance,
     fit_gp,
     log_marginal_likelihood,
     predict,
@@ -149,13 +150,43 @@ def test_gp_checks():
         )
 
 
+def test_a_fitted_gp_rejects_a_param_whatever_the_width_of_its_inputs():
+    """A lengthscale with ARD is a `Param` left even with no input columns, where it has
+    no search entries."""
+    scaler = Scaler(np.ones(1), np.zeros(1))
+    with pytest.raises(ValueError, match="no Param left"):
+        FittedGP(
+            GP(mean=Zero(), kernel=Matern52(), noise_std=0.0),
+            np.zeros((2, 0)),
+            np.zeros(2),
+            scaler,
+            scaler,
+        )
+
+
+def test_inputs_of_different_widths_raise():
+    """A shared lengthscale can't hide inputs of different widths: CasADi would broadcast
+    a width that is a multiple of the other's, and return numbers."""
+    # Setup: a GP of two inputs with one fixed lengthscale
+    gp = GP(mean=Zero(), kernel=Matern52(0.3, ard=False), noise_std=0.0)
+    fitted = fit_gp(gp, X_train, Y_train, np.random.default_rng(0))
+
+    # Check: twice the training columns, then half of them
+    with pytest.raises(ValueError, match="X1 has 4 inputs and X2 has 2"):
+        predict(fitted, np.zeros((3, 4)))
+    with pytest.raises(ValueError, match="X1 has 2 inputs and X2 has 1"):
+        covariance(Matern52(0.3), cas.DM.zeros(3, 2), cas.DM.zeros(5, 1))
+
+
 def test_hyperparameters_are_fitted_output_scales_first():
     """The search entries are each output scale, outermost first, then the lengthscale:
     one per input with ARD, one without, and none for a fixed value."""
+    # Setup: an output scale at each level, and a lengthscale to fit
     outer = Param(2.0, (1.0, 3.0))
     inner = Param(1.0, (0.1, 10.0))
     lengthscale = Param(0.5, (0.1, 1.0))
 
+    # Check: with ARD, without it, and with a fixed lengthscale
     assert _params(Scale(Scale(Matern52(lengthscale), inner), outer), 2) == [
         outer,
         inner,

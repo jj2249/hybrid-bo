@@ -216,7 +216,7 @@ class FittedGP:
     y_scaler: Scaler
 
     def __post_init__(self) -> None:
-        if _params(self.gp.kernel, self.X.shape[1]):
+        if _params(self.gp.kernel, 1):
             msg = f"A fitted GP has no Param left, got {self.gp.kernel!r}"
             raise ValueError(msg)
 
@@ -262,10 +262,14 @@ def _squared_distance(X1: Any, X2: Any, lengthscale: Any) -> Any:
     Clamped below at 1e-30, as gpytorch does, so the square root in the Matern kernels
     has a finite derivative at zero distance.
 
-    Raises `ValueError` if a tuple doesn't have one entry per column of X1.
+    Raises `ValueError` if X1 and X2 have different columns, or a tuple doesn't have one
+    entry per column.
     """
     # One lengthscale per input, as a row repeated for every point
     n_inputs = X1.shape[1]
+    if X2.shape[1] != n_inputs:
+        msg = f"X1 has {n_inputs} inputs and X2 has {X2.shape[1]}"
+        raise ValueError(msg)
     lengthscales = (
         lengthscale if isinstance(lengthscale, tuple) else (lengthscale,) * n_inputs
     )
@@ -284,10 +288,11 @@ def _squared_distance(X1: Any, X2: Any, lengthscale: Any) -> Any:
 
 def covariance(kernel: Kernel, X1: Any, X2: Any) -> Any:
     """The kernel's covariance between the rows of the CasADi matrices X1 (n1, d) and
-    X2 (n2, d), shape (n1, n2). Each hyperparameter must be a number or a CasADi symbol, not
+    X2 (n2, d), shape (n1, n2). Each hyperparameter must be a number or a CasADi scalar, not
     a `Param`; a lengthscale may be a tuple of them, one per input.
 
-    Raises `ValueError` if that tuple doesn't have one entry per input.
+    Raises `ValueError` if X1 and X2 have different columns, or that tuple doesn't have
+    one entry per input.
     """
     match kernel:
         case Scale(kernel=inner, outputscale=outputscale):
@@ -421,7 +426,7 @@ def fit_gp(
     params = _params(gp.kernel, n_inputs)
     fitted_gp = gp
     if params:
-        # The search space: one entry per `Param`, log ones as logarithms
+        # The search space: one entry per entry of `params`, log ones as logarithms
         is_log = np.array([param.log for param in params])
         lower = np.array([param.bounds[0] for param in params])
         upper = np.array([param.bounds[1] for param in params])
@@ -482,16 +487,18 @@ def predict(fitted: FittedGP, X: Any) -> tuple[Any, Any]:
     For a numpy X, returns two arrays (n,). For a symbolic X (SX or MX; the conditional
     mean and variance themselves are built in SX), returns two (n, 1) CasADi columns,
     for building acquisition problems.
+
+    Raises `ValueError` if X doesn't have the columns of the training inputs.
     """
     # The conditional mean and variance at symbols for X, with the hyperparameters and
     # data as constants. A numpy X is predicted one row at a time, mapped over its rows:
-    # predicting all rows at once builds their whole covariance matrix. CasADi's `chol`
-    # gives the upper factor
+    # predicting all rows at once builds their whole covariance matrix
     gp = fitted.gp
     X_train, Y_train = Symbolic(fitted.X), Symbolic(fitted.Y)
     is_numeric = isinstance(X, np.ndarray)
     X_symbols = Symbolic.sym("X", 1 if is_numeric else X.shape[0], X.shape[1])
     X_scaled = scale(fitted.x_scaler, X_symbols)
+    # CasADi's `chol` gives the upper factor
     L = cas.chol(_training_covariance(gp, X_train, fitted.y_scaler)).T
     alpha = cas.solve(L, Y_train - prior_mean(gp.mean, X_train))
     beta = cas.solve(L, covariance(gp.kernel, X_scaled, X_train).T)

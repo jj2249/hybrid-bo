@@ -446,7 +446,7 @@ only operator; `kernel * kernel` raises `TypeError` (the kernels share `_Scalabl
   later be `noise_std=Param(...)`.
 - **Closed set.** `Scale`, `Matern12`, `Matern32`, `Matern52`, `SquaredExponential`
   and the `Zero` mean; no composition (`Sum`, a product of kernels) and no user kernels
-  until an experiment needs them. A new kernel is a dataclass and a case in `covariance`.
+  until an experiment needs them. A new kernel is a dataclass and a case in each of `covariance`, `_params` and `_with_values`.
 - **Jitter** is 1e-6 (#107), a nugget in the sense of Gramacy & Lee (2012), "Cases
   for the nugget in modeling computer experiments". Once a run converges its inputs
   cluster, and with legacy's 1e-10 the training covariance reached cond(K) of about
