@@ -18,7 +18,7 @@ from oracle_helper import oracle_incumbents, oracle_states
 from plain_loop import evaluate_points, hybrid_loop, standard_loop
 
 import hybrid_bo as hb
-from hybrid_bo.hybrid_model import Solution
+from hybrid_bo.solvers import Solution
 
 BASELINE_DIR = Path(__file__).parent / "data" / "regression"
 RTOL, ATOL = 1e-6, 1e-8
@@ -31,7 +31,7 @@ Result = tuple[hb.Dataset, list[Solution]]
 
 
 def run_hybrid_bo(
-    approximation: hb.SAA | hb.SoftSAA, measure: hb.Measure, rng: np.random.Generator
+    acquisition: hb.EI | hb.SoftEI, measure: hb.Measure, rng: np.random.Generator
 ) -> Result:
     """Hybrid BO: the initial points, the scenarios once, then the loop."""
     points = hb.lhs_points(ex.system.u, ex.N_INITIAL, rng)
@@ -45,7 +45,8 @@ def run_hybrid_bo(
         rng,
         n_iterations=N_ITERATIONS,
         gp=ex.gp,
-        approximation=approximation,
+        acquisition=acquisition,
+        unknown_states_as_variables=False,
     )
 
 
@@ -82,10 +83,10 @@ def run_uniform_sampling(measure: hb.Measure, rng: np.random.Generator) -> Resul
 
 # The illustrative example's methods, with their labels in the stored results
 METHODS = {
-    "hybrid_bo": partial(run_hybrid_bo, hb.SAA(unknown_states_as_variables=False)),
+    "hybrid_bo": partial(run_hybrid_bo, hb.EI()),
     "hybrid_bo_soft": partial(
         run_hybrid_bo,
-        hb.SoftSAA(temperature=50e-3, unknown_states_as_variables=False),
+        hb.SoftEI(temperature=50e-3),
     ),
     "standard_bo": run_standard_bo,
     "latin_hypercube_sampling": run_latin_hypercube_sampling,

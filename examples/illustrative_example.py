@@ -1,4 +1,4 @@
-"""Hybrid BO with SoftSAA-EI against standard BO on the illustrative example.
+"""Hybrid BO with SAA-SoftEI against standard BO on the illustrative example.
 
 The known equation is x + exp(x) = y, and the unknown one is y = sin(u), which the
 methods never see. Writes regret.png and iteration.png to the current folder:
@@ -43,13 +43,13 @@ def measure(u, rng):
     return np.sin(u)
 
 
-# The prior GP, and the approximation of EI
+# The prior GP, and the acquisition function
 gp = hb.gp.GP(
     mean=hb.gp.Zero(),
     kernel=hb.gp.Scale(hb.gp.Matern52(), hb.gp.Param((0.1, 10.0))),
     noise_std=0.0,
 )
-approximation = hb.SoftSAA(temperature=50e-3, unknown_states_as_variables=False)
+acquisition = hb.SoftEI(temperature=50e-3)
 
 figure, axes = plt.subplots(3, 2, sharex=True, figsize=(10, 8), layout="constrained")
 
@@ -67,10 +67,16 @@ for seed in range(N_RUNS):
         before = dataset
         incumbent = hb.incumbents(dataset)[-1]
         fitted = hb.fit_surrogate(system, dataset, gp=gp, rng=rng)
-        acquisition = hb.hybrid_acquisition(
-            problem, fitted, z, w, incumbent, approximation=approximation
+        equivalent = hb.hybrid_deterministic_equivalent(
+            problem,
+            fitted,
+            z,
+            w,
+            incumbent,
+            acquisition=acquisition,
+            unknown_states_as_variables=False,
         )
-        solution = acquisition.solve(rng)
+        solution = equivalent.solve(rng)
         u_new = solution.u[None]
         new = hb.reconstruct_states(
             problem, u=u_new, measured=measure(u_new, rng), rng=rng
@@ -79,8 +85,8 @@ for seed in range(N_RUNS):
     hybrid_curves.append(hb.incumbents(dataset))
 
 # The last iteration of the last run
-hb.plots.iteration(acquisition, solution, fitted[0], before, axes[:, 0])
-axes[0, 0].set(title="Hybrid BO, SoftSAA-EI", ylabel="y")
+hb.plots.iteration(equivalent, solution, fitted[0], before, axes[:, 0])
+axes[0, 0].set(title="Hybrid BO, SAA-SoftEI", ylabel="y")
 
 # Standard BO: a GP of the objective
 standard_curves = []
@@ -94,8 +100,8 @@ for seed in range(N_RUNS):
         before = dataset
         incumbent = hb.incumbents(dataset)[-1]
         fitted = gp.fit(dataset.u, dataset.f, rng)
-        acquisition = hb.standard_acquisition(problem, fitted, incumbent)
-        solution = acquisition.solve(rng)
+        standard = hb.standard_acquisition(problem, fitted, incumbent)
+        solution = standard.solve(rng)
         u_new = solution.u[None]
         new = hb.reconstruct_states(
             problem, u=u_new, measured=measure(u_new, rng), rng=rng
@@ -105,7 +111,7 @@ for seed in range(N_RUNS):
 
 axes[0, 1].remove()
 axes[1, 1].set_prop_cycle(color=["tab:orange"])
-hb.plots.iteration(acquisition, solution, fitted, before, axes[1:, 1])
+hb.plots.iteration(standard, solution, fitted, before, axes[1:, 1])
 axes[1, 1].set(title="Standard BO", ylabel="f")
 
 # The true curves: the states and f at a grid of u, from the system itself

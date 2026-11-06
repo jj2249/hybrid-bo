@@ -33,7 +33,7 @@ Decisions to keep, so they aren't undone:
   differences.
 - GPs are data: frozen dataclasses from a closed set of kernels, each holding its own math
   as methods. No custom kernels.
-- A default may set how hard we search, never what we search for: `approximation`,
+- A default may set how hard we search, never what we search for: `acquisition`,
   `temperature` and `noise_std` are required.
 - The library has no loop or runner. The user writes the loop and the measurement.
 - Figures evaluate the acquisition problem over a grid from the stored solution, so they

@@ -80,27 +80,27 @@ w = np.full(25, 1 / 25)
 
 for _ in range(10):
     fitted = hb.fit_surrogate(system, dataset, gp=gp, rng=rng)
-    acquisition = hb.hybrid_acquisition(
+    equivalent = hb.hybrid_deterministic_equivalent(
         problem,
         fitted,
         z,
         w,
         hb.incumbents(dataset)[-1],
-        approximation=hb.SAA(),  # or hb.SoftSAA(temperature=...)
+        acquisition=hb.EI(),  # or hb.SoftEI(temperature=...)
     )
-    solution = acquisition.solve(rng)
+    solution = equivalent.solve(rng)
     dataset = hb.extend(dataset, evaluate(solution.u, rng))
 ```
 
-**Standard BO** fits one GP to the objective:
+**Standard BO** fits one GP to the objective, so EI is exact and needs no scenarios:
 
 ```python
 dataset = initial
 
 for _ in range(10):
     fitted = gp.fit(dataset.u, dataset.f, rng)
-    acquisition = hb.standard_acquisition(problem, fitted, hb.incumbents(dataset)[-1])
-    solution = acquisition.solve(rng)
+    standard = hb.standard_acquisition(problem, fitted, hb.incumbents(dataset)[-1])
+    solution = standard.solve(rng)
     dataset = hb.extend(dataset, evaluate(solution.u, rng))
 ```
 

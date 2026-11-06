@@ -13,9 +13,9 @@ import numpy as np
 from hybrid_bo.dataset import Dataset
 from hybrid_bo.errors import RootFindingError
 from hybrid_bo.gp import FittedGP
-from hybrid_bo.hybrid_model import DeterministicEquivalent, Solution
+from hybrid_bo.hybrid_model import DeterministicEquivalent
 from hybrid_bo.problem import Symbolic
-from hybrid_bo.solvers import RootProblem, find_root
+from hybrid_bo.solvers import NLP, RootProblem, Solution, find_root
 from hybrid_bo.utils import unscale
 
 if TYPE_CHECKING:
@@ -77,7 +77,9 @@ def surrogate(fitted: FittedGP, lower: float, upper: float, ax: "Axes") -> "Axes
 
 
 def acquisition_on_grid(
-    problem: DeterministicEquivalent, solution: Solution, u: np.ndarray
+    problem: NLP | DeterministicEquivalent,
+    solution: Solution,
+    u: np.ndarray,
 ) -> tuple[np.ndarray, tuple[Dataset, ...]]:
     """The acquisition problem over a grid of points nobody measured, to draw what the
     solver minimized: the acquisition value at each row of u (n, N) and, for hybrid BO, one
@@ -92,14 +94,12 @@ def acquisition_on_grid(
     branch the optimizer chose. A point fails if the residual norm is above
     `_GRID_TOLERANCE` or a state is outside its bounds, and is NaN.
     """
-    if problem.n_scenarios == 0:
-        return problem.acquisition_from_objective(
-            problem.nlp.f.map(len(u))(u.T).full().ravel()
-        ), ()
+    if isinstance(problem, NLP):
+        return -problem.f.map(len(u))(u.T).full().ravel(), ()
 
     # The constraints as a root problem: the states are unknowns and u a parameter
     nlp, n_u = problem.nlp, problem.n_u
-    assert nlp.g is not None and problem.scenario_values is not None
+    assert nlp.g is not None
     assert solution.x is not None and solution.y is not None
     stored = problem.pack(solution)[n_u:]
     states, u_fixed = Symbolic.sym("v", len(stored)), Symbolic.sym("u", n_u)
@@ -129,13 +129,13 @@ def acquisition_on_grid(
         solved_states.append(root)
 
     scenarios = range(problem.n_scenarios)
-    return problem.acquisition_from_objective(values), tuple(
+    return problem.acquisition.from_objective(values), tuple(
         Dataset(u, x[:, s], y[:, s], f[:, s]) for s in scenarios
     )
 
 
 def iteration(
-    problem: DeterministicEquivalent,
+    problem: NLP | DeterministicEquivalent,
     solution: Solution,
     fitted: FittedGP,
     dataset: Dataset,
@@ -154,16 +154,19 @@ def iteration(
     """
     # The checks
     panels = list(axes)
-    is_hybrid = problem.n_scenarios > 0
-    if problem.n_u != 1:
-        msg = f"The panels draw one decision variable, got {problem.n_u}"
+    is_hybrid = isinstance(problem, DeterministicEquivalent)
+    nlp = problem.nlp if is_hybrid else problem
+    n_u = problem.n_u if is_hybrid else len(problem.lower)
+    if n_u != 1:
+        msg = f"The panels draw one decision variable, got {n_u}"
         raise ValueError(msg)
     if len(panels) != (3 if is_hybrid else 2):
         msg = f"Standard BO draws 2 panels and hybrid BO 3, got {len(panels)} axes"
         raise ValueError(msg)
 
     # The GP, in its panel's color, and the acquisition over the start bounds of u
-    lower, upper = (float(bound[0]) for bound in problem.start_bounds)
+    assert nlp.start_bounds is not None
+    lower, upper = (float(bound[0]) for bound in nlp.start_bounds)
     surrogate(fitted, lower, upper, panels[0])
     color = panels[0].get_lines()[0].get_color()
     u = np.linspace(lower, upper, 201)

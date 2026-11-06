@@ -16,6 +16,7 @@ import casadi as cas
 import numpy as np
 
 from hybrid_bo.errors import NoSolutionError, RootFindingError
+from hybrid_bo.utils import lhs
 
 _logger = logging.getLogger(__name__)
 
@@ -29,25 +30,54 @@ _NEWTON_MAX_ITERATIONS = 100
 
 
 @dataclass(frozen=True)
+class Ipopt:
+    """IPOPT through CasADi: options for the CasADi plugin and for IPOPT itself."""
+
+    plugin_options: dict[str, Any] = field(default_factory=lambda: {"print_time": 0})
+    solver_options: dict[str, Any] = field(default_factory=lambda: {"print_level": 0})
+
+
+@dataclass(frozen=True)
+class Solution:
+    """The solution of an acquisition problem: the trial point u (N,), the objective the
+    problem minimizes there and, for hybrid BO, the scenario states there, x (S, M) and
+    y (S, P), one row per scenario. Standard BO has no scenario states, so they are None."""
+
+    u: np.ndarray
+    value: float
+    x: np.ndarray | None = None
+    y: np.ndarray | None = None
+
+
+@dataclass(frozen=True)
 class NLP:
     """min f(w) subject to g(w) = 0 and lower <= w <= upper.
 
     `f` and `g` are CasADi functions (`cas.Function`) of the column w; the bounds have
-    shape (n,) and may be infinite. A `g` of no rows is no constraint.
+    shape (n,) and may be infinite. A `g` of no rows is no constraint. `start_bounds`
+    `(lower, upper)` is the finite box its multistart draws from, by default the bounds.
     """
 
     f: cas.Function
     lower: np.ndarray
     upper: np.ndarray
     g: cas.Function | None = None
+    start_bounds: tuple[np.ndarray, np.ndarray] | None = None
 
+    def solve(
+        self,
+        rng: np.random.Generator,
+        *,
+        n_starts: int = 10,
+        solver: Ipopt = Ipopt(),  # noqa: B008  (frozen, never mutated)
+    ) -> Solution:
+        """The minimizer over u = w, from `n_starts` Latin hypercube starts over the start
+        bounds: an acquisition problem over the decision variables alone.
 
-@dataclass(frozen=True)
-class Ipopt:
-    """IPOPT through CasADi: options for the CasADi plugin and for IPOPT itself."""
-
-    plugin_options: dict[str, Any] = field(default_factory=lambda: {"print_time": 0})
-    solver_options: dict[str, Any] = field(default_factory=lambda: {"print_level": 0})
+        Raises `NoSolutionError` if every start fails.
+        """
+        starts = lhs(*(self.start_bounds or (self.lower, self.upper)), n_starts, rng)
+        return Solution(*solve_with_multistart(self, starts, solver))
 
 
 @dataclass(frozen=True)

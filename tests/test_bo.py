@@ -100,11 +100,13 @@ def test_scenarios_reject_inconsistent_draws_or_weights(z, w):
 
     # `raises` passes only if the block raises that exception
     with pytest.raises(ValueError, match="Scenario"):
-        hb.hybrid_acquisition(ex.problem, (fitted,), z, w, 0.0, approximation=hb.SAA())
+        hb.hybrid_deterministic_equivalent(
+            ex.problem, (fitted,), z, w, 0.0, acquisition=hb.EI()
+        )
 
 
 @pytest.mark.parametrize("unknown_states_as_variables", [True, False])
-def test_solving_hybrid_acquisition_gives_the_trial_point_and_states(
+def test_solving_the_equivalent_gives_the_trial_point_and_states(
     unknown_states_as_variables,
 ):
     """The solution holds the trial point, the acquisition problem's objective there
@@ -115,11 +117,16 @@ def test_solving_hybrid_acquisition_gives_the_trial_point_and_states(
     fitted = hb.fit_surrogate(ex.system, dataset, gp=ex.gp, rng=rng)
     z, w = draw_scenarios(N_SCENARIOS, ex.system.n_y, rng)
     incumbent = hb.incumbents(dataset)[-1]
-    approximation = hb.SAA(unknown_states_as_variables=unknown_states_as_variables)
 
     # Act
-    built = hb.hybrid_acquisition(
-        ex.problem, fitted, z, w, incumbent, approximation=approximation
+    built = hb.hybrid_deterministic_equivalent(
+        ex.problem,
+        fitted,
+        z,
+        w,
+        incumbent,
+        acquisition=hb.EI(),
+        unknown_states_as_variables=unknown_states_as_variables,
     )
     solution = built.solve(rng)
 
@@ -160,11 +167,11 @@ def test_solving_standard_acquisition_minimizes_analytic_ei():
 
     # Check that no other point of a grid has a better value
     grid = np.linspace(-2.0, 2.0, 201)[np.newaxis]
-    assert solution.value <= built.nlp.f.map(201)(grid).full().min() + 1e-9
+    assert solution.value <= built.f.map(201)(grid).full().min() + 1e-9
 
 
 def ei_problems(incumbent: float, temperature: float):
-    """The SoftSAA and SAA problems of the illustrative system over Z and W, with the
+    """The SAA-SoftEI and SAA-EI problems of the illustrative system over Z and W, with the
     GP substituted, and the decision vector and f_s (S,) at u = 0.3 and x = (-1, 0, 0.5)."""
     problem = h_of_x_problem()
     X = np.array([[-1.5, -1.0], [-0.5, 0.2], [0.4, -0.3], [1.7, 0.6]])
@@ -176,13 +183,16 @@ def ei_problems(incumbent: float, temperature: float):
     f = x**2 + mean + std * Z[:, 0]
 
     soft, saa = (
-        hb.hybrid_acquisition(
-            problem, (fitted,), Z, W, incumbent, approximation=approximation
+        hb.hybrid_deterministic_equivalent(
+            problem,
+            (fitted,),
+            Z,
+            W,
+            incumbent,
+            acquisition=acquisition,
+            unknown_states_as_variables=False,
         )
-        for approximation in (
-            hb.SoftSAA(temperature=temperature, unknown_states_as_variables=False),
-            hb.SAA(unknown_states_as_variables=False),
-        )
+        for acquisition in (hb.SoftEI(temperature=temperature), hb.EI())
     )
     return soft, saa, _pack(np.array([u]), x[:, np.newaxis]), f
 
@@ -194,8 +204,8 @@ def gradient(nlp, w: np.ndarray) -> np.ndarray:
     return function(w).full().ravel()
 
 
-def test_saa_ei_is_the_weighted_average_over_the_scenarios():
-    """SAA minimizes the weighted average of min(f_s - incumbent, 0), with the unknown
+def test_ei_is_the_weighted_average_over_the_scenarios():
+    """SAA-EI minimizes the weighted average of min(f_s - incumbent, 0), with the unknown
     states predicted by the GP at each scenario's arguments of h."""
     _, saa, w, f = ei_problems(incumbent=1.0, temperature=0.5)
 
@@ -203,8 +213,8 @@ def test_saa_ei_is_the_weighted_average_over_the_scenarios():
     np.testing.assert_allclose(saa.nlp.f(w).full().item(), expected, rtol=1e-10)
 
 
-def test_soft_saa_ei_is_minus_log_the_weighted_smooth_improvement():
-    """SoftSAA minimizes -log sum_s w_s tau log(1 + exp(a_s / tau)), a_s = incumbent -
+def test_soft_ei_ei_is_minus_log_the_weighted_smooth_improvement():
+    """SAA-SoftEI minimizes -log sum_s w_s tau log(1 + exp(a_s / tau)), a_s = incumbent -
     f_s."""
     soft, _, w, f = ei_problems(incumbent=1.0, temperature=0.5)
 
@@ -214,15 +224,15 @@ def test_soft_saa_ei_is_minus_log_the_weighted_smooth_improvement():
 
 
 @pytest.mark.parametrize("temperature", [0.0, -1.0, np.inf, np.nan])
-def test_soft_saa_needs_a_positive_finite_temperature(temperature):
+def test_soft_ei_needs_a_positive_finite_temperature(temperature):
     """The temperature is in units of the objective, so it must be positive and
     finite."""
     with pytest.raises(ValueError, match="temperature"):
-        hb.SoftSAA(temperature=temperature)
+        hb.SoftEI(temperature=temperature)
 
 
-def test_soft_saa_ei_has_a_gradient_where_no_scenario_improves():
-    """With the incumbent below every f_s, SAA-EI is flat, while SoftSAA-EI stays finite
+def test_soft_ei_ei_has_a_gradient_where_no_scenario_improves():
+    """With the incumbent below every f_s, SAA-EI is flat, while SAA-SoftEI stays finite
     with a nonzero gradient in u."""
     soft, saa, w, f = ei_problems(incumbent=-1.0, temperature=0.5)
     assert np.all(f > -1.0)
@@ -231,14 +241,14 @@ def test_soft_saa_ei_has_a_gradient_where_no_scenario_improves():
     assert saa.nlp.f(w).full().item() == 0
     assert np.all(gradient(saa.nlp, w) == 0)
 
-    # SoftSAA-EI's objective and its gradient in u
+    # SAA-SoftEI's objective and its gradient in u
     assert np.isfinite(soft.nlp.f(w).full().item())
     u_gradient, _, _ = soft.unpack(gradient(soft.nlp, w))
     assert np.all(np.isfinite(u_gradient)) and np.all(u_gradient != 0)
 
 
 @pytest.mark.parametrize("incumbent", [-3.0, 5.0])
-def test_soft_saa_ei_is_finite_far_from_the_incumbent(incumbent):
+def test_soft_ei_ei_is_finite_far_from_the_incumbent(incumbent):
     """Where exp(a_s / tau) underflows or overflows, the objective and its gradient are
     finite; far below, the objective matches its asymptote."""
     # Setup: a temperature small enough to put every a_s / tau beyond +-1000
@@ -255,7 +265,7 @@ def test_soft_saa_ei_is_finite_far_from_the_incumbent(incumbent):
         np.testing.assert_allclose(value, expected, rtol=1e-12)
 
 
-def test_the_acquisition_problem_needs_one_gp_and_column_per_unknown_state():
+def test_the_equivalent_needs_one_gp_and_column_per_unknown_state():
     """Scenarios or a surrogate model of the wrong size are refused."""
     fitted = ex.gp.fit(
         np.array([[0.0], [1.0]]), np.array([0.0, 1.0]), np.random.default_rng(0)
@@ -263,19 +273,21 @@ def test_the_acquisition_problem_needs_one_gp_and_column_per_unknown_state():
     z, w = draw_scenarios(3, 2, np.random.default_rng(0))
 
     with pytest.raises(ValueError, match="one column of z"):
-        hb.hybrid_acquisition(ex.problem, (fitted,), z, w, 0.0, approximation=hb.SAA())
+        hb.hybrid_deterministic_equivalent(
+            ex.problem, (fitted,), z, w, 0.0, acquisition=hb.EI()
+        )
     with pytest.raises(ValueError, match="one fitted GP"):
-        hb.hybrid_acquisition(
-            ex.problem, (fitted, fitted), Z, W, 0.0, approximation=hb.SAA()
+        hb.hybrid_deterministic_equivalent(
+            ex.problem, (fitted, fitted), Z, W, 0.0, acquisition=hb.EI()
         )
 
 
 @pytest.mark.parametrize(
-    "approximation",
+    ("acquisition", "unknown_states_as_variables"),
     [
-        hb.SAA(),
-        hb.SAA(unknown_states_as_variables=False),
-        hb.SoftSAA(temperature=0.5),
+        (hb.EI(), True),
+        (hb.EI(), False),
+        (hb.SoftEI(temperature=0.5), True),
     ],
 )
 @pytest.mark.parametrize(
@@ -283,7 +295,9 @@ def test_the_acquisition_problem_needs_one_gp_and_column_per_unknown_state():
     [ex.problem, no_known_equations_problem(), h_of_x_problem()],
     ids=["known_equations", "no_known_equations", "h_of_x"],
 )
-def test_hybrid_bo_runs_with_a_measurement_of_your_own(problem, approximation):
+def test_hybrid_bo_runs_with_a_measurement_of_your_own(
+    problem, acquisition, unknown_states_as_variables
+):
     """A measurement that only returns an array goes through the loop, and each trial
     point joins the dataset."""
     # Setup: the initial points and the scenarios, drawn once
@@ -302,7 +316,8 @@ def test_hybrid_bo_runs_with_a_measurement_of_your_own(problem, approximation):
         rng,
         n_iterations=2,
         gp=ex.gp,
-        approximation=approximation,
+        acquisition=acquisition,
+        unknown_states_as_variables=unknown_states_as_variables,
     )
 
     # Check: the measured y, and the trial points in the dataset
@@ -333,7 +348,7 @@ def test_hybrid_bo_runs_with_two_unknown_states():
         rng,
         n_iterations=2,
         gp=ex.gp,
-        approximation=hb.SAA(),
+        acquisition=hb.EI(),
     )
 
     assert dataset.y.shape == (7, 2)
@@ -412,14 +427,16 @@ def test_surrogate_draws_the_gp_and_its_points_in_measured_units():
 
 
 @pytest.mark.parametrize(
-    "approximation",
+    ("acquisition", "unknown_states_as_variables"),
     [
-        hb.SAA(),
-        hb.SAA(unknown_states_as_variables=False),
-        hb.SoftSAA(temperature=0.5),
+        (hb.EI(), True),
+        (hb.EI(), False),
+        (hb.SoftEI(temperature=0.5), True),
     ],
 )
-def test_acquisition_on_grid_gives_the_solution_and_solves_the_equations(approximation):
+def test_acquisition_on_grid_gives_the_solution_and_solves_the_equations(
+    acquisition, unknown_states_as_variables
+):
     """At the trial point the grid gives the stored solution, and over a grid each
     scenario's states solve the known equations and f is the objective there."""
     # Setup: one solved iteration
@@ -428,8 +445,14 @@ def test_acquisition_on_grid_gives_the_solution_and_solves_the_equations(approxi
     fitted = hb.fit_surrogate(ex.system, dataset, gp=ex.gp, rng=rng)
     z, w = draw_scenarios(N_SCENARIOS, ex.system.n_y, rng)
     incumbent = hb.incumbents(dataset)[-1]
-    built = hb.hybrid_acquisition(
-        ex.problem, fitted, z, w, incumbent, approximation=approximation
+    built = hb.hybrid_deterministic_equivalent(
+        ex.problem,
+        fitted,
+        z,
+        w,
+        incumbent,
+        acquisition=acquisition,
+        unknown_states_as_variables=unknown_states_as_variables,
     )
     solution = built.solve(rng)
 
@@ -440,7 +463,7 @@ def test_acquisition_on_grid_gives_the_solution_and_solves_the_equations(approxi
     # Check: the stored solution at the trial point
     assert solution.x is not None
     assert ei[0] == pytest.approx(
-        built.acquisition_from_objective(np.array(solution.value)), rel=1e-6, abs=1e-8
+        built.acquisition.from_objective(np.array(solution.value)), rel=1e-6, abs=1e-8
     )
     x_at_trial_point = np.array([scenario.x[0] for scenario in scenarios])
     np.testing.assert_allclose(x_at_trial_point, solution.x, atol=1e-6)
@@ -498,9 +521,14 @@ def test_acquisition_on_grid_works_with_no_states_to_solve():
     fitted = hb.fit_surrogate(problem.system, dataset, gp=ex.gp, rng=rng)
     z, w = draw_scenarios(N_SCENARIOS, 1, rng)
     incumbent = hb.incumbents(dataset)[-1]
-    approximation = hb.SAA(unknown_states_as_variables=False)
-    built = hb.hybrid_acquisition(
-        problem, fitted, z, w, incumbent, approximation=approximation
+    built = hb.hybrid_deterministic_equivalent(
+        problem,
+        fitted,
+        z,
+        w,
+        incumbent,
+        acquisition=hb.EI(),
+        unknown_states_as_variables=False,
     )
     solution = built.solve(rng)
 
@@ -512,22 +540,21 @@ def test_acquisition_on_grid_works_with_no_states_to_solve():
 
 
 def solved_iteration() -> tuple:
-    """A hybrid iteration with SoftSAA: the problem, solution, GP and data."""
+    """A hybrid iteration with SoftEI: the problem, solution, GP and data."""
     rng = np.random.default_rng(2)
     dataset = training_data()
     fitted = hb.fit_surrogate(ex.system, dataset, gp=ex.gp, rng=rng)
     z, w = draw_scenarios(N_SCENARIOS, ex.system.n_y, rng)
     incumbent = hb.incumbents(dataset)[-1]
-    approximation = hb.SoftSAA(temperature=0.5)
-    built = hb.hybrid_acquisition(
-        ex.problem, fitted, z, w, incumbent, approximation=approximation
+    built = hb.hybrid_deterministic_equivalent(
+        ex.problem, fitted, z, w, incumbent, acquisition=hb.SoftEI(temperature=0.5)
     )
     solution = built.solve(rng)
     return built, solution, fitted[0], dataset
 
 
-def test_soft_saa_gives_ei_from_its_log():
-    """SoftSAA minimizes -log EI, so EI is exp of minus the objective."""
+def test_soft_ei_gives_ei_from_its_log():
+    """SoftEI minimizes -log SoftEI, so it is exp of minus the objective."""
     built, solution, *_ = solved_iteration()
 
     ei, _ = hb.plots.acquisition_on_grid(built, solution, solution.u[np.newaxis])

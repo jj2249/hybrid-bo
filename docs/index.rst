@@ -18,15 +18,15 @@ simulator or an oracle of your own:
    w = np.full(25, 1 / 25)
    for _ in range(10):
        fitted = hb.fit_surrogate(system, dataset, gp=gp, rng=rng)
-       acquisition = hb.hybrid_acquisition(
+       equivalent = hb.hybrid_deterministic_equivalent(
            problem,
            fitted,
            z,
            w,
            hb.incumbents(dataset)[-1],
-           approximation=hb.SAA(),
+           acquisition=hb.EI(),
        )
-       solution = acquisition.solve(rng)
+       solution = equivalent.solve(rng)
        measured = measure(solution.u, rng)
        new = hb.reconstruct_states(
            problem, u=solution.u[None], measured=measured[None], rng=rng

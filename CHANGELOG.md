@@ -2,11 +2,15 @@
 
 ## Unreleased
 
-- **Breaking:** `hb.hybrid_trial_point` and `hb.standard_trial_point` are gone: build with
-  `hb.hybrid_acquisition` or `hb.standard_acquisition` and call `.solve(rng)`, and pass the
-  same object to `hb.plots.iteration`.
+- **Breaking:** `hb.hybrid_trial_point`, `hb.standard_trial_point` and `hb.hybrid_acquisition`
+  are gone: build with `hb.hybrid_deterministic_equivalent` or `hb.standard_acquisition`,
+  call `.solve(rng)`, and pass the same object to `hb.plots.iteration`.
+- **Breaking:** `hb.SAA` and `hb.SoftSAA` are `hb.EI` and `hb.SoftEI`, passed as
+  `acquisition=`: the sample average is what the deterministic equivalent does, and SoftEI
+  reformulates the acquisition function. `unknown_states_as_variables` is a keyword of
+  `hb.hybrid_deterministic_equivalent`.
 - **Breaking:** `hb.saa_scenarios` and `Scenarios` are gone: pass draws `z` and weights `w`.
-  `approximation` is keyword-only, and `AcquisitionSolution` is `Solution`.
+  `AcquisitionSolution` is `Solution`.
 - `hb.expected_improvement` is public.
 - **Breaking:** `hb.replay` and `Replay` are gone: `hb.plots.acquisition_on_grid` gives the
   acquisition and a `Dataset` per scenario. `hybrid_bo.evaluation` is now `hybrid_bo.reconstruction`.

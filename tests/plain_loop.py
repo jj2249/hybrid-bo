@@ -5,7 +5,7 @@ import numpy as np
 
 import hybrid_bo as hb
 from hybrid_bo.gp import GP
-from hybrid_bo.hybrid_model import Solution
+from hybrid_bo.solvers import Solution
 
 
 def evaluate_point(
@@ -41,7 +41,8 @@ def hybrid_loop(
     *,
     n_iterations: int,
     gp: GP,
-    approximation: hb.SAA | hb.SoftSAA,
+    acquisition: hb.EI | hb.SoftEI,
+    unknown_states_as_variables: bool = True,
 ) -> tuple[hb.Dataset, list[Solution]]:
     """Hybrid BO from `dataset`, with the scenarios z and w drawn once, before the loop.
 
@@ -51,10 +52,16 @@ def hybrid_loop(
     for _ in range(n_iterations):
         fitted = hb.fit_surrogate(problem.system, dataset, gp=gp, rng=rng)
         incumbent = hb.incumbents(dataset)[-1]
-        acquisition = hb.hybrid_acquisition(
-            problem, fitted, z, w, incumbent, approximation=approximation
+        equivalent = hb.hybrid_deterministic_equivalent(
+            problem,
+            fitted,
+            z,
+            w,
+            incumbent,
+            acquisition=acquisition,
+            unknown_states_as_variables=unknown_states_as_variables,
         )
-        solution = acquisition.solve(rng)
+        solution = equivalent.solve(rng)
         dataset = hb.extend(dataset, evaluate_point(problem, measure, solution.u, rng))
         solutions.append(solution)
     return dataset, solutions

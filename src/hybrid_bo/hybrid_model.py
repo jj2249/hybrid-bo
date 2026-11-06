@@ -1,66 +1,52 @@
 """The hybrid model as an optimization problem: the known equations with the surrogate
 model embedded, over scenarios of the GPs' prediction of the unknown states.
 
-A `DeterministicEquivalent` is that problem: `solve` it for the next trial point, and pass
-it to the plots to see what was minimized. `hybrid_deterministic_equivalent` builds it for
-a given objective, and hybrid BO's acquisition problem (`hybrid_acquisition`) is its one
-use.
+Hybrid BO's acquisition function has no closed form, so
+`hybrid_deterministic_equivalent` replaces it with a sample average over scenarios. A
+`DeterministicEquivalent` is that problem: `solve` it for the next trial point, and pass
+it to the plots to see what was minimized.
 """
 
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any
 
 import casadi as cas
 import numpy as np
 
+from hybrid_bo.acquisition import EI, SoftEI
 from hybrid_bo.gp import FittedGP
 from hybrid_bo.problem import Problem, Symbolic, Var, start_bounds
-from hybrid_bo.solvers import NLP, Ipopt, solve_with_multistart
+from hybrid_bo.solvers import NLP, Ipopt, Solution, solve_with_multistart
 from hybrid_bo.utils import lhs
 
 
 @dataclass(frozen=True)
-class Solution:
-    """The solution of a deterministic equivalent: the trial point u (N,), the objective
-    the problem minimizes there (-EI, or -log EI for `SoftSAA`) and, for hybrid BO, the
-    scenario states there, x (S, M) and y (S, P), one row per scenario. Standard BO has no
-    scenario states, so they are None."""
-
-    u: np.ndarray
-    value: float
-    x: np.ndarray | None = None
-    y: np.ndarray | None = None
-
-
-@dataclass(frozen=True)
 class DeterministicEquivalent:
-    """A deterministic equivalent: the NLP over the decision vector, the start bounds
-    `(lower, upper)` of that vector for its multistart, and the order of its variables.
+    """A deterministic equivalent: the NLP over the decision vector, and the order of its
+    variables.
 
     The decision vector holds the N decision variables u, then the S scenario copies of
     the M mechanistic states x (S, M), then those of the unknown states y (S, P) if they
-    are variables. The defaults are those of a problem over u alone, such as standard BO's
-    acquisition problem.
+    are variables.
 
-    `weights` (S,) are the scenario weights. `scenario_values` maps the decision vector to
-    f under each scenario (S, 1) and the scenarios' unknown states y (S, P), read from the
-    vector or predicted by the GPs. `acquisition_from_objective` turns values of the
-    objective, which is minimized, into values of the acquisition function.
+    `weights` (S,) are the scenario weights, and `acquisition` is the function the
+    objective averages. `scenario_values` maps the decision vector to f under each
+    scenario (S, 1) and the scenarios' unknown states y (S, P), read from the vector or
+    predicted by the GPs.
     """
 
     nlp: NLP
-    start_bounds: tuple[np.ndarray, np.ndarray]
     n_u: int
-    acquisition_from_objective: Callable[[np.ndarray], np.ndarray]
-    n_x: int = 0
-    weights: np.ndarray = field(default_factory=lambda: np.zeros(0))
-    unknown_states_as_variables: bool = False
-    scenario_values: cas.Function | None = None
+    n_x: int
+    weights: np.ndarray
+    acquisition: EI | SoftEI
+    unknown_states_as_variables: bool
+    scenario_values: cas.Function
 
     @property
     def n_scenarios(self) -> int:
-        """The number of scenarios: 0 for a problem over u alone."""
+        """The number of scenarios."""
         return len(self.weights)
 
     def solve(
@@ -74,10 +60,9 @@ class DeterministicEquivalent:
 
         Raises `NoSolutionError` if every start fails.
         """
-        starts = lhs(*self.start_bounds, n_starts, rng)
+        assert self.nlp.start_bounds is not None
+        starts = lhs(*self.nlp.start_bounds, n_starts, rng)
         w, value = solve_with_multistart(self.nlp, starts, solver)
-        if self.scenario_values is None:
-            return Solution(w, value)
         u, x, _ = self.unpack(w)
         return Solution(u, value, x, self.scenario_values(w)[1].full())
 
@@ -89,13 +74,11 @@ class DeterministicEquivalent:
     def unpack(self, w: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
         """The u (N,), x (S, M) and y (S, P) (None unless they are variables) held in a
         numeric decision vector w of this problem; undoes `pack`."""
-        # One column per state of each scenario; a problem over u alone has no scenarios
+        # One column per state of each scenario
         w = np.asarray(w, dtype=float).ravel()
-        n_u, n_x, n_scenarios = self.n_u, self.n_x, self.n_scenarios
-        n_states = (len(w) - n_u) // n_scenarios if n_scenarios else 0
-        states = w[n_u:].reshape((n_scenarios, n_states), order="F")
-        y = states[:, n_x:] if self.unknown_states_as_variables else None
-        return w[:n_u], states[:, :n_x], y
+        states = w[self.n_u :].reshape((self.n_scenarios, -1), order="F")
+        y = states[:, self.n_x :] if self.unknown_states_as_variables else None
+        return w[: self.n_u], states[:, : self.n_x], y
 
 
 def _pack(u: Any, x: Any = None, y: Any = None) -> Any:
@@ -116,13 +99,18 @@ def hybrid_deterministic_equivalent(
     fitted: tuple[FittedGP, ...],
     z: np.ndarray,
     w: np.ndarray,
-    objective: Callable[[Any], Any],
-    acquisition_from_objective: Callable[[np.ndarray], np.ndarray],
-    unknown_states_as_variables: bool,
+    incumbent: float,
+    *,
+    acquisition: EI | SoftEI,
+    unknown_states_as_variables: bool = True,
 ) -> DeterministicEquivalent:
-    """The hybrid model over the scenarios of the surrogate model, minimizing `objective`
-    of f under each scenario (S, 1). The scenarios are the draws z (S, P), one row per
-    scenario, and the weights w (S,), which sum to 1.
+    """The acquisition problem of hybrid BO (paper, Problems 8 and 9): the hybrid model
+    over the scenarios, minimizing the sample average of `acquisition` under them.
+
+    The scenarios are the draws z (S, P), one row per scenario, and the weights w (S,),
+    which sum to 1. For a sample average, `z = rng.standard_normal((S, P))` and
+    `w = np.full(S, 1 / S)`. Draw z once, before the first iteration, and pass the same one
+    every time: nothing here checks that.
 
     `fitted` is the surrogate model: one fitted GP per unknown state, in the order of
     `problem.system.y`. Each scenario s has its own copies x_s and y_s of the states, and
@@ -140,6 +128,7 @@ def hybrid_deterministic_equivalent(
     """
     # The checks
     system = problem.system
+    z, w = np.asarray(z, dtype=float), np.asarray(w, dtype=float)
     if z.ndim != 2 or w.shape != (len(z),):
         msg = (
             f"Scenarios need z of shape (S, P) and w of shape (S,), got {z.shape} "
@@ -197,18 +186,20 @@ def hybrid_deterministic_equivalent(
     f = cas.vertcat(*f_parts)
     decisions = _pack(u, x, y if unknown_states_as_variables else None)
     nlp = NLP(
-        cas.Function("acquisition", [decisions], [objective(f)]),
+        cas.Function(
+            "acquisition", [decisions], [acquisition.objective(f, w, incumbent)]
+        ),
         np.array([var.lower for var in variables]),
         np.array([var.upper for var in variables]),
         cas.Function("g", [decisions], [cas.vertcat(*constraints)]),
+        start_bounds(variables),
     )
     return DeterministicEquivalent(
         nlp,
-        start_bounds(variables),
         system.n_u,
-        acquisition_from_objective,
         system.n_x,
         w,
+        acquisition,
         unknown_states_as_variables,
         cas.Function("scenario_values", [decisions], [f, y]),
     )
