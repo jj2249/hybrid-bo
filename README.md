@@ -46,7 +46,13 @@ system = hb.System(
     measured=[y],
 )
 problem = hb.Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x - 4))
-measure = hb.oracle_measure(system, lambda v: [cas.sin(v.u)], noise_std=0.0)
+
+
+def oracle(v):
+    return [cas.sin(v.u)]
+
+
+measure = hb.measure_oracle(problem, oracle, noise_std=0.0)
 
 run = hb.hybrid_bo(
     problem,
@@ -70,8 +76,20 @@ To compare methods, loop over seeds, then save and plot what you got:
 runs = {"hybrid_bo": [...], "standard_bo": [...]}  # a list of runs per label
 hb.save_runs(runs, "results/first-try")
 
+# Score each run at the oracle, with a generator of its own
+rng = np.random.default_rng(0)
+curves = {
+    label: [
+        hb.oracle_incumbents(
+            run.dataset, hb.oracle_values(problem, oracle, run.dataset.u, rng).f
+        )
+        for run in group
+    ]
+    for label, group in runs.items()
+}
+
 figure, ax = plt.subplots()
-hb.plots.regret(runs, optimum, ax)
+hb.plots.regret(curves, optimum, ax)
 figure.savefig("regret.png")
 ```
 

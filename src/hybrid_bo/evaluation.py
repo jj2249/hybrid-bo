@@ -6,20 +6,10 @@ for the unmeasured states, and computes the objective. The measurement can be:
 
 - **A real system**: the plant itself, or an in silico simulation that stands in for it
   (e.g. a flowsheet simulator). You write the measurement as a function that runs it and
-  returns only the measured variables as an array. The library sees nothing else, so
-  there are no oracle values and no check against them. This is all a real system
-  supplies.
-- **The oracle simulation** (`oracle_measure`, in `oracle.py`), for benchmark
-  experiments, which returns an `OracleMeasurement`: the measured variables and the
-  oracle values of every state.
-
-**Disagreement warnings.** With an oracle, `evaluate` checks that the reconstruction
-lies on the same root as the oracle values. Noise moves the measured variables, so the
-two are compared after one extra solve of the root-finding problem started at the
-oracle values (no random draws). If that solve gives a different root, or none, the
-measured variables don't determine the states uniquely: the method would learn from
-states the system didn't settle at. `evaluate` then warns with `ReconstructionWarning`
-and keeps the reconstruction, since a real system would give nothing else.
+  returns only the measured variables as an array. This is all a real system supplies.
+- **The oracle simulation** (`measure_oracle`, in `oracle.py`), for benchmark
+  experiments, which returns the measured variables too: the oracle values stay in
+  `oracle.py`, for scoring afterwards.
 
 **Measurements the caller already has.** `reconstruct_states` is `evaluate` without
 the measurement: it solves the root-finding problem for given measured variables.
@@ -35,18 +25,16 @@ from hybrid_bo.dataset import Dataset
 from hybrid_bo.errors import (
     HybridBOError,
     OutOfBoundsWarning,
-    ReconstructionWarning,
     RootFindingError,
 )
-from hybrid_bo.oracle import OracleMeasurement
 from hybrid_bo.problem import Problem, Symbolic, System, Var, _states
 from hybrid_bo.sampling import _start_bounds, lhs
 from hybrid_bo.solvers import _find_root
 
 # Runs the system at u (N,) and returns the measured variables (P,) in the order of
-# `system.measured`. A real system (the plant or an in silico simulation of it) returns
-# an array; the oracle simulation returns an OracleMeasurement.
-Measure = Callable[[np.ndarray, np.random.Generator], np.ndarray | OracleMeasurement]
+# `system.measured`, whether a real system (the plant or an in silico simulation of it)
+# or the oracle simulation.
+Measure = Callable[[np.ndarray, np.random.Generator], np.ndarray]
 
 
 def _unmeasured(system: System) -> list[Var]:
@@ -88,23 +76,14 @@ def _evaluate_point(
     rng: np.random.Generator,
     n_starts: int,
     tol: float,
-) -> tuple[np.ndarray, np.ndarray | None]:
-    """Runs the measurement at u (N,) and reconstructs the states.
-
-    Returns the states (M + P,) and their oracle values (None without an oracle). Warns
-    with `ReconstructionWarning` when the reconstruction is a different root from the
-    one the oracle values lie on.
+) -> np.ndarray:
+    """Runs the measurement at u (N,) and reconstructs the states (M + P,).
 
     Raises `ValueError` if the measurement returns the wrong shape, and
     `RootFindingError` if a measured variable isn't finite or no start gives a root.
     """
-    # The measurement: the measured variables, and the oracle values if known
-    result = measure(u, rng)
-    oracle_measurement = result if isinstance(result, OracleMeasurement) else None
-    measured = np.asarray(
-        result if oracle_measurement is None else oracle_measurement.measured,
-        dtype=float,
-    )
+    # The measurement
+    measured = np.asarray(measure(u, rng), dtype=float)
     if measured.shape != (system.n_y,):
         msg = (
             f"The measurement must return the {system.n_y} measured variables with "
@@ -120,59 +99,17 @@ def _evaluate_point(
         raise RootFindingError(msg)
 
     # The root-finding problem, from starts over the unmeasured variables
-    states, unmeasured = _states(system), _unmeasured(system)
-    starts = lhs(*_start_bounds(unmeasured), n_starts, rng)
-    reconstruction = _reconstruct(system, u, measured, starts, tol)
-    if oracle_measurement is None:
-        return reconstruction, None
-
-    # Agreement: solving the same root-finding problem from the oracle values must
-    # give the same root (noise moves both along the branch the oracle lies on)
-    oracle_values = np.concatenate([oracle_measurement.x, oracle_measurement.y])
-    is_unmeasured = np.array([var in unmeasured for var in states])
-    try:
-        nearest = _reconstruct(
-            system, u, measured, oracle_values[is_unmeasured][np.newaxis], tol
-        )
-        agrees = np.allclose(nearest, reconstruction, rtol=1e-6, atol=1e-6)
-    except RootFindingError:
-        agrees = False
-    if not agrees:
-        names = ", ".join(var.name for var in states)
-        msg = (
-            f"At u = {u}, the root-finding problem gave ({names}) = {reconstruction}, "
-            f"which is not the root the oracle values {oracle_values} lie on; the "
-            f"measured variables don't determine the states uniquely"
-        )
-        warnings.warn(msg, ReconstructionWarning, stacklevel=3)
-    return reconstruction, oracle_values
+    starts = lhs(*_start_bounds(_unmeasured(system)), n_starts, rng)
+    return _reconstruct(system, u, measured, starts, tol)
 
 
-def _dataset(
-    problem: Problem,
-    u: np.ndarray,
-    states: list[np.ndarray],
-    oracle_values: list[np.ndarray | None],
-) -> Dataset:
-    """The Dataset of the points u (n, N) with their states, all initial points.
-
-    The oracle values are kept only when every point has them.
-    """
+def _dataset(problem: Problem, u: np.ndarray, states: list[np.ndarray]) -> Dataset:
+    """The Dataset of the points u (n, N) with their states, all initial points."""
     system = problem.system
-
-    def split(rows: list[np.ndarray]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """x, y and f of rows of states."""
-        array = np.reshape(rows, (len(rows), system.n_x + system.n_y))
-        x, y = array[:, : system.n_x], array[:, system.n_x :]
-        f = np.array([problem.f(*point).full().item() for point in zip(x, y, u)])
-        return x, y, f
-
-    # Measured and reconstructed values, then the oracle values if every point has them
-    x, y, f = split(states)
-    oracle_rows = [row for row in oracle_values if row is not None]
-    has_oracle = 0 < len(oracle_rows) == len(oracle_values)
-    x_oracle, y_oracle, f_oracle = split(oracle_rows) if has_oracle else (None,) * 3
-    return Dataset(u, x, y, f, x_oracle, y_oracle, f_oracle, n_initial=len(u))
+    array = np.reshape(states, (len(states), system.n_x + system.n_y))
+    x, y = array[:, : system.n_x], array[:, system.n_x :]
+    f = np.array([problem.f(*point).full().item() for point in zip(x, y, u)])
+    return Dataset(u, x, y, f, n_initial=len(u))
 
 
 def evaluate(
@@ -187,9 +124,7 @@ def evaluate(
 
     Each evaluation runs the measurement, then solves the root-finding problem for the
     unmeasured states from `n_starts` Latin hypercube starts over their start bounds,
-    then computes `f`. With an oracle, it also computes `f` at the oracle values and
-    warns with `ReconstructionWarning` when the reconstruction is a different root
-    from the one the oracle values lie on (see the module docs).
+    then computes `f`.
 
     Raises `ValueError` if the measurement returns the wrong shape, and
     `RootFindingError` (from the oracle simulation, a measured variable that isn't
@@ -197,18 +132,16 @@ def evaluate(
     `error.dataset`.
     """
     states: list[np.ndarray] = []
-    oracle_values: list[np.ndarray | None] = []
     for u_point in u:
         try:
-            point, oracle_point = _evaluate_point(
+            point = _evaluate_point(
                 problem.system, measure, u_point, rng, n_starts, tol
             )
         except HybridBOError as error:
-            error.dataset = _dataset(problem, u[: len(states)], states, oracle_values)
+            error.dataset = _dataset(problem, u[: len(states)], states)
             raise
         states.append(point)
-        oracle_values.append(oracle_point)
-    return _dataset(problem, u, states, oracle_values)
+    return _dataset(problem, u, states)
 
 
 def _check_measurements(system: System, u: np.ndarray, measured: np.ndarray) -> None:
@@ -250,7 +183,7 @@ def reconstruct_states(
     `u` (n, N) holds the decision variables and `measured` (n, P) the measured variables
     at them, in the order of `system.measured`. Each row solves the root-finding problem
     for the unmeasured states from `n_starts` Latin hypercube starts over their start
-    bounds, then computes `f`. The dataset has no oracle values.
+    bounds, then computes `f`.
 
     A `u` or a measured variable outside its bounds is still a measurement, so it is kept,
     with one `OutOfBoundsWarning`. An unmeasured state must lie within its bounds, which
@@ -286,9 +219,7 @@ def reconstruct_states(
             failed.append(row)
 
     # The rows that worked, as the result or on the error
-    dataset = _dataset(
-        problem, np.delete(u, failed, axis=0), states, [None] * len(states)
-    )
+    dataset = _dataset(problem, np.delete(u, failed, axis=0), states)
     if failed:
         msg = f"No root, or a value that isn't finite, at rows {failed}"
         error = RootFindingError(msg)

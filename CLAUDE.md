@@ -63,9 +63,6 @@ with a GitHub issue labeled `bug`: remove the marker when fixing the bug.
   behavior in functions that match on the type (`covariance`; ADR 0008). An
   operator may only build data (`Param(...) * Matern52()` is a `Scale`). Add a
   protocol only once a second implementation exists.
-  The exception is a value the user passes where a function is expected, which may
-  be a frozen dataclass with `__call__` when it is data (the oracle simulation,
-  `OracleSimulation`; #141): users call and write it as a function.
 - American spelling everywhere, in code and prose (`optimization_loop`,
   "optimization loop").
 - Library code lives at the top level of `hybrid_bo`.
@@ -89,9 +86,9 @@ with a GitHub issue labeled `bug`: remove the marker when fixing the bug.
   into commented blocks (setup, act, check). The first use in a file of a pytest
   feature (fixture, `parametrize`, `raises`, `xfail`) gets a short comment saying
   what it does.
-- Defaults may be derived from other arguments when the derivation is obvious and
-  recorded in the run (start bounds from finite bounds, GP size from its inputs);
-  otherwise arguments are explicit. Experiments should be short to write.
+- Defaults may be derived from other arguments when the derivation is obvious (start
+  bounds from finite bounds, GP size from its inputs); otherwise arguments are
+  explicit. Experiments should be short to write.
 - A default may set how hard or how precisely we search, never what we search for
   (ADR 0009): the acquisition function, the approximation, `n_scenarios`,
   `std_factor`, `temperature` and `noise_std` are required. Methods and the choice

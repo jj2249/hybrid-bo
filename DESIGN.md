@@ -38,7 +38,7 @@ The original code was hard to change for three reasons:
    times) is logged too; the library never configures logging.
 7. **Rows are points.** A point is `(n,)`, a set is `(n_points, n)`, `f` is `(n_points,)`.
 8. **Experiments are short to write.** Defaults may be derived from other arguments when
-   the derivation is obvious and recorded in the run. A default may set how hard or how
+   the derivation is obvious. A default may set how hard or how
    precisely we search, never what we search for ([ADR 0009](docs/adr/0009-defaults-never-choose-the-method.md)):
    the acquisition function, the approximation, the number of scenarios, LCB's
    `std_factor`, SoftSAA's temperature and the noise are required, and the settings
@@ -76,11 +76,11 @@ The original code was hard to change for three reasons:
 - **Iteration plots replay the acquisition problem**
   ([ADR 0005](docs/adr/0005-iteration-plots-replay-the-acquisition-problem.md)).
 - **A slim top level** (#52). `hb.*` holds what a typical script uses: `Var`, `System`,
-  `Problem`, `Measure`, `oracle_measure`, `initial_points`, the methods,
+  `Problem`, `Measure`, `measure_oracle`, `initial_points`, the methods,
   `reconstruct_states`, `fit_surrogate`, `optimize_hybrid_model`,
   `hybrid_trial_point`, `standard_trial_point`, `saa_scenarios`, `nominal_scenario`,
   `EI`, `LCB`, `oracle_optimum`, `save_run`, `load_run`, `save_runs`, `load_runs`, `Run`, `Dataset`,
-  `extend`, `incumbents`, `oracle_incumbents`, `check_oracle_optimum`, the errors and `plots`. Everything else is reached through its module (`hb.gp.fit_gp`,
+  `extend`, `incumbents`, `oracle_values`, `oracle_incumbents`, `check_reconstruction`, the errors and `plots`. Everything else is reached through its module (`hb.gp.fit_gp`,
   `hb.solvers.solve_with_multistart`). A new name joins the top level only if the
   example or a typical analysis script would use it.
 
@@ -114,7 +114,7 @@ def oracle(v):
     return [cas.sin(v.u)]
 
 
-measure = hb.oracle_measure(system, oracle, noise_std=0.0)
+measure = hb.measure_oracle(problem, oracle, noise_std=0.0)
 
 # Method: how we search. The GP, the acquisition function and its approximation have no
 # defaults (ADR 0009)
@@ -201,25 +201,33 @@ uses for starts; `initial_points` is the `Var` front end for experiments.
 ### Evaluation (`evaluation.py`, `oracle.py`, `dataset.py`, `errors.py`)
 
 ```python
-@dataclass(frozen=True)
-class OracleMeasurement:  # what the oracle simulation returns
-    measured: np.ndarray  # (P,)
-    x: np.ndarray  # (M,) oracle values
-    y: np.ndarray  # (P,)
+Measure = Callable[[np.ndarray, np.random.Generator], np.ndarray]  # u (N,) -> measured (P,)
 
 
-Measure = Callable[
-    [np.ndarray, np.random.Generator], np.ndarray | OracleMeasurement
-]  # u (N,) -> measured (P,)
-
-
-def oracle_measure(
-    system,
+def measure_oracle(
+    problem,
     oracle: Callable,  # like g: lambda v: [cas.sin(v.u)], y = oracle(x, y, u)
-    noise_std: float = 0.0,
+    noise_std: float,
+    optimum: float | None = None,  # the stated oracle optimum, to warn below it
     n_starts: int = 100,
     tol: float = 1e-10,
-) -> OracleSimulation: ...  # a frozen, callable dataclass
+) -> Measure: ...
+
+
+@dataclass(frozen=True)
+class OracleValues:  # for scoring; one row per point
+    x: np.ndarray  # (n, M)
+    y: np.ndarray  # (n, P)
+    f: np.ndarray  # (n,)
+
+
+def oracle_values(
+    problem, oracle, u: np.ndarray, rng, n_starts=100, tol=1e-10
+) -> OracleValues: ...
+def oracle_incumbents(
+    dataset, f_oracle: np.ndarray
+) -> np.ndarray: ...  # f_oracle at each incumbent's point (#32)
+def check_reconstruction(system, dataset, values: OracleValues, tol=1e-10) -> None: ...
 
 
 def evaluate(
@@ -230,41 +238,45 @@ def evaluate(
 - A **measurement** returns the measured variables for one trial point. A real
   system supplies only this, as a plain array.
 - **The oracle has a module of its own**, `oracle.py`, since only benchmark experiments
-  need it. `evaluation.py` imports `OracleMeasurement` from it, for `Measure` and to
-  tell an oracle's measurement from a real system's, so `oracle.py` never imports
-  `evaluation.py`. What both need sits below them: `_find_root` in `solvers.py` and
-  `_states` in `problem.py`.
+  need it. A `Dataset` holds only what a real system gives, so nothing in `evaluation.py`
+  knows about an oracle, and `oracle.py` imports `evaluation.py`, for `Measure` and the
+  root-finding problem.
 - The **oracle simulation** solves `g` with `y = oracle(x, y, u)` for every state
   (root-finding with CasADi Jacobians), reads the measured variables and adds
-  `rng.normal(0, noise_std)`. Its full states are the **oracle values**, returned in an
-  `OracleMeasurement`.
+  `rng.normal(0, noise_std)`. It returns those alone, like a real system. With `optimum`,
+  it also computes the oracle objective at each point from the states it solved, which
+  draws nothing, and warns with `OracleOptimumWarning` below it, so nothing has to
+  remember a separate check.
+- The **oracle values** are the states and objective the oracle gives at a point.
+  `oracle_values` computes them at any `u` afterwards, for scoring, from a generator of
+  its own so a run's draws don't change. Its starts aren't the measurement's, so with
+  several roots it can find a different one, and the score is then of another branch:
+  the accepted cost of a `Dataset` that holds no oracle values. Narrow the start bounds to
+  one branch to score such a system.
 - **Oracle vs real system.** Being simulated doesn't make a system an oracle. An in
   silico simulation of a plant (a flowsheet simulator, say) is a real system to the
-  library: a custom measurement that returns only the measured variables, with no
-  oracle values and no disagreement check. An oracle is the benchmark experiment
-  stating the unknown equations in closed form, next to `g`, so the oracle values are
-  known and a method can be scored against them. The method never sees the oracle
-  either way. A custom measurement that knows its oracle values can return an
-  `OracleMeasurement`.
+  library: a custom measurement that returns only the measured variables. An oracle is
+  the benchmark experiment stating the unknown equations in closed form, next to `g`, so
+  the oracle values are known and a method can be scored against them. The method never
+  sees the oracle either way.
 - The library then always solves the **root-finding problem**: `g` for the unmeasured
   states given `u` and the measured variables, from Latin hypercube starts over the
-  unmeasured variables' start bounds, then computes `f` (and `f` at the oracle values).
+  unmeasured variables' start bounds, then computes `f`.
 - A root is accepted when its residual norm is below `tol` and it lies within the
   bounds; if no start gives one, `RootFindingError`. A measured variable that isn't
   finite raises it too, before the solve: with no unmeasured states nothing is solved,
   and a measured variable outside `g` leaves a root, so the solve wouldn't notice.
 - **Disagreement with the oracle.** Comparing the reconstruction directly with the
-  oracle values would warn at every noisy point. Instead `evaluate` solves the same
-  root-finding problem (same noisy measured variables) once more, started at the
-  oracle values. That extra solve draws nothing, so the draw order is unchanged. If it
+  oracle values would warn at every noisy point. Instead `check_reconstruction`, which a
+  script calls, solves the same root-finding problem (same noisy measured variables)
+  once more, started at the oracle values. That extra solve draws nothing. If it
   gives a different root (`rtol = atol = 1e-6`) or none, the measured variables don't
   determine the states uniquely and the method may learn from states the system didn't
-  settle at. `evaluate` then warns with `ReconstructionWarning` and keeps the
-  reconstruction, because a real system would give nothing else. The fix is in the
+  settle at. It then warns with `ReconstructionWarning`. The fix is in the
   problem: measure other variables, or narrow the unmeasured start bounds to the right
   branch.
 - **Measurements from elsewhere.** `reconstruct_states(problem, *, u, measured, rng)` is
-  `evaluate` without the measurement: no oracle values, and every row is tried, since
+  `evaluate` without the measurement, and every row is tried, since
   plant data can have several bad rows, a missing value among them. `RootFindingError`
   names them and keeps the others as `error.dataset`, so the caller decides whether to
   carry on. A `u` or a
@@ -284,17 +296,11 @@ class Dataset:  # one row per point, in the order the points were taken
     x: np.ndarray  # (n, M)  measured and reconstructed
     y: np.ndarray  # (n, P)
     f: np.ndarray  # (n,)
-    x_oracle: np.ndarray | None  # benchmark only; None without an oracle
-    y_oracle: np.ndarray | None
-    f_oracle: np.ndarray | None
     n_initial: int
 
 
 def extend(dataset, new) -> Dataset: ...  # a new dataset; a point is a one-row dataset
 def incumbents(dataset) -> np.ndarray: ...  # np.minimum.accumulate(dataset.f)
-def oracle_incumbents(
-    dataset,
-) -> np.ndarray: ...  # f_oracle at each incumbent's point (#32)
 
 
 @dataclass(frozen=True)
@@ -321,9 +327,6 @@ replay.
 The settings dataclasses live in `settings.py`, not with their methods in `bo.py`,
 because `run.py` needs them and `bo.py` imports `run.py`. `MethodSettings` is their
 union, the one place a new method's settings join.
-
-The oracle simulation is a frozen, callable dataclass, not a closure (#141): it is
-data (the system, the oracle traced like `g`, a `cas.Function`, and the settings).
 
 A column is found by name with `system.column("x1")`.
 
@@ -897,8 +900,8 @@ subclasses (`ReconstructionWarning`) so they can be filtered.
 
 ### Plots
 
-`hb.plots.regret` and `hb.plots.convergence` draw a list of runs per label over the
-evaluations. `hb.plots.iteration` draws one iteration of a run, a function of the finished run (#55)
+`hb.plots.regret` and `hb.plots.convergence` draw a list of incumbent curves per label,
+plain arrays, over the evaluations. `hb.plots.iteration` draws one iteration of a run, a function of the finished run (#55)
 that replays its acquisition problem
 ([ADR 0005](docs/adr/0005-iteration-plots-replay-the-acquisition-problem.md)). Each run's
 GP comes from its stored fitted GPs (#119) and the rest from `run.settings`, so a saved

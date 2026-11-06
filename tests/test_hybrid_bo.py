@@ -27,7 +27,7 @@ from hybrid_bo import (
     hybrid_bo,
     incumbents,
     initial_points,
-    oracle_measure,
+    measure_oracle,
 )
 from hybrid_bo.acquisition import _sensitivity, hybrid_acquisition, saa_scenarios
 from hybrid_bo.evaluation import evaluate
@@ -91,9 +91,7 @@ def illustrative_run(problem, settings, seed=0) -> Run:
     """A hybrid BO run without noise: 2 initial points, 2 iterations."""
     rng = np.random.default_rng(seed)
     u = initial_points(problem.system.u, 2, rng)
-    measure = oracle_measure(
-        problem.system, oracle=lambda v: [cas.sin(v.u)], noise_std=0.0
-    )
+    measure = measure_oracle(problem, oracle=lambda v: [cas.sin(v.u)], noise_std=0.0)
     return hybrid_bo(
         problem, measure, initial_points=u, n_iterations=2, rng=rng, **vars(settings)
     )
@@ -964,8 +962,8 @@ def test_linearization_draws_nothing_from_the_generator(illustrative_problem):
     generator where evaluating the initial points does, while SAA draws its
     scenarios."""
     # Initial points only (0 iterations), with each approximation
-    measure = oracle_measure(
-        illustrative_problem.system,
+    measure = measure_oracle(
+        illustrative_problem,
         oracle=lambda v: [cas.sin(v.u)],
         noise_std=0.0,
     )
@@ -1018,8 +1016,8 @@ def test_gp_inputs_are_the_arguments_of_h():
 def test_what_chooses_the_method_is_required_and_keyword_only(illustrative_problem):
     """Hybrid BO has no default GP, acquisition function or approximation, and every
     argument after the measurement is keyword-only."""
-    measure = oracle_measure(
-        illustrative_problem.system,
+    measure = measure_oracle(
+        illustrative_problem,
         oracle=lambda v: [cas.sin(v.u)],
         noise_std=0.0,
     )

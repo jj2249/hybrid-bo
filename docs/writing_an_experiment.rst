@@ -102,10 +102,12 @@ A benchmark experiment: an oracle
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 To test a method you write the unknown equations in closed form, the *oracle*, and
-:py:func:`~hybrid_bo.oracle.oracle_measure` simulates the system from ``g`` and
+:py:func:`~hybrid_bo.oracle.measure_oracle` simulates the system from ``g`` and
 the oracle together. The methods only see the measured variables, with normal noise
-of the standard deviation you state (``noise_std``, 0 for none); a run also keeps the
-true (*oracle*) values, so the methods can be scored.
+of the standard deviation you state (``noise_std``, 0 for none). To score them,
+:py:func:`~hybrid_bo.oracle.oracle_values` gives the *oracle values* at any ``u``
+afterwards. With several roots it can find a different one from the measurement, so
+narrow the start bounds to one branch to score such a system.
 
 .. literalinclude:: ../tests/illustrative_example.py
    :language: python
@@ -115,8 +117,8 @@ true (*oracle*) values, so the methods can be scored.
 The *oracle optimum* is the true minimum of the problem, which regret is measured from.
 State it: nothing searches for it, since a search can miss it. Find it once with
 :py:func:`~hybrid_bo.oracle.oracle_optimum` (with many starts), check it, and paste
-the value as above. :py:func:`~hybrid_bo.dataset.check_oracle_optimum` warns if a run
-evaluates a point below it.
+the value as above. Pass it to ``measure_oracle`` as ``optimum=`` and the measurement warns
+at a point below it.
 
 Your own system
 ~~~~~~~~~~~~~~~
@@ -237,12 +239,12 @@ deviation, so a lengthscale of 0.5 is half the range of the data.
 
 ``noise_std`` is the known standard deviation of the measurement noise, in the units
 of the measured variable, the same number as the measurement's noise. It has no
-default, here or in ``oracle_measure``: 0 is noise-free. With noise of 0.01 on the
+default, here or in ``measure_oracle``: 0 is noise-free. With noise of 0.01 on the
 measured state:
 
 .. code-block:: python
 
-   measure = hb.oracle_measure(system, oracle, noise_std=0.01)
+   measure = hb.measure_oracle(problem, oracle, noise_std=0.01)
    gp = hb.gp.GP(
        mean=hb.gp.Zero(),
        kernel=outputscale * hb.gp.Matern52(lengthscale=lengthscale),
@@ -315,8 +317,9 @@ When something goes wrong
   root-finding problem has no solution, or a measurement returned NaN or an infinity):
   it carries the run up to that point as ``error.run``. Check the equations, the start
   bounds and the measurement.
-- **ReconstructionWarning**: with an oracle, the measured variables don't pin the
-  states down to the oracle's values (``g`` has several roots). Narrow the start
+- **ReconstructionWarning**, from :py:func:`~hybrid_bo.oracle.check_reconstruction`: the
+  measured variables don't pin the states down to the oracle's values (``g`` has several
+  roots). Narrow the start
   bounds of the unmeasured states to the right branch, or measure other variables.
 - **ReplayWarning** when plotting: an iteration figure's replay of hybrid BO's
   acquisition function found another root of the known equations at the trial

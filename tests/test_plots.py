@@ -24,7 +24,6 @@ from hybrid_bo import (
     EI,
     LCB,
     SAA,
-    Dataset,
     Linearization,
     Problem,
     ReplayWarning,
@@ -35,7 +34,7 @@ from hybrid_bo import (
     hybrid_bo,
     initial_points,
     latin_hypercube_sampling,
-    oracle_measure,
+    measure_oracle,
     plots,
     standard_bo,
 )
@@ -164,28 +163,6 @@ def legend_labels(figure: Figure) -> list[str]:
 # Convergence and regret
 
 
-def fake_run(
-    method: str,
-    f: list[float],
-    f_oracle: list[float] | None,
-    n_initial: int = 2,
-) -> Run:
-    """A run of one decision variable, after `n_initial` initial points, with these
-    measured and oracle objective values."""
-    n = len(f)
-    dataset = Dataset(
-        u=np.zeros((n, 1)),
-        x=np.zeros((n, 1)),
-        y=np.zeros((n, 1)),
-        f=np.array(f),
-        x_oracle=None if f_oracle is None else np.zeros((n, 1)),
-        y_oracle=None if f_oracle is None else np.zeros((n, 1)),
-        f_oracle=None if f_oracle is None else np.array(f_oracle),
-        n_initial=n_initial,
-    )
-    return Run(dataset, method=method)
-
-
 def band(ax: Axes) -> np.ndarray:
     """The vertices (x, y) of the one shaded band on the axes."""
     (collection,) = ax.collections
@@ -265,8 +242,8 @@ def test_hybrid_bo_figure_from_a_pickled_run(hybrid_run):
     gridded panels: the GP of y with its true curve, f under the scenarios, and the
     acquisition function, the objective of the acquisition problem at each u with
     each scenario's states solving g, all with one legend for the figure."""
-    # Act: iteration 1, with the oracle for the true curves
-    figure = plots.iteration(hybrid_run, ex.problem, 1, measure=ex.measure)
+    # Act: iteration 1, with the oracle for the oracle curves
+    figure = plots.iteration(hybrid_run, ex.problem, 1, oracle=ex.oracle)
 
     # The title, three gridded panels, the figure's legend
     surrogate, scenarios, acquisition = figure.axes
@@ -455,9 +432,14 @@ ROSENBROCK_SYSTEM = System(
     measured=[ROSENBROCK_Y],
 )
 ROSENBROCK = Problem(ROSENBROCK_SYSTEM, f=lambda v: 100 * v.y**2 + v.x**2)
-ROSENBROCK_MEASURE = oracle_measure(
-    ROSENBROCK_SYSTEM, lambda v: [v.u2 - v.u1**2], noise_std=0.0
-)
+
+
+def rosenbrock_oracle(v):
+    """The unknown equation of the Rosenbrock problem: y = u2 - u1^2."""
+    return [v.u2 - v.u1**2]
+
+
+ROSENBROCK_MEASURE = measure_oracle(ROSENBROCK, rosenbrock_oracle, noise_std=0.0)
 
 
 def rosenbrock_run(
@@ -564,7 +546,7 @@ def test_2d_figure_has_a_panel_per_quantity(request, run_name, expected, tmp_pat
     f. Every panel shows the points, and the figure saves as a PNG."""
     # Act: iteration 1, with the oracle
     run = request.getfixturevalue(run_name)
-    figure = plots.iteration(run, ROSENBROCK, 1, measure=ROSENBROCK_MEASURE)
+    figure = plots.iteration(run, ROSENBROCK, 1, oracle=rosenbrock_oracle)
 
     # Check: the titles, the points on every panel, one legend
     assert titles(figure) == expected
@@ -581,8 +563,8 @@ def test_2d_figure_has_a_panel_per_quantity(request, run_name, expected, tmp_pat
     plt.close("all")
 
 
-def test_2d_figure_without_measure_drops_the_oracle_column(hybrid_2d_run):
-    """Without a measurement there are no oracle values, so the oracle panels go."""
+def test_2d_figure_without_an_oracle_drops_the_oracle_column(hybrid_2d_run):
+    """Without an oracle there are no oracle values, so the oracle panels go."""
     figure = plots.iteration(hybrid_2d_run, ROSENBROCK, 0)
 
     assert titles(figure) == [
@@ -723,19 +705,13 @@ def test_regret_and_convergence_draw_the_median_and_quartiles_of_each_label():
     """`regret` and `convergence` draw a curve per label over the evaluations, the
     median of its runs, with its interquartile range, and a shorter run counts up to
     its last evaluation."""
-    # Setup: three runs of one label, one of them stopped after one evaluation
-    runs = {
-        "a": [
-            fake_run("a", f=[3.0, 1.0], f_oracle=[3.0, 1.0]),
-            fake_run("a", f=[5.0, 2.0], f_oracle=[5.0, 2.0]),
-            fake_run("a", f=[7.0], f_oracle=[7.0]),
-        ]
-    }
+    # Setup: three incumbent curves of one label, one stopped after one evaluation
+    curves = {"a": [np.array([3.0, 1.0]), np.array([5.0, 2.0]), np.array([7.0])]}
 
     # Act
     _, (regret_ax, convergence_ax) = plt.subplots(2)
-    regret = plots.regret(runs, 0.0, regret_ax)
-    convergence = plots.convergence(runs, convergence_ax)
+    regret = plots.regret(curves, 0.0, regret_ax)
+    convergence = plots.convergence(curves, convergence_ax)
 
     # Check: each draws on the axes it was given, the median at each evaluation, on a
     # log scale for regret

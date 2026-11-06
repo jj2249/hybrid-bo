@@ -20,7 +20,8 @@ measurement (with a module-level `def oracle(v)` and the stated `optimum`), the 
 methods' prior GP (`gp`), `N_INITIAL`, `N_ITERATIONS` and `N_RUNS`, then a small function
 per method, `def hybrid_bo(rng) -> hb.Run`, which calls the library. A `__main__` block
 loops over seeds, then calls `hb.save_runs`, makes a figure with `plt.subplots()` and
-draws on it with `hb.plots.regret(runs, optimum, ax)`.
+draws on it with `hb.plots.regret(curves, optimum, ax)`, the curves being each run's
+`hb.oracle_incumbents(run.dataset, hb.oracle_values(problem, oracle, run.dataset.u, rng).f)`.
 
 - Importing the module runs nothing, so `tests/test_regression.py` reuses the
   illustrative example's `gp`, `problem` and `measure`, and
@@ -32,7 +33,7 @@ draws on it with `hb.plots.regret(runs, optimum, ax)`.
   precisely we search, never what we search for. So these are required and spelled
   out in every experiment: `gp` and `acquisition` (`hb.EI()` or
   `hb.LCB(std_factor=...)`) on both BO methods, `approximation` on `hb.hybrid_bo`, `n_scenarios` on `hb.SAA` and
-  `hb.SoftSAA` (with `temperature`), and `noise_std` on `hb.oracle_measure` and
+  `hb.SoftSAA` (with `temperature`), and `noise_std` on `hb.measure_oracle` and
   `hb.gp.GP`. Search effort and numerics keep defaults (`n_starts`, `n_starts_gp`,
   the solver, `jitter`, kernel priors, `ard`, `unknown_states_as_variables=True`). The
   methods, the choice dataclasses and `GP` are keyword-only:
@@ -61,8 +62,8 @@ with a measurement that draws nothing. Draw nothing else from a run's generator.
 State it as a module-level `optimum`; nothing computes it (a 10-start search found a
 local minimum for the illustrative example, #62). Find it once with
 `hb.oracle_optimum(problem, oracle, rng, n_starts=200)`, check it, and say how in a
-comment. `hb.check_oracle_optimum(dataset, optimum)` warns with `OracleOptimumWarning`
-if a run evaluates a point whose oracle objective is below it.
+comment. `hb.measure_oracle(..., optimum=optimum)` warns with `OracleOptimumWarning` at a
+point whose oracle objective is below it.
 
 ## Data without a measurement
 
@@ -85,11 +86,11 @@ check the solution. `hb.extend(dataset, new)` returns a new dataset with the row
 - Exactly one measured variable per unknown state. With `P > 1` unknown states,
   `plots.iteration` draws hybrid BO only with `gp=False` (else `ValueError`).
 - With measurement noise, state it in the GP too, as the same number:
-  `GP(..., noise_std=0.01)` for `oracle_measure(..., noise_std=0.01)`. `noise_std`
+  `GP(..., noise_std=0.01)` for `measure_oracle(..., noise_std=0.01)`. `noise_std`
   is in measured units; kernel hyperparameters (`Param` bounds, fixed lengthscales) are in
   scaled units (inputs onto [0, 1], outputs standardized). Don't convert the noise by
   hand.
-- Passing `measure` to `plots.iteration` runs it over the plot grid: only for an oracle.
+- Passing `oracle` to `plots.iteration` draws the oracle values over the plot grid.
 - The iteration figures need one or two decision variables. They replay each run from
   what it stored (its fitted GPs and its settings), so nothing from the experiment's
   methods is passed and a saved run plots after the methods change.

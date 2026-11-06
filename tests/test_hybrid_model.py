@@ -201,8 +201,8 @@ def test_optimize_hybrid_model_works_with_two_unknown_states():
         measured=[y1, y2],
     )
     problem = hb.Problem(system, f=lambda v: v.x**2 + (v.y1 - v.y2) ** 2)
-    measure = hb.oracle_measure(
-        system, lambda v: [cas.sin(v.u1), cas.cos(v.u2)], noise_std=0.0
+    measure = hb.measure_oracle(
+        problem, lambda v: [cas.sin(v.u1), cas.cos(v.u2)], noise_std=0.0
     )
     data = data_of(problem, measure, 60)
 

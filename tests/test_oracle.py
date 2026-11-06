@@ -12,6 +12,9 @@ import pytest
 
 import hybrid_bo as hb
 
+# The illustrative example's minimizer, found by a bounded search of the closed form
+U_AT_THE_OPTIMUM = np.array([-0.44633082071941])
+
 
 def implicit_system(known_equations: bool) -> hb.System:
     """A test system over u in [-1, 1] with one unknown state y, measured, and with
@@ -93,9 +96,86 @@ def test_the_oracle_optimum_raises_when_every_start_fails():
 
 def test_the_oracle_simulation_of_an_oracle_that_reads_y():
     """The oracle simulation solves an oracle that reads y for y = 2 sin(u) too."""
-    measure = hb.oracle_measure(implicit_system(True), implicit_oracle, noise_std=0.0)
+    problem = hb.Problem(implicit_system(True), f=lambda v: v.y)
+    measure = hb.measure_oracle(problem, implicit_oracle, noise_std=0.0)
 
-    measurement = measure(np.array([0.5]), np.random.default_rng(0))
+    measured = measure(np.array([0.5]), np.random.default_rng(0))
 
-    np.testing.assert_allclose(measurement.y, [2 * np.sin(0.5)], atol=1e-8)
-    np.testing.assert_allclose(measurement.x, [2 * np.sin(0.5)], atol=1e-8)
+    np.testing.assert_allclose(measured, [2 * np.sin(0.5)], atol=1e-8)
+
+
+def test_a_measurement_below_the_stated_optimum_warns():
+    """A point whose oracle objective is below `optimum`, beyond the tolerance, can't
+    leave it the optimum, so the measurement warns."""
+    measure = hb.measure_oracle(
+        ex.problem, ex.oracle, noise_std=0.0, optimum=ex.optimum + 1e-3
+    )
+
+    # `pytest.warns` fails unless the block warns with the category, matching `match`
+    with pytest.warns(hb.OracleOptimumWarning, match="below the stated"):
+        measure(U_AT_THE_OPTIMUM, np.random.default_rng(0))
+
+
+# `filterwarnings("error")` turns every warning into a failure of this test
+@pytest.mark.filterwarnings("error")
+def test_a_measurement_at_the_stated_optimum_does_not_warn():
+    """The point that reaches the stated optimum doesn't warn, nor does one above it."""
+    # Setup: check that the point does reach the optimum
+    values = hb.oracle_values(
+        ex.problem,
+        ex.oracle,
+        U_AT_THE_OPTIMUM[np.newaxis],
+        np.random.default_rng(0),
+    )
+    assert values.f[0] == pytest.approx(ex.optimum, abs=1e-8)
+
+    # Act and check: warnings are failures here
+    measure = hb.measure_oracle(
+        ex.problem, ex.oracle, noise_std=0.0, optimum=ex.optimum
+    )
+    for u in (U_AT_THE_OPTIMUM, np.array([1.5])):
+        measure(u, np.random.default_rng(0))
+
+
+def test_the_optimum_check_draws_nothing():
+    """A measurement draws the same with and without `optimum`, since the check only
+    reads the states it already solved."""
+    plain = hb.measure_oracle(ex.problem, ex.oracle, noise_std=0.1)
+    checked = hb.measure_oracle(
+        ex.problem, ex.oracle, noise_std=0.1, optimum=ex.optimum
+    )
+
+    first = plain(np.array([0.5]), np.random.default_rng(0))
+    second = checked(np.array([0.5]), np.random.default_rng(0))
+
+    np.testing.assert_array_equal(first, second)
+
+
+def test_oracle_values_solve_every_state_at_each_point():
+    """The oracle values at any u are the states and objective of the closed form, one
+    row per point."""
+    u = np.array([[0.5], [-0.25]])
+
+    values = hb.oracle_values(
+        hb.Problem(implicit_system(True), f=lambda v: v.y + 1.0),
+        implicit_oracle,
+        u,
+        np.random.default_rng(0),
+    )
+
+    np.testing.assert_allclose(values.y, 2 * np.sin(u), atol=1e-8)
+    np.testing.assert_allclose(values.x, 2 * np.sin(u), atol=1e-8)
+    np.testing.assert_allclose(values.f, 2 * np.sin(u[:, 0]) + 1.0, atol=1e-8)
+
+
+@pytest.mark.filterwarnings("error")
+def test_a_reconstruction_agrees_with_the_values_of_the_oracle():
+    """With one root, the states reconstructed from noise-free measurements are the ones
+    `oracle_values` gives, so `check_reconstruction` doesn't warn."""
+    rng = np.random.default_rng(0)
+    u = np.array([[-1.0], [0.5], [1.5]])
+    dataset = hb.reconstruct_states(ex.problem, u=u, measured=np.sin(u), rng=rng)
+
+    values = hb.oracle_values(ex.problem, ex.oracle, u, np.random.default_rng(1))
+
+    hb.check_reconstruction(ex.system, dataset, values)

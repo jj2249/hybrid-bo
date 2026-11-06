@@ -19,7 +19,7 @@ from hybrid_bo import (
     Run,
     incumbents,
     initial_points,
-    oracle_measure,
+    measure_oracle,
     standard_bo,
 )
 from hybrid_bo.acquisition import AcquisitionSolution, standard_acquisition
@@ -31,9 +31,7 @@ from hybrid_bo.settings import StandardBOSettings
 
 def illustrative_measure(problem):
     """The oracle simulation of the illustrative example, without noise."""
-    return oracle_measure(
-        problem.system, oracle=lambda v: [cas.sin(v.u)], noise_std=0.0
-    )
+    return measure_oracle(problem, oracle=lambda v: [cas.sin(v.u)], noise_std=0.0)
 
 
 def illustrative_run(problem, settings=None) -> Run:
@@ -299,7 +297,6 @@ def test_loop_evaluates_each_trial_point_after_the_initial_points(
     np.testing.assert_array_equal(run.dataset.u, [[0.5], [1.0], [-1.0]])
     np.testing.assert_allclose(run.dataset.y, np.sin(run.dataset.u), atol=1e-8)
     assert run.dataset.n_initial == 1
-    assert run.dataset.f_oracle is not None
     assert run.surrogates == ["surrogate behind point 1", "surrogate behind point 2"]
     assert [solution.value for solution in run.acquisitions] == [1, 2]
 

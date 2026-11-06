@@ -44,8 +44,8 @@ def benchmark_problem(n_u: int) -> tuple[hb.Problem, hb.Measure]:
     )
     problem = hb.Problem(system, f=lambda v: v.x1**2 + (v.y1 - v.y2) ** 2)
     last = f"u{n_u}"
-    measure = hb.oracle_measure(
-        system,
+    measure = hb.measure_oracle(
+        problem,
         oracle=lambda v: [cas.sin(v.u1), cas.cos(getattr(v, last))],
         noise_std=0.0,
     )

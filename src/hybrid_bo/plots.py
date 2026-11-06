@@ -1,12 +1,13 @@
-"""Static figures: runs compared over their evaluations, and one iteration of a run.
+"""Static figures: incumbent curves compared over the evaluations, and one iteration of
+a run.
 
-Plots read finished runs, so a saved run is plotted without running it again (ADR
-0003); an iteration's acquisition panels replay the method's acquisition problem (ADR
+An iteration reads a finished run, so a saved run is plotted without running it again
+(ADR 0003); an iteration's acquisition panels replay the method's acquisition problem (ADR
 0005). matplotlib is imported on first use. Figures are drawn in the repo's style,
 `STYLE`; use it elsewhere with `plt.style.use(hb.plots.STYLE)`.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -16,9 +17,9 @@ import scipy
 
 from hybrid_bo.acquisition import LCB, Linearization, SoftSAA, replay
 from hybrid_bo.bo import iteration_problem
-from hybrid_bo.dataset import incumbents, n_iterations, oracle_incumbents
-from hybrid_bo.evaluation import Measure, evaluate
+from hybrid_bo.dataset import n_iterations
 from hybrid_bo.gp import predict
+from hybrid_bo.oracle import oracle_values
 from hybrid_bo.problem import Problem
 from hybrid_bo.run import Run
 from hybrid_bo.sampling import _start_bounds
@@ -40,37 +41,28 @@ _EI_DECADES = 10  # the EI color scale stops this many decades below the largest
 _CONFIDENCE = 0.9  # probability inside the confidence bands
 
 
-def convergence(runs: Mapping[str, Sequence[Run]], ax: "Axes") -> "Axes":
-    """Draws the incumbent of each label's runs over the evaluations on `ax`, and
-    returns it: the oracle incumbent if the runs have an oracle, else the measured one,
-    as the median with the interquartile range shaded."""
-    curves = {
-        label: [_incumbents(run) for run in group] for label, group in runs.items()
-    }
+def convergence(curves: Mapping[str, Sequence[np.ndarray]], ax: "Axes") -> "Axes":
+    """Draws each label's incumbent curves (`hb.incumbents`, or `hb.oracle_incumbents`
+    for a benchmark) over the evaluations on `ax`, and returns it: the median with the
+    interquartile range shaded."""
     ax = _over_evaluations(curves, ax)
     ax.set_ylabel("incumbent")
     return ax
 
 
-def regret(runs: Mapping[str, Sequence[Run]], optimum: float, ax: "Axes") -> "Axes":
-    """Draws the regret of each label's runs over the evaluations on `ax`, and returns
-    it: measured from the oracle optimum `optimum`, as in `convergence`, on a log y-axis
-    (the paper's figure)."""
-    curves = {
-        label: [_incumbents(run) - optimum for run in group]
-        for label, group in runs.items()
+def regret(
+    curves: Mapping[str, Sequence[np.ndarray]], optimum: float, ax: "Axes"
+) -> "Axes":
+    """Draws the regret of each label's incumbent curves over the evaluations on `ax`,
+    and returns it: measured from the oracle optimum `optimum`, as in `convergence`, on
+    a log y-axis (the paper's figure)."""
+    regrets = {
+        label: [curve - optimum for curve in group] for label, group in curves.items()
     }
-    ax = _over_evaluations(curves, ax)
+    ax = _over_evaluations(regrets, ax)
     ax.set_ylabel("regret")
     ax.set_yscale("log")
     return ax
-
-
-def _incumbents(run: Run) -> np.ndarray:
-    """The run's oracle incumbents if it has an oracle, else its incumbents."""
-    if run.dataset.f_oracle is None:
-        return incumbents(run.dataset)
-    return oracle_incumbents(run.dataset)
 
 
 def _over_evaluations(curves: Mapping[str, Sequence[np.ndarray]], ax: "Axes") -> "Axes":
@@ -96,7 +88,7 @@ def iteration(
     problem: Problem,
     i: int,
     *,
-    measure: Measure | None = None,
+    oracle: Callable[[Any], Any] | None = None,
     gp: bool = True,
     scenarios: bool = True,
     acquisition: bool = True,
@@ -137,16 +129,15 @@ def iteration(
     is. The acquisition panel notes the stored and the replayed
     value at the trial point, which check the replay.
 
-    `measure` adds the oracle values (curves, or the oracle panels in 2D); it runs at
-    every grid point (generator seeded with 0), so pass an oracle measurement, never
-    a real system.
+    `oracle`, written as for `measure_oracle`, adds the oracle values (curves, or the
+    oracle panels in 2D), computed at every grid point (generator seeded with 0).
 
     The GPs are the run's stored fitted GPs; the rest of the replay (the acquisition
     function, the approximation, the solver) comes from the run's stored settings.
 
     Raises `ValueError` unless the problem has one or two decision variables (and,
-    for hybrid BO's GP panels, one unknown state and h of u only), or if `measure`
-    has no oracle; and `IndexError` if the run has no iteration `i`.
+    for hybrid BO's GP panels, one unknown state and h of u only), and `IndexError` if
+    the run has no iteration `i`.
     """
     # The checks: one or two decision variables, one GP of y over u, the iteration
     system, dataset, settings = problem.system, run.dataset, run.settings
@@ -176,32 +167,26 @@ def iteration(
         "acquisition": acquisition and settings is not None,
     }
     if system.n_u == 1:
-        return _iteration_1d(run, problem, i, measure, shown)
-    return _iteration_2d(run, problem, i, measure, shown)
+        return _iteration_1d(run, problem, i, oracle, shown)
+    return _iteration_2d(run, problem, i, oracle, shown)
 
 
 def _truth(
-    problem: Problem, measure: Measure | None, u: np.ndarray
+    problem: Problem, oracle: Callable[[Any], Any] | None, u: np.ndarray
 ) -> tuple[np.ndarray | None, np.ndarray | None]:
-    """The oracle first unknown state and f at the rows of u, or None without a
-    measurement.
-
-    Raises `ValueError` if the measurement has no oracle.
-    """
-    if measure is None:
+    """The oracle first unknown state and f at the rows of u, or None without an
+    oracle."""
+    if oracle is None:
         return None, None
-    truth = evaluate(problem, measure, u, np.random.default_rng(0))
-    if truth.f_oracle is None or truth.y_oracle is None:
-        msg = "The true curves need an oracle measurement"
-        raise ValueError(msg)
-    return truth.y_oracle[:, 0], truth.f_oracle
+    truth = oracle_values(problem, oracle, u, np.random.default_rng(0))
+    return truth.y[:, 0], truth.f
 
 
 def _iteration_1d(
     run: Run,
     problem: Problem,
     i: int,
-    measure: Measure | None,
+    oracle: Callable[[Any], Any] | None,
     shown: dict[str, bool],
 ) -> "Figure":
     """`iteration`'s figure for one decision variable: a panel per entry of `shown`
@@ -213,7 +198,7 @@ def _iteration_1d(
     n = dataset.n_initial + i
     trial = dataset.u[n, 0]
     u = np.sort(np.append(np.linspace(*_start_bounds(system.u), _N_GRID), trial))
-    y_true, f_true = _truth(problem, measure, u[:, None])
+    y_true, f_true = _truth(problem, oracle, u[:, None])
 
     # The replay the panels need
     panels = [panel for panel, on in shown.items() if on] or ["points"]
@@ -292,7 +277,7 @@ def _iteration_2d(
     run: Run,
     problem: Problem,
     i: int,
-    measure: Measure | None,
+    oracle: Callable[[Any], Any] | None,
     shown: dict[str, bool],
 ) -> "Figure":
     """`iteration`'s figure for two decision variables: filled contours in rows, a
@@ -305,7 +290,7 @@ def _iteration_2d(
     u1, u2 = (np.linspace(lower[j], upper[j], _N_GRID_2D) for j in range(2))
     U1, U2 = np.meshgrid(u1, u2)
     grid = np.column_stack([U1.ravel(), U2.ravel()])
-    y_true, f_true = _truth(problem, measure, grid)
+    y_true, f_true = _truth(problem, oracle, grid)
 
     # The replay, from the trial point (the first row, split off after) over the grid
     replayed = None
@@ -318,10 +303,10 @@ def _iteration_2d(
     if isinstance(settings, HybridBOSettings) and shown["gp"]:
         name = system.y[0].name
         mean, std = predict(run.surrogates[i][0], grid)
-        oracle = None if y_true is None else _Panel(f"oracle {name}", y_true)
+        oracle_panel = None if y_true is None else _Panel(f"oracle {name}", y_true)
         rows.append(
             [
-                oracle,
+                oracle_panel,
                 _Panel(f"GP mean of {name}", mean),
                 _Panel(f"GP std of {name}", std),
             ]

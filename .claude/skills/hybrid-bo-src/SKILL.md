@@ -15,7 +15,7 @@ code uses GLOSSARY.md's terms; use them in PRs, tests and comments too.
     min_u f(x, y, u)   s.t.   0 = g(x, y, u),   y = h(x, u)  (unknown)
 
 - **Evaluation** (`evaluate`): the measurement returns the measured variables for each
-  trial point. The oracle simulation (`oracle_measure`) solves `g` with
+  trial point. The oracle simulation (`measure_oracle`) solves `g` with
   `y = oracle(x, y, u)` for every state by multistart `fsolve`, reads the measured
   variables and adds `rng.normal(0, noise_std)` (drawn also when `noise_std` is 0).
   The library then always solves the **root-finding problem**: `g` for the unmeasured
@@ -80,40 +80,39 @@ from its module (`from hybrid_bo.gp import fit_gp`).
 - `sampling.py`: `lhs(lower, upper, n, rng)` and `uniform(...)` over a box, shape
   `(n, d)`; `initial_points(variables, n, rng)` is `lhs` over `Var` start bounds. Use
   them for any Latin hypercube or uniform draw.
-- `oracle.py`: the oracle, for benchmark experiments. `OracleMeasurement` (measured
-  plus oracle `x`, `y`). `oracle_measure(system, oracle, noise_std, ...)` (`noise_std`
-  required) traces the oracle like `g` (`_trace_oracle`) and returns an
-  `OracleSimulation`, a frozen, callable dataclass holding the system, the traced oracle
-  and the settings (#141).
+- `oracle.py`: the oracle, for benchmark experiments. `measure_oracle(problem, oracle,
+  noise_std, optimum, ...)` (`noise_std` required) traces the oracle like `g`
+  (`_trace_oracle`) and returns a plain function `(u, rng) -> measured (P,)`: `lhs` starts,
+  the root of `g` and the oracle (`_oracle_root`), then noise, in that order. With
+  `optimum` it warns with `OracleOptimumWarning` at a point below it, beyond a relative
+  1e-6 (`_check_optimum`; no draws). `oracle_values(problem, oracle, u, rng, ...)` gives an
+  `OracleValues` (`x`, `y`, `f`) at any `u`, from a generator of its own; with several
+  roots it can find a different one from the measurement, as its starts differ.
+  `oracle_incumbents(dataset, f_oracle)` is the benchmark metric.
+  `check_reconstruction(system, dataset, values)` warns with `ReconstructionWarning` for a
+  row not on the oracle's root: one extra solve from the oracle values, no draws.
   An oracle may read `y`: the unknown equations are `0 = h(x, y, u)`, and `y = h(x, u)`
   is only the form the GP learns. `oracle_optimum(problem, oracle, rng)` solves min f
   s.t. g = 0, y = oracle: `build_deterministic_equivalent` of one scenario, with its own
   symbols, the unknown equations `oracle(x, y, u) - y` and the objective `_minimize_f`,
   by `solve_with_multistart` from `lhs` starts over the start bounds of (u, x, y). It
   builds no NLP of its own.
-  `evaluation.py` imports `OracleMeasurement` from here, so this module never imports
-  `evaluation.py`; what both need sits below them (`_find_root` in `solvers.py`,
-  `_states` in `problem.py`).
-- `evaluation.py`: a `Measure` is `(u (N,), rng) -> measured (P,)`, or an
-  `OracleMeasurement` in benchmark experiments.
+  This module imports `evaluation.py` (`Measure`, `_reconstruct`, `_unmeasured`), never
+  the reverse: `evaluation.py` knows nothing of an oracle.
+- `evaluation.py`: a `Measure` is `(u (N,), rng) -> measured (P,)`.
   `evaluate(problem, measure, u, rng)` runs the measurement per row, rejects a measured
   variable that isn't finite with `RootFindingError` (#214; before the starts are
   drawn, since with M = 0 nothing is solved and a measured variable outside `g` leaves
   a root, so the solve wouldn't notice), then always
   solves the root-finding problem (`_reconstruct`, starts over the unmeasured
-  variables), and returns a `Dataset` whose points are all initial points. With an
-  oracle, one extra solve from the
-  oracle values (no draws) checks the reconstruction is on the same root, else
-  `ReconstructionWarning`. `_start_bounds` (in `sampling.py`) is a shared helper.
+  variables), and returns a `Dataset` whose points are all initial points. `_start_bounds` (in `sampling.py`) is a shared helper.
   `reconstruct_states(problem, *, u, measured, rng, n_starts, tol)` is `evaluate`
-  without the measurement, for data from elsewhere: no oracle values, `ValueError` on a
+  without the measurement, for data from elsewhere: `ValueError` on a
   wrong shape, one `OutOfBoundsWarning` for a `u` or measured variable outside its
   bounds (kept), and every row tried, one `RootFindingError` naming those with no root
   or a non-finite value and the others as `error.dataset`.
-- `dataset.py`: `Dataset` (`u`, `x`, `y`, `f`, oracle values or `None`, `n_initial`)
-  `incumbents` and `oracle_incumbents` (the benchmark metric);
-  `check_oracle_optimum(dataset, optimum)` warns with `OracleOptimumWarning` if a point
-  is below the stated optimum, and returns whether it did; `extend(dataset, new)`
+- `dataset.py`: `Dataset` (`u`, `x`, `y`, `f`, `n_initial`), `incumbents`;
+  `extend(dataset, new)`
   (`hb.extend`) returns a new dataset, the rows of one followed by the other's; a point
   is a one-row dataset, so it appends too.
 - `run.py`: `Run` (`dataset`, `method`: the method's name; `surrogates`: per
@@ -305,9 +304,9 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   `iteration_problem(run, problem, i)` calls it, which rebuilds iteration i's problem for the
   replay, with the `n_initial + i` points before trial point i, from the stored
   surrogate, the run's scenarios and `run.settings` (`ValueError` for a baseline).
-- `plots.py`: static figures, no widgets and no `rng`. `regret(runs, optimum, ax)` and
-  `convergence(runs, ax)` draw a list of runs per label on the caller's required axes (median and IQR over evaluations,
-  `_over_evaluations`, in numpy). `iteration(run, problem, i, *, measure, gp,
+- `plots.py`: static figures, no widgets and no `rng`. `regret(curves, optimum, ax)` and
+  `convergence(curves, ax)` draw a list of incumbent curves per label on the caller's required axes (median and IQR over evaluations,
+  `_over_evaluations`, in numpy). `iteration(run, problem, i, *, oracle, gp,
   scenarios, acquisition) -> Figure` draws the state before trial point i over the
   `u` start bounds, with one figure legend (`_figure_legend`); it dispatches on
   `n_u` (`ValueError` above 2, and for hybrid BO's GP panels with P > 1: they draw
@@ -343,7 +342,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   precisely we search, never what we search for. Required, with no default:
   `gp` and `acquisition` on both BO methods, `approximation` on `hybrid_bo` and
   `hybrid_acquisition`, `n_scenarios` on `SAA` and `SoftSAA`, `temperature` on
-  `SoftSAA`, `std_factor` on `LCB`, `noise_std` on `oracle_measure` and `GP`. Defaults
+  `SoftSAA`, `std_factor` on `LCB`, `noise_std` on `measure_oracle` and `GP`. Defaults
   stay for search effort, numerics and plumbing (`n_starts`, `n_starts_gp`, `tol`,
   `solver`, `jitter`, kernel priors and `ard`, `Var` bounds, plot flags, and
   `unknown_states_as_variables=True`, a formulation with the same optimum). The
@@ -395,7 +394,7 @@ from its module (`from hybrid_bo.gp import fit_gp`).
   starts at the iteration limit. Times come from `time.perf_counter`. The library adds
   no handlers to the caller's process.
 - **Oracle incumbents.** `incumbents(dataset)` is the running minimum of the measured
-  `f`. The benchmark metric `oracle_incumbents(dataset)` is `f_oracle` at the
+  `f`. The benchmark metric `oracle_incumbents(dataset, f_oracle)` is `f_oracle` at the
   incumbent's point, not the running minimum of `f_oracle`; they agree only
   without noise.
 
