@@ -83,7 +83,7 @@ for _ in range(10):
 
 ## Standard BO
 
-We can recover non-hybrid problems as the case where we have no internal states `x` and `y`. In this case we have one unknown state, the measured `f`. This is the standard black-box BO. Solving with `hb.Exact()` tells the method to use closed-form EI rather than taking scenarios as in SAA.
+We can recover non-hybrid problems as the case with no mechanistic states `x` and a single unknown state `y`, which is the measured objective itself, `f = y`. This is standard black-box BO. Solving with `hb.Exact()` tells the method to use closed-form EI rather than taking scenarios as in SAA.
 
 ```python
 fhat = hb.Var("fhat", start=(-10.0, 10.0))
