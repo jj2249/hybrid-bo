@@ -1,13 +1,12 @@
 # Hybrid-BO
+This library allows you to define and solve hybrid-NLPs
+$$
+\begin{aligned}
+\min_{u\in\mathcal U}&\quad \mathbb E_\xi\left[f(x, y, u)\right]&\\ \text{s.t. }&\quad g(x, y, u)=0&\text{ a.s.}&\\ &\quad y = \mu_h(x, u) + L_h(x, u)\xi&\text{ a.s.}&\\
+\end{aligned}
+$$
 
-Hybrid-BO is a Python package for
-[Bayesian optimization for partially known systems using hybrid models](https://arxiv.org/abs/2603.11199).
-It minimizes `f(x, y, u)` over the decision variables `u`, where the known equations
-`0 = g(x, y, u)` are used as they are, and a Gaussian process learns the unknown ones,
-`y = h(x, u)`, from measurements. It is built on [CasADi](https://web.casadi.org/).
-
-The library fits GPs and solves the hybrid model once. You write the loop and the
-measurement.
+We provide methods for maximum likelihood fitting of GPs and solving the NLP with the GP embedded, implemented in CasADi.
 
 ## Install
 
@@ -15,12 +14,11 @@ measurement.
 pip install "hybrid-bo @ git+https://github.com/jj2249/hybrid-bo.git"
 ```
 
-Add `@<tag>` to the URL to fix the version, so the library can't change under your work.
+Add `@<tag>` to the URL to fix the version.
 
 ## The illustrative example
 
-The known equation is `x + exp(x) = y`, and the unknown one is `y = sin(u)`. State what you
-know as a `HybridNLP`: the variables, `g`, and `f`. Each is read from `v` by name.
+The known equation is `x + exp(x) = y`, and the unknown one is `y = sin(u)`. Create a `HybridNLP`, specifying the variables along with the known model structure `g` and `f`. The functions must be python callables that take `v`, a list of variables as parameters. The variables can then be accessed by name for improved readability.
 
 ```python
 import casadi as cas
@@ -40,20 +38,14 @@ nlp = hb.HybridNLP(
 )
 ```
 
-The measurement is yours: a plant, a simulator, or here an oracle. It measures `y` at `u`,
-and `Dataset.from_measurements` solves `g` for `x` and computes `f`. `u` and `y` may be a
-point or a set of points.
-
+We provide a helper class for handling data `Dataset`. Given measured data $$\mathcal D = \{(u_i, y_i)\}_i$$, the library allows you to reconstruct the full state of the system using `Dataset.from_measurements`. This solves `g` for `x` and computes `f`.
 ```python
-def measure(u, rng):
-    return hb.Dataset.from_measurements(nlp, u=u, y=np.sin(u), rng=rng)
-
-
 rng = np.random.default_rng(0)
-data = measure(hb.lhs_points([u], 2, rng), rng)
+u_samples = hb.lhs_points([u], 2, rng)
+data = hb.Dataset.from_measurements(nlp, u=u_samples, y=np.sin(u_samples), rng=rng)
 ```
 
-A GP of each unknown state is fitted to the data. It records its `inputs` and `output`.
+You can specify a GP prior and fit it to the data by specifying its `inputs` and `output`.
 
 ```python
 gp = hb.gp.GP(kernel=hb.gp.Matern52(), mean=hb.gp.Zero(), noise_std=0.0)
@@ -62,24 +54,18 @@ surrogate = [gp.fit(data, inputs=[u], output=y, rng=rng)]
 
 ## Minimize E[f] with SAA
 
-`hb.SAA(z)` averages over the scenarios `z`, a row per scenario and a column per unknown
-state, with equal weights unless you give `w`. The default objective is the mean, so this
-minimizes the expected `f` of the hybrid model:
-
+We provide an implementation of sample-average approximation (SAA) to solve the stochastic problem. This is accessed through `hb.SAA(z)`, where `z` is an array of sampled scenarios. The scenarios are equally weighted unless you specify `w`.
 ```python
 saa = hb.SAA(rng.standard_normal((25, 1)))
 solution = nlp.solve(saa, rng, surrogate=surrogate)
 print(solution.u, solution.objective)
 ```
-
-`solution` holds `u` (N,), `x` (S, M) and `y` (S, P), a row per scenario, and the
+You can call `HybridNLP.solve` with a discretisation method and a fitted surrogate to solve the problem. The default behaviour is to solve the problem for the mean objective, $$\mathbb E [f]$$. The returned solution holds `u` (N,), `x` (S, M) and `y` (S, P), a row per scenario, and the
 `objective`.
 
 ## Hybrid BO
 
-Draw the scenarios once, before the loop, and keep them. Each iteration fits the GP,
-minimizes SoftEI over the scenarios, and measures the result:
-
+Alternatively, you can specify an acquisition function as the objective to solve a Bayesian optimisation problem. This can be implemented as a loop with a fixed set of scenarios. Here, for example, we minimise -EI over the scenarios and build a sequence of BO trials.
 ```python
 saa = hb.SAA(rng.standard_normal((25, 1)))
 for _ in range(10):
@@ -88,18 +74,16 @@ for _ in range(10):
         saa,
         rng,
         surrogate=surrogate,
-        objective=hb.obj.SoftEI(data.incumbents[-1], temperature=0.05),
+        objective=hb.obj.EI(data.incumbents[-1]),
         unknown_states_as_variables=False,
     )
-    data = data.extend(measure(solution.u, rng))
+    new = hb.Dataset.from_measurements(nlp, u=solution.u, y=np.sin(solution.u), rng=rng)
+    data = data.extend(new)
 ```
-
-`hb.obj.EI(incumbent)` is the plain expected improvement.
 
 ## Standard BO
 
-Standard BO is a problem with nothing known: one unknown state, the measured `f`, which
-is the objective. `hb.Exact()` gives EI in closed form, with no scenarios.
+We can recover non-hybrid problems as the case where we have no internal states `x` and `y`. In this case we have one unknown state, the measured `f`. This is the standard black-box BO. Solving with `hb.Exact()` tells the method to use closed-form EI rather than taking scenarios as in SAA.
 
 ```python
 fhat = hb.Var("fhat", start=(-10.0, 10.0))
@@ -119,10 +103,12 @@ solution = standard_nlp.solve(
 
 A fit or a `solve` raises `hb.NoSolutionError` if every start fails, and
 `Dataset.from_measurements` raises `hb.RootFindingError` if `g` has no root or a value
-isn't finite. Nothing is caught for you.
+isn't finite.
 
 The library logs at `INFO` on the `hybrid_bo` logger:
 `logging.getLogger("hybrid_bo").setLevel(logging.INFO)` shows it.
+
+You can also save and load datasets. This command will fail if the file already exists.
 
 ```python
 data.save("dataset.npz")
