@@ -2,34 +2,25 @@
 
 Hybrid-BO is a Python package for
 [Bayesian optimization for partially known systems using hybrid models](https://arxiv.org/abs/2603.11199).
-It optimizes a system whose equations are partly known: the known equations are used
-as they are, and a Gaussian process learns the unknown ones from measurements. It is
-built on [CasADi](https://web.casadi.org/).
+It minimizes `f(x, y, u)` over the decision variables `u`, where the known equations
+`0 = g(x, y, u)` are used as they are, and a Gaussian process learns the unknown ones,
+`y = h(x, u)`, from measurements. It is built on [CasADi](https://web.casadi.org/).
 
-The library fits GPs and solves one iteration of BO. You write the loop.
+The library fits GPs and solves the hybrid model once. You write the loop and the
+measurement.
 
 ## Install
 
 ```bash
-pip install "hybrid-bo[plots] @ git+https://github.com/jj2249/hybrid-bo.git@v0.9.0"
+pip install "hybrid-bo @ git+https://github.com/jj2249/hybrid-bo.git"
 ```
 
-`plots` adds matplotlib. The tag fixes the version, so the library can't change under your
-work.
+Add `@<tag>` to the URL to fix the version, so the library can't change under your work.
 
-To work on the library, install [pixi](https://pixi.sh):
+## The illustrative example
 
-```bash
-pixi run -e dev test    # pytest
-pixi run -e dev check   # lint, format and type check
-pixi run -e dev docs    # the API docs, in docs/_build/html
-```
-
-## Use
-
-State the problem, and how to measure the system. `measure(u, rng)` returns the measured
-variables as an array, and can run anything: a plant, an external simulator, or an oracle
-of your own.
+The known equation is `x + exp(x) = y`, and the unknown one is `y = sin(u)`. State what you
+know as a `HybridNLP`: the variables, `g`, and `f`. Each is read from `v` by name.
 
 ```python
 import casadi as cas
@@ -40,116 +31,113 @@ import hybrid_bo as hb
 u = hb.Var("u", lower=-2.0, upper=2.0)
 x = hb.Var("x", start=(-2.5, 1.0))
 y = hb.Var("y", start=(-2.0, 2.0))
-system = hb.System(
+nlp = hb.HybridNLP(
     u=[u],
     x=[x],
     y=[y],
-    g=lambda v: [v.x + cas.exp(v.x) - v.y],  # the known equation, 0 = g(x, y, u)
-    h_inputs=[u],  # the unknown equation is y = h(u), which a GP learns
-    measured=[y],
+    g=lambda v: [v.x + cas.exp(v.x) - v.y],
+    f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x - 4),
 )
-problem = hb.Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x - 4))
+```
 
+The measurement is yours: a plant, a simulator, or here an oracle. It measures `y` at `u`,
+and `Dataset.from_measurements` solves `g` for `x` and computes `f`. `u` and `y` may be a
+point or a set of points.
 
+```python
 def measure(u, rng):
-    return np.sin(u)
-
-
-def evaluate(u, rng):
-    """A one-row dataset: measure the system at u, and solve for the other states."""
-    return hb.reconstruct_states(
-        problem, u=u[None], measured=measure(u, rng)[None], rng=rng
-    )
+    return hb.Dataset.from_measurements(nlp, u=u, y=np.sin(u), rng=rng)
 
 
 rng = np.random.default_rng(0)
-gp = hb.gp.GP(mean=hb.gp.Zero(), kernel=hb.gp.Matern52(), noise_std=0.0)
-points = hb.lhs_points(system.u, 5, rng)
-initial = hb.reconstruct_states(
-    problem, u=points, measured=measure(points, rng), rng=rng
-)
+data = measure(hb.lhs_points([u], 2, rng), rng)
 ```
 
-**Hybrid BO** fits a GP to each unknown state. The scenarios are draws `z` and weights `w`.
-Draw them once, before the loop, and keep them: nothing checks that they stay the same.
+A GP of each unknown state is fitted to the data. It records its `inputs` and `output`.
 
 ```python
-dataset = initial
-z = rng.standard_normal((25, system.n_y))
-w = np.full(25, 1 / 25)
+gp = hb.gp.GP(kernel=hb.gp.Matern52(), mean=hb.gp.Zero(), noise_std=0.0)
+surrogate = [gp.fit(data, inputs=[u], output=y, rng=rng)]
+```
 
+## Minimize E[f] with SAA
+
+`hb.SAA(z)` averages over the scenarios `z`, a row per scenario and a column per unknown
+state, with equal weights unless you give `w`. The default objective is the mean, so this
+minimizes the expected `f` of the hybrid model:
+
+```python
+saa = hb.SAA(rng.standard_normal((25, 1)))
+solution = nlp.solve(saa, rng, surrogate=surrogate)
+print(solution.u, solution.objective)
+```
+
+`solution` holds `u` (N,), `x` (S, M) and `y` (S, P), a row per scenario, and the
+`objective`.
+
+## Hybrid BO
+
+Draw the scenarios once, before the loop, and keep them. Each iteration fits the GP,
+minimizes SoftEI over the scenarios, and measures the result:
+
+```python
+saa = hb.SAA(rng.standard_normal((25, 1)))
 for _ in range(10):
-    fitted = hb.fit_surrogate(system, dataset, gp=gp, rng=rng)
-    hybrid_nlp = hb.HybridNLP(
-        problem,
-        fitted,
-        z,
-        w,
-        objective=hb.EI(
-            hb.incumbents(dataset)[-1]
-        ),  # or hb.SoftEI(..., temperature=...)
+    surrogate = [gp.fit(data, inputs=[u], output=y, rng=rng)]
+    solution = nlp.solve(
+        saa,
+        rng,
+        surrogate=surrogate,
+        objective=hb.obj.SoftEI(data.incumbents[-1], temperature=0.05),
+        unknown_states_as_variables=False,
     )
-    u, x, y, value = hybrid_nlp.solve(rng)
-    dataset = hb.extend(dataset, evaluate(u, rng))
+    data = data.extend(measure(solution.u, rng))
 ```
 
-**Standard BO** fits one GP to the objective, so EI is exact and needs no scenarios.
-Its variables are just `u`, so `solve` gives the trial point and the objective:
+`hb.obj.EI(incumbent)` is the plain expected improvement.
+
+## Standard BO
+
+Standard BO is a problem with nothing known: one unknown state, the measured `f`, which
+is the objective. `hb.Exact()` gives EI in closed form, with no scenarios.
 
 ```python
-dataset = initial
-
-for _ in range(10):
-    fitted = gp.fit(dataset.u, dataset.f, rng)
-    standard = hb.standard_acquisition(problem, fitted, hb.incumbents(dataset)[-1])
-    u, value = standard.solve(rng)
-    dataset = hb.extend(dataset, evaluate(u, rng))
-```
-
-**Without BO**, a `HybridNLP` optimizes the hybrid model itself. `objective` is any function
-of f under the scenarios and the weights. `hb.mean` gives the expected objective, and over
-one scenario at `z = 0`, the nominal objective:
-
-```python
-fitted = hb.fit_surrogate(system, dataset, gp=gp, rng=rng)
-nominal = hb.HybridNLP(
-    problem, fitted, np.zeros((1, system.n_y)), [1.0], objective=hb.mean
+fhat = hb.Var("fhat", start=(-10.0, 10.0))
+standard_nlp = hb.HybridNLP(u=[u], y=[fhat], f=lambda v: v.fhat)
+observed = hb.Dataset.from_measurements(
+    standard_nlp, u=data.u, y=data.f[:, None], rng=rng
 )
-u, x, y, value = nominal.solve(rng)
+surrogate = [gp.fit(observed, inputs=[u], output=fhat, rng=rng)]
+solution = standard_nlp.solve(
+    hb.Exact(), rng, surrogate=surrogate, objective=hb.obj.EI(data.incumbents[-1])
+)
 ```
 
-**A baseline** is points through the same steps, from `hb.lhs_points` or
-`hb.uniform_points`:
+`examples/illustrative_example.py` runs both loops over several seeds and compares them.
 
-```python
-dataset = initial
-
-for point in hb.uniform_points(system.u, 10, rng):
-    dataset = hb.extend(dataset, evaluate(point, rng))
-```
+## Errors, logs and saving
 
 A fit or a `solve` raises `hb.NoSolutionError` if every start fails, and
-`hb.reconstruct_states` raises `hb.RootFindingError` if the known equations have no root
-or a value isn't finite. Your loop decides what to do: nothing is caught for you.
+`Dataset.from_measurements` raises `hb.RootFindingError` if `g` has no root or a value
+isn't finite. Nothing is caught for you.
 
-The library logs what it fits and how many starts of each solve succeed, at `INFO` on the
-`hybrid_bo` logger; `logging.getLogger("hybrid_bo").setLevel(logging.INFO)` shows it.
-
-A dataset can be saved, and extended later. Nothing records how it was produced.
+The library logs at `INFO` on the `hybrid_bo` logger:
+`logging.getLogger("hybrid_bo").setLevel(logging.INFO)` shows it.
 
 ```python
-hb.save_dataset(dataset, "dataset.npz")
-dataset = hb.load_dataset("dataset.npz")
+data.save("dataset.npz")
+data = hb.Dataset.load("dataset.npz")
 ```
 
-Plots draw on the axes you give them: `hb.plots.convergence` and `hb.plots.regret` take
-incumbent curves per label, `hb.plots.surrogate` draws a fitted GP of one input, and
-`hb.plots.iteration` draws what an iteration minimized, from
-`hb.plots.objective_on_grid`, which gives the objective over a grid
-of `u` and a `Dataset` per scenario.
-`examples/illustrative_example.py` compares hybrid and standard BO and draws both.
-`plt.style.use("hybrid_bo.default")` gives the library's look; change it as any matplotlib
-style, with `plt.rcParams` or a style of your own.
+## Develop
+
+To work on the library, install [pixi](https://pixi.sh):
+
+```bash
+pixi run -e dev test    # pytest
+pixi run -e dev check   # lint, format and type check
+pixi run -e dev docs    # the API docs, in docs/_build/html
+```
 
 ## License
 
