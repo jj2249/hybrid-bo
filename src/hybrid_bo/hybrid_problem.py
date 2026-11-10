@@ -48,12 +48,16 @@ class Exact:
 @dataclass(frozen=True)
 class Solution:
     """The minimizer u (N,), the states there x (S, M) and y (S, P), a row per scenario
-    (S = 1 for `Exact`), and the objective."""
+    (S = 1 for `Exact`), and the minimized value, with the method, surrogate and
+    objective that `solve` minimized it by."""
 
     u: np.ndarray
     x: np.ndarray
     y: np.ndarray
-    objective: float
+    value: float
+    method: SAA | Exact
+    surrogate: tuple[FittedGP, ...] = field(repr=False)
+    objective: Mean | EI | SoftEI
 
 
 @dataclass(frozen=True, init=False)
@@ -120,6 +124,27 @@ class HybridNLP:
         Raises `ValueError` for a surrogate or method that doesn't fit the problem, and
         `NoSolutionError` if every start fails.
         """
+        nlp, scenarios = self._nlp(
+            method, surrogate, objective, unknown_states_as_variables
+        )
+        best, value = nlp.solve(rng, n_starts=n_starts, solver=solver)
+        x, y, _ = (part.full() for part in scenarios(best))
+        u = best[: len(self.u)]
+        return Solution(u, x, y, value, method, tuple(surrogate), objective)
+
+    def _nlp(
+        self,
+        method: SAA | Exact,
+        surrogate: Sequence[FittedGP],
+        objective: Mean | EI | SoftEI,
+        unknown_states_as_variables: bool,
+    ) -> tuple[NLP, cas.Function]:
+        """The `NLP` that `solve` minimizes, over u and then, if they are variables,
+        the scenario states, and `scenarios`: its decisions -> x (S, M), y (S, P) and
+        f (S, 1).
+
+        Raises `ValueError` for a surrogate or method that doesn't fit the problem.
+        """
         gps = {gp.output: gp for gp in surrogate}
         if len(surrogate) != len(self.y) or set(gps) != set(self.y):
             msg = (
@@ -142,23 +167,25 @@ class HybridNLP:
             if self.x or not any(is_f):
                 msg = "Exact needs f to be one unknown state, and no states in x"
                 raise ValueError(msg)
-            gp = gps[self.y[is_f.index(True)]]
             columns = dict(zip(self.u, cas.vertsplit(u), strict=True))
-            mean, std = gp.predict(cas.horzcat(*(columns[var] for var in gp.inputs)))
+            mean, std = zip(
+                *(
+                    gps[var].predict(
+                        cas.horzcat(*(columns[v] for v in gps[var].inputs))
+                    )
+                    for var in self.y
+                ),
+                strict=True,
+            )
+            j = is_f.index(True)
             nlp = NLP(
-                cas.Function("objective", [u], [objective.exact(mean, std)]),
+                cas.Function("objective", [u], [objective.exact(mean[j], std[j])]),
                 np.array([var.lower for var in self.u]),
                 np.array([var.upper for var in self.u]),
                 start_bounds=start_bounds(self.u),
             )
-            u_best, value = nlp.solve(rng, n_starts=n_starts, solver=solver)
-            y_best = [
-                gps[var].predict(
-                    np.array([[u_best[self.u.index(v)] for v in gps[var].inputs]])
-                )[0]
-                for var in self.y
-            ]
-            return Solution(u_best, np.zeros((1, 0)), np.column_stack(y_best), value)
+            outputs = [Symbolic(1, 0), cas.horzcat(*mean), mean[j]]
+            return nlp, cas.Function("scenarios", [u], outputs)
 
         # SAA: each scenario s has its own states x_s and y_s, with g(x_s, y_s, u) = 0
         z, w = method.z, method.w
@@ -216,9 +243,4 @@ class HybridNLP:
             cas.Function("g", [decisions], [cas.vertcat(*constraints)]),
             start_bounds(variables),
         )
-        best, value = nlp.solve(rng, n_starts=n_starts, solver=solver)
-        x_best = best[n_u : n_u + n_scenarios * n_x].reshape(
-            (n_scenarios, n_x), order="F"
-        )
-        y_best = cas.Function("y", [decisions], [y])(best).full()
-        return Solution(best[:n_u], x_best, y_best, value)
+        return nlp, cas.Function("scenarios", [decisions], [x, y, f])

@@ -135,7 +135,7 @@ def test_exact_ei_is_the_closed_form():
     mean, std = fitted.predict(solution.u[None])
     gamma = (incumbent - mean[0]) / std[0]
     ei = (incumbent - mean[0]) * norm.cdf(gamma) + std[0] * norm.pdf(gamma)
-    assert solution.objective == pytest.approx(-ei, rel=1e-6)
+    assert solution.value == pytest.approx(-ei, rel=1e-6)
     np.testing.assert_allclose(solution.y, [[mean[0]]])
 
 
