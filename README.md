@@ -11,10 +11,10 @@ We provide methods for maximum likelihood fitting of GPs and solving the NLP wit
 ## Install
 
 ```bash
-pip install "hybrid-bo @ git+https://github.com/jj2249/hybrid-bo.git"
+pip install "hybrid-bo @ git+https://github.com/jj2249/hybrid-bo.git@v0.1.0"
 ```
 
-Add `@<tag>` to the URL to fix the version.
+Change `@v0.1.0` to install another version.
 
 ## The illustrative example
 
