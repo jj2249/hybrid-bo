@@ -1,5 +1,4 @@
-"""Numerical tools that know nothing of systems or GPs: the symbol type, drawing points
-from a box, affine scaling, and a stable log softplus."""
+"""Numerical tools that know nothing of the problem or GPs."""
 
 from dataclasses import dataclass
 from typing import Any
@@ -17,14 +16,8 @@ LOG_SOFTPLUS_LINEAR_BELOW = -30.0
 def lhs(
     lower: np.ndarray, upper: np.ndarray, n: int, rng: np.random.Generator
 ) -> np.ndarray:
-    """n points from a Latin hypercube scaled to the box [lower, upper], shape (n, d).
-
-    `lower` and `upper` have shape (d,) and must be finite. The draw is scipy's
-    `qmc.LatinHypercube(d, rng=rng).random(n)`, made here because scipy is
-    only a dev dependency: from the next spawned child of `rng`, which
-    leaves its stream untouched, a point within each of the n strata, then a shuffle of
-    the strata of each dimension.
-    """
+    """n points (n, d) from a Latin hypercube over the finite box [lower, upper], each
+    (d,), as scipy's `qmc.LatinHypercube` draws them, from a spawned child of `rng`."""
     d = len(lower)
     child = rng.spawn(1)[0]
     within_stratum = child.uniform(size=(n, d))
@@ -32,17 +25,6 @@ def lhs(
     for strata_of_dimension in strata:
         child.shuffle(strata_of_dimension)
     samples = (strata.T - within_stratum) / n
-    return lower + (upper - lower) * samples
-
-
-def uniform(
-    lower: np.ndarray, upper: np.ndarray, n: int, rng: np.random.Generator
-) -> np.ndarray:
-    """n points drawn uniformly from the box [lower, upper], shape (n, d).
-
-    `lower` and `upper` have shape (d,) and must be finite.
-    """
-    samples = rng.uniform(size=(n, len(lower)))
     return lower + (upper - lower) * samples
 
 
@@ -65,8 +47,8 @@ class Scaler:
 
     @classmethod
     def standard(cls, values: np.ndarray) -> "Scaler":
-        """The scaler that gives each column of `values` (n, d) zero mean and unit standard
-        deviation (`ddof=0`). A constant column is only shifted."""
+        """The scaler that maps each column of `values` (n, d) to zero mean and unit
+        std. A constant column is only shifted."""
         mean, std = values.mean(0), values.std(0)
         std = np.where(std == 0.0, 1.0, std)
         return cls(1 / std, -mean / std)
@@ -83,12 +65,8 @@ class Scaler:
 
 
 def log_softplus(t: Any) -> Any:
-    """log log(1 + exp(t)), elementwise for CasADi expressions, finite with a
-    finite gradient for any finite t.
-
-    Far below zero, log(1 + exp(t)) underflows, so its log is taken as t; above
-    zero, it is t + log(1 + exp(-t)), so exp doesn't overflow.
-    """
+    """log log(1 + exp(t)) of a CasADi expression, elementwise, finite with a finite
+    gradient for any finite t."""
     below = cas.log(cas.log1p(cas.exp(t)))
     above = cas.log(t + cas.log1p(cas.exp(-t)))
     exact = cas.if_else(t > 0, above, below)

@@ -15,10 +15,6 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 
-[project.optional-dependencies]
-# matplotlib for `hb.plots`
-plots = ["matplotlib>=3.11.2,<4"]
-
 [build-system]
 build-backend = "hatchling.build"
 requires = ["hatchling"]

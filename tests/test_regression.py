@@ -1,10 +1,7 @@
-"""Regression tests: each method of the illustrative example vs stored results.
+"""Regression tests: each method on the illustrative example vs stored results.
 
-These lock in the *current* behavior. If a PR intentionally changes behavior,
-regenerate with `pixi run -e dev test --update-baselines` and review the JSON diff.
-
-Each method runs as the plain loop a script writes (`plain_loop.py`), one point at a
-time, and each result is mapped to the keys of the stored JSON to compare.
+If a PR intentionally changes behavior, regenerate with
+`pixi run -e dev test --update-baselines` and review the JSON diff.
 """
 
 import json
@@ -15,7 +12,7 @@ from pathlib import Path
 import illustrative_example as ex
 import numpy as np
 import pytest
-from plain_loop import evaluate_points, hybrid_loop, standard_loop
+from plain_loop import hybrid_loop, measure_points, standard_loop
 
 import hybrid_bo as hb
 
@@ -26,86 +23,55 @@ RTOL, ATOL = 1e-6, 1e-8
 SEED, N_ITERATIONS = 0, 2
 
 # What a run of a method gives: the dataset, and each iteration's solution
-Result = tuple[hb.Dataset, Sequence[tuple]]
+Result = tuple[hb.Dataset, Sequence[hb.Solution]]
 
 
 def run_hybrid_bo(
-    acquisition: Callable[[float], hb.EI | hb.SoftEI],
-    measure: hb.Measure,
-    rng: np.random.Generator,
+    objective: Callable[[float], hb.obj.EI | hb.obj.SoftEI], rng: np.random.Generator
 ) -> Result:
     """Hybrid BO: the initial points, the scenarios once, then the loop."""
-    points = hb.lhs_points(ex.system.u, ex.N_INITIAL, rng)
-    z = rng.standard_normal((25, ex.system.n_y))
+    points = hb.lhs_points([ex.u], ex.N_INITIAL, rng)
+    saa = hb.SAA(rng.standard_normal((25, 1)))
     return hybrid_loop(
-        ex.problem,
-        measure,
-        evaluate_points(ex.problem, measure, points, rng),
-        z,
-        np.full(25, 1 / 25),
+        measure_points(points, rng),
+        saa,
         rng,
         n_iterations=N_ITERATIONS,
-        gp=ex.gp,
-        acquisition=acquisition,
-        unknown_states_as_variables=False,
+        objective=objective,
     )
 
 
-def run_standard_bo(measure: hb.Measure, rng: np.random.Generator) -> Result:
+def run_standard_bo(rng: np.random.Generator) -> Result:
     """Standard BO: the initial points, then the loop."""
-    points = hb.lhs_points(ex.system.u, ex.N_INITIAL, rng)
-    return standard_loop(
-        ex.problem,
-        measure,
-        evaluate_points(ex.problem, measure, points, rng),
-        rng,
-        n_iterations=N_ITERATIONS,
-        gp=ex.gp,
-    )
+    points = hb.lhs_points([ex.u], ex.N_INITIAL, rng)
+    return standard_loop(measure_points(points, rng), rng, n_iterations=N_ITERATIONS)
 
 
-def run_latin_hypercube_sampling(
-    measure: hb.Measure, rng: np.random.Generator
-) -> Result:
+def run_latin_hypercube_sampling(rng: np.random.Generator) -> Result:
     """Latin hypercube sampling: the initial points and the design, then every point."""
-    points = hb.lhs_points(ex.system.u, ex.N_INITIAL, rng)
-    design = hb.lhs_points(ex.system.u, N_ITERATIONS, rng)
-    all_points = np.concatenate([points, design])
-    return evaluate_points(ex.problem, measure, all_points, rng), []
+    points = hb.lhs_points([ex.u], ex.N_INITIAL, rng)
+    design = hb.lhs_points([ex.u], N_ITERATIONS, rng)
+    return measure_points(np.concatenate([points, design]), rng), []
 
 
-def run_uniform_sampling(measure: hb.Measure, rng: np.random.Generator) -> Result:
-    """Uniform sampling: the initial points and the design, then every point."""
-    points = hb.lhs_points(ex.system.u, ex.N_INITIAL, rng)
-    design = hb.uniform_points(ex.system.u, N_ITERATIONS, rng)
-    all_points = np.concatenate([points, design])
-    return evaluate_points(ex.problem, measure, all_points, rng), []
-
-
-# The illustrative example's methods, with their labels in the stored results
 METHODS = {
-    "hybrid_bo": partial(run_hybrid_bo, hb.EI),
-    "hybrid_bo_soft": partial(
-        run_hybrid_bo,
-        partial(hb.SoftEI, temperature=50e-3),
-    ),
+    "hybrid_bo": partial(run_hybrid_bo, hb.obj.EI),
+    "hybrid_bo_soft": partial(run_hybrid_bo, partial(hb.obj.SoftEI, temperature=50e-3)),
     "standard_bo": run_standard_bo,
     "latin_hypercube_sampling": run_latin_hypercube_sampling,
-    "uniform_sampling": run_uniform_sampling,
 }
 
 
 def as_baseline_columns(
-    dataset: hb.Dataset,
-    solutions: Sequence[tuple],
+    dataset: hb.Dataset, solutions: Sequence[hb.Solution]
 ) -> dict[str, np.ndarray]:
-    """The run under the stored keys: they store y inside x, f as a column, and split
-    every array into the initial points and the rest."""
+    """The run under the stored keys: y inside x, f as a column, and every array split
+    into the initial points and the rest."""
     columns = {
         "u": dataset.u,
         "x": np.column_stack([dataset.x, dataset.y]),
         "f": dataset.f[:, np.newaxis],
-        "incumbents": hb.incumbents(dataset)[:, np.newaxis],
+        "incumbents": dataset.incumbents[:, np.newaxis],
     }
     n = ex.N_INITIAL
     baseline = {
@@ -114,23 +80,20 @@ def as_baseline_columns(
         for name, value in columns.items()
     }
 
-    # The BO methods' acquisition solutions: the value per iteration, and hybrid BO's
-    # scenario states (iteration, scenario, state)
+    # The BO methods' solutions: the objective per iteration, and hybrid BO's scenario
+    # states (iteration, scenario, state)
     if solutions:
-        baseline["acquisition_values"] = np.array([s[-1] for s in solutions])
-    scenario_solutions = [s for s in solutions if len(s) == 4]
-    if scenario_solutions:
-        baseline["acquisition_x"] = np.stack([s[1] for s in scenario_solutions])
-        baseline["acquisition_y"] = np.stack([s[2] for s in scenario_solutions])
+        baseline["acquisition_values"] = np.array([s.objective for s in solutions])
+    if solutions and solutions[0].x.shape[1]:
+        baseline["acquisition_x"] = np.stack([s.x for s in solutions])
+        baseline["acquisition_y"] = np.stack([s.y for s in solutions])
     return baseline
 
 
 def run_method(method: str) -> dict[str, np.ndarray]:
-    """Runs one run of a method as the experiment does and returns it under the stored
-    keys."""
-    # As in the experiment: one generator per run, initial points drawn from it
+    """One seeded run of a method, under the stored keys."""
     rng = np.random.default_rng(SEED).spawn(1)[0]
-    dataset, solutions = METHODS[method](ex.measure, rng)
+    dataset, solutions = METHODS[method](rng)
     return as_baseline_columns(dataset, solutions)
 
 

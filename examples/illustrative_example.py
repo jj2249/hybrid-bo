@@ -1,7 +1,7 @@
 """Hybrid BO with SAA-SoftEI against standard BO on the illustrative example.
 
 The known equation is x + exp(x) = y, and the unknown one is y = sin(u), which the
-methods never see. Writes regret.png and iteration.png to the current folder:
+methods never see. Prints each method's median regret over the runs:
 
     pixi run -e dev python examples/illustrative_example.py
 """
@@ -9,7 +9,6 @@ methods never see. Writes regret.png and iteration.png to the current folder:
 import logging
 
 import casadi as cas
-import matplotlib.pyplot as plt
 import numpy as np
 
 import hybrid_bo as hb
@@ -18,112 +17,67 @@ import hybrid_bo as hb
 logging.basicConfig()
 logging.getLogger("hybrid_bo").setLevel(logging.INFO)
 
-plt.style.use("hybrid_bo.default")
-
 N_INITIAL, N_ITERATIONS, N_RUNS = 2, 5, 10
 OPTIMUM = -50.4608044704652  # the lowest f, at u = -0.446
 
-# The problem: what we know about the system, and what we want
+# What we know about the system, and what we want
 u = hb.Var("u", lower=-2.0, upper=2.0)
 x = hb.Var("x", start=(-2.5, 1.0))
 y = hb.Var("y", start=(-2.0, 2.0))
-system = hb.System(
+nlp = hb.HybridNLP(
     u=[u],
     x=[x],
     y=[y],
     g=lambda v: [v.x + cas.exp(v.x) - v.y],
-    h_inputs=[u],
-    measured=[y],
+    f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x - 4),
 )
-problem = hb.Problem(system, f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x - 4))
 
 
 def measure(u, rng):
     """The system: here an oracle, but it could run a plant or a simulator."""
-    return np.sin(u)
+    return hb.Dataset.from_measurements(nlp, u=u, y=np.sin(u), rng=rng)
 
 
-# The prior GP
-gp = hb.gp.GP(
-    mean=hb.gp.Zero(),
-    kernel=hb.gp.Scale(hb.gp.Matern52(), hb.gp.Param((0.1, 10.0))),
-    noise_std=0.0,
-)
-
-figure, axes = plt.subplots(3, 2, sharex=True, figsize=(10, 8), layout="constrained")
+gp = hb.gp.GP(kernel=hb.gp.Matern52(), mean=hb.gp.Zero(), noise_std=0.0)
 
 # Hybrid BO: a GP of the unknown state, inside the known equations
-hybrid_curves = []
+hybrid_regret = []
 for seed in range(N_RUNS):
     rng = np.random.default_rng(seed)
-    points = hb.lhs_points(system.u, N_INITIAL, rng)
-    dataset = hb.reconstruct_states(
-        problem, u=points, measured=measure(points, rng), rng=rng
-    )
-    z = rng.standard_normal((25, system.n_y))  # the scenarios, once, before the loop
-    w = np.full(25, 1 / 25)
+    data = measure(hb.lhs_points([u], N_INITIAL, rng), rng)
+    saa = hb.SAA(rng.standard_normal((25, 1)))  # the scenarios, once, before the loop
     for _ in range(N_ITERATIONS):
-        before = dataset
-        incumbent = hb.incumbents(dataset)[-1]
-        fitted = hb.fit_surrogate(system, dataset, gp=gp, rng=rng)
-        hybrid_nlp = hb.HybridNLP(
-            problem,
-            fitted,
-            z,
-            w,
-            objective=hb.SoftEI(incumbent, temperature=50e-3),
+        surrogate = [gp.fit(data, inputs=[u], output=y, rng=rng)]
+        solution = nlp.solve(
+            saa,
+            rng,
+            surrogate=surrogate,
+            objective=hb.obj.SoftEI(data.incumbents[-1], temperature=0.05),
             unknown_states_as_variables=False,
         )
-        solution = hybrid_nlp.solve(rng)
-        u_new = solution[0][None]
-        new = hb.reconstruct_states(
-            problem, u=u_new, measured=measure(u_new, rng), rng=rng
-        )
-        dataset = hb.extend(dataset, new)
-    hybrid_curves.append(hb.incumbents(dataset))
+        data = data.extend(measure(solution.u, rng))
+    hybrid_regret.append(data.incumbents - OPTIMUM)
 
-# The last iteration of the last run
-hb.plots.iteration(hybrid_nlp, solution, fitted[0], before, axes[:, 0])
-axes[0, 0].set(title="Hybrid BO, SAA-SoftEI", ylabel="y")
-
-# Standard BO: a GP of the objective
-standard_curves = []
+# Standard BO: a GP of the measured f, an unknown state of a problem with nothing known
+fhat = hb.Var("fhat", start=(-10.0, 10.0))
+standard_nlp = hb.HybridNLP(u=[u], y=[fhat], f=lambda v: v.fhat)
+standard_regret = []
 for seed in range(N_RUNS):
     rng = np.random.default_rng(seed)
-    points = hb.lhs_points(system.u, N_INITIAL, rng)
-    dataset = hb.reconstruct_states(
-        problem, u=points, measured=measure(points, rng), rng=rng
-    )
+    data = measure(hb.lhs_points([u], N_INITIAL, rng), rng)
     for _ in range(N_ITERATIONS):
-        before = dataset
-        incumbent = hb.incumbents(dataset)[-1]
-        fitted = gp.fit(dataset.u, dataset.f, rng)
-        standard = hb.standard_acquisition(problem, fitted, incumbent)
-        solution = standard.solve(rng)
-        u_new = solution[0][None]
-        new = hb.reconstruct_states(
-            problem, u=u_new, measured=measure(u_new, rng), rng=rng
+        observed = hb.Dataset.from_measurements(
+            standard_nlp, u=data.u, y=data.f[:, None], rng=rng
         )
-        dataset = hb.extend(dataset, new)
-    standard_curves.append(hb.incumbents(dataset))
+        surrogate = [gp.fit(observed, inputs=[u], output=fhat, rng=rng)]
+        solution = standard_nlp.solve(
+            hb.Exact(),
+            rng,
+            surrogate=surrogate,
+            objective=hb.obj.EI(data.incumbents[-1]),
+        )
+        data = data.extend(measure(solution.u, rng))
+    standard_regret.append(data.incumbents - OPTIMUM)
 
-axes[0, 1].remove()
-axes[1, 1].set_prop_cycle(color=["tab:orange"])
-hb.plots.iteration(standard, solution, fitted, before, axes[1:, 1])
-axes[1, 1].set(title="Standard BO", ylabel="f")
-
-# The true curves: the states and f at a grid of u, from the system itself
-grid = np.linspace(-2.0, 2.0, 201)[:, None]
-truth = hb.reconstruct_states(problem, u=grid, measured=measure(grid, rng), rng=rng)
-axes[0, 0].plot(grid, truth.y, "k--", label="oracle")
-axes[1, 0].plot(grid, truth.f, "k--", label="oracle")
-axes[1, 1].plot(grid, truth.f, "k--", label="oracle")
-for ax in figure.axes:
-    ax.legend(fontsize="small")
-figure.savefig("iteration.png", dpi=150)
-
-# Regret over the runs
-figure, ax = plt.subplots(layout="constrained")
-curves = {"hybrid BO": hybrid_curves, "standard BO": standard_curves}
-hb.plots.regret(curves, OPTIMUM, ax)
-figure.savefig("regret.png", dpi=150)
+for label, regret in (("hybrid BO", hybrid_regret), ("standard BO", standard_regret)):
+    print(f"{label} median regret per point:", np.median(regret, axis=0).round(3))

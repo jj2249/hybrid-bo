@@ -1,90 +1,62 @@
-"""The loop a script writes, one point at a time. `measure` is the script's function of
-(u, rng), returning the measured variables as an array."""
+"""The loops a script writes, one point at a time."""
 
 from collections.abc import Callable
 
+import illustrative_example as ex
 import numpy as np
 
 import hybrid_bo as hb
-from hybrid_bo.gp import GP
 
 
-def evaluate_point(
-    problem: hb.Problem, measure: hb.Measure, u: np.ndarray, rng: np.random.Generator
-) -> hb.Dataset:
-    """Measures the system at u (N,) and solves for its states: a one-row dataset."""
-    measured = measure(u, rng)
-    return hb.reconstruct_states(
-        problem, u=u[np.newaxis], measured=measured[np.newaxis], rng=rng
-    )
-
-
-def evaluate_points(
-    problem: hb.Problem,
-    measure: hb.Measure,
-    points: np.ndarray,
-    rng: np.random.Generator,
-) -> hb.Dataset:
-    """The dataset of the rows of `points` (n, N), evaluated one after the other."""
-    dataset = evaluate_point(problem, measure, points[0], rng)
+def measure_points(points: np.ndarray, rng: np.random.Generator) -> hb.Dataset:
+    """The rows of `points` (n, N), measured one after the other."""
+    data = ex.measure(points[0], rng)
     for u in points[1:]:
-        dataset = hb.extend(dataset, evaluate_point(problem, measure, u, rng))
-    return dataset
+        data = data.extend(ex.measure(u, rng))
+    return data
 
 
 def hybrid_loop(
-    problem: hb.Problem,
-    measure: hb.Measure,
-    dataset: hb.Dataset,
-    z: np.ndarray,
-    w: np.ndarray,
+    data: hb.Dataset,
+    method: hb.SAA,
     rng: np.random.Generator,
     *,
     n_iterations: int,
-    gp: GP,
-    acquisition: Callable[[float], hb.EI | hb.SoftEI],
-    unknown_states_as_variables: bool = True,
-) -> tuple[hb.Dataset, list[tuple]]:
-    """Hybrid BO from `dataset`, with the scenarios z and w drawn once, before the loop.
-
-    Returns the grown dataset and each iteration's solution.
-    """
+    objective: Callable[[float], hb.obj.EI | hb.obj.SoftEI],
+) -> tuple[hb.Dataset, list[hb.Solution]]:
+    """Hybrid BO from `data`: the grown dataset and each iteration's solution."""
     solutions = []
     for _ in range(n_iterations):
-        fitted = hb.fit_surrogate(problem.system, dataset, gp=gp, rng=rng)
-        incumbent = hb.incumbents(dataset)[-1]
-        hybrid_nlp = hb.HybridNLP(
-            problem,
-            fitted,
-            z,
-            w,
-            objective=acquisition(incumbent),
-            unknown_states_as_variables=unknown_states_as_variables,
+        surrogate = [ex.gp.fit(data, inputs=[ex.u], output=ex.y, rng=rng)]
+        solution = ex.nlp.solve(
+            method,
+            rng,
+            surrogate=surrogate,
+            objective=objective(data.incumbents[-1]),
+            unknown_states_as_variables=False,
         )
-        solution = hybrid_nlp.solve(rng)
-        dataset = hb.extend(dataset, evaluate_point(problem, measure, solution[0], rng))
+        data = data.extend(ex.measure(solution.u, rng))
         solutions.append(solution)
-    return dataset, solutions
+    return data, solutions
 
 
 def standard_loop(
-    problem: hb.Problem,
-    measure: hb.Measure,
-    dataset: hb.Dataset,
-    rng: np.random.Generator,
-    *,
-    n_iterations: int,
-    gp: GP,
-) -> tuple[hb.Dataset, list[tuple]]:
-    """Standard BO from `dataset`: a GP of the measured objective over u.
-
-    Returns the grown dataset and each iteration's solution.
-    """
+    data: hb.Dataset, rng: np.random.Generator, *, n_iterations: int
+) -> tuple[hb.Dataset, list[hb.Solution]]:
+    """Standard BO from `data`, a GP of the measured f over u: the grown dataset of the
+    system and each iteration's solution."""
     solutions = []
     for _ in range(n_iterations):
-        fitted = gp.fit(dataset.u, dataset.f, rng)
-        incumbent = hb.incumbents(dataset)[-1]
-        solution = hb.standard_acquisition(problem, fitted, incumbent).solve(rng)
-        dataset = hb.extend(dataset, evaluate_point(problem, measure, solution[0], rng))
+        observed = hb.Dataset.from_measurements(
+            ex.standard_nlp, u=data.u, y=data.f[:, np.newaxis], rng=rng
+        )
+        surrogate = [ex.gp.fit(observed, inputs=[ex.u], output=ex.fhat, rng=rng)]
+        solution = ex.standard_nlp.solve(
+            hb.Exact(),
+            rng,
+            surrogate=surrogate,
+            objective=hb.obj.EI(data.incumbents[-1]),
+        )
+        data = data.extend(ex.measure(solution.u, rng))
         solutions.append(solution)
-    return dataset, solutions
+    return data, solutions
