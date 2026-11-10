@@ -20,18 +20,12 @@ docs/_build/
 docs/_static/
 docs/_templates/
 
-# Data files
-*.pkl
-
-
-
 # Personal Claude Code settings
 .claude/settings.local.json
 
 # Coverage data
 .coverage
 htmlcov/
-
 
 # Results and personal scripts, kept out of the repository
 /results/
