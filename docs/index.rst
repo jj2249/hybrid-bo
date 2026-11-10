@@ -28,7 +28,7 @@ a plant, an external simulator or an oracle of your own:
        data = data.extend(new)
 
 The `README <https://github.com/jj2249/hybrid-bo#readme>`_ has a complete example, with
-standard BO and the baselines. The API reference covers the rest.
+min E[f] by SAA and standard BO. The API reference covers the rest.
 
 .. toctree::
    :hidden:
