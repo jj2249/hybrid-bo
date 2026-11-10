@@ -58,10 +58,10 @@ We provide an implementation of sample-average approximation (SAA) to solve the 
 ```python
 saa = hb.SAA(rng.standard_normal((25, 1)))
 solution = nlp.solve(saa, rng, surrogate=surrogate)
-print(solution.u, solution.objective)
+print(solution.u, solution.value)
 ```
 You can call `HybridNLP.solve` with a discretisation method and a fitted surrogate to solve the problem. The default behaviour is to solve the problem for the mean objective, $$\mathbb E [f]$$. The returned solution holds `u` (N,), `x` (S, M) and `y` (S, P), a row per scenario, and the
-`objective`.
+minimized `value`, with the `method`, `surrogate` and `objective` it was solved by.
 
 ## Hybrid BO
 

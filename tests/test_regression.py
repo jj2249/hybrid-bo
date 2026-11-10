@@ -83,7 +83,7 @@ def as_baseline_columns(
     # The BO methods' solutions: the objective per iteration, and hybrid BO's scenario
     # states (iteration, scenario, state)
     if solutions:
-        baseline["acquisition_values"] = np.array([s.objective for s in solutions])
+        baseline["acquisition_values"] = np.array([s.value for s in solutions])
     if solutions and solutions[0].x.shape[1]:
         baseline["acquisition_x"] = np.stack([s.x for s in solutions])
         baseline["acquisition_y"] = np.stack([s.y for s in solutions])
