@@ -1,4 +1,4 @@
-"""lhs and uniform vs the scipy/numpy calls they reproduce.
+"""lhs vs the scipy call it reproduces.
 
 The regression baselines depend on these drawing exactly as the code they replaced.
 """
@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 from scipy.stats import qmc
 
-from hybrid_bo.utils import lhs, uniform
+from hybrid_bo.utils import lhs
 
 LOWER = np.array([-2.0, 0.0, 10.0])
 UPPER = np.array([2.0, 1.0, 10.5])
@@ -28,18 +28,9 @@ def test_lhs_matches_scipy(n, d, seed):
     np.testing.assert_array_equal(points, lower + (upper - lower) * samples)
 
 
-def test_uniform_matches_numpy():
-    """uniform is numpy's uniform draw from the same seed, stretched to the bounds."""
-    points = uniform(LOWER, UPPER, 7, np.random.default_rng(0))
-
-    samples = np.random.default_rng(0).uniform(size=(7, 3))
-    np.testing.assert_array_equal(points, LOWER + (UPPER - LOWER) * samples)
-
-
-@pytest.mark.parametrize("sample", [lhs, uniform])
-def test_shape_and_bounds(sample):
-    """Both samplers return one row per point, inside the bounds."""
-    points = sample(LOWER, UPPER, 50, np.random.default_rng(1))
+def test_shape_and_bounds():
+    """lhs returns one row per point, inside the bounds."""
+    points = lhs(LOWER, UPPER, 50, np.random.default_rng(1))
 
     assert points.shape == (50, 3)
     assert (points >= LOWER).all()

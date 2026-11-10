@@ -1,14 +1,16 @@
 """The library's exceptions."""
 
-from hybrid_bo.dataset import Dataset
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from hybrid_bo.dataset import Dataset
 
 
 class RootFindingError(Exception):
-    """No start of a root-finding solve gave a root within the bounds, or a measured
-    variable or decision variable isn't finite. `dataset` holds the points that worked,
-    if any were given."""
+    """No root of g within the bounds, or a value that isn't finite. `dataset` holds
+    the points that worked, if any were given."""
 
-    dataset: Dataset | None = None
+    dataset: "Dataset | None" = None
 
 
 class NoSolutionError(Exception):

@@ -1,197 +1,224 @@
-"""The hybrid model as an optimization problem: the known equations with the surrogate
-model embedded, over scenarios of the GPs' prediction of the unknown states.
-
-A `HybridNLP` discretizes the unknown states into scenarios, and minimizes an objective of
-f under them. For hybrid BO that objective is an acquisition function; `mean` optimizes the
-hybrid model itself. `solve` it, and pass it to the plots to see what was minimized.
-"""
+"""The hybrid NLP: min f(x, y, u) subject to 0 = g(x, y, u), with y from fitted GPs,
+solved by a sample average over scenarios (`SAA`) or in closed form (`Exact`)."""
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import casadi as cas
 import numpy as np
 
 from hybrid_bo.gp import FittedGP
-from hybrid_bo.problem import Problem, Var, start_bounds
+from hybrid_bo.obj import EI, Mean, SoftEI
 from hybrid_bo.solvers import NLP, Ipopt
 from hybrid_bo.utils import Symbolic
+from hybrid_bo.variables import Var, start_bounds, to_casadi_function
 
 
-def mean(f: Any, w: np.ndarray) -> Any:
-    """The weighted average of f (S, 1) with weights w (S,): an objective with no
-    acquisition function. Over one scenario at z = 0 it is the nominal objective."""
-    return Symbolic(w).T @ f
+@dataclass(frozen=True, init=False)
+class SAA:
+    """The sample average over the draws z (S, P), a row per scenario and a column per
+    unknown state, with weights w (S,), by default 1/S.
+
+    Raises `ValueError` unless w has S entries that are >= 0 and sum to 1.
+    """
+
+    z: np.ndarray
+    w: np.ndarray
+
+    def __init__(self, z: np.ndarray, w: np.ndarray | None = None) -> None:
+        z = np.asarray(z, dtype=float)
+        w = np.full(len(z), 1 / len(z)) if w is None else np.asarray(w, dtype=float)
+        if z.ndim != 2 or w.shape != (len(z),):
+            msg = f"SAA needs z (S, P) and w (S,), got {z.shape} and {w.shape}"
+            raise ValueError(msg)
+        if np.any(w < 0) or not np.isclose(w.sum(), 1.0):
+            msg = f"SAA weights must be >= 0 and sum to 1, got {w}"
+            raise ValueError(msg)
+        object.__setattr__(self, "z", z)
+        object.__setattr__(self, "w", w)
+
+
+@dataclass(frozen=True)
+class Exact:
+    """The objective in closed form from the GP's mean and std. Valid only when f is
+    one unknown state and there are no mechanistic states: standard BO."""
+
+
+@dataclass(frozen=True)
+class Solution:
+    """The minimizer u (N,), the states there x (S, M) and y (S, P), a row per scenario
+    (S = 1 for `Exact`), and the objective."""
+
+    u: np.ndarray
+    x: np.ndarray
+    y: np.ndarray
+    objective: float
 
 
 @dataclass(frozen=True, init=False)
 class HybridNLP:
-    """The hybrid model over scenarios, as an NLP: the paper's deterministic equivalent
-    (Problems 8 and 9) when `objective` is an acquisition function.
+    """What you know: the decision variables u, the mechanistic states x with their
+    known equations g, the unknown states y, and the objective f.
 
-    `objective` maps f under each scenario (S, 1) and the weights w (S,) to the value to
-    minimize: `hb.EI`, `hb.SoftEI`, `hb.mean` or a function of your own, called once with
-    CasADi symbols.
-
-    The scenarios are the draws z (S, P), one row per scenario, and the weights w (S,),
-    which sum to 1. For a sample average, `z = rng.standard_normal((S, P))` and
-    `w = np.full(S, 1 / S)`. Draw z once, before the first iteration, and pass the same one
-    every time: nothing here checks that.
-
-    `fitted` is the surrogate model: one fitted GP per unknown state, in the order of
-    `problem.system.y`. Each scenario s has its own copies x_s and y_s of the states, and
-    the known equations g(x_s, y_s, u) = 0 are constraints. The unknown states y_s are
-    the GPs' prediction at the scenario's arguments of h, mean + std * z_s. With
-    `unknown_states_as_variables` the y_s are variables too, tied by y_s - prediction = 0
-    (paper, Problem 8), which helps IPOPT. Otherwise the prediction is substituted for
-    them, so they add no variables and have no bounds.
-
-    `nlp` is the problem IPOPT solves, over a decision vector in `pack`'s order, each entry
-    boxed by its bounds and started within its start bounds. `scenario_values` maps that
-    vector to f under each scenario (S, 1) and the scenarios' unknown states y (S, P), read
-    from the vector or predicted by the GPs.
-
-    Raises `ValueError` if z and w don't match, a weight is negative, the weights don't
-    sum to 1, or there isn't one column of z and one fitted GP per unknown state.
+    `g` and `f` are callables of `v`, read as `v.<name>`, traced once by CasADi. Raises
+    `ValueError` for a repeated name, a g without one equation per state of x, or a
+    non-scalar f.
     """
 
-    nlp: NLP
-    n_u: int
-    n_x: int
-    weights: np.ndarray
-    unknown_states_as_variables: bool
-    scenario_values: cas.Function
+    u: tuple[Var, ...]
+    x: tuple[Var, ...]
+    y: tuple[Var, ...]
+    g: cas.Function = field(repr=False)
+    f: cas.Function = field(repr=False)
 
     def __init__(
         self,
-        problem: Problem,
-        fitted: tuple[FittedGP, ...],
-        z: np.ndarray,
-        w: np.ndarray,
         *,
-        objective: Callable[[Any, np.ndarray], Any],
-        unknown_states_as_variables: bool = True,
+        u: Sequence[Var],
+        x: Sequence[Var] = (),
+        y: Sequence[Var],
+        g: Callable[[Any], Any] | None = None,
+        f: Callable[[Any], Any],
     ) -> None:
-        # The checks
-        system = problem.system
-        z, w = np.asarray(z, dtype=float), np.asarray(w, dtype=float)
-        if z.ndim != 2 or w.shape != (len(z),):
-            msg = (
-                f"Scenarios need z of shape (S, P) and w of shape (S,), got {z.shape} "
-                f"and {w.shape}"
-            )
+        u, x, y = tuple(u), tuple(x), tuple(y)
+        names = [var.name for var in (*u, *x, *y)]
+        if len(set(names)) != len(names):
+            msg = f"Variable names must be unique, got {names}"
             raise ValueError(msg)
-        if np.any(w < 0) or not np.isclose(w.sum(), 1.0):
-            msg = f"Scenario weights must be >= 0 and sum to 1, got {w}"
+        g_function = to_casadi_function("g", g or (lambda v: []), x, y, u)
+        if g_function.size_out(0) != (len(x), 1):
+            msg = f"g must give one equation per state of x ({len(x)}), got {g_function.size_out(0)}"
             raise ValueError(msg)
-        if z.shape[1] != system.n_y:
-            msg = (
-                f"The scenarios need one column of z per unknown state ({system.n_y}), "
-                f"got {z.shape[1]}"
-            )
-            raise ValueError(msg)
-        if len(fitted) != system.n_y:
-            msg = (
-                "The surrogate model needs one fitted GP per unknown state "
-                f"({system.n_y}), got {len(fitted)}"
-            )
+        f_function = to_casadi_function("f", f, x, y, u)
+        if f_function.size_out(0) != (1, 1):
+            msg = f"f must be a scalar, got shape {f_function.size_out(0)}"
             raise ValueError(msg)
 
-        # The symbols for u and each scenario's mechanistic states (row s: scenario s), and
-        # the unknown states: variables tied to the GP, or the GP itself
+        # Frozen dataclass: set fields through object.__setattr__
+        object.__setattr__(self, "u", u)
+        object.__setattr__(self, "x", x)
+        object.__setattr__(self, "y", y)
+        object.__setattr__(self, "g", g_function)
+        object.__setattr__(self, "f", f_function)
+
+    def solve(
+        self,
+        method: SAA | Exact,
+        rng: np.random.Generator,
+        *,
+        surrogate: Sequence[FittedGP],
+        objective: Mean | EI | SoftEI = Mean(),  # noqa: B008  (frozen)
+        n_starts: int = 10,
+        solver: Ipopt = Ipopt(),  # noqa: B008  (frozen, never mutated)
+        unknown_states_as_variables: bool = True,
+    ) -> Solution:
+        """The `Solution` minimizing `objective` with y from `surrogate`, one fitted GP
+        per unknown state in any order, by `method`, from `n_starts` starts.
+
+        With `unknown_states_as_variables`, SAA's y are variables tied to the GPs.
+        Raises `ValueError` for a surrogate or method that doesn't fit the problem, and
+        `NoSolutionError` if every start fails.
+        """
+        gps = {gp.output: gp for gp in surrogate}
+        if len(surrogate) != len(self.y) or set(gps) != set(self.y):
+            msg = (
+                f"The surrogate needs one GP per unknown state "
+                f"{[var.name for var in self.y]}, got GPs of "
+                f"{[gp.output.name for gp in surrogate]}"
+            )
+            raise ValueError(msg)
+        if any(var not in (*self.u, *self.x) for gp in surrogate for var in gp.inputs):
+            msg = "A GP's inputs must be decision variables or mechanistic states"
+            raise ValueError(msg)
+        n_u, n_x, n_y = len(self.u), len(self.x), len(self.y)
+        u = Symbolic.sym("u", n_u)
+
+        if isinstance(method, Exact):
+            # f is one unknown state, whose GP gives its mean and std at u
+            y = Symbolic.sym("y", n_y)
+            f = self.f(Symbolic(0, 1), y, u)
+            is_f = [bool(cas.is_equal(f, y[j])) for j in range(n_y)]
+            if self.x or not any(is_f):
+                msg = "Exact needs f to be one unknown state, and no states in x"
+                raise ValueError(msg)
+            gp = gps[self.y[is_f.index(True)]]
+            columns = dict(zip(self.u, cas.vertsplit(u), strict=True))
+            mean, std = gp.predict(cas.horzcat(*(columns[var] for var in gp.inputs)))
+            nlp = NLP(
+                cas.Function("objective", [u], [objective.exact(mean, std)]),
+                np.array([var.lower for var in self.u]),
+                np.array([var.upper for var in self.u]),
+                start_bounds=start_bounds(self.u),
+            )
+            u_best, value = nlp.solve(rng, n_starts=n_starts, solver=solver)
+            y_best = [
+                gps[var].predict(
+                    np.array([[u_best[self.u.index(v)] for v in gps[var].inputs]])
+                )[0]
+                for var in self.y
+            ]
+            return Solution(u_best, np.zeros((1, 0)), np.column_stack(y_best), value)
+
+        # SAA: each scenario s has its own states x_s and y_s, with g(x_s, y_s, u) = 0
+        z, w = method.z, method.w
         n_scenarios = len(w)
-        u = Symbolic.sym("u", system.n_u)
-        x = Symbolic.sym("x", n_scenarios, system.n_x)
+        if z.shape[1] != n_y:
+            msg = (
+                f"SAA needs one column of z per unknown state ({n_y}), got {z.shape[1]}"
+            )
+            raise ValueError(msg)
+        x = Symbolic.sym("x", n_scenarios, n_x)
 
-        # Unknown state j of scenario s is GP j's prediction at the scenario's arguments of h,
-        # mean_j + std_j * z_sj: one column of mean and std per unknown state, like z
-        h_arguments = cas.horzcat(
-            *system.h_arguments(cas.repmat(u.T, n_scenarios, 1), x)
+        # Unknown state j of scenario s is its GP's prediction at the scenario's inputs,
+        # mean_j + std_j * z_sj
+        columns = {
+            var: cas.repmat(u[i], n_scenarios, 1) for i, var in enumerate(self.u)
+        }
+        columns |= {var: x[:, j] for j, var in enumerate(self.x)}
+        mean, std = zip(
+            *(
+                gps[var].predict(cas.horzcat(*(columns[v] for v in gps[var].inputs)))
+                for var in self.y
+            ),
+            strict=True,
         )
-        mean, std = zip(*(gp.predict(h_arguments) for gp in fitted), strict=True)
         prediction = cas.horzcat(*mean) + cas.horzcat(*std) * Symbolic(z)
-        y = prediction
-        if unknown_states_as_variables:
-            y = Symbolic.sym("y", n_scenarios, system.n_y)
+        y = (
+            Symbolic.sym("y", n_scenarios, n_y)
+            if unknown_states_as_variables
+            else prediction
+        )
 
         # Each scenario: its known equations, its tie to the GP, and its f
         constraints, f_parts = [], []
         for s in range(n_scenarios):
             x_s, y_s = x[s, :].T, y[s, :].T
-            constraints.append(system.g(x_s, y_s, u))
+            constraints.append(self.g(x_s, y_s, u))
             if unknown_states_as_variables:
                 constraints.append((y - prediction)[s, :].T)
-            f_parts.append(problem.f(x_s, y_s, u))
-
-        # The Var of each entry of the decision vector, each state once per scenario
-        def per_scenario(variables: Sequence[Var]) -> np.ndarray:
-            """The variables repeated in a row per scenario, (S, len(variables))."""
-            return np.tile(np.array(variables, dtype=object), (n_scenarios, 1))
-
-        # Frozen dataclass: set fields through object.__setattr__. `pack` reads the first
-        object.__setattr__(
-            self, "unknown_states_as_variables", unknown_states_as_variables
-        )
-        variables = self.pack(
-            np.array(system.u, dtype=object),
-            per_scenario(system.x),
-            per_scenario(system.y),
-        )
+            f_parts.append(self.f(x_s, y_s, u))
         f = cas.vertcat(*f_parts)
-        decisions = self.pack(u, x, y)
+
+        # The decision vector: u, then each state's S scenario copies
+        blocks = [x, y] if unknown_states_as_variables else [x]
+        decisions = cas.vertcat(u, *(cas.vec(block) for block in blocks))
+        variables = [*self.u] + [
+            var
+            for block in ([self.x, self.y] if unknown_states_as_variables else [self.x])
+            for var in block
+            for _ in range(n_scenarios)
+        ]
         nlp = NLP(
-            cas.Function("objective", [decisions], [objective(f, w)]),
+            cas.Function("objective", [decisions], [objective.saa(f, w)]),
             np.array([var.lower for var in variables]),
             np.array([var.upper for var in variables]),
             cas.Function("g", [decisions], [cas.vertcat(*constraints)]),
             start_bounds(variables),
         )
-        scenario_values = cas.Function("scenario_values", [decisions], [f, y])
-        object.__setattr__(self, "nlp", nlp)
-        object.__setattr__(self, "n_u", system.n_u)
-        object.__setattr__(self, "n_x", system.n_x)
-        object.__setattr__(self, "weights", w)
-        object.__setattr__(self, "scenario_values", scenario_values)
-
-    @property
-    def n_scenarios(self) -> int:
-        """The number of scenarios."""
-        return len(self.weights)
-
-    def solve(
-        self,
-        rng: np.random.Generator,
-        *,
-        n_starts: int = 10,
-        solver: Ipopt = Ipopt(),  # noqa: B008  (frozen, never mutated)
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
-        """The minimizer u (N,), the scenario states there, x (S, M) and y (S, P), one row
-        per scenario, and the objective.
-
-        Raises `NoSolutionError` if every start fails.
-        """
-        decisions, value = self.nlp.solve(rng, n_starts=n_starts, solver=solver)
-        u, x, _ = self.unpack(decisions)
-        return u, x, self.scenario_values(decisions)[1].full(), value
-
-    def pack(self, u: Any, x: Any, y: Any = None) -> Any:
-        """The decision vector of u (N,), the scenario states x (S, M) and, if they are
-        variables, y (S, P): numpy arrays give a numpy array, CasADi matrices a column.
-
-        The states are stacked column by column, so each state has its S scenario copies
-        in a row.
-        """
-        states = [x, y] if self.unknown_states_as_variables else [x]
-        if isinstance(u, np.ndarray):
-            return np.concatenate([u, *(block.ravel(order="F") for block in states)])
-        return cas.vertcat(u, *(cas.vec(block) for block in states))
-
-    def unpack(self, w: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
-        """The u (N,), x (S, M) and y (S, P) (None unless they are variables) held in a
-        numeric decision vector w of this problem."""
-        # One column per state of each scenario
-        w = np.asarray(w, dtype=float).ravel()
-        states = w[self.n_u :].reshape((self.n_scenarios, -1), order="F")
-        y = states[:, self.n_x :] if self.unknown_states_as_variables else None
-        return w[: self.n_u], states[:, : self.n_x], y
+        best, value = nlp.solve(rng, n_starts=n_starts, solver=solver)
+        x_best = best[n_u : n_u + n_scenarios * n_x].reshape(
+            (n_scenarios, n_x), order="F"
+        )
+        y_best = cas.Function("y", [decisions], [y])(best).full()
+        return Solution(best[:n_u], x_best, y_best, value)

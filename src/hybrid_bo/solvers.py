@@ -1,9 +1,4 @@
-"""Running the solvers: everything here takes a problem someone else built.
-
-An `NLP` and `Ipopt` describe an optimization, and `NLP.solve` solves it from several
-starts and keeps the best solution. A `RootProblem` describes a square system of
-equations, and `RootProblem.solve` solves it from several starts and keeps the first root.
-"""
+"""The solvers: multistart IPOPT for an `NLP`, and Newton's method for a `RootProblem`."""
 
 import logging
 from dataclasses import dataclass, field
@@ -28,7 +23,7 @@ _NEWTON_MAX_ITERATIONS = 100
 
 @dataclass(frozen=True)
 class Ipopt:
-    """IPOPT through CasADi: options for the CasADi plugin and for IPOPT itself."""
+    """Options for CasADi's IPOPT plugin and for IPOPT itself."""
 
     plugin_options: dict[str, Any] = field(default_factory=lambda: {"print_time": 0})
     solver_options: dict[str, Any] = field(default_factory=lambda: {"print_level": 0})
@@ -36,12 +31,8 @@ class Ipopt:
 
 @dataclass(frozen=True)
 class NLP:
-    """min f(w) subject to g(w) = 0 and lower <= w <= upper.
-
-    `f` and `g` are CasADi functions (`cas.Function`) of the column w; the bounds have
-    shape (n,) and may be infinite. A `g` of no rows is no constraint. `start_bounds`
-    `(lower, upper)` is the finite box its multistart draws from, by default the bounds.
-    """
+    """min f(w) subject to g(w) = 0 and lower <= w <= upper, bounds (n,), with
+    multistart starts drawn from `start_bounds`, by default the bounds."""
 
     f: cas.Function
     lower: np.ndarray
@@ -56,11 +47,8 @@ class NLP:
         n_starts: int = 10,
         solver: Ipopt = Ipopt(),  # noqa: B008  (frozen, never mutated)
     ) -> tuple[np.ndarray, float]:
-        """The minimizer w (n,) and its objective, from `n_starts` Latin hypercube starts
-        over the start bounds, as `solve_from` finds them.
-
-        Raises `NoSolutionError` if every start fails.
-        """
+        """The best minimizer w (n,) and its objective from `n_starts` Latin hypercube
+        starts. Raises `NoSolutionError` if every start fails."""
         starts = lhs(*(self.start_bounds or (self.lower, self.upper)), n_starts, rng)
         return self.solve_from(starts, solver)
 
@@ -69,16 +57,9 @@ class NLP:
         starts: np.ndarray,
         solver: Ipopt = Ipopt(),  # noqa: B008  (frozen, never mutated)
     ) -> tuple[np.ndarray, float]:
-        """Builds this problem as a CasADi `Opti` problem, solves it with IPOPT from each
-        row of `starts` (n_starts, n), and returns the best w (n,) and its objective.
-        Objectives that differ only by rounding tie, and the earlier start wins, so the
-        result doesn't depend on the platform's arithmetic.
-
-        A start that fails is expected, so it is skipped. Starts that ran IPOPT to its
-        iteration limit are counted in one warning. Raises `NoSolutionError` if every
-        start fails. CasADi catches a Ctrl-C inside IPOPT and fails that start, so Ctrl-C
-        skips one start rather than stopping the solve.
-        """
+        """The best minimizer w (n,) and its objective from the rows of `starts`
+        (n_starts, n); on a tie the earlier start wins. Raises `NoSolutionError` if every
+        start fails."""
         # Build the problem once, with the bounds as constraints, so IPOPT takes the steps
         # the regression baselines record
         opti = cas.Opti()
@@ -134,11 +115,8 @@ class NLP:
 
 @dataclass(frozen=True)
 class RootProblem:
-    """residual(w, p) = 0 for w, with lower <= w <= upper, at given parameters p.
-
-    `residual` is a `cas.Function` of the columns w and p, with one equation per entry of
-    w. The bounds have shape (n,) and may be infinite.
-    """
+    """residual(w, p) = 0 for w within lower <= w <= upper, bounds (n,), at the
+    parameters p."""
 
     residual: cas.Function
     lower: np.ndarray
@@ -156,13 +134,10 @@ class RootProblem:
         return cas.rootfinder("newton", "newton", self.residual, options)
 
     def solve(self, p: np.ndarray, starts: np.ndarray, tol: float) -> np.ndarray:
-        """A root at the parameters p (k,), by Newton's method from each row of `starts`
-        (n_starts, n) in turn: the first, shape (n,), whose residual norm is below `tol`
-        and that lies within the bounds. A start that fails is expected, so it is skipped.
-        With no variables the root is empty and nothing is solved.
+        """The first root w (n,) within the bounds and below `tol`, at the parameters p
+        (k,), by Newton's method from the rows of `starts` (n_starts, n).
 
-        Raises `RootFindingError` if no start gives such a root, or if the equations can't
-        determine the variables: CasADi refuses a structurally singular system.
+        Raises `RootFindingError` if no start gives one or the equations are singular.
         """
         if len(self.lower) == 0:
             return np.zeros(0)
