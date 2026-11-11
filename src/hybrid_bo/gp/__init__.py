@@ -56,8 +56,8 @@ class GP:
         solver: Ipopt = Ipopt(),  # noqa: B008  (frozen, never mutated)
     ) -> "FittedGP":
         """This GP of `output` over `inputs`, fitted to `data` by maximizing the log
-        marginal likelihood from `n_starts` starts. Warns if the training covariance is
-        nearly singular.
+        marginal likelihood plus the kernel's log prior from `n_starts` starts. Warns if
+        the training covariance is nearly singular.
 
         Raises `ValueError` if the data aren't finite, and `NoSolutionError` if every
         start fails.
@@ -77,7 +77,7 @@ class GP:
         bounds = self.kernel.learned_bounds(n_inputs)
         fitted_gp = self
         if bounds:
-            # Maximize the log marginal likelihood over the log hyperparameters
+            # Maximize the log posterior over the log hyperparameters
             w = Symbolic.sym("w", len(bounds))
             symbolic_gp = dataclasses.replace(
                 self,
@@ -91,9 +91,12 @@ class GP:
             log_bounds = np.log(np.array(bounds))
             nlp = NLP(
                 cas.Function(
-                    "negative_log_marginal_likelihood",
+                    "negative_log_posterior",
                     [w],
-                    [-symbolic_fit.log_marginal_likelihood()],
+                    [
+                        -symbolic_fit.log_marginal_likelihood()
+                        - self.kernel.log_prior(w, n_inputs)
+                    ],
                 ),
                 log_bounds[:, 0],
                 log_bounds[:, 1],

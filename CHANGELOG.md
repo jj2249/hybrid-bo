@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- `hb.gp.Matern52(lengthscale_prior=True)` fits a learned lengthscale by MAP, with
+  each log lengthscale ~ N(sqrt(2) + log(d) / 2, 3) over d inputs (Hvarfner et al.,
+  2024), instead of by maximum likelihood. Off by default.
+
 ## 0.1.0 (2026-11-10)
 
 First release. Minimize `f(x, y, u)` subject to known equations `0 = g(x, y, u)` and

@@ -114,6 +114,34 @@ def test_fit_maximizes_the_log_marginal_likelihood():
     assert fitted.log_marginal_likelihood() >= max(grid) - 1e-8
 
 
+def test_fit_with_lengthscale_prior_maximizes_the_log_posterior():
+    """With the prior, the fit is at least as probable as any lengthscale of a grid
+    over the bounds."""
+    data = hb.Dataset(
+        X_train[:, :1], np.zeros((6, 0)), Y_train[:, None], Y_train, ("a", "out")
+    )
+    kernel = Matern52(outputscale=1.0, lengthscale_prior=True)
+    gp = GP(kernel=kernel, mean=Zero(), noise_std=0.0)
+
+    fitted = gp.fit(data, inputs=[A], output=OUT, rng=np.random.default_rng(1))
+
+    def log_posterior(ls):
+        """The log marginal likelihood plus the log prior at the lengthscale ls."""
+        fit = FittedGP(
+            GP(kernel=Matern52((ls,), outputscale=1.0), mean=Zero(), noise_std=0.0),
+            *(fitted.inputs, fitted.output, fitted.X, fitted.Y),
+            *(fitted.x_scaler, fitted.y_scaler),
+        )
+        return fit.log_marginal_likelihood() + float(
+            kernel.log_prior(cas.DM([np.log(ls)]), 1)
+        )
+
+    grid = [log_posterior(ls) for ls in np.geomspace(1e-3, 1e2, 200)]
+    lengthscale = fitted.gp.kernel.lengthscale
+    assert isinstance(lengthscale, tuple)
+    assert log_posterior(lengthscale[0]) >= max(grid) - 1e-8
+
+
 def test_gp_checks():
     """A negative noise, data that aren't finite and inputs that don't match raise."""
     with pytest.raises(ValueError, match="noise_std"):
