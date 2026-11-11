@@ -98,7 +98,7 @@ def test_fit_maximizes_the_log_marginal_likelihood():
     data = hb.Dataset(
         X_train[:, :1], np.zeros((6, 0)), Y_train[:, None], Y_train, ("a", "out")
     )
-    gp = GP(kernel=Matern52(), mean=Zero(), noise_std=0.0)
+    gp = GP(kernel=Matern52(outputscale=None), mean=Zero(), noise_std=0.0)
 
     fitted = gp.fit(data, inputs=[A], output=OUT, rng=np.random.default_rng(1))
 

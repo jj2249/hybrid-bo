@@ -13,13 +13,15 @@ class Matern52:
     """The Matern-5/2 kernel times an output scale, in scaled units.
 
     A hyperparameter that is None is learned in log space within its bounds; a number
-    fixes it. With `ard`, a learned lengthscale has one entry per input. With
-    `lengthscale_prior`, a learned lengthscale is MAP rather than maximum likelihood.
+    fixes it. The output scale is fixed at 1 by default, the variance of the
+    standardized outputs. With `ard`, a learned lengthscale has one entry per input.
+    With `lengthscale_prior`, a learned lengthscale is MAP rather than maximum
+    likelihood.
     """
 
     lengthscale: float | tuple[float, ...] | None = None
     lengthscale_bounds: tuple[float, float] = (1e-3, 1e2)
-    outputscale: float | None = None
+    outputscale: float | None = 1.0
     outputscale_bounds: tuple[float, float] = (0.1, 10.0)
     ard: bool = True
     lengthscale_prior: bool = False
