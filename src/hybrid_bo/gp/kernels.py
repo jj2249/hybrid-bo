@@ -13,14 +13,18 @@ class Matern52:
     """The Matern-5/2 kernel times an output scale, in scaled units.
 
     A hyperparameter that is None is learned in log space within its bounds; a number
-    fixes it. With `ard`, a learned lengthscale has one entry per input.
+    fixes it. The output scale is fixed at 1 by default, the variance of the
+    standardized outputs. With `ard`, a learned lengthscale has one entry per input.
+    With `lengthscale_prior`, a learned lengthscale is MAP rather than maximum
+    likelihood.
     """
 
     lengthscale: float | tuple[float, ...] | None = None
     lengthscale_bounds: tuple[float, float] = (1e-3, 1e2)
-    outputscale: float | None = None
+    outputscale: float | None = 1.0
     outputscale_bounds: tuple[float, float] = (0.1, 10.0)
     ard: bool = True
+    lengthscale_prior: bool = False
 
     def learned_bounds(self, n_inputs: int) -> list[tuple[float, float]]:
         """The bounds of each learned entry: the output scale, then the lengthscales."""
@@ -39,6 +43,17 @@ class Matern52:
         return dataclasses.replace(
             self, outputscale=outputscale, lengthscale=lengthscale
         )
+
+    def log_prior(self, w: Any, n_inputs: int) -> Any:
+        """The log prior, up to a constant, of the log hyperparameters w, a CasADi
+        column ordered as `learned_bounds`: with `lengthscale_prior`, each learned log
+        lengthscale ~ N(sqrt(2) + log(n_inputs) / 2, 3) (Hvarfner et al., 2024), and
+        flat otherwise."""
+        if not self.lengthscale_prior or self.lengthscale is not None:
+            return 0.0
+        log_lengthscale = w[1:] if self.outputscale is None else w
+        mu = np.sqrt(2.0) + 0.5 * np.log(n_inputs)
+        return -cas.sumsqr(log_lengthscale - mu) / (2 * 3.0)
 
     def covariance(self, X1: Any, X2: Any) -> Any:
         """outputscale (1 + sqrt(5) r + 5/3 r^2) exp(-sqrt(5) r) between the rows of the
