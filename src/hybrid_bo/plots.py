@@ -57,9 +57,21 @@ def iteration(
         return
     best = np.argmin(data.f)
     for ax in axes:
-        ax.scatter(data.u[:, 0], data.u[:, 1], color="k", s=12, label="measured")
         ax.scatter(
-            *data.u[best], facecolors="none", edgecolors="k", s=80, label="incumbent"
+            data.u[:, 0],
+            data.u[:, 1],
+            color="k",
+            edgecolors="w",
+            s=30,
+            label="measured",
+        )
+        ax.scatter(
+            *data.u[best],
+            facecolors="none",
+            edgecolors="C3",
+            linewidths=2,
+            s=150,
+            label="incumbent",
         )
     axes[0].legend(fontsize="small")
 
@@ -260,16 +272,26 @@ def _contour(
     *,
     label: str,
 ) -> None:
-    """Draws `values` on the square grid u of two u as filled contours with a color
-    bar, with the solution marked as `label`."""
+    """Draws `values` on the square grid u of two u as filled contours, light to dark,
+    with contour lines, a color bar, gray where the constraints have no root, and the
+    solution marked as `label`."""
     shape = (_GRID_POINTS[2], _GRID_POINTS[2])
-    filled = ax.contourf(
-        u[:, 0].reshape(shape), u[:, 1].reshape(shape), values.reshape(shape), levels=20
-    )
+    grid = u[:, 0].reshape(shape), u[:, 1].reshape(shape), values.reshape(shape)
+    filled = ax.contourf(*grid, levels=10, cmap="Blues")
+    ax.contour(*grid, levels=filled.levels, colors="k", linewidths=0.5, alpha=0.3)
+    ax.set_facecolor("0.8")
     figure = ax.get_figure()
     assert figure is not None
     figure.colorbar(filled, ax=ax)
-    ax.scatter(*solution.u, color="w", edgecolors="k", marker="*", s=150, label=label)
+    ax.scatter(
+        *solution.u,
+        color="C1",
+        edgecolors="k",
+        marker="*",
+        s=200,
+        zorder=3,
+        label=label,
+    )
     ax.set_title(title)
     ax.set_xlabel(nlp.u[0].name)
     ax.set_ylabel(nlp.u[1].name)
