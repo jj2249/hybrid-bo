@@ -5,6 +5,8 @@
 - `hb.plots.solution` and `hb.plots.iteration` draw f, and an unknown state whose GP
   takes more than u, as the weighted mean over the scenarios with a band of ±2
   standard deviations, in place of one line per scenario.
+- Their third panel draws the acquisition in units of f, maximized at the trial point:
+  EI as -objective and SoftEI as exp(-objective), in place of the minimized objective.
 
 ## 0.2.0 (2026-11-19)
 
