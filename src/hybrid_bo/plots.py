@@ -23,8 +23,8 @@ _GRID_TOLERANCE = 1e-8
 
 def solution(nlp: HybridNLP, solution: Solution, axes: "Sequence[Axes]") -> None:
     """Draws what `solution` minimized over the one decision variable: the surrogate,
-    f under each scenario with their weighted mean, and the objective unless it is
-    `Mean`, one panel each, with the minimizer marked.
+    f's weighted mean over the scenarios with a band of ±2 standard deviations, and the
+    objective unless it is `Mean`, one panel each, with the minimizer marked.
 
     Raises `ValueError` unless u has one variable and there is one axes per panel.
     """
@@ -103,15 +103,18 @@ def _draw(
         solved_u.append(u[i])
         solved_states.append(root)
 
-    # The surrogate: a GP of u alone as its band, else its scenarios on the branch
+    # Mean and standard deviation over the scenarios, by their weights
+    w = solution.method.w if isinstance(solution.method, SAA) else np.ones(1)
+    y_mean = np.einsum("isj,s->ij", y, w)
+    y_std = np.sqrt(np.einsum("isj,s->ij", (y - y_mean[:, np.newaxis]) ** 2, w))
+    f_mean = f @ w
+    f_std = np.sqrt((f - f_mean[:, np.newaxis]) ** 2 @ w)
+
+    # The surrogate: a GP of u alone as its band, else its scenarios' band on the branch
     for fitted in solution.surrogate:
         j = nlp.y.index(fitted.output)
         if fitted.inputs == (var,):
             mean, std = fitted.predict(u[:, np.newaxis])
-            axes[0].plot(u, mean, color=f"C{j}", label=fitted.output.name)
-            axes[0].fill_between(
-                u, mean - 2 * std, mean + 2 * std, color=f"C{j}", alpha=0.2
-            )
             axes[0].scatter(
                 fitted.x_scaler.unscale(fitted.X),
                 fitted.y_scaler.unscale(fitted.Y[:, np.newaxis]),
@@ -119,14 +122,18 @@ def _draw(
                 s=12,
             )
         else:
-            axes[0].plot(u, y[:, :, j], color=f"C{j}", alpha=0.3)
+            mean, std = y_mean[:, j], y_std[:, j]
+        axes[0].plot(u, mean, color=f"C{j}", label=fitted.output.name)
+        axes[0].fill_between(
+            u, mean - 2 * std, mean + 2 * std, color=f"C{j}", alpha=0.2
+        )
     axes[0].set_ylabel("surrogate")
 
-    # f under each scenario and their weighted mean, then the objective
-    w = solution.method.w if isinstance(solution.method, SAA) else np.ones(1)
-    if n_scenarios > 1:
-        axes[1].plot(u, f, color="C0", alpha=0.2, linewidth=0.5)
-    axes[1].plot(u, f @ w, color="C0", label="E[f]")
+    # f's mean and band over the scenarios, then the objective
+    axes[1].plot(u, f_mean, color="C0", label="E[f]")
+    axes[1].fill_between(
+        u, f_mean - 2 * f_std, f_mean + 2 * f_std, color="C0", alpha=0.2
+    )
     axes[1].set_ylabel("f")
     if n_panels == 3:
         axes[2].plot(u, objective, color="C0")
