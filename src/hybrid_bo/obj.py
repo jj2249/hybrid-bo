@@ -50,9 +50,9 @@ class EI:
 
 
 @dataclass(frozen=True)
-class SoftEI:
-    """-log SoftEI: EI with max(a, 0) smoothed to tau log(1 + exp(a / tau)), tau the
-    temperature in units of f. Has no exact form.
+class SoftLogEI:
+    """-SoftLogEI: the log of EI with max(a, 0) smoothed to tau log(1 + exp(a / tau)),
+    tau the temperature in units of f. Has no exact form.
 
     Raises `ValueError` unless the temperature is positive and finite.
     """
@@ -64,7 +64,9 @@ class SoftEI:
     def __post_init__(self) -> None:
         """Raises `ValueError` unless the temperature is positive and finite."""
         if not (np.isfinite(self.temperature) and self.temperature > 0):
-            msg = f"SoftEI temperature must be finite and > 0, got {self.temperature}"
+            msg = (
+                f"SoftLogEI temperature must be finite and > 0, got {self.temperature}"
+            )
             raise ValueError(msg)
 
     def saa(self, f: Any, w: np.ndarray) -> Any:
@@ -74,6 +76,6 @@ class SoftEI:
         return -cas.logsumexp(Symbolic(np.log(w)) + log_smooth)
 
     def exact(self, mean: Any, std: Any) -> Any:
-        """Raises `ValueError`: SoftEI has no exact form."""
-        msg = "SoftEI has no exact form: solve it with hb.SAA"
+        """Raises `ValueError`: SoftLogEI has no exact form."""
+        msg = "SoftLogEI has no exact form: solve it with hb.SAA"
         raise ValueError(msg)

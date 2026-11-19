@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 
 
 def test_figures_draw():
-    """An SAA iteration with SoftEI draws 3 panels, an Exact solution with Mean 2, and
+    """An SAA iteration with SoftLogEI draws 3 panels, an Exact solution with Mean 2, and
     the objective on the grid is finite at the solution."""
     rng = np.random.default_rng(0)
     data = ex.measure(np.linspace(-1.8, 1.8, 5)[:, None], rng)
@@ -21,7 +21,7 @@ def test_figures_draw():
         hb.SAA(rng.standard_normal((4, 1))),
         rng,
         surrogate=surrogate,
-        objective=hb.obj.SoftEI(data.incumbents[-1], temperature=0.05),
+        objective=hb.obj.SoftLogEI(data.incumbents[-1], temperature=0.05),
     )
     _, axes = plt.subplots(3, 1)
     hb.plots.iteration(ex.nlp, solution, axes, data)

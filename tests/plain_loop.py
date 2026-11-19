@@ -22,7 +22,7 @@ def hybrid_loop(
     rng: np.random.Generator,
     *,
     n_iterations: int,
-    objective: Callable[[float], hb.obj.EI | hb.obj.SoftEI],
+    objective: Callable[[float], hb.obj.EI | hb.obj.SoftLogEI],
 ) -> tuple[hb.Dataset, list[hb.Solution]]:
     """Hybrid BO from `data`: the grown dataset and each iteration's solution."""
     solutions = []
