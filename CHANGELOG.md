@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Breaking:** `hb.obj.SoftEI` is renamed `hb.obj.SoftLogEI`, since it minimizes
+  -log of the smoothed EI. Replace `hb.obj.SoftEI(...)` with `hb.obj.SoftLogEI(...)`.
 - `hb.plots.solution` and `hb.plots.iteration` draw f, and an unknown state whose GP
   takes more than u, as the weighted mean over the scenarios with a band of ±2
   standard deviations, in place of one line per scenario.

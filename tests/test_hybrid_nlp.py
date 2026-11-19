@@ -249,7 +249,7 @@ def test_exact_ei_is_the_closed_form():
 
 
 def test_exact_rejects_what_has_no_closed_form():
-    """Exact raises for mechanistic states, and for SoftEI."""
+    """Exact raises for mechanistic states, and for SoftLogEI."""
     data = training_data()
     with pytest.raises(ValueError, match="Exact needs"):
         ex.nlp.solve(hb.Exact(), np.random.default_rng(0), surrogate=surrogate(data))
@@ -267,12 +267,12 @@ def test_exact_rejects_what_has_no_closed_form():
             hb.Exact(),
             np.random.default_rng(0),
             surrogate=[fitted],
-            objective=hb.obj.SoftEI(0.0, temperature=0.1),
+            objective=hb.obj.SoftLogEI(0.0, temperature=0.1),
         )
 
 
 def test_objectives_over_scenarios():
-    """Mean, EI and SoftEI of f under weighted scenarios match numpy."""
+    """Mean, EI and SoftLogEI of f under weighted scenarios match numpy."""
     f, w = np.array([-1.0, 0.5, 2.0]), np.array([0.2, 0.3, 0.5])
 
     def value(objective):
@@ -282,8 +282,8 @@ def test_objectives_over_scenarios():
     assert value(hb.obj.Mean()) == pytest.approx(w @ f)
     assert value(hb.obj.EI(1.0)) == pytest.approx(w @ np.minimum(f - 1.0, 0))
     smooth = 0.5 * np.log1p(np.exp((1.0 - f) / 0.5))
-    assert value(hb.obj.SoftEI(1.0, temperature=0.5)) == pytest.approx(
+    assert value(hb.obj.SoftLogEI(1.0, temperature=0.5)) == pytest.approx(
         -np.log(w @ smooth)
     )
     with pytest.raises(ValueError, match="temperature"):
-        hb.obj.SoftEI(0.0, temperature=0.0)
+        hb.obj.SoftLogEI(0.0, temperature=0.0)

@@ -9,7 +9,7 @@ import numpy as np
 from hybrid_bo.dataset import Dataset
 from hybrid_bo.errors import RootFindingError
 from hybrid_bo.hybrid_problem import SAA, HybridNLP, Solution
-from hybrid_bo.obj import EI, Mean, SoftEI
+from hybrid_bo.obj import EI, Mean, SoftLogEI
 from hybrid_bo.solvers import RootProblem
 from hybrid_bo.utils import Symbolic
 from hybrid_bo.variables import start_bounds
@@ -24,8 +24,8 @@ _GRID_TOLERANCE = 1e-8
 def solution(nlp: HybridNLP, solution: Solution, axes: "Sequence[Axes]") -> None:
     """Draws what `solution` minimized over the one decision variable: the surrogate,
     f's weighted mean over the scenarios with a band of ±2 standard deviations, and the
-    acquisition in units of f unless the objective is `Mean` (EI is -objective, SoftEI
-    is exp(-objective)), one panel each, with the minimizer marked.
+    acquisition in units of f unless the objective is `Mean` (EI is -objective,
+    SoftLogEI's is exp(-objective)), one panel each, with the minimizer marked.
 
     Raises `ValueError` unless u has one variable and there is one axes per panel.
     """
@@ -136,11 +136,11 @@ def _draw(
         u, f_mean - 2 * f_std, f_mean + 2 * f_std, color="C0", alpha=0.2
     )
     axes[1].set_ylabel("f")
-    # The acquisition in units of f: EI is -objective, SoftEI is exp(-objective)
+    # The acquisition in units of f: EI is -objective, SoftLogEI's is exp(-objective)
     if isinstance(solution.objective, EI):
         axes[2].plot(u, -objective, color="C0")
         axes[2].set_ylabel("EI")
-    elif isinstance(solution.objective, SoftEI):
+    elif isinstance(solution.objective, SoftLogEI):
         axes[2].plot(u, np.exp(-objective), color="C0")
         axes[2].set_ylabel("SoftEI")
     axes[-1].set_xlabel(var.name)

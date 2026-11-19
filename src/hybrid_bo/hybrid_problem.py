@@ -9,7 +9,7 @@ import casadi as cas
 import numpy as np
 
 from hybrid_bo.gp import FittedGP
-from hybrid_bo.obj import EI, Mean, SoftEI
+from hybrid_bo.obj import EI, Mean, SoftLogEI
 from hybrid_bo.solvers import NLP, Ipopt
 from hybrid_bo.utils import Symbolic
 from hybrid_bo.variables import Var, start_bounds, to_casadi_function
@@ -58,7 +58,7 @@ class Solution:
     value: float
     method: SAA | Exact
     surrogate: tuple[FittedGP, ...] = field(repr=False)
-    objective: Mean | EI | SoftEI
+    objective: Mean | EI | SoftLogEI
 
 
 @dataclass(frozen=True, init=False)
@@ -124,7 +124,7 @@ class HybridNLP:
         *,
         surrogate: Sequence[FittedGP],
         c: np.ndarray | None = None,
-        objective: Mean | EI | SoftEI = Mean(),  # noqa: B008  (frozen)
+        objective: Mean | EI | SoftLogEI = Mean(),  # noqa: B008  (frozen)
         n_starts: int = 10,
         solver: Ipopt = Ipopt(),  # noqa: B008  (frozen, never mutated)
         unknown_states_as_variables: bool = True,
@@ -153,7 +153,7 @@ class HybridNLP:
         self,
         method: SAA | Exact,
         surrogate: Sequence[FittedGP],
-        objective: Mean | EI | SoftEI,
+        objective: Mean | EI | SoftLogEI,
         unknown_states_as_variables: bool,
         c: np.ndarray,
     ) -> tuple[NLP, cas.Function]:
