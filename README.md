@@ -103,6 +103,33 @@ solution = standard_nlp.solve(
 
 `examples/illustrative_example.py` runs both loops over several seeds and compares them.
 
+## A fixed configuration
+
+Some values in the known equations change from one experiment to the next but aren't yours to choose. In a reactor, the inlet flow rate and composition are measured for each run, and they enter the mass balances. These values are the configuration `c`, (K,). The decision variables `u` are free, and `solve` chooses them. The configuration is fixed: you give it for each measured point, and for the experiment you are planning next. `g` and `f` read it by name, as they read the other variables. The GPs don't take it as an input, because `h` depends on x and u, and the configuration reaches it through the x that `g` solves for.
+
+```python
+a = hb.Var("a")  # known, never sampled: needs no bounds or start
+configured_nlp = hb.HybridNLP(
+    u=[u],
+    c=[a],
+    x=[x],
+    y=[y],
+    g=lambda v: [v.x + v.a * cas.exp(v.x) - v.y],
+    f=lambda v: (6 * v.x - 2) ** 2 * cas.sin(12 * v.x - 4),
+)
+configured = hb.Dataset.from_measurements(
+    configured_nlp,
+    u=u_samples,
+    c=np.array([[1.0], [1.5]]),  # each experiment's configuration, (n, K)
+    measured={y: np.sin(u_samples[:, 0])},
+    rng=rng,
+)
+surrogate = [gp.fit(configured, inputs=[u], output=y, rng=rng)]
+solution = configured_nlp.solve(saa, rng, surrogate=surrogate, c=np.array([1.2]))
+```
+
+A problem without a configuration never mentions `c`.
+
 ## Errors, logs and saving
 
 A fit or a `solve` raises `hb.NoSolutionError` if every start fails, and

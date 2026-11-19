@@ -21,7 +21,12 @@ X_test = rng.uniform(-1, 1, size=(4, 2))
 
 A, B, OUT = hb.Var("a", -1, 1), hb.Var("b", -1, 1), hb.Var("out", -5, 5)
 DATA = hb.Dataset(
-    X_train, np.zeros((6, 0)), Y_train[:, None], Y_train, ("a", "b", "out")
+    X_train,
+    np.zeros((6, 0)),
+    np.zeros((6, 0)),
+    Y_train[:, None],
+    Y_train,
+    ("a", "b", "out"),
 )
 
 
@@ -96,7 +101,12 @@ def test_fit_learns_within_bounds_and_keeps_fixed_values():
 def test_fit_maximizes_the_log_marginal_likelihood():
     """The fit is at least as likely as any point of a grid over the bounds."""
     data = hb.Dataset(
-        X_train[:, :1], np.zeros((6, 0)), Y_train[:, None], Y_train, ("a", "out")
+        X_train[:, :1],
+        np.zeros((6, 0)),
+        np.zeros((6, 0)),
+        Y_train[:, None],
+        Y_train,
+        ("a", "out"),
     )
     gp = GP(kernel=Matern52(outputscale=None), mean=Zero(), noise_std=0.0)
 
@@ -118,7 +128,12 @@ def test_fit_with_lengthscale_prior_maximizes_the_log_posterior():
     """With the prior, the fit is at least as probable as any lengthscale of a grid
     over the bounds."""
     data = hb.Dataset(
-        X_train[:, :1], np.zeros((6, 0)), Y_train[:, None], Y_train, ("a", "out")
+        X_train[:, :1],
+        np.zeros((6, 0)),
+        np.zeros((6, 0)),
+        Y_train[:, None],
+        Y_train,
+        ("a", "out"),
     )
     kernel = Matern52(outputscale=1.0, lengthscale_prior=True)
     gp = GP(kernel=kernel, mean=Zero(), noise_std=0.0)
@@ -146,7 +161,7 @@ def test_gp_checks():
     """A negative noise, data that aren't finite and inputs that don't match raise."""
     with pytest.raises(ValueError, match="noise_std"):
         GP(kernel=Matern52(), mean=Zero(), noise_std=-0.1)
-    bad = hb.Dataset(X_train, DATA.x, DATA.y * np.nan, DATA.f, DATA.names)
+    bad = hb.Dataset(X_train, DATA.c, DATA.x, DATA.y * np.nan, DATA.f, DATA.names)
     gp = GP(kernel=Matern52(), mean=Zero(), noise_std=0.0)
     with pytest.raises(ValueError, match="finite"):
         gp.fit(bad, inputs=[A, B], output=OUT, rng=np.random.default_rng(0))

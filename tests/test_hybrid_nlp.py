@@ -25,17 +25,19 @@ def surrogate(data: hb.Dataset) -> list[hb.gp.FittedGP]:
     [
         ({"name": "1x", "lower": 0, "upper": 1}, "identifier"),
         ({"name": "x", "lower": 1, "upper": 0}, "lower"),
-        ({"name": "x"}, "start"),
     ],
 )
 def test_var_rejects(kwargs, match):
-    """A bad name, lower > upper, or an infinite bound without start raise."""
+    """A bad name, or lower > upper, raise."""
     with pytest.raises(ValueError, match=match):
         hb.Var(**kwargs)
 
 
 def test_hybrid_nlp_rejects():
-    """A g without one equation per state of x, a vector f, or a repeated name raise."""
+    """A u, x or y with no start, a g without one equation per state of x, a vector f,
+    or a repeated name raise."""
+    with pytest.raises(ValueError, match="start"):
+        hb.HybridNLP(u=[hb.Var("w")], y=[ex.y], f=lambda v: v.y)
     with pytest.raises(ValueError, match="one equation per state"):
         hb.HybridNLP(u=[ex.u], x=[ex.x], y=[ex.y], f=lambda v: v.x)
     with pytest.raises(ValueError, match="scalar"):
@@ -68,11 +70,18 @@ def test_dataset_from_measurements_solves_g():
 
 
 def test_dataset_saves_and_loads(tmp_path):
-    """A saved dataset loads equal."""
-    data = training_data()
+    """A saved dataset loads equal, with its configuration."""
+    data = hb.Dataset.from_measurements(
+        configured_nlp(),
+        u=np.zeros((2, 1)),
+        c=np.array([[1.0], [2.0]]),
+        measured={ex.y: np.zeros(2)},
+        rng=np.random.default_rng(0),
+    )
     data.save(tmp_path / "data.npz")
     loaded = hb.Dataset.load(tmp_path / "data.npz")
     assert loaded.names == data.names
+    np.testing.assert_array_equal(loaded.c, data.c)
     np.testing.assert_array_equal(loaded.f, data.f)
 
 
@@ -118,6 +127,70 @@ def test_from_measurements_rejects(measured, match):
     with pytest.raises(ValueError, match=match):
         hb.Dataset.from_measurements(
             ex.nlp, u=np.zeros((1, 1)), measured=measured, rng=np.random.default_rng(0)
+        )
+
+
+def configured_nlp() -> hb.HybridNLP:
+    """The illustrative example with a configuration a in g and f: x + a exp(x) = y,
+    and f scaled by a. At a = 1 it is the illustrative example."""
+    a = hb.Var("a")  # known, not chosen: no bounds or start
+    assert a.start is None
+    return hb.HybridNLP(
+        u=[ex.u],
+        c=[a],
+        x=[ex.x],
+        y=[ex.y],
+        g=lambda v: [v.x + v.a * cas.exp(v.x) - v.y],
+        f=lambda v: v.a * (6 * v.x - 2) ** 2 * cas.sin(12 * v.x - 4),
+    )
+
+
+def test_configuration_enters_g_and_f():
+    """Each row's c enters g and f, and at c = 1 the dataset and the solution are the
+    illustrative example's."""
+    nlp, u = configured_nlp(), np.array([[0.3], [-1.0]])
+    data = hb.Dataset.from_measurements(
+        nlp,
+        u=u,
+        c=np.array([[1.0], [2.0]]),
+        measured={ex.y: np.sin(u[:, 0])},
+        rng=np.random.default_rng(0),
+    )
+
+    np.testing.assert_allclose(data.x + data.c * np.exp(data.x), np.sin(u), atol=1e-9)
+    np.testing.assert_array_equal(data[nlp.c[0]], [1.0, 2.0])
+    plain = ex.measure(u, np.random.default_rng(0))
+    np.testing.assert_allclose(data.x[0], plain.x[0], atol=1e-9)
+    x = data.x[1, 0]
+    assert data.f[1] == pytest.approx(2 * (6 * x - 2) ** 2 * np.sin(12 * x - 4))
+
+    saa, fitted = hb.SAA(np.array([[0.0], [1.0]])), surrogate(training_data())
+    solution = nlp.solve(
+        saa, np.random.default_rng(2), surrogate=fitted, c=np.array([1.0])
+    )
+    reference = ex.nlp.solve(saa, np.random.default_rng(2), surrogate=fitted)
+    np.testing.assert_allclose(solution.u, reference.u, atol=1e-6)
+    np.testing.assert_array_equal(solution.c, [1.0])
+    at_two = nlp.solve(
+        saa, np.random.default_rng(2), surrogate=fitted, c=np.array([2.0])
+    )
+    np.testing.assert_allclose(at_two.x + 2 * np.exp(at_two.x), at_two.y, atol=1e-6)
+
+
+def test_configuration_is_checked():
+    """A missing c, a c of the wrong shape, or a c for a problem with none raise."""
+    configured = hb.HybridNLP(u=[ex.u], c=[hb.Var("a")], y=[ex.y], f=lambda v: v.y)
+    saa, fitted = hb.SAA(np.zeros((1, 1))), surrogate(training_data())
+    rng = np.random.default_rng(0)
+    with pytest.raises(ValueError, match=r"needs c \(1,\)"):
+        configured.solve(saa, rng, surrogate=fitted)
+    with pytest.raises(ValueError, match=r"needs c \(1,\)"):
+        configured.solve(saa, rng, surrogate=fitted, c=np.array([0.5, 0.5]))
+    with pytest.raises(ValueError, match=r"needs c \(0,\)"):
+        ex.nlp.solve(saa, rng, surrogate=fitted, c=np.array([1.0]))
+    with pytest.raises(ValueError, match=r"c \(n, 1\)"):
+        hb.Dataset.from_measurements(
+            configured, u=np.zeros((1, 1)), measured={ex.y: np.zeros(1)}, rng=rng
         )
 
 

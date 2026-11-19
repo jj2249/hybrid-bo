@@ -14,16 +14,15 @@ from hybrid_bo.utils import Symbolic, lhs
 @dataclass(frozen=True, init=False)
 class Var:
     """A named scalar variable: its bounds, and the finite box `start` that starting
-    points are drawn from, by default the bounds.
+    points are drawn from, by default the bounds if they are finite, else None.
 
-    Raises `ValueError` for a name that isn't an identifier, lower > upper, or an infinite
-    bound without `start`.
+    Raises `ValueError` for a name that isn't an identifier, or lower > upper.
     """
 
     name: str
     lower: float
     upper: float
-    start: tuple[float, float]
+    start: tuple[float, float] | None
 
     def __init__(
         self,
@@ -43,25 +42,30 @@ class Var:
         if not lower <= upper:
             msg = f"Var {name!r}: lower ({lower}) must be <= upper ({upper})"
             raise ValueError(msg)
-        if start is None:
-            if not (np.isfinite(lower) and np.isfinite(upper)):
-                msg = f"Var {name!r} has an infinite bound, so it needs start"
-                raise ValueError(msg)
+        if start is None and np.isfinite(lower) and np.isfinite(upper):
             start = (lower, upper)
 
         # Frozen dataclass: set fields through object.__setattr__
         object.__setattr__(self, "name", name)
         object.__setattr__(self, "lower", float(lower))
         object.__setattr__(self, "upper", float(upper))
-        object.__setattr__(self, "start", (float(start[0]), float(start[1])))
+        object.__setattr__(
+            self, "start", None if start is None else (float(start[0]), float(start[1]))
+        )
 
 
 def start_bounds(variables: Sequence[Var]) -> tuple[np.ndarray, np.ndarray]:
-    """The lower and upper start bounds of the variables, each (d,)."""
-    return (
-        np.array([var.start[0] for var in variables]),
-        np.array([var.start[1] for var in variables]),
-    )
+    """The lower and upper start bounds of the variables, each (d,).
+
+    Raises `ValueError` for a variable with no start.
+    """
+    starts = [var.start for var in variables]
+    if None in starts:
+        names = [var.name for var in variables if var.start is None]
+        msg = f"{names} need a start, or finite bounds, to draw starting points over"
+        raise ValueError(msg)
+    lower, upper = np.array(starts, dtype=float).reshape(-1, 2).T
+    return lower, upper
 
 
 def lhs_points(
@@ -98,12 +102,14 @@ def to_casadi_function(
     x: Sequence[Var],
     y: Sequence[Var],
     u: Sequence[Var],
+    c: Sequence[Var],
 ) -> cas.Function:
-    """`equations` (`g` or `f`), called once on symbols, as `name(x, y, u) -> column`.
+    """`equations` (`g` or `f`), called once on symbols, as
+    `name(x, y, u, c) -> column`.
 
     Raises `TypeError` if `equations` doesn't return CasADi expressions.
     """
-    symbols = {var.name: Symbolic.sym(var.name) for var in (*x, *y, *u)}
+    symbols = {var.name: Symbolic.sym(var.name) for var in (*x, *y, *u, *c)}
     expressions = equations(_Variables(symbols))
     parts = expressions if isinstance(expressions, list | tuple) else [expressions]
     try:
@@ -111,9 +117,7 @@ def to_casadi_function(
     except NotImplementedError:  # CasADi's error for arguments it can't stack
         msg = f"{name} must return CasADi expressions built from v; got {expressions!r}"
         raise TypeError(msg) from None
-    x_column, y_column, u_column = (
-        cas.vertcat(*(symbols[var.name] for var in block)) for block in (x, y, u)
-    )
-    return cas.Function(
-        name, [x_column, y_column, u_column], [column], ["x", "y", "u"], [name]
-    )
+    inputs = [
+        cas.vertcat(*(symbols[var.name] for var in block)) for block in (x, y, u, c)
+    ]
+    return cas.Function(name, inputs, [column], ["x", "y", "u", "c"], [name])

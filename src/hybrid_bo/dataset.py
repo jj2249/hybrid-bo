@@ -19,13 +19,15 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class Dataset:
-    """The decision variables u (n, N), states x (n, M) and y (n, P), and objective f
-    (n,) of n points in the order taken, and the `names` of the variables of u, x and y.
+    """The decision variables u (n, N), configuration c (n, K), states x (n, M) and y
+    (n, P), and objective f (n,) of n points in the order taken, and the `names` of the
+    variables of u, c, x and y.
 
     `data[var]` is that variable's values (n,).
     """
 
     u: np.ndarray
+    c: np.ndarray
     x: np.ndarray
     y: np.ndarray
     f: np.ndarray
@@ -38,19 +40,22 @@ class Dataset:
         u: np.ndarray,
         measured: dict[Var, np.ndarray],
         *,
+        c: np.ndarray | None = None,
         rng: np.random.Generator,
         n_starts: int = 100,
         tol: float = 1e-10,
     ) -> "Dataset":
-        """The dataset of u, a point (N,) or a set (n, N), and `measured`, the values of
-        P of the states x and y, each a scalar or (n,): the other states solved from g
-        within their bounds from `n_starts` starts, and f.
+        """The dataset of u, a point (N,) or a set (n, N), at the configuration c, (K,)
+        or (n, K) and None when there is none, and `measured`, the values of P of the
+        states x and y, each a scalar or (n,): the other states solved from g within
+        their bounds from `n_starts` starts, and f.
 
         Raises `ValueError` for a wrong shape or a measured set that isn't P states, and
         `RootFindingError` naming every row with no root or a value that isn't finite,
         with the other rows as `error.dataset`.
         """
         u = np.atleast_2d(u).astype(float)
+        c = np.zeros((len(u), 0)) if c is None else np.atleast_2d(c).astype(float)
         measured = {
             var: np.atleast_1d(values).astype(float) for var, values in measured.items()
         }
@@ -63,17 +68,21 @@ class Dataset:
             )
             raise ValueError(msg)
         shapes = [values.shape for values in measured.values()]
-        if u.shape[1:] != (len(nlp.u),) or any(s != (len(u),) for s in shapes):
+        if (
+            u.shape[1:] != (len(nlp.u),)
+            or c.shape != (len(u), len(nlp.c))
+            or any(s != (len(u),) for s in shapes)
+        ):
             msg = (
-                f"Measurements need u (n, {len(nlp.u)}) and each measured state (n,), "
-                f"got {u.shape} and {shapes}"
+                f"Measurements need u (n, {len(nlp.u)}), c (n, {len(nlp.c)}) and each "
+                f"measured state (n,), got {u.shape}, {c.shape} and {shapes}"
             )
             raise ValueError(msg)
 
-        # The root-finding problem: g for the states not measured, with u and the
+        # The root-finding problem: g for the states not measured, with u, c and the
         # measured states as parameters
         unsolved = [var for var in states if var not in measured]
-        symbols = {var: Symbolic.sym(var.name) for var in (*nlp.u, *states)}
+        symbols = {var: Symbolic.sym(var.name) for var in (*nlp.u, *nlp.c, *states)}
 
         def column(variables: Sequence[Var]) -> Symbolic:
             """The symbols of `variables`, stacked."""
@@ -82,15 +91,15 @@ class Dataset:
         root_problem = RootProblem(
             cas.Function(
                 "known_equations",
-                [column(unsolved), column([*nlp.u, *measured])],
-                [nlp.g(column(nlp.x), column(nlp.y), column(nlp.u))],
+                [column(unsolved), column([*nlp.u, *nlp.c, *measured])],
+                [nlp.g(column(nlp.x), column(nlp.y), column(nlp.u), column(nlp.c))],
             ),
             np.array([var.lower for var in unsolved]),
             np.array([var.upper for var in unsolved]),
         )
 
         # Solve it at each row, noting the rows that fail
-        parameters = np.column_stack([u, *measured.values()])
+        parameters = np.column_stack([u, c, *measured.values()])
         solved, failed = [], []
         for row, p in enumerate(parameters):
             starts = (
@@ -106,9 +115,9 @@ class Dataset:
 
         # Every state's values, measured or solved, in the order of x and y
         parameters = np.delete(parameters, failed, axis=0)
-        n = len(parameters)
-        u = parameters[:, : len(nlp.u)]
-        columns = dict(zip(measured, parameters[:, len(nlp.u) :].T, strict=True))
+        n, n_u, n_c = len(parameters), len(nlp.u), len(nlp.c)
+        u, c = parameters[:, :n_u], parameters[:, n_u : n_u + n_c]
+        columns = dict(zip(measured, parameters[:, n_u + n_c :].T, strict=True))
         columns |= dict(
             zip(unsolved, np.reshape(solved, (n, len(unsolved))).T, strict=True)
         )
@@ -116,9 +125,9 @@ class Dataset:
             np.reshape([columns[var] for var in block], (len(block), n)).T
             for block in (nlp.x, nlp.y)
         )
-        f = np.array([nlp.f(*point).full().item() for point in zip(x, y, u)])
-        names = tuple(var.name for var in (*nlp.u, *nlp.x, *nlp.y))
-        dataset = cls(u, x, y, f, names)
+        f = np.array([nlp.f(*point).full().item() for point in zip(x, y, u, c)])
+        names = tuple(var.name for var in (*nlp.u, *nlp.c, *nlp.x, *nlp.y))
+        dataset = cls(u, c, x, y, f, names)
         if failed:
             error = RootFindingError(
                 f"No root, or a value that isn't finite, at rows {failed}"
@@ -132,7 +141,8 @@ class Dataset:
         if var.name not in self.names:
             msg = f"{var.name!r} is not in the dataset; it has {', '.join(self.names)}"
             raise KeyError(msg)
-        return np.column_stack([self.u, self.x, self.y])[:, self.names.index(var.name)]
+        columns = np.column_stack([self.u, self.c, self.x, self.y])
+        return columns[:, self.names.index(var.name)]
 
     def extend(self, new: "Dataset") -> "Dataset":
         """The rows of this dataset followed by those of `new`.
@@ -144,6 +154,7 @@ class Dataset:
             raise ValueError(msg)
         return Dataset(
             np.concatenate([self.u, new.u]),
+            np.concatenate([self.c, new.c]),
             np.concatenate([self.x, new.x]),
             np.concatenate([self.y, new.y]),
             np.concatenate([self.f, new.f]),
@@ -160,7 +171,13 @@ class Dataset:
         exists."""
         with Path(path).open("xb") as file:
             np.savez(
-                file, u=self.u, x=self.x, y=self.y, f=self.f, names=np.array(self.names)
+                file,
+                u=self.u,
+                c=self.c,
+                x=self.x,
+                y=self.y,
+                f=self.f,
+                names=np.array(self.names),
             )
 
     @classmethod
@@ -169,6 +186,7 @@ class Dataset:
         with np.load(path) as saved:
             return cls(
                 saved["u"],
+                saved["c"],
                 saved["x"],
                 saved["y"],
                 saved["f"],
