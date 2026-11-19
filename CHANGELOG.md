@@ -9,6 +9,11 @@
   standard deviations, in place of one line per scenario.
 - Their third panel draws the acquisition in units of f, maximized at the trial point:
   EI as -objective and SoftEI as exp(-objective), in place of the minimized objective.
+- `hb.plots.solution` and `hb.plots.iteration` draw two decision variables as filled
+  contours: the mean and standard deviation of each GP's output, then of f, then the
+  acquisition, on `2 * len(surrogate) + 3` axes (`+ 2` for `Mean`). `iteration` marks
+  the measured u on every panel and circles the incumbent.
+- `hb.plots.acquisition` draws only the acquisition, over one or two u, on one axes.
 
 ## 0.2.0 (2026-11-19)
 
