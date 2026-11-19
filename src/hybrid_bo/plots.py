@@ -9,7 +9,7 @@ import numpy as np
 from hybrid_bo.dataset import Dataset
 from hybrid_bo.errors import RootFindingError
 from hybrid_bo.hybrid_problem import SAA, HybridNLP, Solution
-from hybrid_bo.obj import Mean
+from hybrid_bo.obj import EI, Mean, SoftEI
 from hybrid_bo.solvers import RootProblem
 from hybrid_bo.utils import Symbolic
 from hybrid_bo.variables import start_bounds
@@ -23,8 +23,9 @@ _GRID_TOLERANCE = 1e-8
 
 def solution(nlp: HybridNLP, solution: Solution, axes: "Sequence[Axes]") -> None:
     """Draws what `solution` minimized over the one decision variable: the surrogate,
-    f under each scenario with their weighted mean, and the objective unless it is
-    `Mean`, one panel each, with the minimizer marked.
+    f's weighted mean over the scenarios with a band of ±2 standard deviations, and the
+    acquisition in units of f unless the objective is `Mean` (EI is -objective, SoftEI
+    is exp(-objective)), one panel each, with the minimizer marked.
 
     Raises `ValueError` unless u has one variable and there is one axes per panel.
     """
@@ -103,15 +104,18 @@ def _draw(
         solved_u.append(u[i])
         solved_states.append(root)
 
-    # The surrogate: a GP of u alone as its band, else its scenarios on the branch
+    # Mean and standard deviation over the scenarios, by their weights
+    w = solution.method.w if isinstance(solution.method, SAA) else np.ones(1)
+    y_mean = np.einsum("isj,s->ij", y, w)
+    y_std = np.sqrt(np.einsum("isj,s->ij", (y - y_mean[:, np.newaxis]) ** 2, w))
+    f_mean = f @ w
+    f_std = np.sqrt((f - f_mean[:, np.newaxis]) ** 2 @ w)
+
+    # The surrogate: a GP of u alone as its band, else its scenarios' band on the branch
     for fitted in solution.surrogate:
         j = nlp.y.index(fitted.output)
         if fitted.inputs == (var,):
             mean, std = fitted.predict(u[:, np.newaxis])
-            axes[0].plot(u, mean, color=f"C{j}", label=fitted.output.name)
-            axes[0].fill_between(
-                u, mean - 2 * std, mean + 2 * std, color=f"C{j}", alpha=0.2
-            )
             axes[0].scatter(
                 fitted.x_scaler.unscale(fitted.X),
                 fitted.y_scaler.unscale(fitted.Y[:, np.newaxis]),
@@ -119,18 +123,26 @@ def _draw(
                 s=12,
             )
         else:
-            axes[0].plot(u, y[:, :, j], color=f"C{j}", alpha=0.3)
+            mean, std = y_mean[:, j], y_std[:, j]
+        axes[0].plot(u, mean, color=f"C{j}", label=fitted.output.name)
+        axes[0].fill_between(
+            u, mean - 2 * std, mean + 2 * std, color=f"C{j}", alpha=0.2
+        )
     axes[0].set_ylabel("surrogate")
 
-    # f under each scenario and their weighted mean, then the objective
-    w = solution.method.w if isinstance(solution.method, SAA) else np.ones(1)
-    if n_scenarios > 1:
-        axes[1].plot(u, f, color="C0", alpha=0.2, linewidth=0.5)
-    axes[1].plot(u, f @ w, color="C0", label="E[f]")
+    # f's mean and band over the scenarios, then the objective
+    axes[1].plot(u, f_mean, color="C0", label="E[f]")
+    axes[1].fill_between(
+        u, f_mean - 2 * f_std, f_mean + 2 * f_std, color="C0", alpha=0.2
+    )
     axes[1].set_ylabel("f")
-    if n_panels == 3:
-        axes[2].plot(u, objective, color="C0")
-        axes[2].set_ylabel(f"objective ({type(solution.objective).__name__})")
+    # The acquisition in units of f: EI is -objective, SoftEI is exp(-objective)
+    if isinstance(solution.objective, EI):
+        axes[2].plot(u, -objective, color="C0")
+        axes[2].set_ylabel("EI")
+    elif isinstance(solution.objective, SoftEI):
+        axes[2].plot(u, np.exp(-objective), color="C0")
+        axes[2].set_ylabel("SoftEI")
     axes[-1].set_xlabel(var.name)
     for ax in axes:
         ax.axvline(solution.u[0], color="k", linestyle=":", label=label)
