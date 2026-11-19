@@ -38,11 +38,13 @@ nlp = hb.HybridNLP(
 )
 ```
 
-We provide a helper class for handling data `Dataset`. Given measured data $$\mathcal D = \{(u_i, y_i)\}_i$$, the library allows you to reconstruct the full state of the system using `Dataset.from_measurements`. This solves `g` for `x` and computes `f`.
+We provide a helper class for handling data `Dataset`. Given u and the measured states, the library allows you to reconstruct the full state of the system using `Dataset.from_measurements`. `measured` maps each measured variable to its values (n,): any P of the states `x` and `y`, as many as there are unknown states. It solves `g` for the other states and computes `f`. Here we measure `y`. A system that measures `x` instead would pass `measured={x: ...}` and have `y` solved from `g`.
 ```python
 rng = np.random.default_rng(0)
 u_samples = hb.lhs_points([u], 2, rng)
-data = hb.Dataset.from_measurements(nlp, u=u_samples, y=np.sin(u_samples), rng=rng)
+data = hb.Dataset.from_measurements(
+    nlp, u=u_samples, measured={y: np.sin(u_samples[:, 0])}, rng=rng
+)
 ```
 
 You can specify a GP prior and fit it to the data by specifying its `inputs` and `output`.
@@ -77,7 +79,9 @@ for _ in range(10):
         objective=hb.obj.EI(data.incumbents[-1]),
         unknown_states_as_variables=False,
     )
-    new = hb.Dataset.from_measurements(nlp, u=solution.u, y=np.sin(solution.u), rng=rng)
+    new = hb.Dataset.from_measurements(
+        nlp, u=solution.u, measured={y: np.sin(solution.u)}, rng=rng
+    )
     data = data.extend(new)
 ```
 
@@ -89,7 +93,7 @@ We can recover non-hybrid problems as the case with no mechanistic states `x` an
 fhat = hb.Var("fhat", start=(-10.0, 10.0))
 standard_nlp = hb.HybridNLP(u=[u], y=[fhat], f=lambda v: v.fhat)
 observed = hb.Dataset.from_measurements(
-    standard_nlp, u=data.u, y=data.f[:, None], rng=rng
+    standard_nlp, u=data.u, measured={fhat: data.f}, rng=rng
 )
 surrogate = [gp.fit(observed, inputs=[u], output=fhat, rng=rng)]
 solution = standard_nlp.solve(

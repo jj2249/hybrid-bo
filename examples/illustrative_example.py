@@ -35,7 +35,9 @@ nlp = hb.HybridNLP(
 
 def measure(u, rng):
     """The system: here an oracle, but it could run a plant or a simulator."""
-    return hb.Dataset.from_measurements(nlp, u=u, y=np.sin(u), rng=rng)
+    return hb.Dataset.from_measurements(
+        nlp, u=u, measured={y: np.sin(u[..., 0])}, rng=rng
+    )
 
 
 gp = hb.gp.GP(kernel=hb.gp.Matern52(), mean=hb.gp.Zero(), noise_std=0.0)
@@ -67,7 +69,7 @@ for seed in range(N_RUNS):
     data = measure(hb.lhs_points([u], N_INITIAL, rng), rng)
     for _ in range(N_ITERATIONS):
         observed = hb.Dataset.from_measurements(
-            standard_nlp, u=data.u, y=data.f[:, None], rng=rng
+            standard_nlp, u=data.u, measured={fhat: data.f}, rng=rng
         )
         surrogate = [gp.fit(observed, inputs=[u], output=fhat, rng=rng)]
         solution = standard_nlp.solve(

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Breaking:** `hb.Dataset.from_measurements` takes `measured`, a dict of any P of
+  the states x and y and their values (n,), in place of `y` (n, P). g is solved for
+  the other states, so a system can measure an x and infer a y. Replace `y=values`
+  with `measured={y: values[:, 0]}`.
+
 - `hb.gp.Matern52(lengthscale_prior=True)` fits a learned lengthscale by MAP, with
   each log lengthscale ~ N(sqrt(2) + log(d) / 2, 3) over d inputs (Hvarfner et al.,
   2024), instead of by maximum likelihood. Off by default.

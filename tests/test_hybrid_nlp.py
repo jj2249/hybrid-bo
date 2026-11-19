@@ -82,10 +82,43 @@ def test_a_failed_measurement_keeps_the_other_rows():
         hb.Dataset.from_measurements(
             ex.nlp,
             u=np.array([[0.0], [0.0]]),
-            y=np.array([[0.0], [np.nan]]),
+            measured={ex.y: np.array([0.0, np.nan])},
             rng=np.random.default_rng(0),
         )
     assert error.value.dataset is not None and len(error.value.dataset.f) == 1
+
+
+def test_measuring_x_solves_g_for_y():
+    """With x measured, y solves x + exp(x) = y, and matches measuring that y."""
+    u, x = np.array([[0.3], [-1.0]]), np.array([0.2, -0.5])
+    data = hb.Dataset.from_measurements(
+        ex.nlp, u=u, measured={ex.x: x}, rng=np.random.default_rng(0)
+    )
+
+    np.testing.assert_allclose(data.y[:, 0], x + np.exp(x), atol=1e-9)
+    from_y = hb.Dataset.from_measurements(
+        ex.nlp, u=u, measured={ex.y: data.y[:, 0]}, rng=np.random.default_rng(0)
+    )
+    np.testing.assert_allclose(from_y.x, data.x, atol=1e-9)
+    np.testing.assert_allclose(from_y.f, data.f, atol=1e-9)
+
+
+@pytest.mark.parametrize(
+    ("measured", "match"),
+    [
+        ({}, "exactly 1"),
+        ({ex.x: [0.0], ex.y: [1.0]}, "exactly 1"),
+        ({ex.u: [0.0]}, "exactly 1"),
+        ({hb.Var("z", 0, 1): [0.0]}, "exactly 1"),
+        ({ex.y: [0.0, 1.0]}, r"\(n,\)"),
+    ],
+)
+def test_from_measurements_rejects(measured, match):
+    """Measuring other than P states, or the wrong number of rows, raises."""
+    with pytest.raises(ValueError, match=match):
+        hb.Dataset.from_measurements(
+            ex.nlp, u=np.zeros((1, 1)), measured=measured, rng=np.random.default_rng(0)
+        )
 
 
 @pytest.mark.parametrize("unknown_states_as_variables", [True, False])
@@ -118,7 +151,10 @@ def test_exact_ei_is_the_closed_form():
     """Standard BO: Exact with EI minimizes -EI of the GP of f."""
     data = training_data()
     observed = hb.Dataset.from_measurements(
-        ex.standard_nlp, u=data.u, y=data.f[:, None], rng=np.random.default_rng(0)
+        ex.standard_nlp,
+        u=data.u,
+        measured={ex.fhat: data.f},
+        rng=np.random.default_rng(0),
     )
     fitted = ex.gp.fit(
         observed, inputs=[ex.u], output=ex.fhat, rng=np.random.default_rng(0)
@@ -145,7 +181,10 @@ def test_exact_rejects_what_has_no_closed_form():
     with pytest.raises(ValueError, match="Exact needs"):
         ex.nlp.solve(hb.Exact(), np.random.default_rng(0), surrogate=surrogate(data))
     fhat_data = hb.Dataset.from_measurements(
-        ex.standard_nlp, u=data.u, y=data.f[:, None], rng=np.random.default_rng(0)
+        ex.standard_nlp,
+        u=data.u,
+        measured={ex.fhat: data.f},
+        rng=np.random.default_rng(0),
     )
     fitted = ex.gp.fit(
         fhat_data, inputs=[ex.u], output=ex.fhat, rng=np.random.default_rng(0)

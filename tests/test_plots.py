@@ -29,7 +29,7 @@ def test_figures_draw():
     assert np.isfinite(objective).any()
 
     observed = hb.Dataset.from_measurements(
-        ex.standard_nlp, u=data.u, y=data.f[:, None], rng=rng
+        ex.standard_nlp, u=data.u, measured={ex.fhat: data.f}, rng=rng
     )
     fitted = ex.gp.fit(observed, inputs=[ex.u], output=ex.fhat, rng=rng)
     solution = ex.standard_nlp.solve(hb.Exact(), rng, surrogate=[fitted])
