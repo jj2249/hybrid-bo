@@ -70,8 +70,7 @@ def test_dataset_from_measurements_solves_g():
 
 
 def test_dataset_saves_and_loads(tmp_path):
-    """A saved dataset loads equal, with its configuration, and a v0.1.0 file without
-    one loads with K = 0."""
+    """A saved dataset loads equal, with its configuration."""
     data = hb.Dataset.from_measurements(
         configured_nlp(),
         u=np.zeros((2, 1)),
@@ -84,11 +83,6 @@ def test_dataset_saves_and_loads(tmp_path):
     assert loaded.names == data.names
     np.testing.assert_array_equal(loaded.c, data.c)
     np.testing.assert_array_equal(loaded.f, data.f)
-
-    old = training_data()
-    names = np.array(old.names)
-    np.savez(tmp_path / "old.npz", u=old.u, x=old.x, y=old.y, f=old.f, names=names)
-    assert hb.Dataset.load(tmp_path / "old.npz").c.shape == (5, 0)
 
 
 def test_a_failed_measurement_keeps_the_other_rows():
@@ -184,24 +178,19 @@ def test_configuration_enters_g_and_f():
 
 
 def test_configuration_is_checked():
-    """A missing c, a c of the wrong shape or outside its bounds, or a c for a problem
-    with none raise."""
-    bounded = hb.HybridNLP(
-        u=[ex.u], c=[hb.Var("a", 0, 1)], y=[ex.y], f=lambda v: v.y + v.a
-    )
+    """A missing c, a c of the wrong shape, or a c for a problem with none raise."""
+    configured = hb.HybridNLP(u=[ex.u], c=[hb.Var("a")], y=[ex.y], f=lambda v: v.y)
     saa, fitted = hb.SAA(np.zeros((1, 1))), surrogate(training_data())
     rng = np.random.default_rng(0)
-    with pytest.raises(ValueError, match="K=1"):
-        bounded.solve(saa, rng, surrogate=fitted)
-    with pytest.raises(ValueError, match="K=1"):
-        bounded.solve(saa, rng, surrogate=fitted, c=np.array([0.5, 0.5]))
-    with pytest.raises(ValueError, match="bounds"):
-        bounded.solve(saa, rng, surrogate=fitted, c=np.array([2.0]))
-    with pytest.raises(ValueError, match="K=0"):
+    with pytest.raises(ValueError, match=r"needs c \(1,\)"):
+        configured.solve(saa, rng, surrogate=fitted)
+    with pytest.raises(ValueError, match=r"needs c \(1,\)"):
+        configured.solve(saa, rng, surrogate=fitted, c=np.array([0.5, 0.5]))
+    with pytest.raises(ValueError, match=r"needs c \(0,\)"):
         ex.nlp.solve(saa, rng, surrogate=fitted, c=np.array([1.0]))
-    with pytest.raises(ValueError, match="K=1"):
+    with pytest.raises(ValueError, match=r"c \(n, 1\)"):
         hb.Dataset.from_measurements(
-            bounded, u=np.zeros((1, 1)), measured={ex.y: np.zeros(1)}, rng=rng
+            configured, u=np.zeros((1, 1)), measured={ex.y: np.zeros(1)}, rng=rng
         )
 
 

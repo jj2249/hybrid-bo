@@ -12,7 +12,7 @@
   them, and `Dataset` and `Solution` store them. Unless the problem has a
   configuration, nothing changes.
 - **Breaking:** `hb.Dataset` has a field `c` (n, K) after `u`, so a dataset built
-  directly takes it too. `Dataset.load` reads a v0.1.0 file as K = 0.
+  directly takes it too, and `Dataset.load` needs a file saved with it.
 - `hb.Var` needs no `start` when its bounds are infinite; its `start` is then None.
   `HybridNLP` raises for a u, x or y without one, since those are sampled.
 - `hb.gp.Matern52(lengthscale_prior=True)` fits a learned lengthscale by MAP, with

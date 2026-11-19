@@ -50,11 +50,12 @@ class Dataset:
         states x and y, each a scalar or (n,): the other states solved from g within
         their bounds from `n_starts` starts, and f.
 
-        Raises `ValueError` for a wrong shape, a c outside its bounds or a measured set
-        that isn't P states, and `RootFindingError` naming every row with no root or a
-        value that isn't finite, with the other rows as `error.dataset`.
+        Raises `ValueError` for a wrong shape or a measured set that isn't P states, and
+        `RootFindingError` naming every row with no root or a value that isn't finite,
+        with the other rows as `error.dataset`.
         """
         u = np.atleast_2d(u).astype(float)
+        c = np.zeros((len(u), 0)) if c is None else np.atleast_2d(c).astype(float)
         measured = {
             var: np.atleast_1d(values).astype(float) for var, values in measured.items()
         }
@@ -67,13 +68,16 @@ class Dataset:
             )
             raise ValueError(msg)
         shapes = [values.shape for values in measured.values()]
-        if u.shape[1:] != (len(nlp.u),) or any(s != (len(u),) for s in shapes):
+        if (
+            u.shape[1:] != (len(nlp.u),)
+            or c.shape != (len(u), len(nlp.c))
+            or any(s != (len(u),) for s in shapes)
+        ):
             msg = (
-                f"Measurements need u (n, {len(nlp.u)}) and each measured state (n,), "
-                f"got {u.shape} and {shapes}"
+                f"Measurements need u (n, {len(nlp.u)}), c (n, {len(nlp.c)}) and each "
+                f"measured state (n,), got {u.shape}, {c.shape} and {shapes}"
             )
             raise ValueError(msg)
-        c = nlp.configuration(c, len(u))
 
         # The root-finding problem: g for the states not measured, with u, c and the
         # measured states as parameters
@@ -178,12 +182,11 @@ class Dataset:
 
     @classmethod
     def load(cls, path: str | Path) -> "Dataset":
-        """The dataset `save` wrote to `path`, with no configuration if it has none
-        (v0.1.0)."""
+        """The dataset `save` wrote to `path`."""
         with np.load(path) as saved:
             return cls(
                 saved["u"],
-                saved["c"] if "c" in saved else np.zeros((len(saved["u"]), 0)),
+                saved["c"],
                 saved["x"],
                 saved["y"],
                 saved["f"],

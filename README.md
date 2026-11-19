@@ -128,7 +128,7 @@ surrogate = [gp.fit(configured, inputs=[u], output=y, rng=rng)]
 solution = configured_nlp.solve(saa, rng, surrogate=surrogate, c=np.array([1.2]))
 ```
 
-A problem without a configuration never mentions `c`. Pass a configuration variable bounds if you want values outside them rejected.
+A problem without a configuration never mentions `c`.
 
 ## Errors, logs and saving
 

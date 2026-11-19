@@ -94,7 +94,12 @@ class HybridNLP:
         if len(set(names)) != len(names):
             msg = f"Variable names must be unique, got {names}"
             raise ValueError(msg)
-        start_bounds((*u, *x, *y))  # raises for one with no start: they are sampled
+        no_start = [var.name for var in (*u, *x, *y) if var.start is None]
+        if no_start:
+            msg = (
+                f"{no_start} need a start, or finite bounds: starts are drawn over them"
+            )
+            raise ValueError(msg)
         g_function = to_casadi_function("g", g or (lambda v: []), x, y, u, c)
         if g_function.size_out(0) != (len(x), 1):
             msg = f"g must give one equation per state of x ({len(x)}), got {g_function.size_out(0)}"
@@ -111,28 +116,6 @@ class HybridNLP:
         object.__setattr__(self, "y", y)
         object.__setattr__(self, "g", g_function)
         object.__setattr__(self, "f", f_function)
-
-    def configuration(self, c: np.ndarray | None, n: int) -> np.ndarray:
-        """The configuration c (n, K) of n points, from c (K,) or (n, K), or None when
-        there is none.
-
-        Raises `ValueError` for a wrong shape or a value outside its bounds.
-        """
-        k = len(self.c)
-        c = np.zeros((n, 0)) if c is None else np.atleast_2d(c).astype(float)
-        if c.shape != (n, k):
-            msg = (
-                f"This problem has a configuration of K={k} "
-                f"{[var.name for var in self.c]}; pass c (n, {k}) for n={n}, got "
-                f"{c.shape}"
-            )
-            raise ValueError(msg)
-        lower = np.array([var.lower for var in self.c])
-        upper = np.array([var.upper for var in self.c])
-        if not np.all((lower <= c) & (c <= upper)):
-            msg = f"c must be within the bounds of {[var.name for var in self.c]}"
-            raise ValueError(msg)
-        return c
 
     def solve(
         self,
@@ -154,7 +137,10 @@ class HybridNLP:
         Raises `ValueError` for a surrogate, method or c that doesn't fit the problem,
         and `NoSolutionError` if every start fails.
         """
-        c = self.configuration(c, 1)[0]
+        c = np.zeros(0) if c is None else np.asarray(c, dtype=float)
+        if c.shape != (len(self.c),):
+            msg = f"solve needs c ({len(self.c)},), got {c.shape}"
+            raise ValueError(msg)
         nlp, scenarios = self._nlp(
             method, surrogate, objective, unknown_states_as_variables, c
         )
