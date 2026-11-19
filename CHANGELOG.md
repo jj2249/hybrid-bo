@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 (2026-11-19)
+
+Measure any P of the states, give each experiment a fixed configuration c, and fit
+GPs with the defaults of Hvarfner et al. (2024). Two changes break v0.1.0 code: the
+`measured` argument of `from_measurements`, and the new field `c` of `Dataset`.
 
 - **Breaking:** `hb.Dataset.from_measurements` takes `measured`, a dict of any P of
   the states x and y and their values (n,), in place of `y` (n, P). g is solved for
