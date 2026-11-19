@@ -48,7 +48,7 @@ def standard_loop(
     solutions = []
     for _ in range(n_iterations):
         observed = hb.Dataset.from_measurements(
-            ex.standard_nlp, u=data.u, y=data.f[:, np.newaxis], rng=rng
+            ex.standard_nlp, u=data.u, measured={ex.fhat: data.f}, rng=rng
         )
         surrogate = [ex.gp.fit(observed, inputs=[ex.u], output=ex.fhat, rng=rng)]
         solution = ex.standard_nlp.solve(

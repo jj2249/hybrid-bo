@@ -32,10 +32,9 @@ Decisions to keep, so they aren't undone:
 
 - `h` is not part of the problem: its form exists only in a user's oracle, and the library
   always solves `g` for the unmeasured states.
-- `y` is always the measured block, and `g` is solved for `x`. This is a deliberate gap:
-  the paper's general measured set (some of x, some of y, P in all) is cut, and is the
-  first thing likely to come back (a reactor measures concentration or temperature in x
-  and infers an unknown rate in y).
+- A dataset measures exactly P of x and y, the same ones in every row, as a dict
+  `{Var: (n,)}`, and `g` is solved for the rest. More than P (an overdetermined,
+  least-squares fit) is cut.
 - `surrogate` is required on `solve`, not on `HybridNLP`, so data can be built before any
   GP exists. It is a list of `FittedGP`, one per unknown state, each recording its
   `inputs` and `output`.

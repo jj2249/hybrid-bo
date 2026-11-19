@@ -1,5 +1,6 @@
 """A set of evaluated points: what a GP is fitted to."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -35,55 +36,86 @@ class Dataset:
         cls,
         nlp: "HybridNLP",
         u: np.ndarray,
-        y: np.ndarray,
+        measured: dict[Var, np.ndarray],
         *,
         rng: np.random.Generator,
         n_starts: int = 100,
         tol: float = 1e-10,
     ) -> "Dataset":
-        """The dataset of u and the measured y, a point (N,), (P,) or a set (n, N),
-        (n, P): x solved from g within its bounds from `n_starts` starts, and f.
+        """The dataset of u, a point (N,) or a set (n, N), and `measured`, the values of
+        P of the states x and y, each a scalar or (n,): the other states solved from g
+        within their bounds from `n_starts` starts, and f.
 
-        Raises `ValueError` for a wrong shape, and `RootFindingError` naming every row
-        with no root or a value that isn't finite, with the other rows as
-        `error.dataset`.
+        Raises `ValueError` for a wrong shape or a measured set that isn't P states, and
+        `RootFindingError` naming every row with no root or a value that isn't finite,
+        with the other rows as `error.dataset`.
         """
-        u, y = np.atleast_2d(u).astype(float), np.atleast_2d(y).astype(float)
-        if u.shape[1:] != (len(nlp.u),) or y.shape != (len(u), len(nlp.y)):
+        u = np.atleast_2d(u).astype(float)
+        measured = {
+            var: np.atleast_1d(values).astype(float) for var, values in measured.items()
+        }
+        states = (*nlp.x, *nlp.y)
+        if not set(measured) <= set(states) or len(measured) != len(nlp.y):
             msg = (
-                f"Measurements need u (n, {len(nlp.u)}) and y (n, {len(nlp.y)}), got "
-                f"{u.shape} and {y.shape}"
+                f"Measure exactly {len(nlp.y)} of the states "
+                f"{[var.name for var in states]}, as many as unknown states, got "
+                f"{[var.name for var in measured]}"
+            )
+            raise ValueError(msg)
+        shapes = [values.shape for values in measured.values()]
+        if u.shape[1:] != (len(nlp.u),) or any(s != (len(u),) for s in shapes):
+            msg = (
+                f"Measurements need u (n, {len(nlp.u)}) and each measured state (n,), "
+                f"got {u.shape} and {shapes}"
             )
             raise ValueError(msg)
 
-        # The root-finding problem: g for x, with u and y as parameters
-        x_symbol = Symbolic.sym("x", len(nlp.x))
-        u_symbol = Symbolic.sym("u", len(nlp.u))
-        y_symbol = Symbolic.sym("y", len(nlp.y))
+        # The root-finding problem: g for the states not measured, with u and the
+        # measured states as parameters
+        unsolved = [var for var in states if var not in measured]
+        symbols = {var: Symbolic.sym(var.name) for var in (*nlp.u, *states)}
+
+        def column(variables: Sequence[Var]) -> Symbolic:
+            """The symbols of `variables`, stacked."""
+            return cas.vertcat(*(symbols[var] for var in variables))
+
         root_problem = RootProblem(
             cas.Function(
                 "known_equations",
-                [x_symbol, cas.vertcat(u_symbol, y_symbol)],
-                [nlp.g(x_symbol, y_symbol, u_symbol)],
+                [column(unsolved), column([*nlp.u, *measured])],
+                [nlp.g(column(nlp.x), column(nlp.y), column(nlp.u))],
             ),
-            np.array([var.lower for var in nlp.x]),
-            np.array([var.upper for var in nlp.x]),
+            np.array([var.lower for var in unsolved]),
+            np.array([var.upper for var in unsolved]),
         )
 
         # Solve it at each row, noting the rows that fail
-        x, failed = [], []
-        for row, p in enumerate(np.concatenate([u, y], axis=1)):
-            starts = lhs_points(nlp.x, n_starts, rng) if nlp.x else np.zeros((0, 0))
+        parameters = np.column_stack([u, *measured.values()])
+        solved, failed = [], []
+        for row, p in enumerate(parameters):
+            starts = (
+                lhs_points(unsolved, n_starts, rng) if unsolved else np.zeros((0, 0))
+            )
             try:
                 if not np.isfinite(p).all():
                     msg = f"Row {row} holds a value that isn't finite"
                     raise RootFindingError(msg)
-                x.append(root_problem.solve(p, starts, tol))
+                solved.append(root_problem.solve(p, starts, tol))
             except RootFindingError:
                 failed.append(row)
 
-        u, y = np.delete(u, failed, axis=0), np.delete(y, failed, axis=0)
-        x = np.reshape(x, (len(u), len(nlp.x)))
+        # Every state's values, measured or solved, in the order of x and y
+        parameters = np.delete(parameters, failed, axis=0)
+        n = len(parameters)
+        u = parameters[:, : len(nlp.u)]
+        columns = dict(zip(measured, parameters[:, len(nlp.u) :].T, strict=True))
+        columns |= dict(
+            zip(unsolved, np.reshape(solved, (n, len(unsolved))).T, strict=True)
+        )
+        x, y = (
+            np.reshape([columns[var] for var in block], (len(block), n)).T
+            for block in (nlp.x, nlp.y)
+        )
         f = np.array([nlp.f(*point).full().item() for point in zip(x, y, u)])
         names = tuple(var.name for var in (*nlp.u, *nlp.x, *nlp.y))
         dataset = cls(u, x, y, f, names)

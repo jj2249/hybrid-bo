@@ -24,7 +24,9 @@ standard_nlp = hb.HybridNLP(u=[u], y=[fhat], f=lambda v: v.fhat)
 
 def measure(u: np.ndarray, rng: np.random.Generator) -> hb.Dataset:
     """The system at u, a point or a set: y = sin(u), with x solved from g."""
-    return hb.Dataset.from_measurements(nlp, u=u, y=np.sin(u), rng=rng)
+    return hb.Dataset.from_measurements(
+        nlp, u=u, measured={y: np.sin(u[..., 0])}, rng=rng
+    )
 
 
 gp = hb.gp.GP(kernel=hb.gp.Matern52(), mean=hb.gp.Zero(), noise_std=0.0)
