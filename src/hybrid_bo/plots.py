@@ -12,6 +12,7 @@ from hybrid_bo.hybrid_problem import SAA, HybridNLP, Solution
 from hybrid_bo.obj import Mean
 from hybrid_bo.solvers import RootProblem
 from hybrid_bo.utils import Symbolic
+from hybrid_bo.variables import start_bounds
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -56,7 +57,7 @@ def _draw(
         msg = f"This figure draws one u on {n_panels} axes, got {len(nlp.u)} u and {len(axes)} axes"
         raise ValueError(msg)
     problem, scenarios = nlp._nlp(
-        solution.method, solution.surrogate, solution.objective, True
+        solution.method, solution.surrogate, solution.objective, True, solution.c
     )
 
     # With u fixed, SAA's constraints are a square system in the scenario states
@@ -78,7 +79,8 @@ def _draw(
         )
 
     # Outwards from the solution, each grid point from the nearest one solved
-    u = np.linspace(*var.start, 201)
+    (lower,), (upper,) = start_bounds(nlp.u)
+    u = np.linspace(lower, upper, 201)
     n_scenarios, n_y = solution.y.shape
     objective = np.full(len(u), np.nan)
     y = np.full((len(u), n_scenarios, n_y), np.nan)

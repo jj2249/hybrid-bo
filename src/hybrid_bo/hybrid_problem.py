@@ -47,11 +47,12 @@ class Exact:
 
 @dataclass(frozen=True)
 class Solution:
-    """The minimizer u (N,), the states there x (S, M) and y (S, P), a row per scenario
-    (S = 1 for `Exact`), and the minimized value, with the method, surrogate and
-    objective that `solve` minimized it by."""
+    """The minimizer u (N,) at the configuration c (K,), the states there x (S, M) and
+    y (S, P), a row per scenario (S = 1 for `Exact`), and the minimized value, with the
+    method, surrogate and objective that `solve` minimized it by."""
 
     u: np.ndarray
+    c: np.ndarray
     x: np.ndarray
     y: np.ndarray
     value: float
@@ -62,15 +63,17 @@ class Solution:
 
 @dataclass(frozen=True, init=False)
 class HybridNLP:
-    """What you know: the decision variables u, the mechanistic states x with their
-    known equations g, the unknown states y, and the objective f.
+    """What you know: the decision variables u, free for `solve` to choose, the
+    configuration c, fixed and given for each experiment, the mechanistic states x with
+    their known equations g, the unknown states y, and the objective f.
 
     `g` and `f` are callables of `v`, read as `v.<name>`, traced once by CasADi. Raises
-    `ValueError` for a repeated name, a g without one equation per state of x, or a
-    non-scalar f.
+    `ValueError` for a repeated name, a u, x or y with no start, a g without one
+    equation per state of x, or a non-scalar f.
     """
 
     u: tuple[Var, ...]
+    c: tuple[Var, ...]
     x: tuple[Var, ...]
     y: tuple[Var, ...]
     g: cas.Function = field(repr=False)
@@ -80,31 +83,56 @@ class HybridNLP:
         self,
         *,
         u: Sequence[Var],
+        c: Sequence[Var] = (),
         x: Sequence[Var] = (),
         y: Sequence[Var],
         g: Callable[[Any], Any] | None = None,
         f: Callable[[Any], Any],
     ) -> None:
-        u, x, y = tuple(u), tuple(x), tuple(y)
-        names = [var.name for var in (*u, *x, *y)]
+        u, c, x, y = tuple(u), tuple(c), tuple(x), tuple(y)
+        names = [var.name for var in (*u, *c, *x, *y)]
         if len(set(names)) != len(names):
             msg = f"Variable names must be unique, got {names}"
             raise ValueError(msg)
-        g_function = to_casadi_function("g", g or (lambda v: []), x, y, u)
+        start_bounds((*u, *x, *y))  # raises for one with no start: they are sampled
+        g_function = to_casadi_function("g", g or (lambda v: []), x, y, u, c)
         if g_function.size_out(0) != (len(x), 1):
             msg = f"g must give one equation per state of x ({len(x)}), got {g_function.size_out(0)}"
             raise ValueError(msg)
-        f_function = to_casadi_function("f", f, x, y, u)
+        f_function = to_casadi_function("f", f, x, y, u, c)
         if f_function.size_out(0) != (1, 1):
             msg = f"f must be a scalar, got shape {f_function.size_out(0)}"
             raise ValueError(msg)
 
         # Frozen dataclass: set fields through object.__setattr__
         object.__setattr__(self, "u", u)
+        object.__setattr__(self, "c", c)
         object.__setattr__(self, "x", x)
         object.__setattr__(self, "y", y)
         object.__setattr__(self, "g", g_function)
         object.__setattr__(self, "f", f_function)
+
+    def configuration(self, c: np.ndarray | None, n: int) -> np.ndarray:
+        """The configuration c (n, K) of n points, from c (K,) or (n, K), or None when
+        there is none.
+
+        Raises `ValueError` for a wrong shape or a value outside its bounds.
+        """
+        k = len(self.c)
+        c = np.zeros((n, 0)) if c is None else np.atleast_2d(c).astype(float)
+        if c.shape != (n, k):
+            msg = (
+                f"This problem has a configuration of K={k} "
+                f"{[var.name for var in self.c]}; pass c (n, {k}) for n={n}, got "
+                f"{c.shape}"
+            )
+            raise ValueError(msg)
+        lower = np.array([var.lower for var in self.c])
+        upper = np.array([var.upper for var in self.c])
+        if not np.all((lower <= c) & (c <= upper)):
+            msg = f"c must be within the bounds of {[var.name for var in self.c]}"
+            raise ValueError(msg)
+        return c
 
     def solve(
         self,
@@ -112,25 +140,28 @@ class HybridNLP:
         rng: np.random.Generator,
         *,
         surrogate: Sequence[FittedGP],
+        c: np.ndarray | None = None,
         objective: Mean | EI | SoftEI = Mean(),  # noqa: B008  (frozen)
         n_starts: int = 10,
         solver: Ipopt = Ipopt(),  # noqa: B008  (frozen, never mutated)
         unknown_states_as_variables: bool = True,
     ) -> Solution:
         """The `Solution` minimizing `objective` with y from `surrogate`, one fitted GP
-        per unknown state in any order, by `method`, from `n_starts` starts.
+        per unknown state in any order, at the configuration c (K,), by `method`, from
+        `n_starts` starts.
 
         With `unknown_states_as_variables`, SAA's y are variables tied to the GPs.
-        Raises `ValueError` for a surrogate or method that doesn't fit the problem, and
-        `NoSolutionError` if every start fails.
+        Raises `ValueError` for a surrogate, method or c that doesn't fit the problem,
+        and `NoSolutionError` if every start fails.
         """
+        c = self.configuration(c, 1)[0]
         nlp, scenarios = self._nlp(
-            method, surrogate, objective, unknown_states_as_variables
+            method, surrogate, objective, unknown_states_as_variables, c
         )
         best, value = nlp.solve(rng, n_starts=n_starts, solver=solver)
         x, y, _ = (part.full() for part in scenarios(best))
         u = best[: len(self.u)]
-        return Solution(u, x, y, value, method, tuple(surrogate), objective)
+        return Solution(u, c, x, y, value, method, tuple(surrogate), objective)
 
     def _nlp(
         self,
@@ -138,10 +169,11 @@ class HybridNLP:
         surrogate: Sequence[FittedGP],
         objective: Mean | EI | SoftEI,
         unknown_states_as_variables: bool,
+        c: np.ndarray,
     ) -> tuple[NLP, cas.Function]:
-        """The `NLP` that `solve` minimizes, over u and then, if they are variables,
-        the scenario states, and `scenarios`: its decisions -> x (S, M), y (S, P) and
-        f (S, 1).
+        """The `NLP` that `solve` minimizes at the configuration c (K,), over u and
+        then, if they are variables, the scenario states, and `scenarios`: its
+        decisions -> x (S, M), y (S, P) and f (S, 1).
 
         Raises `ValueError` for a surrogate or method that doesn't fit the problem.
         """
@@ -162,7 +194,7 @@ class HybridNLP:
         if isinstance(method, Exact):
             # f is one unknown state, whose GP gives its mean and std at u
             y = Symbolic.sym("y", n_y)
-            f = self.f(Symbolic(0, 1), y, u)
+            f = self.f(Symbolic(0, 1), y, u, c)
             is_f = [bool(cas.is_equal(f, y[j])) for j in range(n_y)]
             if self.x or not any(is_f):
                 msg = "Exact needs f to be one unknown state, and no states in x"
@@ -221,10 +253,10 @@ class HybridNLP:
         constraints, f_parts = [], []
         for s in range(n_scenarios):
             x_s, y_s = x[s, :].T, y[s, :].T
-            constraints.append(self.g(x_s, y_s, u))
+            constraints.append(self.g(x_s, y_s, u, c))
             if unknown_states_as_variables:
                 constraints.append((y - prediction)[s, :].T)
-            f_parts.append(self.f(x_s, y_s, u))
+            f_parts.append(self.f(x_s, y_s, u, c))
         f = cas.vertcat(*f_parts)
 
         # The decision vector: u, then each state's S scenario copies

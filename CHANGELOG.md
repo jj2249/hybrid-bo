@@ -6,7 +6,15 @@
   the states x and y and their values (n,), in place of `y` (n, P). g is solved for
   the other states, so a system can measure an x and infer a y. Replace `y=values`
   with `measured={y: values[:, 0]}`.
-
+- A fixed configuration c (K,): known values that change between experiments but
+  aren't chosen, such as a feed's composition. `hb.HybridNLP(c=[...])` lets g and f
+  read them as `v.<name>`, `from_measurements(c=(n, K))` and `solve(c=(K,))` take
+  them, and `Dataset` and `Solution` store them. Unless the problem has a
+  configuration, nothing changes.
+- **Breaking:** `hb.Dataset` has a field `c` (n, K) after `u`, so a dataset built
+  directly takes it too. `Dataset.load` reads a v0.1.0 file as K = 0.
+- `hb.Var` needs no `start` when its bounds are infinite; its `start` is then None.
+  `HybridNLP` raises for a u, x or y without one, since those are sampled.
 - `hb.gp.Matern52(lengthscale_prior=True)` fits a learned lengthscale by MAP, with
   each log lengthscale ~ N(sqrt(2) + log(d) / 2, 3) over d inputs (Hvarfner et al.,
   2024), instead of by maximum likelihood. Off by default.

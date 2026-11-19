@@ -35,6 +35,11 @@ Decisions to keep, so they aren't undone:
 - A dataset measures exactly P of x and y, the same ones in every row, as a dict
   `{Var: (n,)}`, and `g` is solved for the rest. More than P (an overdetermined,
   least-squares fit) is cut.
+- The configuration c is fixed: known for each experiment, never chosen (that is u),
+  never solved for (that is x). g and f see it; GPs don't, since h is h(x, u) and c
+  reaches h through x. `solve` takes one c for all scenarios. Every `c` defaults to
+  None, so a problem without one never mentions it.
+- A whole block (u, c) is passed as an array; a chosen subset (`measured`) as a dict.
 - `surrogate` is required on `solve`, not on `HybridNLP`, so data can be built before any
   GP exists. It is a list of `FittedGP`, one per unknown state, each recording its
   `inputs` and `output`.
