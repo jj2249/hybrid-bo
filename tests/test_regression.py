@@ -27,7 +27,7 @@ Result = tuple[hb.Dataset, Sequence[hb.Solution]]
 
 
 def run_hybrid_bo(
-    objective: Callable[[float], hb.obj.EI | hb.obj.SoftEI], rng: np.random.Generator
+    objective: Callable[[float], hb.obj.EI | hb.obj.SoftLogEI], rng: np.random.Generator
 ) -> Result:
     """Hybrid BO: the initial points, the scenarios once, then the loop."""
     points = hb.lhs_points([ex.u], ex.N_INITIAL, rng)
@@ -56,7 +56,9 @@ def run_latin_hypercube_sampling(rng: np.random.Generator) -> Result:
 
 METHODS = {
     "hybrid_bo": partial(run_hybrid_bo, hb.obj.EI),
-    "hybrid_bo_soft": partial(run_hybrid_bo, partial(hb.obj.SoftEI, temperature=50e-3)),
+    "hybrid_bo_soft": partial(
+        run_hybrid_bo, partial(hb.obj.SoftLogEI, temperature=50e-3)
+    ),
     "standard_bo": run_standard_bo,
     "latin_hypercube_sampling": run_latin_hypercube_sampling,
 }

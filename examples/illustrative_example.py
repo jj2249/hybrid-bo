@@ -1,4 +1,4 @@
-"""Hybrid BO with SAA-SoftEI against standard BO on the illustrative example.
+"""Hybrid BO with SAA-SoftLogEI against standard BO on the illustrative example.
 
 The known equation is x + exp(x) = y, and the unknown one is y = sin(u), which the
 methods never see. Prints each method's median regret over the runs:
@@ -54,7 +54,7 @@ for seed in range(N_RUNS):
             saa,
             rng,
             surrogate=surrogate,
-            objective=hb.obj.SoftEI(data.incumbents[-1], temperature=0.05),
+            objective=hb.obj.SoftLogEI(data.incumbents[-1], temperature=0.05),
             unknown_states_as_variables=False,
         )
         data = data.extend(measure(solution.u, rng))

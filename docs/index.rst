@@ -20,7 +20,7 @@ a plant, an external simulator or an oracle of your own:
            saa,
            rng,
            surrogate=surrogate,
-           objective=hb.obj.SoftEI(data.incumbents[-1], temperature=0.05),
+           objective=hb.obj.SoftLogEI(data.incumbents[-1], temperature=0.05),
        )
        new = hb.Dataset.from_measurements(
            nlp, u=solution.u, measured={y: measure(solution.u)}, rng=rng
