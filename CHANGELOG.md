@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 (2026-11-23)
+
+Plots that show the scenarios as a band and two decision variables as contours, and
+SoftEI renamed SoftLogEI. The rename breaks v0.2.0 code that uses `hb.obj.SoftEI`.
 
 - **Breaking:** `hb.obj.SoftEI` is renamed `hb.obj.SoftLogEI`, since it minimizes
   -log of the smoothed EI. Replace `hb.obj.SoftEI(...)` with `hb.obj.SoftLogEI(...)`.
@@ -8,7 +11,8 @@
   takes more than u, as the weighted mean over the scenarios with a band of ±2
   standard deviations, in place of one line per scenario.
 - Their third panel draws the acquisition in units of f, maximized at the trial point:
-  EI as -objective and SoftEI as exp(-objective), in place of the minimized objective.
+  EI as -objective and SoftLogEI as the smoothed EI, exp(-objective), in place of the
+  minimized objective.
 - `hb.plots.solution` and `hb.plots.iteration` draw two decision variables as filled
   contours: the mean and standard deviation of each GP's output, then of f, then the
   acquisition, on `2 * len(surrogate) + 3` axes (`+ 2` for `Mean`). `iteration` marks
