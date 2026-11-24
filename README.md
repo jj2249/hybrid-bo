@@ -1,5 +1,5 @@
 # GP Embedded NLPs
-This library is a Python package for uncertainty aware nonlinear programming in engineering. We embed data-driven relationships into the nonlinear program (NLP). The relationships represent epistemic uncertainty and missing knowledge in our system. The resulting uncertainty aware *hybrid* NLP is a stochastic problem. We implement the models in [Kutschat et al. (2026)](https://arxiv.org/abs/2603.11199) using [CasADi](https://web.casadi.org/).
+This library is a Python package for uncertainty aware nonlinear programming in engineering. We embed data-driven relationships into the nonlinear program (NLP). The relationships represent epistemic uncertainty and missing knowledge in our system. The resulting uncertainty aware *hybrid* NLP is a stochastic problem. We implement the models in [Cramer et al. (2026)](https://arxiv.org/abs/2603.11199) using [CasADi](https://web.casadi.org/).
 
 With the library you can:
 - Define an NLP from known mechanistic equations and unknown relationships
