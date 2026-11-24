@@ -33,21 +33,21 @@ With [uv](https://docs.astral.sh/uv/):
 uv add "hybrid-bo @ git+https://github.com/jj2249/hybrid-bo.git@v0.3.0"
 ```
 ### Building docs
-The API reference is not publicly hosted at the moment. It can be built locally by cloning the repository and running
+The API reference isn't hosted yet. To build it locally, clone the repository and run
 
 ```bash
 pixi run -e dev docs
 ```
 
-then opening `docs/_build/html/autoapi/index.html`.
+then open `docs/_build/html/autoapi/index.html`.
 
 ## Using the library
 
-The illustrative example: the known equation is `x + exp(x) = y`, and the unknown one, `y = sin(u)`, appears only in the measurements.
+In the illustrative example, you know `x + exp(x) = y` but not `y = sin(u)`, which you see only through measurements.
 
 ### Define the hybrid NLP
 
-`g` and `f` take the variables `v` and read them by name.
+Write `g` and `f` as functions of the variables `v`, and read each one by name.
 
 ```python
 import casadi as cas
@@ -69,7 +69,7 @@ nlp = hb.HybridNLP(
 
 ### Collect data
 
-Pass the measured states; `g` is solved for the rest.
+Pass the measured states, then solve `g` for the rest.
 
 ```python
 rng = np.random.default_rng(0)
@@ -118,7 +118,7 @@ for _ in range(10):
     data = data.extend(new)
 ```
 
-Standard BO: no `x`, and `f` is the unknown state. `hb.Exact()` uses closed-form EI.
+For standard BO, drop `x` and make `f` the unknown state. Use `hb.Exact()` for closed-form EI.
 
 ```python
 fhat = hb.Var("fhat", start=(-10.0, 10.0))
@@ -135,11 +135,11 @@ standard_solution = standard_nlp.solve(
 )
 ```
 
-`examples/illustrative_example.py` runs both loops over several seeds and compares them.
+Run `examples/illustrative_example.py` to compare both loops over several seeds.
 
 ### Plot and save results
 
-Plotting needs matplotlib.
+Install matplotlib to plot.
 
 ```python
 import matplotlib.pyplot as plt
@@ -149,7 +149,7 @@ hb.plots.iteration(nlp, solution, axes, data)
 fig.savefig("iteration.png")
 ```
 
-Saving won't overwrite an existing file.
+You can't save over an existing file.
 
 ```python
 data.save("dataset.npz")
@@ -158,7 +158,7 @@ data = hb.Dataset.load("dataset.npz")
 
 ## A fixed configuration
 
-Values that enter `g` or `f` and are known for each experiment but not chosen, such as a reactor's inlet flow, go in `c`. Give them for each measured point and for the next experiment.
+Put values that enter `g` or `f`, that you know for each experiment but don't choose, such as a reactor's inlet flow, in `c`. Give them for each measured point and for the next experiment.
 
 ```python
 a = hb.Var("a")  # known, never sampled: needs no bounds or start
@@ -181,7 +181,7 @@ surrogate = [gp.fit(configured, inputs=[u], output=y, rng=rng)]
 solution = configured_nlp.solve(saa, rng, surrogate=surrogate, c=np.array([1.2]))
 ```
 
-A problem without a configuration never mentions `c`.
+If your problem has no configuration, leave out `c`.
 
 ## Errors and logs
 
@@ -189,8 +189,8 @@ A fit or a `solve` raises `hb.NoSolutionError` if every start fails, and
 `Dataset.from_measurements` raises `hb.RootFindingError` if `g` has no root or a value
 isn't finite.
 
-The library logs at `INFO` on the `hybrid_bo` logger:
-`logging.getLogger("hybrid_bo").setLevel(logging.INFO)` shows it.
+To see the library's `INFO` logs, call
+`logging.getLogger("hybrid_bo").setLevel(logging.INFO)`.
 
 ## Develop
 
@@ -204,5 +204,5 @@ pixi run -e dev docs    # the API docs, from docs/_build/html/autoapi/index.html
 
 ## License
 
-This project is licensed under the MIT license.
-Be aware that dependencies are not necessarily licensed under the MIT license.
+We release this project under the MIT license.
+Check your dependencies' licenses too: they may differ.
