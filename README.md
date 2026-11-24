@@ -1,14 +1,14 @@
 # GP Embedded NLPs
 This library is a Python package for uncertainty aware nonlinear programming in engineering. We embed data-driven relationships into the nonlinear program (NLP). The relationships represent epistemic uncertainty and missing knowledge in our system. The resulting uncertainty aware *hybrid* NLP is a stochastic problem. We implement the models in [Kutschat et al. (2026)](https://arxiv.org/abs/2603.11199) using [CasADi](https://web.casadi.org/).
 
-The library provides the means to:
-- Define a nonlinear program in terms of known and unknown mechanistic equations
-- Define GP priors
-  - Maximum likelihood and maximum a posteriori parameter estimation with the lengthscale prior of [Hvarfner et al. (2024)](https://arxiv.org/abs/2402.02229)
-  - Condition GP on data and make conditional predictions
-- Embed the GP surrogate models into the NLP
-- Solve the resulting stochastic problem using sample-average approximation discretisation
-- Solve acquisition problems in a bayesian optimisation context using expected improvement
+With the library you can:
+- Define an NLP from known mechanistic equations and unknown relationships
+- Define GP priors and fit them to data
+  - by maximum likelihood, or maximum a posteriori with the lengthscale prior of [Hvarfner et al. (2024)](https://arxiv.org/abs/2402.02229)
+  - and make predictions conditioned on the data
+- Embed the fitted GPs in the NLP
+- Solve the resulting stochastic problem by sample-average approximation
+- Choose the next experiment in Bayesian optimization by maximizing expected improvement
 - Plot and save results
 
 ```math
@@ -43,11 +43,11 @@ then opening `docs/_build/html/autoapi/index.html`.
 
 ## Using the library
 
-We walk through an illustrative example with one decision variable `u`, one mechanistic state `x` and one unknown state `y`. The known equation is `x + exp(x) = y`, the unknown one is `y = sin(u)`, and the objective is `f = (6x - 2)^2 sin(12x - 4)`. The library never sees `sin(u)`: it only appears in our measurements.
+The illustrative example: the known equation is `x + exp(x) = y`, and the unknown one, `y = sin(u)`, appears only in the measurements.
 
 ### Define the hybrid NLP
 
-Declare each variable with `hb.Var`, giving bounds for the decision variables and a range of starting points for the states. Then create a `HybridNLP` from the variables, the known equations `g` and the objective `f`. `g` and `f` are Python callables that take `v`, the variables, and read each one by name. CasADi traces them once, so derivatives are exact.
+`g` and `f` take the variables `v` and read them by name.
 
 ```python
 import casadi as cas
@@ -69,7 +69,7 @@ nlp = hb.HybridNLP(
 
 ### Collect data
 
-A `Dataset` holds the measured points. `Dataset.from_measurements` takes `u` and the measured states, solves `g` for the other states, and computes `f`. `measured` maps each measured variable to its values `(n,)`: any P of the states `x` and `y`, where P is the number of unknown states. Here we measure `y` at two points from a Latin hypercube. A system that measured `x` instead would pass `measured={x: ...}` and have `y` solved from `g`.
+Pass the measured states; `g` is solved for the rest.
 
 ```python
 rng = np.random.default_rng(0)
@@ -81,7 +81,7 @@ data = hb.Dataset.from_measurements(
 
 ### Define and fit a GP
 
-A `GP` is a prior: a kernel, a mean and a known noise level. `GP.fit` learns the hyperparameters by maximum likelihood and returns a `FittedGP`, conditioned on the data, for the given `inputs` and `output`. With `Matern52(lengthscale_prior=True)` the lengthscales are found by maximum a posteriori estimation instead. `FittedGP.predict` gives the conditional mean and standard deviation at new points.
+Use `Matern52(lengthscale_prior=True)` for a MAP fit.
 
 ```python
 gp = hb.gp.GP(kernel=hb.gp.Matern52(), mean=hb.gp.Zero(), noise_std=0.0)
@@ -91,8 +91,6 @@ mean, std = fitted.predict(np.array([[0.0], [1.0]]))
 
 ### Embed the GP and solve with SAA
 
-`HybridNLP.solve` embeds the fitted GPs, one per unknown state, as `y = mu_h(x, u) + L_h(x, u) xi`, and solves the resulting stochastic problem. `hb.SAA(z)` discretizes it by sample-average approximation over scenarios `z`, an array `(S, P)` of draws of `xi`, equally weighted unless you give weights `w`. By default `solve` minimizes the mean objective, E[f].
-
 ```python
 surrogate = [fitted]
 saa = hb.SAA(rng.standard_normal((25, 1)))
@@ -100,11 +98,9 @@ solution = nlp.solve(saa, rng, surrogate=surrogate)
 print(solution.u, solution.value)
 ```
 
-The returned `Solution` holds `u` `(N,)`, `x` `(S, M)` and `y` `(S, P)`, one row per scenario, and the minimized `value`, along with the `method`, `surrogate` and `objective` it was solved by.
-
 ### Bayesian optimization with expected improvement
 
-Pass an acquisition function as the `objective` to choose the next experiment instead. `hb.obj.EI(incumbent)` gives expected improvement over the best measured `f`, and `hb.obj.SoftLogEI` a smooth log version that is easier to optimize. The library solves one iteration; you write the loop and the measurement. Here we keep the scenarios fixed and run ten iterations of hybrid BO.
+Pass an acquisition function as the `objective`. You write the loop and the measurement.
 
 ```python
 for _ in range(10):
@@ -122,7 +118,7 @@ for _ in range(10):
     data = data.extend(new)
 ```
 
-Standard black-box BO is the special case with no mechanistic states and a single unknown state that is the measured objective itself, `f = y`. Solving with `hb.Exact()` uses closed-form EI rather than scenarios.
+Standard BO: no `x`, and `f` is the unknown state. `hb.Exact()` uses closed-form EI.
 
 ```python
 fhat = hb.Var("fhat", start=(-10.0, 10.0))
@@ -143,7 +139,7 @@ standard_solution = standard_nlp.solve(
 
 ### Plot and save results
 
-`hb.plots` draws a solution over a grid of `u` on matplotlib axes you provide. For one `u` and an EI objective, that is three panels: the surrogate, `f`, and the acquisition. `hb.plots.iteration` also marks the measured points and the incumbent. Plotting needs matplotlib, which the library doesn't install.
+Plotting needs matplotlib.
 
 ```python
 import matplotlib.pyplot as plt
@@ -153,7 +149,7 @@ hb.plots.iteration(nlp, solution, axes, data)
 fig.savefig("iteration.png")
 ```
 
-Datasets save to and load from `.npz` files. Saving fails if the file already exists.
+Saving won't overwrite an existing file.
 
 ```python
 data.save("dataset.npz")
@@ -162,7 +158,7 @@ data = hb.Dataset.load("dataset.npz")
 
 ## A fixed configuration
 
-Some values in the known equations change from one experiment to the next but aren't yours to choose. In a reactor, the inlet flow rate and composition are measured for each run, and they enter the mass balances. These values are the configuration `c`, (K,). The decision variables `u` are free, and `solve` chooses them. The configuration is fixed: you give it for each measured point, and for the experiment you are planning next. `g` and `f` read it by name, as they read the other variables. The GPs don't take it as an input, because `h` depends on x and u, and the configuration reaches it through the x that `g` solves for.
+Values that enter `g` or `f` and are known for each experiment but not chosen, such as a reactor's inlet flow, go in `c`. Give them for each measured point and for the next experiment.
 
 ```python
 a = hb.Var("a")  # known, never sampled: needs no bounds or start
