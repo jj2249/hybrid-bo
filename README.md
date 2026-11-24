@@ -1,10 +1,13 @@
 # Hybrid-BO
 This library allows you to define and solve hybrid-NLPs
-$$
+
+```math
 \begin{aligned}
-\min_{u\in\mathcal U}&\quad \mathbb E_\xi\left[f(x, y, u)\right]&\\ \text{s.t. }&\quad g(x, y, u)=0&\text{ a.s.}&\\ &\quad y = \mu_h(x, u) + L_h(x, u)\xi&\text{ a.s.}&\\
+\min_{u \in \mathcal{U}} \quad & \mathbb{E}_\xi \left[ f(x, y, u) \right] \\
+\text{s.t.} \quad & g(x, y, u) = 0 \quad \text{a.s.} \\
+& y = \mu_h(x, u) + L_h(x, u)\,\xi \quad \text{a.s.}
 \end{aligned}
-$$
+```
 
 We provide methods for maximum likelihood fitting of GPs and solving the NLP with the GP embedded, implemented in CasADi.
 
